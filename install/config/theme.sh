@@ -100,3 +100,7 @@ if [ ! -d ~/.local/share/aether-ssd ]; then
   cp gtk.css ~/.config/gtk-4.0/
   cd - >/dev/null
 fi
+
+# Add managed policy directory for Chromium theme changes
+sudo mkdir -p /etc/chromium/policies/managed
+sudo chmod a+rw /etc/chromium/policies/managed

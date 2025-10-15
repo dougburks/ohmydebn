@@ -260,5 +260,6 @@ fi
 # Set new background
 ~/.local/share/ohmydebn/bin/ohmydebn-theme-bg-next
 
+ohmydebn-theme-set-browser
 ohmydebn-theme-set-eza
 ohmydebn-theme-set-vscode

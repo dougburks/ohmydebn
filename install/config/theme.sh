@@ -42,6 +42,10 @@ if [ ! -f $THEME_STATE ]; then
   touch $THEME_STATE
 fi
 
+# Add managed policy directory for Chromium theme changes
+sudo mkdir -p /etc/chromium/policies/managed
+sudo chmod a+rw /etc/chromium/policies/managed
+
 # Make sure default theme is set
 if [ ! -f ~/.local/state/ohmydebn ]; then
   ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
@@ -100,7 +104,3 @@ if [ ! -d ~/.local/share/aether-ssd ]; then
   cp gtk.css ~/.config/gtk-4.0/
   cd - >/dev/null
 fi
-
-# Add managed policy directory for Chromium theme changes
-sudo mkdir -p /etc/chromium/policies/managed
-sudo chmod a+rw /etc/chromium/policies/managed

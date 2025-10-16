@@ -11,4 +11,6 @@ else
 fi
 
 echo "{\"BrowserThemeColor\": \"$THEME_HEX_COLOR\"}" | tee "/etc/chromium/policies/managed/color.json" >/dev/null
-chromium --refresh-platform-policy --no-startup-window
+if pgrep chromium /dev/null 2>&1; then
+  chromium --refresh-platform-policy --no-startup-window
+fi

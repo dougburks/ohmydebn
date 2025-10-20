@@ -61,14 +61,6 @@ if [ ! -e ~/.local/bin/omarchy-theme-set ]; then
   ln -s ~/.local/share/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set
 fi
 
-# Use pipx to install pywal for Aether
-PYWAL_STATE=~/.local/state/ohmydebn-config/pywal-20251006
-if [ ! -f $PYWAL_STATE ]; then
-  pipx install pywal
-  pipx ensurepath
-  touch $PYWAL_STATE
-fi
-
 # Install or update Aether
 if [ ! -d ~/.local/share/aether ]; then
   mkdir -p ~/.local/share

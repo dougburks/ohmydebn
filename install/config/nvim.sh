@@ -68,17 +68,17 @@ if [ ! -f $NVIM_STATE ]; then
   # Debian stable repo does not include this new version yet.
   # In the meantime, pin LazyVim to v14 as described at:
   # https://github.com/LazyVim/LazyVim/issues/6421
-  CORE=$NVIM_CONFIG_DIR/lua/plugins/core.lua
+  CORE=$CONFIG_DIR/lua/plugins/core.lua
   if [ ! -f $CORE ]; then
     ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $CORE"
-    mkdir -p $NVIM_CONFIG_DIR/lua/plugins
+    mkdir -p $CONFIG_DIR/lua/plugins
     cp -av ~/.local/share/ohmydebn/config/nvim/lua/plugins/core.lua $CORE
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     LAZYVIM=~/.local/share/nvim/lazy/LazyVim
     if [ -d $LAZYVIM ]; then
       mv $LAZYVIM $LAZYVIM-backup-$TIMESTAMP
     fi
-    LAZYLOCK=$NVIM_CONFIG_DIR/lazy-lock.json
+    LAZYLOCK=$CONFIG_DIR/lazy-lock.json
     if [ -f $LAZYLOCK ]; then
       mv $LAZYLOCK $LAZYLOCK-backup-$TIMESTAMP
     fi

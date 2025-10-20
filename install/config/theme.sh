@@ -82,21 +82,13 @@ else
 fi
 cd - >/dev/null
 
-# Remove GTK4-NoCSD if it was previously installed
+# Install GTK4-NoCSD to enable window decorations for Aether
 NOCSD_DIR=~/.local/share/GTK4-NoCSD
-if [ -d $NOCSD_DIR ]; then
-  echo "Removing $NOCSD_DIR"
-  rm -rf $NOCSD_DIR
-fi
-
-# Install aether-ssd to enable window decorations for Aether
-if [ ! -d ~/.local/share/aether-ssd ]; then
+if [ ! -d $NOCSD_DIR ]; then
   mkdir -p ~/.local/share
   cd ~/.local/share
-  git clone https://github.com/dougburks/aether-ssd
-  cd aether-ssd
-  make
-  mkdir -p ~/.config/gtk-4.0
-  cp gtk.css ~/.config/gtk-4.0/
+  git clone https://codeberg.org/MorsMortium/GTK4-NoCSD.git
+  cd GTK4-NoCSD
+  gcc -fPIC -shared ./Source/GTK4-NoCSD.c -o libgtk4-nocsd.so $(pkg-config --cflags --libs libadwaita-1)
   cd - >/dev/null
 fi

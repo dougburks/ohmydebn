@@ -70,7 +70,7 @@ ALL_THEMES=$NVIM_CONFIG_DIR/lua/plugins/all-themes.lua
 if [ ! -f $ALL_THEMES ]; then
   ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $ALL_THEMES"
   mkdir -p $NVIM_CONFIG_DIR/lua/plugins
-  cp -av ~/.local/share/ohmydebn/config/nvim/lua/plugins/all-themes.lua $SCROLLING
+  cp -av ~/.local/share/ohmydebn/config/nvim/lua/plugins/all-themes.lua $ALL_THEMES
 fi
 
 HOTRELOAD=$NVIM_CONFIG_DIR/lua/plugins/omarchy-theme-hotreload.lua

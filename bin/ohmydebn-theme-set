@@ -194,14 +194,14 @@ esac
 # If using an aether theme, then pull the colors from its wofi.css and convert them for rofi
 WOFI_CSS=~/.config/ohmydebn/current/theme/wofi.css
 if [[ -f $WOFI_CSS ]]; then
-  BG=$(grep "@define-color bg" $WOFI_CSS | awk '{print $3}')
-  FG=$(grep "@define-color fg" $WOFI_CSS | awk '{print $3}')
-  GRAY1=$(grep "@define-color gray1" $WOFI_CSS | awk '{print $3}')
-  GRAY2=$(grep "@define-color gray2" $WOFI_CSS | awk '{print $3}')
-  GRAY3=$(grep "@define-color gray3" $WOFI_CSS | awk '{print $3}')
-  GRAY4=$(grep "@define-color gray4" $WOFI_CSS | awk '{print $3}')
-  GRAY5=$(grep "@define-color gray5" $WOFI_CSS | awk '{print $3}')
-  FG_BRIGHT=$(grep "@define-color fg_bright" $WOFI_CSS | awk '{print $3}')
+  BG=$(grep "@define-color bg " $WOFI_CSS | awk '{print $3}')
+  FG=$(grep "@define-color fg " $WOFI_CSS | awk '{print $3}')
+  GRAY1=$(grep "@define-color gray1 " $WOFI_CSS | awk '{print $3}')
+  GRAY2=$(grep "@define-color gray2 " $WOFI_CSS | awk '{print $3}')
+  GRAY3=$(grep "@define-color gray3 " $WOFI_CSS | awk '{print $3}')
+  GRAY4=$(grep "@define-color gray4 " $WOFI_CSS | awk '{print $3}')
+  GRAY5=$(grep "@define-color gray5 " $WOFI_CSS | awk '{print $3}')
+  FG_BRIGHT=$(grep "@define-color fg_bright " $WOFI_CSS | awk '{print $3}')
   AETHER_RASI=$ROFI_DIR/aether.rasi
   cp $ROFI_DIR/square-nord-dark.rasi $AETHER_RASI
   # bg0 - window background color

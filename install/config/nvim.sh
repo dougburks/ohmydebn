@@ -65,3 +65,17 @@ if [ ! -f $CORE ]; then
     mv $LAZYLOCK $LAZYLOCK-backup-$TIMESTAMP
   fi
 fi
+
+ALL_THEMES=$NVIM_CONFIG_DIR/lua/plugins/all-themes.lua
+if [ ! -f $ALL_THEMES ]; then
+  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $ALL_THEMES"
+  mkdir -p $NVIM_CONFIG_DIR/lua/plugins
+  cp -av ~/.local/share/ohmydebn/config/nvim/lua/plugins/all-themes.lua $ALL_THEMES
+fi
+
+HOTRELOAD=$NVIM_CONFIG_DIR/lua/plugins/omarchy-theme-hotreload.lua
+if [ ! -f $HOTRELOAD ]; then
+  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $HOTRELOAD"
+  mkdir -p $NVIM_CONFIG_DIR/lua/plugins
+  cp -av ~/.local/share/ohmydebn/config/nvim/lua/plugins/omarchy-theme-hotreload.lua $HOTRELOAD
+fi

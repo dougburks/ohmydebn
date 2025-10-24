@@ -2,7 +2,7 @@ keybinding-custom 0 "Browser" "/usr/bin/chromium" "['<Super>B']" "Press Super + 
 keybinding-custom 1 "Calendar" "$HOME/.local/share/ohmydebn/bin/ohmydebn-launch-webapp https://calendar.google.com" "['<Super>C']" "Press Super + C for calendar (Google Calendar)"
 keybinding-custom 2 "GMail" "$HOME/.local/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com" "['<Super>E']" "Press Super + E for email (GMail)"
 keybinding-custom 3 "Google" "$HOME/.local/share/ohmydebn/bin/ohmydebn-launch-webapp https://google.com" "['<Super>G']" "Press Super + G for Google search"
-keybinding-custom 4 "Hotkeys" "$HOME/.local/share/ohmydebn/bin/ohmydebn-launch-webapp https://github.com/dougburks/ohmydebn?tab=readme-ov-file#hotkeys" "['<Super>K']" "Press Super + K to show all hotkeys"
+keybinding-custom 4 "Hotkeys" "$HOME/.local/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/" "['<Super>K']" "Press Super + K to show all hotkeys"
 keybinding-custom 5 "Neovim" "/usr/bin/alacritty --title 'nvim' -e nvim" "['<Super>N']" "Press Super + N to launch Neovim text editor"
 keybinding-custom 6 "Rofi" "/usr/bin/rofi -dpi 1 -show drun -show-icons" "['<Super>R', '<Super>space']" "Press Super + R to run the application launcher (rofi)"
 keybinding-custom 7 "btop" "/usr/bin/alacritty --title 'btop' -e /usr/bin/btop" "['<Super>T']" "Press Super + T to launch btop"

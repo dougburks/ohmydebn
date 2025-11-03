@@ -4,6 +4,17 @@ set -e
 
 ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "OhMyDebn Update"
 
+cat <<EOF
+Continuing will update the base Debian OS packages and OhMyDebn components like themes and the Aether theme builder.
+
+If this update is interrupted, then your machine may be left in an inconsistent state so please
+make sure you have stable power and network before continuing.
+
+Press Enter to continue or Ctrl-C to cancel.
+EOF
+
+read input
+
 ohmydebn-update-git
 
 bash ~/.local/share/ohmydebn/ohmydebn.sh --no-uninstall

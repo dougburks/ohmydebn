@@ -13,8 +13,8 @@ fi
 
 PDF_STATE=~/.local/state/ohmydebn-config/pdf-20251107
 if [ ! -f $PDF_STATE ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring xournal as default pdf viewer"
-  xdg-mime default com.github.xournalpp.xournalpp.desktop application/pdf
+  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default pdf viewer"
+  xdg-mime default chromium.desktop application/pdf
   mkdir -p ~/.local/state/ohmydebn-config
   touch $PDF_STATE
 fi

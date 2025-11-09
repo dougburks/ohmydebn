@@ -11,28 +11,13 @@ $directory\
 [](fg:blue bg:green)\
 $git_branch\
 $git_status\
-[](fg:green bg:cyan)\
-$c\
-$rust\
-$golang\
-$nodejs\
-$php\
-$java\
-$kotlin\
-$haskell\
-$python\
-[](fg:cyan bg:yellow)\
-$docker_context\
-[](fg:yellow bg:red)\
-$time\
-[ ](fg:red)\
+[ ](fg:green)\
 $line_break$character"""
 
 # The palette section has been removed to use your terminal's dynamic colors.
 
 [os]
 disabled = false
-# Uses your terminal's 'bright-black' color for the background
 style = "bg:bright-black fg:white"
 
 [os.symbols]
@@ -58,7 +43,6 @@ RedHatEnterprise = "󱄛"
 
 [username]
 show_always = true
-# Uses your terminal's 'bright-black' color for the background
 style_user = "bg:bright-black fg:white"
 style_root = "bg:bright-black fg:white"
 format = '[ $user ]($style)'
@@ -84,62 +68,6 @@ format = '[[ $symbol $branch ](fg:black bg:green)]($style)'
 [git_status]
 style = "bg:green"
 format = '[[($all_status$ahead_behind )](fg:black bg:green)]($style)'
-
-[nodejs]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[c]
-symbol = " "
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[rust]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[golang]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[php]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[java]
-symbol = " "
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[kotlin]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[haskell]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[python]
-symbol = ""
-style = "bg:cyan"
-format = '[[ $symbol( $version) ](fg:black bg:cyan)]($style)'
-
-[docker_context]
-symbol = ""
-style = "bg:yellow"
-format = '[[ $symbol( $context) ](fg:black bg:yellow)]($style)'
-
-[time]
-disabled = true
-time_format = "%R"
-style = "bg:red"
-format = '[[  $time ](fg:black bg:red)]($style)'
 
 [line_break]
 disabled = true

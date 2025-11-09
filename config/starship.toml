@@ -3,12 +3,12 @@
 add_newline = false
 
 format = """
-[](bright-black)\
+[](blue)\
 $os\
 $username\
-[](bg:blue fg:bright-black)\
+[](bg:cyan fg:blue)\
 $directory\
-[](fg:blue bg:green)\
+[](fg:cyan bg:green)\
 $git_branch\
 $git_status\
 [ ](fg:green)\
@@ -18,7 +18,7 @@ $line_break$character"""
 
 [os]
 disabled = false
-style = "bg:bright-black fg:white"
+style = "bg:blue fg:black"
 
 [os.symbols]
 Windows = "󰍲"
@@ -43,12 +43,12 @@ RedHatEnterprise = "󱄛"
 
 [username]
 show_always = true
-style_user = "bg:bright-black fg:white"
-style_root = "bg:bright-black fg:white"
+style_user = "bg:blue fg:black"
+style_root = "bg:blue fg:black"
 format = '[ $user ]($style)'
 
 [directory]
-style = "fg:black bg:blue"
+style = "fg:black bg:cyan"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"

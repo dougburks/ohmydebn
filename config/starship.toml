@@ -64,7 +64,7 @@ style_root = "bg:bright-black fg:white"
 format = '[ $user ]($style)'
 
 [directory]
-style = "fg:bright-black bg:blue"
+style = "fg:black bg:blue"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -139,7 +139,7 @@ format = '[[ $symbol( $context) ](fg:black bg:yellow)]($style)'
 disabled = true
 time_format = "%R"
 style = "bg:red"
-format = '[[  $time ](fg:bright-black bg:red)]($style)'
+format = '[[  $time ](fg:black bg:red)]($style)'
 
 [line_break]
 disabled = true

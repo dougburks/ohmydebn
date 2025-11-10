@@ -247,14 +247,16 @@ touch $ALACRITTY_CONFIG_DIR/alacritty.toml
 pkill -SIGUSR2 btop
 
 # Update starship prompt
-STARSHIP_CONFIG=~/.config/starship.toml
-if [ -f $STARSHIP_CONFIG ]; then
-  mv $STARSHIP_CONFIG $STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
-fi
-if [ "$1" == "Ohmydebn" ]; then
+STARSHIP_STATE=~/.local/state/ohmydebn-config/starship-20251109
+if [ ! -f $STARSHIP_STATE ]; then
+  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
+  STARSHIP_CONFIG=~/.config/starship.toml
+  if [ -f $STARSHIP_CONFIG ]; then
+    mv $STARSHIP_CONFIG $STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+  fi
   cp ~/.local/share/ohmydebn/config/starship.toml $STARSHIP_CONFIG
-else
-  cp ~/.local/share/omarchy/config/starship.toml $STARSHIP_CONFIG
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $STARSHIP_STATE
 fi
 
 # Set new background

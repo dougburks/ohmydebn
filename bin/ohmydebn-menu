@@ -87,7 +87,7 @@ install_and_launch() {
 
 show_learn_menu() {
   case $(menu "Learn" "  Keybindings\n  OhMyDebn\n  Cinnamon\n  Debian\n  Neovim\n󱆃  Bash") in
-  *Keybindings*) ohmydebn-launch-webapp "https://github.com/dougburks/ohmydebn?tab=readme-ov-file#hotkeys" ;;
+  *Keybindings*) ohmydebn-launch-webapp "https://ohmydebn.org/hotkeys/" ;;
   *OhMyDebn*) ohmydebn-launch-webapp "https://ohmydebn.org" ;;
   *Cinnamon*) ohmydebn-launch-webapp "https://github.com/linuxmint/cinnamon" ;;
   *Debian*) ohmydebn-launch-webapp "https://wiki.debian.org/" ;;

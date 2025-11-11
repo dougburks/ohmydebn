@@ -15,6 +15,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt -y install alacritty \
   galculator \
   gcc \
   gcolor3 \
+  gir1.2-gtk4layershell-1.0 \
   git \
   gimp \
   golang \

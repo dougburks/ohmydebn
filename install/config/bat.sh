@@ -6,10 +6,17 @@ if [ ! -e $BAT_BIN ]; then
   sudo ln -s /usr/bin/batcat /usr/local/bin/bat
 fi
 
-if [ ! -d ~/.config/bat ]; then
+BAT_STATE=~/.local/state/ohmydebn-config/bat-20251110
+if [ ! -f $BAT_STATE ]; then
   ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring bat"
+  BAT_CONFIG=~/.config/bat
+  if [ -d $BAT_CONFIG ]; then
+    mv $BAT_CONFIG $BAT_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+  fi
   mkdir -p ~/.config
   cp -av ~/.local/share/ohmydebn/config/bat ~/.config/
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $BAT_STATE
 fi
 
 BAT_CACHE_METADATA=~/.cache/bat/metadata.yaml

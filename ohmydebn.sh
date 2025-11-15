@@ -7,7 +7,6 @@ source $OHMYDEBN_INSTALL/preflight/set.sh
 source $OHMYDEBN_INSTALL/preflight/os.sh
 source $OHMYDEBN_INSTALL/preflight/user.sh
 source $OHMYDEBN_INSTALL/preflight/arguments.sh
-source $OHMYDEBN_INSTALL/preflight/warning.sh
 source $OHMYDEBN_INSTALL/preflight/path.sh
 source $OHMYDEBN_INSTALL/preflight/effects.sh
 

@@ -13,6 +13,20 @@ Stars bow to its charm.
  -- AI, probably
 EOF
 
+if [ ! -f ~/.local/state/ohmydebn ]; then
+  cat <<EOF
+WARNING!
+
+- OhMyDebn is intended for a clean new installation.
+- OhMyDebn will remove apps like FireFox, Thunderbird, and others (unless you use the --no-uninstall option).
+- OhMyDebn will make changes to your APT configuration.
+- OhMyDebn is totally unsupported. If it breaks your system, you get to keep both pieces!
+
+Press Enter to continue or Ctrl-c to cancel.
+EOF
+  read input
+fi
+
 # Check to see if we have an APT configuration
 if [ -f /etc/apt/sources.list.d/debian.sources ] || [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
   echo "Found an APT sources file in /etc/apt/sources.list.d/"

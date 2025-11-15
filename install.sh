@@ -65,4 +65,4 @@ if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
 fi
 
-source ~/.local/share/ohmydebn/ohmydebn.sh "$@"
+source /opt/ohmydebn/ohmydebn.sh "$@"

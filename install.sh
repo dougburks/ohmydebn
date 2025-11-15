@@ -15,6 +15,7 @@ EOF
 
 if [ ! -f ~/.local/state/ohmydebn ]; then
   cat <<EOF
+
 WARNING!
 
 - OhMyDebn is intended for a clean new installation.

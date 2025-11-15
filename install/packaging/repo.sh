@@ -22,5 +22,5 @@ fi
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   /opt/ohmydebn/bin/ohmydebn-headline "tte rain" "Installing OhMyDebn packages from repo"
   sudo apt update
-  sudo apt install -y ohmydebn
+  sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
 fi

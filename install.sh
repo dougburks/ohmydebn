@@ -62,7 +62,7 @@ fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo apt update
-  sudo apt install -y ohmydebn
+  sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
 fi
 
 source ~/.local/share/ohmydebn/ohmydebn.sh "$@"

@@ -4,15 +4,15 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   toilet -f mono12 "OhMyDebn" | tte rain
   echo
 
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Configuring base OS"
+  /opt/ohmydebn/bin/ohmydebn-headline "tte rain" "Configuring base OS"
 
   if ! dpkg -s "cinnamon-desktop-environment" >/dev/null 2>&1; then
-    ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Installing Cinnamon desktop"
+    /opt/ohmydebn/bin/ohmydebn-headline "cat" "Installing Cinnamon desktop"
     sudo apt -y install cinnamon-desktop-environment
   fi
 
   if [ $(dpkg -l | grep "^ii  mint-" | wc -l) -eq 0 ]; then
-    ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Downloading Cinnamon themes"
+    /opt/ohmydebn/bin/ohmydebn-headline "cat" "Downloading Cinnamon themes"
     ARCH=$(uname -m)
     if [ "$ARCH" != "x86_64" ]; then
       sudo dpkg --add-architecture amd64

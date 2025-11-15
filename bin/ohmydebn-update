@@ -2,7 +2,7 @@
 
 set -e
 
-~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "OhMyDebn Update"
+/opt/ohmydebn/bin/ohmydebn-headline "cat" "OhMyDebn Update"
 
 cat <<EOF
 Continuing will update the base Debian OS packages and OhMyDebn
@@ -17,6 +17,4 @@ EOF
 
 read input
 
-ohmydebn-update-git
-
-bash ~/.local/share/ohmydebn/ohmydebn.sh --no-uninstall
+bash /opt/ohmydebn/ohmydebn.sh --no-uninstall

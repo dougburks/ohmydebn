@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OHMYDEBN_INSTALL=~/.local/share/ohmydebn/install
+OHMYDEBN_INSTALL=/opt/ohmydebn/install
 
 # Preflight
 source $OHMYDEBN_INSTALL/preflight/set.sh
@@ -12,9 +12,9 @@ source $OHMYDEBN_INSTALL/preflight/path.sh
 source $OHMYDEBN_INSTALL/preflight/effects.sh
 
 # Packaging
+source $OHMYDEBN_INSTALL/packaging/repo.sh
 source $OHMYDEBN_INSTALL/packaging/cinnamon.sh
 source $OHMYDEBN_INSTALL/packaging/dbus.sh
-source $OHMYDEBN_INSTALL/packaging/components.sh
 source $OHMYDEBN_INSTALL/packaging/remove.sh
 
 # Config
@@ -42,6 +42,7 @@ source $OHMYDEBN_INSTALL/config/zsh.sh
 # Cleanup
 source $OHMYDEBN_INSTALL/cleanup/usr-local-bin.sh
 source $OHMYDEBN_INSTALL/cleanup/theme-symlink.sh
+source $OHMYDEBN_INSTALL/cleanup/local-share.sh
 
 # Finalization
 source $OHMYDEBN_INSTALL/finalization/updates.sh

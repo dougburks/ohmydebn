@@ -2,7 +2,7 @@
 
 UFW_STATE=~/.local/state/ohmydebn-ufw
 if [ ! -f $UFW_STATE ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring firewall to deny inbound connections"
+  /opt/ohmydebn/bin/ohmydebn-headline "cat" "Configuring firewall to deny inbound connections"
   sudo ufw enable
   sudo ufw default deny incoming
   sudo ufw default allow outgoing

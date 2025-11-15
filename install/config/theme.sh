@@ -1,33 +1,16 @@
 #!/bin/bash
 
-~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating themes"
-
-# Update omarchy repo
-if [ ! -d ~/.local/share/omarchy ]; then
-  cd ~/.local/share/
-  git clone https://github.com/basecamp/omarchy.git
-else
-  cd ~/.local/share/omarchy
-  echo "Checking for updated omarchy themes..."
-  git pull
-  echo
-fi
-cd - >/dev/null
-
 # Create symlinks for all themes
-mkdir -p ~/.config/ohmydebn/themes
-for f in ~/.local/share/ohmydebn/themes/*; do
-  THEME=$(basename $f)
-  if [ ! -L ~/.config/ohmydebn/themes/$THEME ]; then
+THEME_SYMLINK_STATE=~/.local/state/ohmydebn-config/ohmydebn-theme-symlink-20251115
+if [ ! -f $THEME_SYMLINK_STATE ]; then
+  mkdir -p ~/.config/ohmydebn/themes
+  for f in /opt/ohmydebn-themes/* /opt/ohmydebn-themes-omarchy/*; do
+    THEME=$(basename $f)
+    rm -f ~/.config/ohmydebn/themes/$THEME
     ln -nfs "$f" ~/.config/ohmydebn/themes/
-  fi
-done
-for f in ~/.local/share/omarchy/themes/*; do
-  THEME=$(basename $f)
-  if [ ! -L ~/.config/omarchy/themes/$THEME ]; then
-    ln -nfs "$f" ~/.config/ohmydebn/themes/
-  fi
-done
+  done
+  touch $THEME_SYMLINK_STATE
+fi
 
 # Download theme support
 THEME_STATE=~/.local/state/ohmydebn-config/ohmydebn-themes-20250911
@@ -44,9 +27,9 @@ fi
 
 # Make sure default theme is set
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
+  /opt/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
   mkdir -p ~/.config/ohmydebn/current
-  ~/.local/share/ohmydebn/bin/ohmydebn-theme-set Ohmydebn
+  /opt/ohmydebn/bin/ohmydebn-theme-set Ohmydebn
 fi
 
 # Symlink ~/.config/omarchy to ~/.config/ohmydebn for Aether theme builder
@@ -58,29 +41,6 @@ fi
 # Symlink omarchy-theme-set to ohmydebn-theme-set for Aether
 if [ ! -e ~/.local/bin/omarchy-theme-set ]; then
   mkdir -p ~/.local/bin
-  ln -s ~/.local/share/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set
-fi
-
-# Install or update Aether
-if [ ! -d ~/.local/share/aether ]; then
-  mkdir -p ~/.local/share
-  cd ~/.local/share/
-  git clone https://github.com/bjarneo/aether
-else
-  echo "Checking for updated version of aether..."
-  cd ~/.local/share/aether
-  git pull
-  echo
-fi
-cd - >/dev/null
-
-# Install GTK4-NoCSD to enable window decorations for Aether
-NOCSD_DIR=~/.local/share/GTK4-NoCSD
-if [ ! -d $NOCSD_DIR ]; then
-  mkdir -p ~/.local/share
-  cd ~/.local/share
-  git clone https://codeberg.org/MorsMortium/GTK4-NoCSD.git
-  cd GTK4-NoCSD
-  gcc -fPIC -shared ./Source/GTK4-NoCSD.c -o libgtk4-nocsd.so $(pkg-config --cflags --libs libadwaita-1)
-  cd - >/dev/null
+  rm -f ~/.local/bin/omarchy-theme-set
+  ln -s /opt/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set
 fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "WARNING!
+  /opt/ohmydebn/bin/ohmydebn-headline "cat" "WARNING!
 
 - OhMyDebn is intended for a clean new installation.
 - OhMyDebn will remove apps like FireFox, Thunderbird, and others (unless you use the --no-uninstall option).

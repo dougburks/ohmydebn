@@ -6,7 +6,7 @@ if ! dpkg -s curl >/dev/null 2>&1 ||
   ! dpkg -s toilet >/dev/null 2>&1 ||
   ! dpkg -s toilet-fonts >/dev/null 2>&1; then
 
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Installing text effects for demoscene nostalgia"
+  /opt/ohmydebn/bin/ohmydebn-headline "cat" "Installing text effects for demoscene nostalgia"
   sudo apt update && sudo apt -y install curl \
     libglib2.0-bin \
     python3-terminaltexteffects \

@@ -45,27 +45,24 @@ EOF
   fi
 fi
 
-if ! dpkg -s "git" >/dev/null 2>&1; then
-  echo
-  echo "We need to install git so that we can clone the repo and continue the install."
-  echo
-  sudo apt update
-  sudo apt -y install git
+if [ ! -f /etc/apt/sources.list.d/ohmydebn.sources ]; then
+  sudo tee /etc/apt/sources.list.d/ohmydebn.sources <<EOF
+Types: deb
+URIs: https://dougburks.github.io/ohmydebn-packages-testing/
+Suites: trixie
+Components: main
+Signed-By: /usr/share/keyrings/ohmydebn-keyring.gpg
+EOF
 fi
 
-# Use custom repo if specified, otherwise default to dougburks/ohmydebn
-OHMYDEBN_REPO="${OHMYDEBN_REPO:-dougburks/ohmydebn}"
+if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
+  curl -fsSL https://dougburks.github.io/ohmydebn-packages-testing/repo-key.asc |
+    sudo gpg --dearmor -o /usr/share/keyrings/ohmydebn-keyring.gpg
+fi
 
-echo -e "\nCloning OhMyDebn from: https://github.com/${OHMYDEBN_REPO}.git"
-rm -rf ~/.local/share/ohmydebn/
-git clone "https://github.com/${OHMYDEBN_REPO}.git" ~/.local/share/ohmydebn >/dev/null
-
-# Use custom branch if instructed
-if [[ -n "$OHMYDEBN_REF" ]]; then
-  echo -e "\eUsing branch: $OHMYDEBN_REF"
-  cd ~/.local/share/ohmydebn
-  git fetch origin "${OHMYDEBN_REF}" && git checkout "${OHMYDEBN_REF}"
-  cd - >/dev/null
+if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
+  sudo apt update
+  sudo apt install -y ohmydebn
 fi
 
 source ~/.local/share/ohmydebn/ohmydebn.sh "$@"

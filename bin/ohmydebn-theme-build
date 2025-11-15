@@ -1,5 +1,4 @@
 #!/bin/bash
 
 export PATH=$PATH:~/.local/bin/
-export LD_PRELOAD=~/.local/share/GTK4-NoCSD/libgtk4-nocsd.so
-~/.local/share/aether/aether
+/opt/ohmydebn-aether/aether

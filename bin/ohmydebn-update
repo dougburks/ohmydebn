@@ -23,8 +23,4 @@ EOF
 
 read input
 
-if dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  bash $DIR/install.sh --no-uninstall
-else
-  bash $DIR/ohmydebn.sh --no-uninstall
-fi
+bash $DIR/install.sh --no-uninstall

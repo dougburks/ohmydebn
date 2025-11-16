@@ -1,6 +1,11 @@
 #!/bin/bash
 
-OHMYDEBN_INSTALL=/opt/ohmydebn/install
+if dpkg -s "ohmydebn" >/dev/null 2>&1; then
+  DIR=/opt/ohmydebn
+else
+  DIR=~/.local/share/ohmydebn
+fi
+OHMYDEBN_INSTALL=$DIR/install
 
 # Preflight
 source $OHMYDEBN_INSTALL/preflight/set.sh

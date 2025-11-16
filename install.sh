@@ -1,8 +1,58 @@
 #!/bin/bash
 
 set -e
-clear
-cat <<EOF
+
+if ! grep -q "13 (trixie)" /etc/os-release; then
+  echo "OhMyDebn is designed for Debian 13 Cinnamon. Exiting!"
+  exit 1
+fi
+
+if [ "$UID" -eq 0 ]; then
+
+  cat <<EOF
+Looks like you're running as root.
+
+Instead of running as root, you most likely want to
+run this as a normal user that has sudo privileges.
+
+Press Enter if you are sure you want to continue as root
+or Ctrl-c to cancel.
+EOF
+
+  read input
+fi
+
+# Parse command line arguments
+NO_UNINSTALL=false
+for arg in "$@"; do
+  case $arg in
+  --no-uninstall)
+    NO_UNINSTALL=true
+    shift
+    ;;
+  *)
+    # Unknown option
+    ;;
+  esac
+done
+
+# Most users are running a normal Debian 13 Cinnamon desktop and are running this script via gnome-terminal
+# In that case, let's change some terminal settings to make the output of this script look nicer
+if dpkg -s "gnome-terminal" >/dev/null 2>&1; then
+  gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/ foreground
+  -color "'#D3D7CF'"
+  gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/ background
+  -color "'#2E3436'"
+  gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/ use-theme-
+  colors false
+  gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/ palette "[
+'#2e3436', '#cc0000', '#4e9a06', '#c4a000', '#3465a4', '#75507b', '#06989a', '#d3d7cf', '#555753', '#ef2929', '#8ae234', '#fce94f', '#72
+9fcf', '#ad7fa8', '#34e2e2', '#eeeeec']"
+fi
+
+if [ ! -f ~/.local/state/ohmydebn ]; then
+  clear
+  cat <<EOF
 Welcome to OhMyDebn!
 
 OhMyDebn is a debonair Debian + Cinnamon setup inspired by Omarchy.
@@ -11,10 +61,6 @@ Debonair strides bold,
 Elegance in every step,
 Stars bow to its charm.
  -- AI, probably
-EOF
-
-if [ ! -f ~/.local/state/ohmydebn ]; then
-  cat <<EOF
 
 WARNING!
 
@@ -79,5 +125,7 @@ if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo apt update
   sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
 fi
+
+export PATH="/opt/ohmydebn/bin:$PATH"
 
 source /opt/ohmydebn/ohmydebn.sh "$@"

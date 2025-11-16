@@ -1,24 +1,5 @@
 #!/bin/bash
 
-if dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  DIR=/opt/ohmydebn
-else
-  DIR=~/.local/share/ohmydebn
-fi
-OHMYDEBN_INSTALL=$DIR/install
-
-# Preflight
-source $OHMYDEBN_INSTALL/preflight/set.sh
-source $OHMYDEBN_INSTALL/preflight/os.sh
-source $OHMYDEBN_INSTALL/preflight/user.sh
-source $OHMYDEBN_INSTALL/preflight/arguments.sh
-source $OHMYDEBN_INSTALL/preflight/path.sh
-source $OHMYDEBN_INSTALL/preflight/effects.sh
-
-# Repo
-source $OHMYDEBN_INSTALL/repo/repo.sh
-OHMYDEBN_INSTALL=/opt/ohmydebn/install
-
 # Packaging
 source $OHMYDEBN_INSTALL/packaging/cinnamon.sh
 source $OHMYDEBN_INSTALL/packaging/dbus.sh

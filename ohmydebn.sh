@@ -15,8 +15,11 @@ source $OHMYDEBN_INSTALL/preflight/arguments.sh
 source $OHMYDEBN_INSTALL/preflight/path.sh
 source $OHMYDEBN_INSTALL/preflight/effects.sh
 
+# Repo
+source $OHMYDEBN_INSTALL/repo/repo.sh
+OHMYDEBN_INSTALL=/opt/ohmydebn/install
+
 # Packaging
-source $OHMYDEBN_INSTALL/packaging/repo.sh
 source $OHMYDEBN_INSTALL/packaging/cinnamon.sh
 source $OHMYDEBN_INSTALL/packaging/dbus.sh
 source $OHMYDEBN_INSTALL/packaging/remove.sh

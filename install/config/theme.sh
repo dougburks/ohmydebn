@@ -73,14 +73,3 @@ else
   echo
 fi
 cd - >/dev/null
-
-# Install GTK4-NoCSD to enable window decorations for Aether
-NOCSD_DIR=~/.local/share/GTK4-NoCSD
-if [ ! -d $NOCSD_DIR ]; then
-  mkdir -p ~/.local/share
-  cd ~/.local/share
-  git clone https://codeberg.org/MorsMortium/GTK4-NoCSD.git
-  cd GTK4-NoCSD
-  gcc -fPIC -shared ./Source/GTK4-NoCSD.c -o libgtk4-nocsd.so $(pkg-config --cflags --libs libadwaita-1)
-  cd - >/dev/null
-fi

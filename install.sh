@@ -75,18 +75,18 @@ EOF
       if [ ! -f $DEBIANSOURCES ]; then
         echo "Creating $DEBIANSOURCES and adding the following:"
         cat <<EOF | sudo tee -a $DEBIANSOURCES
-  Types: deb
-  URIs: https://deb.debian.org/debian
-  Suites: trixie trixie-updates
-  Components: main non-free-firmware
-  Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+Types: deb
+URIs: https://deb.debian.org/debian
+Suites: trixie trixie-updates
+Components: main non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
-  Types: deb
-  URIs: https://security.debian.org/debian-security
-  Suites: trixie-security
-  Components: main non-free-firmware
-  Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-  EOF
+Types: deb
+URIs: https://security.debian.org/debian-security
+Suites: trixie-security
+Components: main non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
       fi
     fi
   fi

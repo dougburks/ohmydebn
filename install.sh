@@ -112,6 +112,6 @@ if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
 fi
 
-export PATH="/opt/ohmydebn/bin:$PATH"
+export PATH="/usr/share/ohmydebn/bin:$PATH"
 
-source /opt/ohmydebn/ohmydebn.sh "$@"
+source /usr/share/ohmydebn/ohmydebn.sh "$@"

@@ -1,10 +1,10 @@
 #!/bin/bash
 
 if [ -f ~/.local/state/ohmydebn ]; then
-  /opt/ohmydebn/bin/ohmydebn-headline "tte rain" "OhMyDebn update complete!"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "OhMyDebn update complete!"
 else
   echo
-  /opt/ohmydebn/bin/ohmydebn-headline "tte rain" "Installation complete!"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Installation complete!"
   echo
   toilet -f mono12 "Welcome" | tte rain
   toilet -f mono12 "   to" | tte rain

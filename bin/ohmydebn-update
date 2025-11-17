@@ -3,7 +3,7 @@
 set -e
 
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  DIR=/opt/ohmydebn
+  DIR=/usr/share/ohmydebn
 else
   DIR=~/.local/share/ohmydebn
 fi

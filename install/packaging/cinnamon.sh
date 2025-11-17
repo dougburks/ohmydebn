@@ -14,10 +14,10 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   toilet -f mono12 "OhMyDebn" | tte rain
   echo
 
-  /opt/ohmydebn/bin/ohmydebn-headline "tte rain" "Configuring base OS"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Configuring base OS"
 
   if [ $(dpkg -l | grep "^ii  mint-" | wc -l) -eq 0 ]; then
-    /opt/ohmydebn/bin/ohmydebn-headline "cat" "Downloading Cinnamon themes"
+    /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Downloading Cinnamon themes"
     ARCH=$(uname -m)
     if [ "$ARCH" != "x86_64" ]; then
       sudo dpkg --add-architecture amd64

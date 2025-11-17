@@ -1,3 +1,3 @@
 #!/bin/bash
 
-/opt/ohmydebn/bin/ohmydebn-logo-generate
+/usr/share/ohmydebn/bin/ohmydebn-logo-generate

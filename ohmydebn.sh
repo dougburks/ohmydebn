@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OHMYDEBN_INSTALL=/opt/ohmydebn/install
+OHMYDEBN_INSTALL=/usr/share/ohmydebn/install
 
 # Packaging
 source $OHMYDEBN_INSTALL/packaging/cinnamon.sh

@@ -4,7 +4,7 @@
 THEME_SYMLINK_STATE=~/.local/state/ohmydebn-config/ohmydebn-theme-symlink-20251115
 if [ ! -f $THEME_SYMLINK_STATE ]; then
   mkdir -p ~/.config/ohmydebn/themes
-  for f in /opt/ohmydebn-themes/* /opt/ohmydebn-themes-omarchy/*; do
+  for f in /usr/share/ohmydebn-themes/* /usr/share/ohmydebn-themes-omarchy/*; do
     THEME=$(basename $f)
     rm -f ~/.config/ohmydebn/themes/$THEME
     ln -nfs "$f" ~/.config/ohmydebn/themes/
@@ -27,9 +27,9 @@ fi
 
 # Make sure default theme is set
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  /opt/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
   mkdir -p ~/.config/ohmydebn/current
-  /opt/ohmydebn/bin/ohmydebn-theme-set Ohmydebn
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set Ohmydebn
 fi
 
 # Symlink ~/.config/omarchy to ~/.config/ohmydebn for Aether theme builder
@@ -42,5 +42,5 @@ fi
 if [ ! -e ~/.local/bin/omarchy-theme-set ]; then
   mkdir -p ~/.local/bin
   rm -f ~/.local/bin/omarchy-theme-set
-  ln -s /opt/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set
+  ln -s /usr/share/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set
 fi

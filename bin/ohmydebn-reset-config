@@ -21,4 +21,4 @@ done
 rm -rf ~/.local/state/ohmydebn*
 
 # Write new config files
-bash /opt/ohmydebn/ohmydebn.sh --no-uninstall
+bash /usr/share/ohmydebn/ohmydebn.sh --no-uninstall

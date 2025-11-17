@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OHMYDEBN_PATH="/opt/ohmydebn"
+OHMYDEBN_PATH="/usr/share/ohmydebn"
 
 # Ensure remote is reachable
 if ! git -C "$OHMYDEBN_PATH" ls-remote &>/dev/null; then

@@ -92,7 +92,7 @@ EOF
   fi
 fi
 
-sudo apt update && sudo apt install curl gpg
+sudo apt update && sudo apt install -y curl gpg
 
 if [ ! -f /etc/apt/sources.list.d/ohmydebn.sources ]; then
   sudo tee /etc/apt/sources.list.d/ohmydebn.sources <<EOF

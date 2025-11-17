@@ -11,7 +11,6 @@ if ohmydebn-cmd-present code && [[ ! -f "$VS_CODE_SKIP_FLAG" ]]; then
 
     # Install VS Code theme extension
     if [[ -n "$extension" ]] && ! code --list-extensions | grep -Fxq "$extension"; then
-      notify-send "   Installing VS Code theme for $theme_name"
       code --install-extension "$extension" >/dev/null
     fi
 

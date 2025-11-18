@@ -38,7 +38,6 @@ source $OHMYDEBN_INSTALL/config/zsh.sh
 
 # Cleanup
 source $OHMYDEBN_INSTALL/cleanup/usr-local-bin.sh
-source $OHMYDEBN_INSTALL/cleanup/theme-symlink.sh
 source $OHMYDEBN_INSTALL/cleanup/local-share.sh
 
 # Finalization

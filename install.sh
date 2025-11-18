@@ -98,7 +98,7 @@ fi
 if [ ! -f /etc/apt/sources.list.d/ohmydebn.sources ]; then
   sudo tee /etc/apt/sources.list.d/ohmydebn.sources <<EOF
 Types: deb
-URIs: https://dougburks.github.io/ohmydebn-packages-testing/
+URIs: https://dougburks.github.io/ohmydebn-packages/
 Suites: trixie
 Components: main
 Signed-By: /usr/share/keyrings/ohmydebn-keyring.gpg
@@ -106,7 +106,7 @@ EOF
 fi
 
 if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
-  curl -fsSL https://dougburks.github.io/ohmydebn-packages-testing/repo-key.asc |
+  curl -fsSL https://dougburks.github.io/ohmydebn-packages/repo-key.asc |
     sudo gpg --dearmor -o /usr/share/keyrings/ohmydebn-keyring.gpg
 fi
 

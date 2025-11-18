@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# If packages haven't been installed yet, then install them
+if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
+  ~/.local/share/ohmydebn/install.sh --no-uninstall
+  exit
+fi
+
+# Our packages install to /usr/share/
 OHMYDEBN_INSTALL=/usr/share/ohmydebn/install
 
 # Packaging

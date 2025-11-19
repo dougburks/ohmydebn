@@ -49,19 +49,19 @@ ash)
   ;;
 catppuccin)
   GTK_THEME="Catppuccin-Dark"
-  ICON_THEME="Yaru-purple-dark"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Catppuccin-Dark"
   ROFI_THEME="$ROFI_DIR/catppuccin.rasi"
   ;;
 catppuccin-latte)
   GTK_THEME="Catppuccin-Light"
-  ICON_THEME="Yaru-magenta"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Catppuccin-Light"
   ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
   ;;
 everforest)
   GTK_THEME="Everforest-Dark"
-  ICON_THEME="Yaru-prussiangreen-dark"
+  ICON_THEME="Mint-Y-Grey"
   CINNAMON_THEME="Everforest-Dark"
   ROFI_THEME="$ROFI_DIR/everforest.rasi"
   ;;
@@ -73,7 +73,7 @@ flexoki-light)
   ;;
 gruvbox)
   GTK_THEME="Gruvbox-Dark"
-  ICON_THEME="Yaru-olive-dark"
+  ICON_THEME="Mint-Y"
   CINNAMON_THEME="Gruvbox-Dark"
   ROFI_THEME="$ROFI_DIR/gruvbox.rasi"
   ;;
@@ -115,7 +115,7 @@ ristretto)
   ;;
 rose-pine)
   GTK_THEME="Rosepine-Light"
-  ICON_THEME="Yaru-purple"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Rosepine-Light"
   ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
   ;;

@@ -132,6 +132,7 @@ tokyo-night)
     ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ICON_THEME in
     Yaru-wartybrown)
+      ICON_THEME="Mint-Y-Grey"
       ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Gruvbox-Light"
@@ -142,6 +143,7 @@ tokyo-night)
       fi
       ;;
     Yaru-red)
+      ICON_THEME="Mint-Y-Red"
       ROFI_THEME="$ROFI_DIR/square-red-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Rosepine-Light"
@@ -152,6 +154,7 @@ tokyo-night)
       fi
       ;;
     Yaru-blue)
+      ICON_THEME="Mint-Y-Blue"
       ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Catppuccin-Light"
@@ -162,6 +165,7 @@ tokyo-night)
       fi
       ;;
     Yaru-sage | Yaru-olive | Yaru-prussiangreen)
+      ICON_THEME="Mint-Y"
       ROFI_THEME="$ROFI_DIR/square-green-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Everforest-Light"
@@ -183,6 +187,7 @@ tokyo-night)
       fi
       ;;
     Yaru-magenta | Yaru-purple)
+      ICON_THEME="Mint-Y-Purple"
       ROFI_THEME="$ROFI_DIR/square-purple-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Tokyonight-Light"

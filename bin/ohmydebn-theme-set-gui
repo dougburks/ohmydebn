@@ -8,13 +8,13 @@ SELECTION=$( (
   $OHMYDEBN_BIN/ohmydebn-theme-list
   echo "Next Background"
   echo "Install Theme from URL"
-  echo "Build New Theme using Aether"
+  echo "Build New Theme"
   echo "Remove Theme"
 ) | /usr/bin/rofi -dpi 1 -i -p "Select a theme" -dmenu -selected-row $INDEX -theme-str 'window {width: 20%;}')
 
 if [ "$SELECTION" == "Install Theme from URL" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install\"; $OHMYDEBN_BIN/ohmydebn-show-done"
-elif [ "$SELECTION" == "Build New Theme using Aether" ]; then
+elif [ "$SELECTION" == "Build New Theme" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-theme-build
 elif [ "$SELECTION" == "Remove Theme" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-remove\"; $OHMYDEBN_BIN/ohmydebn-show-done"

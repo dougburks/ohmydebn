@@ -1,20 +1,17 @@
 #!/bin/bash
 
-OHMYDEBN_INSTALL=~/.local/share/ohmydebn/install
+# If packages haven't been installed yet, then install them
+if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
+  ~/.local/share/ohmydebn/install.sh --no-uninstall
+  exit
+fi
 
-# Preflight
-source $OHMYDEBN_INSTALL/preflight/set.sh
-source $OHMYDEBN_INSTALL/preflight/os.sh
-source $OHMYDEBN_INSTALL/preflight/user.sh
-source $OHMYDEBN_INSTALL/preflight/arguments.sh
-source $OHMYDEBN_INSTALL/preflight/warning.sh
-source $OHMYDEBN_INSTALL/preflight/path.sh
-source $OHMYDEBN_INSTALL/preflight/effects.sh
+# Our packages install to /usr/share/
+OHMYDEBN_INSTALL=/usr/share/ohmydebn/install
 
 # Packaging
 source $OHMYDEBN_INSTALL/packaging/cinnamon.sh
 source $OHMYDEBN_INSTALL/packaging/dbus.sh
-source $OHMYDEBN_INSTALL/packaging/components.sh
 source $OHMYDEBN_INSTALL/packaging/remove.sh
 
 # Config
@@ -41,7 +38,7 @@ source $OHMYDEBN_INSTALL/config/zsh.sh
 
 # Cleanup
 source $OHMYDEBN_INSTALL/cleanup/usr-local-bin.sh
-source $OHMYDEBN_INSTALL/cleanup/theme-symlink.sh
+source $OHMYDEBN_INSTALL/cleanup/local-share.sh
 
 # Finalization
 source $OHMYDEBN_INSTALL/finalization/updates.sh

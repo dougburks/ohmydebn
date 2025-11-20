@@ -7,8 +7,8 @@ let INDEX--
 SELECTION=$( (
   $OHMYDEBN_BIN/ohmydebn-theme-list
   echo "Next Background"
-  echo "Install Theme from URL"
   echo "Build New Theme"
+  echo "Install Theme from URL"
   echo "Remove Theme"
 ) | /usr/bin/rofi -dpi 1 -i -p "Select a theme" -dmenu -selected-row $INDEX -theme-str 'window {width: 20%;}')
 

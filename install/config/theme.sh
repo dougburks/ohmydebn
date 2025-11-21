@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Create symlinks for all themes
-THEME_SYMLINK_STATE=~/.local/state/ohmydebn-config/ohmydebn-theme-symlink-20251115
+THEME_SYMLINK_STATE=~/.local/state/ohmydebn-config/ohmydebn-theme-symlink-20251121
 if [ ! -f $THEME_SYMLINK_STATE ]; then
   mkdir -p ~/.config/ohmydebn/themes
   for f in /usr/share/ohmydebn-themes/* /usr/share/ohmydebn-themes-omarchy/*; do

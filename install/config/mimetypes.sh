@@ -1,19 +1,19 @@
 #!/bin/bash
 
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default web browser"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default web browser"
   sudo update-alternatives --set x-www-browser /usr/bin/chromium
   xdg-settings set default-web-browser chromium.desktop
   xdg-mime default chromium.desktop x-scheme-handler/http
   xdg-mime default chromium.desktop x-scheme-handler/https
 
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring ristretto as default image viewer"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring ristretto as default image viewer"
   xdg-mime default org.xfce.ristretto.desktop image/bmp image/gif image/jpeg image/png image/tiff image/webp
 fi
 
 PDF_STATE=~/.local/state/ohmydebn-config/pdf-20251107
 if [ ! -f $PDF_STATE ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default pdf viewer"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default pdf viewer"
   xdg-mime default chromium.desktop application/pdf
   mkdir -p ~/.local/state/ohmydebn-config
   touch $PDF_STATE

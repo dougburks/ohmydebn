@@ -1,5 +1,3 @@
 #!/bin/bash
 
-OHMYDEBN_PATH=~/.local/share/ohmydebn
-
-git -C "$OHMYDEBN_PATH" describe --tags $(git -C "$OHMYDEBN_PATH" rev-list --tags --max-count=1)
+cat /usr/share/ohmydebn/VERSION

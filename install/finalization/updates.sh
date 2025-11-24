@@ -1,4 +1,4 @@
 #!/bin/bash
 
-~/.local/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Installing any available OS updates"
-sudo apt -y dist-upgrade
+/usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Installing any available package updates"
+sudo apt update && sudo apt -y full-upgrade

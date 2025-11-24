@@ -49,31 +49,37 @@ ash)
   ;;
 catppuccin)
   GTK_THEME="Catppuccin-Dark"
-  ICON_THEME="Catppuccin-Mocha"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Catppuccin-Dark"
   ROFI_THEME="$ROFI_DIR/catppuccin.rasi"
   ;;
 catppuccin-latte)
   GTK_THEME="Catppuccin-Light"
-  ICON_THEME="Catppuccin-Latte"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Catppuccin-Light"
   ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
   ;;
 everforest)
   GTK_THEME="Everforest-Dark"
-  ICON_THEME="Everforest-Dark"
+  ICON_THEME="Mint-Y-Grey"
   CINNAMON_THEME="Everforest-Dark"
   ROFI_THEME="$ROFI_DIR/everforest.rasi"
   ;;
+flexoki-light)
+  GTK_THEME="Mint-Y-Grey"
+  ICON_THEME="Mint-Y-Grey"
+  CINNAMON_THEME="Mint-Y-Grey"
+  ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
+  ;;
 gruvbox)
   GTK_THEME="Gruvbox-Dark"
-  ICON_THEME="gruvbox_dark"
+  ICON_THEME="Mint-Y"
   CINNAMON_THEME="Gruvbox-Dark"
   ROFI_THEME="$ROFI_DIR/gruvbox.rasi"
   ;;
 kanagawa)
   GTK_THEME="Kanagawa-Dark"
-  ICON_THEME="Kanagawa"
+  ICON_THEME="Mint-Y-Navy"
   CINNAMON_THEME="Kanagawa-Dark"
   ROFI_THEME="$ROFI_DIR/kanagawa.rasi"
   ;;
@@ -85,19 +91,19 @@ matte-black)
   ;;
 nord)
   GTK_THEME="Catppuccin-Dark-Macchiato"
-  ICON_THEME="Catppuccin-Macchiato"
+  ICON_THEME="Mint-Y-Navy"
   CINNAMON_THEME="Catppuccin-Dark-Macchiato"
   ROFI_THEME="$ROFI_DIR/square-nord-dark.rasi"
   ;;
 ohmydebn)
   GTK_THEME="Catppuccin-Dark"
-  ICON_THEME="Catppuccin-Mocha-Alt2"
+  ICON_THEME="Mint-Y-Blue"
   CINNAMON_THEME="Catppuccin-Dark"
   ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
   ;;
 osaka-jade)
   GTK_THEME="Osaka-Teal-Dark"
-  ICON_THEME="Osaka_Dark"
+  ICON_THEME="Mint-Y"
   CINNAMON_THEME="Osaka-Teal-Dark"
   ROFI_THEME="$ROFI_DIR/osaka-jade.rasi"
   ;;
@@ -109,13 +115,13 @@ ristretto)
   ;;
 rose-pine)
   GTK_THEME="Rosepine-Light"
-  ICON_THEME="Rose-Pine"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Rosepine-Light"
   ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
   ;;
 tokyo-night)
   GTK_THEME="Tokyonight-Dark"
-  ICON_THEME="Tokyonight-Dark"
+  ICON_THEME="Mint-Y-Purple"
   CINNAMON_THEME="Tokyonight-Dark"
   ROFI_THEME="$ROFI_DIR/tokyo-night.rasi"
   ;;
@@ -126,6 +132,7 @@ tokyo-night)
     ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ICON_THEME in
     Yaru-wartybrown)
+      ICON_THEME="Mint-Y-Grey"
       ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Gruvbox-Light"
@@ -136,6 +143,7 @@ tokyo-night)
       fi
       ;;
     Yaru-red)
+      ICON_THEME="Mint-Y-Red"
       ROFI_THEME="$ROFI_DIR/square-red-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Rosepine-Light"
@@ -146,6 +154,7 @@ tokyo-night)
       fi
       ;;
     Yaru-blue)
+      ICON_THEME="Mint-Y-Blue"
       ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Catppuccin-Light"
@@ -156,6 +165,7 @@ tokyo-night)
       fi
       ;;
     Yaru-sage | Yaru-olive | Yaru-prussiangreen)
+      ICON_THEME="Mint-Y"
       ROFI_THEME="$ROFI_DIR/square-green-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Everforest-Light"
@@ -177,6 +187,7 @@ tokyo-night)
       fi
       ;;
     Yaru-magenta | Yaru-purple)
+      ICON_THEME="Mint-Y-Purple"
       ROFI_THEME="$ROFI_DIR/square-purple-dark.rasi"
       if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
         GTK_THEME="Tokyonight-Light"
@@ -249,18 +260,18 @@ pkill -SIGUSR2 btop
 # Update starship prompt
 STARSHIP_STATE=~/.local/state/ohmydebn-config/starship-20251109
 if [ ! -f $STARSHIP_STATE ]; then
-  ~/.local/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
   STARSHIP_CONFIG=~/.config/starship.toml
   if [ -f $STARSHIP_CONFIG ]; then
     mv $STARSHIP_CONFIG $STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
   fi
-  cp ~/.local/share/ohmydebn/config/starship.toml $STARSHIP_CONFIG
+  cp /usr/share/ohmydebn/config/starship.toml $STARSHIP_CONFIG
   mkdir -p ~/.local/state/ohmydebn-config
   touch $STARSHIP_STATE
 fi
 
 # Set new background
-~/.local/share/ohmydebn/bin/ohmydebn-theme-bg-next
+/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
 
 ohmydebn-theme-set-eza
 ohmydebn-theme-set-vscode

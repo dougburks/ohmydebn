@@ -1,3 +1,3 @@
 #!/bin/bash
 
-/usr/bin/alacritty --title 'screenfetch' -e ~/.local/share/ohmydebn/bin/ohmydebn-screenfetch
+/usr/bin/alacritty --title 'screenfetch' -e /usr/share/ohmydebn/bin/ohmydebn-screenfetch

@@ -14,5 +14,4 @@ Once the idea is accepted, then you can:
 - fork the `dev` branch
 - add the changes to your fork
 - test your changes
-- add documentation to README.md if necessary
 - submit a PR for the `dev` branch

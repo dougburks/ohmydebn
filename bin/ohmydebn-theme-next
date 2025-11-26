@@ -30,5 +30,5 @@ NEXT_INDEX=$(((INDEX + 1) % TOTAL))
 NEW_THEME=${THEMES[$NEXT_INDEX]}
 NEW_THEME_NAME=$(basename "$NEW_THEME")
 
-ohmydebn-theme-set $NEW_THEME_NAME
+/usr/share/ohmydebn/bin/ohmydebn-theme-set $NEW_THEME_NAME
 notify-send "Theme changed to $NEW_THEME_NAME" -t 2000

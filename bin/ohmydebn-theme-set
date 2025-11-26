@@ -299,5 +299,5 @@ fi
 # Set new background
 /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
 
-ohmydebn-theme-set-eza
-ohmydebn-theme-set-vscode
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-vscode

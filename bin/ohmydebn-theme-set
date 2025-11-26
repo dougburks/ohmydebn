@@ -207,12 +207,38 @@ WOFI_CSS=~/.config/ohmydebn/current/theme/wofi.css
 if [[ -f $WOFI_CSS ]]; then
   BG=$(grep "@define-color bg " $WOFI_CSS | awk '{print $3}')
   FG=$(grep "@define-color fg " $WOFI_CSS | awk '{print $3}')
-  GRAY1=$(grep "@define-color gray1 " $WOFI_CSS | awk '{print $3}')
-  GRAY2=$(grep "@define-color gray2 " $WOFI_CSS | awk '{print $3}')
-  GRAY3=$(grep "@define-color gray3 " $WOFI_CSS | awk '{print $3}')
-  GRAY4=$(grep "@define-color gray4 " $WOFI_CSS | awk '{print $3}')
-  GRAY5=$(grep "@define-color gray5 " $WOFI_CSS | awk '{print $3}')
-  FG_BRIGHT=$(grep "@define-color fg_bright " $WOFI_CSS | awk '{print $3}')
+  # Some themes do not contain the certain colors so fall back to FG/BG when necessary
+  if grep -q "@define-color gray1 " $WOFI_CSS; then
+    GRAY1=$(grep "@define-color gray1 " $WOFI_CSS | awk '{print $3}')
+  else
+    GRAY1=$FG
+  fi
+  if grep -q "@define-color gray2 " $WOFI_CSS; then
+    GRAY2=$(grep "@define-color gray2 " $WOFI_CSS | awk '{print $3}')
+  else
+    GRAY2=$FG
+  fi
+  if grep -q "@define-color gray3 " $WOFI_CSS; then
+    GRAY3=$(grep "@define-color gray3 " $WOFI_CSS | awk '{print $3}')
+  else
+    GRAY3=$FG
+  fi
+  if grep -q "@define-color gray4 " $WOFI_CSS; then
+    GRAY4=$(grep "@define-color gray4 " $WOFI_CSS | awk '{print $3}')
+  else
+    GRAY4=$BG
+  fi
+  if grep -q "@define-color gray5 " $WOFI_CSS; then
+    GRAY5=$(grep "@define-color gray5 " $WOFI_CSS | awk '{print $3}')
+  else
+    GRAY5=$BG
+  fi
+  if grep -q "@define-color fg_bright " $WOFI_CSS; then
+    FG_BRIGHT=$(grep "@define-color fg_bright " $WOFI_CSS | awk '{print $3}')
+  else
+    FG_BRIGHT=$FG
+  fi
+
   AETHER_RASI=$ROFI_DIR/aether.rasi
   cp $ROFI_DIR/square-nord-dark.rasi $AETHER_RASI
   # bg0 - window background color

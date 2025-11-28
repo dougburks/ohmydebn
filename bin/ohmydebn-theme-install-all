@@ -1,0 +1,31 @@
+#!/bin/bash
+
+URL="https://learn.omacom.io/2/the-omarchy-manual/90/extra-themes"
+cat <<EOF
+Continuing will install all third-party themes from $URL
+
+Press Enter to continue or Ctrl-C to cancel.
+EOF
+
+read input
+
+THEMES_DIR="$HOME/.config/ohmydebn/themes"
+
+curl -s $URL | grep github.com | cut -d\" -f2 | grep -v torrentz-hydra | while read REPO_URL; do
+  THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//')
+  echo -n $THEME_NAME
+  THEME_PATH="$THEMES_DIR/$THEME_NAME"
+
+  if [ -d "$THEME_PATH" ]; then
+    echo " - already installed"
+  else
+    echo " - installing:"
+    if ! git clone "$REPO_URL" "$THEME_PATH"; then
+      echo "Error: Failed to clone $THEME_PATH"
+    fi
+
+  fi
+
+  echo
+
+done

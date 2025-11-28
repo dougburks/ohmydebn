@@ -204,7 +204,7 @@ esac
 
 # If using an aether theme, then pull the colors from its wofi.css and convert them for rofi
 WOFI_CSS=~/.config/ohmydebn/current/theme/wofi.css
-if [[ -f $WOFI_CSS && grep -q "@define-color bg " $WOFI_CSS && grep -q "@define-color fg " $WOFI_CSS ]]; then
+if [[ -f $WOFI_CSS ]] && grep -q "@define-color bg " $WOFI_CSS && grep -q "@define-color fg " $WOFI_CSS ]]; then
   BG=$(grep "@define-color bg " $WOFI_CSS | awk '{print $3}')
   FG=$(grep "@define-color fg " $WOFI_CSS | awk '{print $3}')
   # Some themes do not contain the certain colors so fall back to FG/BG when necessary

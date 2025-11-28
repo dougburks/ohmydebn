@@ -3,7 +3,6 @@
 source $OHMYDEBN_INSTALL/config/alacritty.sh
 source $OHMYDEBN_INSTALL/config/bat.sh
 source $OHMYDEBN_INSTALL/config/btop.sh
-source $OHMYDEBN_INSTALL/config/caskaydia.sh
 source $OHMYDEBN_INSTALL/config/cava.sh
 source $OHMYDEBN_INSTALL/config/chromium.sh
 source $OHMYDEBN_INSTALL/config/cinnamon.sh

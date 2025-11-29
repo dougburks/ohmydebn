@@ -59,6 +59,12 @@ catppuccin-latte)
   CINNAMON_THEME="Catppuccin-Light"
   ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
   ;;
+ethereal)
+  GTK_THEME="Catppuccin-Dark"
+  ICON_THEME="Mint-Y-Blue"
+  CINNAMON_THEME="Catppuccin-Dark"
+  ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
+  ;;
 everforest)
   GTK_THEME="Everforest-Dark"
   ICON_THEME="Mint-Y-Grey"
@@ -76,6 +82,12 @@ gruvbox)
   ICON_THEME="Mint-Y"
   CINNAMON_THEME="Gruvbox-Dark"
   ROFI_THEME="$ROFI_DIR/gruvbox.rasi"
+  ;;
+hackerman)
+  GTK_THEME="Osaka-Teal-Dark"
+  ICON_THEME="Mint-Y-Blue"
+  CINNAMON_THEME="Osaka-Teal-Dark"
+  ROFI_THEME="$ROFI_DIR/osaka-jade.rasi"
   ;;
 kanagawa)
   GTK_THEME="Kanagawa-Dark"

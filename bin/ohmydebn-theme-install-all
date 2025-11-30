@@ -2,7 +2,11 @@
 
 URL="https://learn.omacom.io/2/the-omarchy-manual/90/extra-themes"
 cat <<EOF
-Continuing will install all third-party themes from $URL
+Continuing will install all third-party themes from:
+$URL
+
+Depending on the speed of your Internet connection,
+this may take a few minutes.
 
 Press Enter to continue or Ctrl-C to cancel.
 EOF

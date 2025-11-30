@@ -1,4 +1,5 @@
 #!/bin/bash
 
-export PATH=$PATH:~/.local/bin/
+source /usr/share/ohmydebn/bin/ohmydebn-path
+
 /usr/share/ohmydebn-aether/aether "$@"

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
+  export PATH="/usr/share/ohmydebn/bin:$PATH"
+fi

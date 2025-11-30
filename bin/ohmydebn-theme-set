@@ -26,8 +26,10 @@ ln -nsf "$THEME_PATH" "$CURRENT_THEME_DIR"
 # Determine light or dark mode
 if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
   gsettings set org.x.apps.portal color-scheme "prefer-light"
+  LIGHT_DARK="Light"
 else
   gsettings set org.x.apps.portal color-scheme "prefer-dark"
+  LIGHT_DARK="Dark"
 fi
 
 # Define ROFI_DIR
@@ -146,68 +148,39 @@ tokyo-night)
     Yaru-wartybrown)
       ICON_THEME="Mint-Y-Grey"
       ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Gruvbox-Light"
-        CINNAMON_THEME="Gruvbox-Light"
-      else
-        GTK_THEME="Gruvbox-Dark"
-        CINNAMON_THEME="Gruvbox-Dark"
+      GTK_THEME="Gruvbox-$LIGHT_DARK"
+      CINNAMON_THEME="Gruvbox-$LIGHT_DARK"
       fi
       ;;
     Yaru-red)
       ICON_THEME="Mint-Y-Red"
       ROFI_THEME="$ROFI_DIR/square-red-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Rosepine-Light"
-        CINNAMON_THEME="Rosepine-Light"
-      else
-        GTK_THEME="Rosepine-Dark"
-        CINNAMON_THEME="Rosepine-Dark"
-      fi
+      GTK_THEME="Rosepine-$LIGHT_DARK"
+      CINNAMON_THEME="Rosepine-$LIGHT_DARK"
       ;;
     Yaru-blue)
       ICON_THEME="Mint-Y-Blue"
       ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Catppuccin-Light"
-        CINNAMON_THEME="Catppuccin-Light"
-      else
-        GTK_THEME="Catppuccin-Dark"
-        CINNAMON_THEME="Catppuccin-Dark"
-      fi
+      GTK_THEME="Catppuccin-$LIGHT_DARK"
+      CINNAMON_THEME="Catppuccin-$LIGHT_DARK"
       ;;
     Yaru-sage | Yaru-olive | Yaru-prussiangreen)
       ICON_THEME="Mint-Y"
       ROFI_THEME="$ROFI_DIR/square-green-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Everforest-Light"
-        CINNAMON_THEME="Everforest-Light"
-      else
-        GTK_THEME="Everforest-Dark"
-        CINNAMON_THEME="Everforest-Dark"
-      fi
+      GTK_THEME="Everforest-$LIGHT_DARK"
+      CINNAMON_THEME="Everforest-$LIGHT_DARK"
       ;;
     Yaru-yellow)
       ICON_THEME="Mint-Y-Sand"
       ROFI_THEME="$ROFI_DIR/square-yellow-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Gruvbox-Yellow-Light"
-        CINNAMON_THEME="Gruvbox-Yellow-Light"
-      else
-        GTK_THEME="Gruvbox-Yellow-Dark"
-        CINNAMON_THEME="Gruvbox-Yellow-Dark"
-      fi
+      GTK_THEME="Gruvbox-Yellow-$LIGHT_DARK"
+      CINNAMON_THEME="Gruvbox-Yellow-$LIGHT_DARK"
       ;;
     Yaru-magenta | Yaru-purple)
       ICON_THEME="Mint-Y-Purple"
       ROFI_THEME="$ROFI_DIR/square-purple-dark.rasi"
-      if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
-        GTK_THEME="Tokyonight-Light"
-        CINNAMON_THEME="Tokyonight-Light"
-      else
-        GTK_THEME="Tokyonight-Dark"
-        CINNAMON_THEME="Tokyonight-Dark"
-      fi
+      GTK_THEME="Tokyonight-$LIGHT_DARK"
+      CINNAMON_THEME="Tokyonight-$LIGHT_DARK"
       ;;
     esac
   fi
@@ -219,7 +192,7 @@ WOFI_CSS=~/.config/ohmydebn/current/theme/wofi.css
 if [[ -f $WOFI_CSS ]] && grep -q "@define-color bg " $WOFI_CSS && grep -q "@define-color fg " $WOFI_CSS ]]; then
   BG=$(grep "@define-color bg " $WOFI_CSS | awk '{print $3}')
   FG=$(grep "@define-color fg " $WOFI_CSS | awk '{print $3}')
-  # Some themes do not contain the certain colors so fall back to FG/BG when necessary
+  # Some themes do not contain certain colors so fall back to FG/BG when necessary
   if grep -q "@define-color gray1 " $WOFI_CSS; then
     GRAY1=$(grep "@define-color gray1 " $WOFI_CSS | awk '{print $3}')
   else

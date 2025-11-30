@@ -9,8 +9,8 @@ SELECTION=$( (
   echo "Next Background"
   echo "Install Theme from URL"
   echo "Install All Omarchy Extra Themes"
+  echo "Build New Theme with Aether"
   echo "Browse Aether Themes"
-  echo "Build New Theme"
   echo "Remove Theme"
 ) | /usr/bin/rofi -dpi 1 -i -p "Select a theme" -dmenu -selected-row $INDEX -theme-str 'window {width: 20%;}')
 
@@ -21,7 +21,7 @@ elif [ "$SELECTION" == "Install All Omarchy Extra Themes" ]; then
 elif [ "$SELECTION" == "Browse Aether Themes" ]; then
   /usr/bin/chromium https://aether.oever.li
 elif [ "$SELECTION" == "Build New Theme" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-theme-build
+  /usr/share/ohmydebn/bin/aether
 elif [ "$SELECTION" == "Remove Theme" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-remove\"; $OHMYDEBN_BIN/ohmydebn-show-done"
 elif [ "$SELECTION" == "Next Background" ]; then

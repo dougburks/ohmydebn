@@ -20,7 +20,7 @@ elif [ "$SELECTION" == "Install All Omarchy Extra Themes" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install-all\"; $OHMYDEBN_BIN/ohmydebn-show-done"
 elif [ "$SELECTION" == "Browse Aether Themes" ]; then
   /usr/bin/chromium https://aether.oever.li
-elif [ "$SELECTION" == "Build New Theme" ]; then
+elif [ "$SELECTION" == "Build New Theme with Aether" ]; then
   /usr/share/ohmydebn/bin/aether
 elif [ "$SELECTION" == "Remove Theme" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-remove\"; $OHMYDEBN_BIN/ohmydebn-show-done"

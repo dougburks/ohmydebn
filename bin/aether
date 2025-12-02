@@ -1,5 +1,5 @@
 #!/bin/bash
 
-source /usr/share/ohmydebn/bin/ohmydebn-path
+cd /usr/share/ohmydebn-aether || exit
 
-/usr/share/ohmydebn-aether/aether "$@"
+exec /usr/bin/gjs -m src/main.js "$@"

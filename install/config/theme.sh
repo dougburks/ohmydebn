@@ -37,3 +37,8 @@ if [ ! -e ~/.config/omarchy ]; then
   mkdir -p ~/.config
   ln -s ~/.config/ohmydebn ~/.config/omarchy
 fi
+
+# Symlink library for Aether theme builder
+if [ ! -e /usr/lib/libgtk4-layer-shell.so ]; then
+  sudo ln -s /usr/lib/x86_64-linux-gnu/libgtk4-layer-shell.so.1.0.4 /usr/lib/libgtk4-layer-shell.so
+fi

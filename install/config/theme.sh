@@ -37,8 +37,3 @@ if [ ! -e ~/.config/omarchy ]; then
   mkdir -p ~/.config
   ln -s ~/.config/ohmydebn ~/.config/omarchy
 fi
-
-# Symlink omarchy-theme-set to ohmydebn-theme-set for Aether
-mkdir -p ~/.local/bin
-rm -f ~/.local/bin/omarchy-theme-set
-ln -s /usr/share/ohmydebn/bin/ohmydebn-theme-set ~/.local/bin/omarchy-theme-set

@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cmd="$*"
-setsid alacritty --class OhMyDebn -e bash -c "ohmydebn-show-logo; $cmd; ohmydebn-show-done"
+setsid alacritty --class OhMyDebn -e bash -c "/usr/share/ohmydebn/bin/ohmydebn-show-logo; $cmd; /usr/share/ohmydebn/bin/ohmydebn-show-done"

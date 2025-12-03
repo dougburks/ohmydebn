@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd /usr/share/ohmydebn-aether || exit
+
+exec /usr/bin/gjs -m src/main.js "$@"

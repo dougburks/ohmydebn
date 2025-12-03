@@ -8,7 +8,7 @@ keybinding-custom 6 "Rofi" "/usr/bin/rofi -dpi 1 -show drun -show-icons" "['<Sup
 keybinding-custom 7 "btop" "/usr/bin/alacritty --title 'btop' -e /usr/bin/btop" "['<Super>T']" "Press Super + T to launch btop"
 keybinding-custom 8 "X" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://x.com" "['<Super>X']" "Press Super + X for X.com"
 keybinding-custom 9 "Alacritty" "/usr/bin/alacritty" "['<Super>Return']" "Press Super + Enter for terminal (alacritty)"
-keybinding-custom 10 "Aether theme builder" "/usr/share/ohmydebn/bin/ohmydebn-theme-build" "['<Ctrl><Shift>A']" "Press Ctrl + Shift + A for Aether theme builder"
+keybinding-custom 10 "Aether theme builder" "/usr/share/ohmydebn/bin/aether" "['<Ctrl><Shift>A']" "Press Ctrl + Shift + A for Aether theme builder"
 keybinding-custom 11 "KeePassXC" "/usr/share/ohmydebn/bin/ohmydebn-keepass" "['<Ctrl><Shift>K']" "Press Ctrl + Shift + K for KeePassXC password manager"
 keybinding-custom 12 "OhMyDebn Logo" "/usr/share/ohmydebn/bin/ohmydebn-logo-gui" "['<Ctrl><Shift>O']" "Press Ctrl + Shift + O to show OhMyDebn logo"
 keybinding-custom 13 "screenfetch" "/usr/share/ohmydebn/bin/ohmydebn-screenfetch-gui" "['<Ctrl><Shift>S']" "Press Ctrl + Shift + S to show screenfetch system summary"

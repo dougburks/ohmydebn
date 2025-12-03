@@ -1,4 +1,0 @@
-#!/bin/bash
-
-export PATH=$PATH:~/.local/bin/
-/usr/share/ohmydebn-aether/aether

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-/usr/share/ohmydebn/ohmydebn-rofi -show window -kb-accept-entry '!Ctrl-Alt-Tab' -kb-row-down "Ctrl-Alt-Tab,Ctrl-Alt-Down" -kb-row-up "Ctrl-Alt-ISO_Left_Tab,Ctrl-Alt-Up" -timeout-delay 1 -timeout-action "kb-accept-entry"
+/usr/share/ohmydebn/bin/ohmydebn-rofi -show window -kb-accept-entry '!Ctrl-Alt-Tab' -kb-row-down "Ctrl-Alt-Tab,Ctrl-Alt-Down" -kb-row-up "Ctrl-Alt-ISO_Left_Tab,Ctrl-Alt-Up" -timeout-delay 1 -timeout-action "kb-accept-entry"

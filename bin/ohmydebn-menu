@@ -33,7 +33,7 @@ menu() {
     fi
   fi
 
-  echo -e "$options" | /usr/bin/rofi -dmenu -i -p "$prompt…" "${args[@]}"
+  echo -e "$options" | /usr/share/ohmydebn/ohmydebn-rofi -dmenu -i -p "$prompt…" "${args[@]}"
 }
 
 terminal() {
@@ -270,7 +270,7 @@ show_main_menu() {
 
 go_to_menu() {
   case "${1,,}" in
-  *apps*) /usr/bin/rofi -show drun -show-icons -p "Launch…" ;;
+  *apps*) /usr/share/ohmydebn/ohmydebn-rofi -show drun -show-icons -p "Launch…" ;;
   *learn*) show_learn_menu ;;
   *style*) show_style_menu ;;
   *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-set-gui ;;

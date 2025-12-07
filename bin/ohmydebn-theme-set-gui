@@ -18,7 +18,7 @@ SELECTION=$( (
 ) | /usr/bin/rofi \
   -dpi "$DPI" \
   -theme-str "$THEME_STR" \
-  -i -p "Select a theme" -dmenu -selected-row $INDEX
+  -i -p "Select a theme" -dmenu -selected-row $INDEX)
 
 if [ "$SELECTION" == "Install Theme from URL" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install\"; $OHMYDEBN_BIN/ohmydebn-show-done"

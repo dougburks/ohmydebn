@@ -1,0 +1,8 @@
+#!/bin/bash
+
+WIDTH=$1
+
+# Determine current desktop scaling value
+SCALE=$(/usr/share/ohmydebn/bin/ohmydebn-scale)
+
+printf "%.0f\n" "$(echo "$WIDTH * $SCALE" | bc -l)"

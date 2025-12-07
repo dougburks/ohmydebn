@@ -1,8 +1,0 @@
-#!/bin/bash
-
-DPI=1
-SCALE=$(/usr/share/ohmydebn/bin/ohmydebn-scale)
-if [[ "$SCALE" != "1.00" ]]; then
-  DPI=$(printf "%.0f\n" "$(echo "96 * $SCALE" | bc -l)")
-fi
-/usr/bin/rofi -dpi $DPI "$@"

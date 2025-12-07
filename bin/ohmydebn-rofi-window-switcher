@@ -2,12 +2,12 @@
 
 DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
 WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 480)
-THEME_STR="'window {width: $WIDTH;}'"
+THEME_STR="window {width: $WIDTH;}"
 /usr/bin/rofi \
-  -dpi $DPI \
-  -theme-str $THEME_STR \
+  -dpi "$DPI" \
+  -theme-str "$THEME_STR" \
   -show window \
-  -kb-accept-entry '!Ctrl-Alt-Tab' \
+  -kb-accept-entry "!Ctrl-Alt-Tab" \
   -kb-row-down "Ctrl-Alt-Tab,Ctrl-Alt-Down" \
   -kb-row-up "Ctrl-Alt-ISO_Left_Tab,Ctrl-Alt-Up" \
   -timeout-delay 1 \

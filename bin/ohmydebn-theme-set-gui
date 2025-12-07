@@ -3,8 +3,8 @@
 OHMYDEBN_BIN=/usr/share/ohmydebn/bin/
 CURRENT_THEME=$($OHMYDEBN_BIN/ohmydebn-theme-current)
 INDEX=$($OHMYDEBN_BIN/ohmydebn-theme-list | grep -nxF "$CURRENT_THEME" | cut -d: -f1)
-DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
-WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 350)
+DPI=$($OHMYDEBN_BIN/ohmydebn-rofi-dpi)
+WIDTH=$($OHMYDEBN_BIN/ohmydebn-rofi-width 350)
 THEME_STR="window {width: $WIDTH;}"
 let INDEX--
 SELECTION=$( (

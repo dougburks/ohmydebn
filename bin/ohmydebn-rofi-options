@@ -1,0 +1,5 @@
+#!/bin/bash
+
+DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
+WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width $1)
+echo "-dpi $DPI -theme-str \"window {width: $WIDTH;}\""

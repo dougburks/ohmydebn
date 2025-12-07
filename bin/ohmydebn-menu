@@ -33,7 +33,7 @@ menu() {
     fi
   fi
 
-  echo -e "$options" | /usr/bin/rofi $(/usr/share/ohmydebn/bin/ohmydebn-rofi-options 200) -dmenu -i -p "$prompt…" "${args[@]}"
+  echo -e "$options" | /usr/bin/rofi "$(/usr/share/ohmydebn/bin/ohmydebn-rofi-options 200)" -dmenu -i -p "$prompt…" "${args[@]}"
 }
 
 terminal() {

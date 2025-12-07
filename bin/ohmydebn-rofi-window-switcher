@@ -1,6 +1,6 @@
 #!/bin/bash
 
-/usr/bin/rofi $(/usr/share/ohmydebn/bin/ohmydebn-rofi-options 800) \
+/usr/bin/rofi "$(/usr/share/ohmydebn/bin/ohmydebn-rofi-options 800)" \
   -show window \
   -kb-accept-entry "!Ctrl-Alt-Tab" \
   -kb-row-down "Ctrl-Alt-Tab,Ctrl-Alt-Down" \

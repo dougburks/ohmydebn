@@ -17,3 +17,13 @@ fi
 EOF
   fi
 done
+
+GRC_STATE=~/.local/state/ohmydebn-config/grc
+if [ ! -f $GRC_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Use grc to colorize some standard commands
+[[ -s "/etc/grc.zsh" ]] && source /etc/grc.zsh
+EOF
+  touch $GRC_STATE
+fi

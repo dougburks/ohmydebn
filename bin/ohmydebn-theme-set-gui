@@ -4,6 +4,8 @@ OHMYDEBN_BIN=/usr/share/ohmydebn/bin/
 CURRENT_THEME=$($OHMYDEBN_BIN/ohmydebn-theme-current)
 INDEX=$($OHMYDEBN_BIN/ohmydebn-theme-list | grep -nxF "$CURRENT_THEME" | cut -d: -f1)
 let INDEX--
+DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
+WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 350)
 SELECTION=$( (
   $OHMYDEBN_BIN/ohmydebn-theme-list
   echo "Next Background"
@@ -12,7 +14,8 @@ SELECTION=$( (
   echo "Build New Theme with Aether"
   echo "Browse Aether Themes"
   echo "Remove Theme"
-) | /usr/bin/rofi "$($OHMYDEBN_BIN/ohmydebn-rofi-options 350)" -i -p "Select a theme" -dmenu -selected-row $INDEX)
+) | /usr/bin/rofi -dpi $DPI -theme-str "window {width: $WIDTH;}" \
+  -i -p "Select a theme" -dmenu -selected-row $INDEX)
 
 if [ "$SELECTION" == "Install Theme from URL" ]; then
   /usr/bin/alacritty --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install\"; $OHMYDEBN_BIN/ohmydebn-show-done"

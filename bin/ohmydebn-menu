@@ -33,7 +33,10 @@ menu() {
     fi
   fi
 
-  echo -e "$options" | /usr/bin/rofi "$(/usr/share/ohmydebn/bin/ohmydebn-rofi-options 200)" -dmenu -i -p "$prompt…" "${args[@]}"
+  DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
+  WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 200)
+  echo -e "$options" | /usr/bin/rofi -dpi $DPI -theme-str "window {width: $WIDTH;}" \
+    -dmenu -i -p "$prompt…" "${args[@]}"
 }
 
 terminal() {

@@ -1,8 +1,10 @@
 #!/bin/bash
 
-WIDTH=$1
+# Set WIDTH to first argument and default to 220 if not supplied
+WIDTH=${1:-220}
 
 # Determine current desktop scaling value
 SCALE=$(/usr/share/ohmydebn/bin/ohmydebn-scale)
 
+# Output the scaled width
 printf "%.0f\n" "$(echo "$WIDTH * $SCALE" | bc -l)"

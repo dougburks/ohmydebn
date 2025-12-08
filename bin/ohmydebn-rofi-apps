@@ -1,6 +1,6 @@
 #!/bin/bash
 
 DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
-WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 400)
+WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 500)
 /usr/bin/rofi -dpi $DPI -theme-str "window {width: $WIDTH;}" \
   -show drun -show-icons -p "Launch…"

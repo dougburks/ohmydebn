@@ -14,6 +14,9 @@ cat <<EOF
 Continuing will update the base Debian OS packages and OhMyDebn
 components like themes and the Aether theme builder.
 
+You can check the OhMyDebn release notes here:
+https://github.com/dougburks/ohmydebn/releases
+
 If this update is interrupted, then your machine may be left in an
 inconsistent state so please make sure you have stable power and 
 Internet access before continuing.

@@ -4,7 +4,7 @@ keybinding-custom 2 "GMail" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp http
 keybinding-custom 3 "Google" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://google.com" "['<Super>G']" "Press Super + G for Google search"
 keybinding-custom 4 "Hotkeys" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/" "['<Super>K']" "Press Super + K to show all hotkeys"
 keybinding-custom 5 "Neovim" "/usr/bin/alacritty --title 'nvim' -e nvim" "['<Super>N']" "Press Super + N to launch Neovim text editor"
-keybinding-custom 6 "Rofi" "/usr/bin/rofi -dpi 1 -show drun -show-icons" "['<Super>R', '<Super>space']" "Press Super + R to run the application launcher (rofi)"
+keybinding-custom 6 "Rofi" "/usr/share/ohmydebn/bin/ohmydebn-rofi-apps" "['<Super>R', '<Super>space']" "Press Super + R to run the application launcher (rofi)"
 keybinding-custom 7 "btop" "/usr/bin/alacritty --title 'btop' -e /usr/bin/btop" "['<Super>T']" "Press Super + T to launch btop"
 keybinding-custom 8 "X" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://x.com" "['<Super>X']" "Press Super + X for X.com"
 keybinding-custom 9 "Alacritty" "/usr/bin/alacritty" "['<Super>Return']" "Press Super + Enter for terminal (alacritty)"

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# DPI defaults to 0 (see rofi man page for explanation)
+DPI=0
+
+# Determine current desktop scaling value
+SCALE=$(/usr/share/ohmydebn/bin/ohmydebn-scale)
+
+# If scale is greater than 1, then multiply that value by 96 to get DPI
+if [[ "$SCALE" != "1.00" ]]; then
+  DPI=$(printf "%.0f\n" "$(echo "96 * $SCALE" | bc -l)")
+fi
+
+echo "$DPI"

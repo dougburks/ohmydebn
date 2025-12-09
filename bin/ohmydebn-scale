@@ -1,0 +1,30 @@
+#!/usr/bin/python3
+
+import dbus
+import sys
+
+try:
+    bus = dbus.SessionBus()
+    proxy = bus.get_object("org.cinnamon.Muffin.DisplayConfig",
+                           "/org/cinnamon/Muffin/DisplayConfig")
+    iface = dbus.Interface(proxy, "org.cinnamon.Muffin.DisplayConfig")
+
+    # GetCurrentState returns: serial, monitors, logical_monitors, properties
+    _serial, _monitors, logical_monitors, _props = iface.GetCurrentState()
+
+    # Find the primary monitor's scale (or the first one if no primary)
+    for x, y, scale, transform, primary, monitors, props in logical_monitors:
+        if primary or not any(p for _, _, _, _, p, _, _ in logical_monitors):
+            # Print only the raw float value (e.g. 1.0, 1.25, 1.5, 2.0)
+            print(f"{float(scale):.2f}")
+            sys.exit(0)
+
+    # Fallback if nothing found
+    print("1.00")
+    sys.exit(1)
+
+except Exception as e:
+    # On error (e.g. Cinnamon not running, D-Bus down), output 1.00 and exit non-zero
+    print("1.00", file=sys.stderr)
+    print("1.00")
+    sys.exit(1)

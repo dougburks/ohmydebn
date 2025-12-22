@@ -32,7 +32,7 @@ cat <<EOF
 
 ================================================================================
 
-Virtualization support has now been installed.
+Virtualization support is now installed.
 
 You may need to logout and log back in to reflect changes to your user account.
 

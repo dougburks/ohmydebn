@@ -8,6 +8,7 @@ fi
 
 cat <<EOF
 Continuing will install the following packages for virtualization support:
+
 qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
 
 Press Enter to continue or Ctrl-c to cancel.
@@ -28,6 +29,9 @@ sudo systemctl enable --now libvirtd
 
 # Output message to user
 cat <<EOF
+
+================================================================================
+
 Virtualization support has now been installed.
 
 You may need to logout and log back in to reflect changes to your user account.

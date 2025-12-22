@@ -36,7 +36,9 @@ Virtualization support has now been installed.
 
 You may need to logout and log back in to reflect changes to your user account.
 
-You can then start Virtual Machine Manager from the menu.
+You can then start Virtual Machine Manager from the menu or by pressing:
+
+Ctrl + Super + V
 
 Press Enter to close this window.
 EOF

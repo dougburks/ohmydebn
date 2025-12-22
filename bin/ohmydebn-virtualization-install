@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# If running on Proxmox, output error message and exit
+if [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
+  echo "This is not supported on Proxmox since Proxmox already provides virtualization."
+  exit 0
+fi
+
+# Install virtualization packages
+sudo apt update
+sudo apt install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
+
+# Add user account to the libvirt and kvm groups
+sudo adduser $USER libvirt
+sudo adduser $USER kvm
+
+# Enable and start libvirtd
+sudo systemctl enable --now libvirtd
+
+# Output message to user
+cat <<EOF
+Virtualization support has now been installed.
+
+You may need to logout and log back in to reflect changes to your user account.
+
+You can start Virtual Machine Manager from the menu.
+EOF

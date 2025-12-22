@@ -135,13 +135,12 @@ show_screenrecord_menu() {
 
 show_install_menu() {
   #case $(menu "Install" "  Package\n  Web App\n  TUI\n  Service\n  Style") in
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n  Editor\n󰞍  Utility") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n  Editor\n  Utility") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
   *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-install ;;
   *Style*) show_install_style_menu ;;
-  *Development*) show_install_development_menu ;;
   *Editor*) show_install_editor_menu ;;
   *Utility*) show_install_utility_menu ;;
   *) show_main_menu ;;
@@ -149,8 +148,9 @@ show_install_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing") in
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n  Virtualization") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
+  *Virtualization*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtualization-install ;;
   *) show_install_menu ;;
   esac
 }
@@ -182,51 +182,6 @@ show_install_style_menu() {
   *Theme*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-theme-install ;;
   *Background*) nemo ~/.config/ohmydebn/current/theme/backgrounds ;;
   *) show_install_menu ;;
-  esac
-}
-
-show_install_development_menu() {
-  case $(menu "Install" "󰫏  Ruby on Rails\n  Docker DB\n  JavaScript\n  Go\n  PHP\n  Python\n  Elixir\n  Zig\n  Rust\n  Java\n  .NET\n  OCaml\n  Clojure") in
-  *Rails*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env ruby" ;;
-  *Docker*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-install-docker-dbs ;;
-  *JavaScript*) show_install_javascript_menu ;;
-  *Go*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env go" ;;
-  *PHP*) show_install_php_menu ;;
-  *Python*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env python" ;;
-  *Elixir*) show_install_elixir_menu ;;
-  *Zig*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env zig" ;;
-  *Rust*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env rust" ;;
-  *Java*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env java" ;;
-  *NET*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env dotnet" ;;
-  *OCaml*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env ocaml" ;;
-  *Clojure*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env clojure" ;;
-  *) show_install_menu ;;
-  esac
-}
-
-show_install_javascript_menu() {
-  case $(menu "Install" "  Node.js\n  Bun\n  Deno") in
-  *Node*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env node" ;;
-  *Bun*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env bun" ;;
-  *Deno*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env deno" ;;
-  *) show_install_development_menu ;;
-  esac
-}
-
-show_install_php_menu() {
-  case $(menu "Install" "  PHP\n  Laravel\n  Symfony") in
-  *PHP*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env php" ;;
-  *Laravel*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env laravel" ;;
-  *Symfony*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env symfony" ;;
-  *) show_install_development_menu ;;
-  esac
-}
-
-show_install_elixir_menu() {
-  case $(menu "Install" "  Elixir\n  Phoenix") in
-  *Elixir*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env elixir" ;;
-  *Phoenix*) present_terminal "/usr/share/ohmydebn/bin/ohmydebn-install-dev-env phoenix" ;;
-  *) show_install_development_menu ;;
   esac
 }
 

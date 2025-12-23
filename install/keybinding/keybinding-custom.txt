@@ -31,3 +31,4 @@ keybinding-custom 29 "Tile with gaps 9 top right corner" "/usr/bin/gdbus call --
 keybinding-custom 30 "Virtual Machine Manager" "/usr/bin/virt-manager" "['<Ctrl><Super>V']" "Press Ctrl + Super + V to launch Virtual Machine Manager (if installed)"
 keybinding-custom 31 "Editor" "/usr/bin/gedit" "['<Ctrl><Super>E']" "Press Ctrl + Super + E to launch gedit text editor"
 keybinding-custom 32 "Calculator" "/usr/bin/galculator" "['<Ctrl><Super>C']" "Press Ctrl + Super + C to launch calculator"
+keybinding-custom 33 "Cava" "/usr/bin/alacritty --title 'cava' -e /usr/bin/cava" "['<Ctrl><Super>A']" "Press Ctrl + Super + A to launch the cava audio visualizer"

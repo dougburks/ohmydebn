@@ -24,6 +24,9 @@ sudo apt install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt
 sudo adduser $USER libvirt
 sudo adduser $USER kvm
 
+# Restart cinnamon desktop to make user account changes take effect
+/usr/bin/cinnamon --replace &
+
 # Enable and start libvirtd
 sudo systemctl enable --now libvirtd
 
@@ -34,9 +37,7 @@ cat <<EOF
 
 Virtualization support is now installed.
 
-You may need to logout and log back in to reflect changes to your user account.
-
-You can then start Virtual Machine Manager from the menu or by pressing:
+You can start Virtual Machine Manager from the menu or by pressing:
 
 Ctrl + Super + V
 

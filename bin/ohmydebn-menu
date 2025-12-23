@@ -215,7 +215,7 @@ show_system_menu() {
   case $(menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown") in
   *Lock*) cinnamon-screensaver-command -l ;;
   *Suspend*) systemctl suspend ;;
-  *Relaunch*) cinnamon --replace & ;;
+  *Relaunch*) /usr/bin/cinnamon --replace & ;;
   *Restart*) systemctl reboot ;;
   *Shutdown*) systemctl poweroff ;;
   *) back_to show_main_menu ;;

@@ -41,7 +41,4 @@ You can start Virtual Machine Manager from the menu or by pressing:
 
 Ctrl + Super + V
 
-Press Enter to close this window.
 EOF
-
-read input

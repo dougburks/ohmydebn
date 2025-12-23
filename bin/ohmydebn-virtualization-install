@@ -25,7 +25,7 @@ sudo adduser $USER libvirt
 sudo adduser $USER kvm
 
 # Restart cinnamon desktop to make user account changes take effect
-/usr/bin/cinnamon --replace &
+setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
 
 # Enable and start libvirtd
 sudo systemctl enable --now libvirtd

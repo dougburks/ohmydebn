@@ -7,7 +7,7 @@ if [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
 fi
 
 cat <<EOF
-Continuing will install the following packages for virtualization support:
+Continuing will install the following packages (and their dependencies) for virtualization support:
 
 qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
 
@@ -18,7 +18,7 @@ read input
 
 # Install virtualization packages
 sudo apt update
-sudo apt install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
+sudo apt -y install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
 
 # Add user account to the libvirt and kvm groups
 sudo adduser $USER libvirt

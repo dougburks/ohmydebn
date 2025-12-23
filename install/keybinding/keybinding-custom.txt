@@ -32,4 +32,4 @@ keybinding-custom 30 "Virtual Machine Manager" "/usr/bin/virt-manager" "['<Ctrl>
 keybinding-custom 31 "Editor" "/usr/bin/gedit" "['<Ctrl><Super>E']" "Press Ctrl + Super + E to launch a simple text editor (gedit)"
 keybinding-custom 32 "Calculator" "/usr/bin/galculator" "['<Ctrl><Super>C']" "Press Ctrl + Super + C to launch calculator (galculator)"
 keybinding-custom 33 "Cava" "/usr/bin/alacritty --title 'cava' -e /usr/bin/cava" "['<Ctrl><Super>A']" "Press Ctrl + Super + A to launch the audio visualizer (cava)"
-keybinding-custom 34 "Visual Studio Code" "/usr/bin/code" "['<Ctrl><Super>S']" "Press Ctrl + Super + S to launch Visual Studio Code"
+keybinding-custom 34 "Visual Studio Code" "/usr/bin/code" "['<Ctrl><Super>S']" "Press Ctrl + Super + S to launch Visual Studio Code (if installed)"

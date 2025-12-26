@@ -1,4 +1,5 @@
 #!/bin/bash
 
-/usr/bin/screenfetch | tte slide
+VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
+/usr/bin/screenfetch -C "OhMyDebn Version=$VERSION,OhMyDebn Website=https://ohmydebn.org" | tte slide
 read input

@@ -1,5 +1,6 @@
 #!/bin/bash
 
-VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
-/usr/bin/screenfetch -C "OhMyDebn Version=$VERSION,OhMyDebn Website=https://ohmydebn.org" | tte slide
+OHMYDEBN_VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
+CINNAMON_VERSION=$(/usr/bin/cinnamon --version)
+/usr/bin/screenfetch -d "-de" -C "Desktop Environment=$CINNAMON_VERSION,OhMyDebn Version=$OHMYDEBN_VERSION,OhMyDebn Website=https://ohmydebn.org" | tte slide
 read input

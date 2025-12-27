@@ -24,12 +24,17 @@ curl -s $URL | grep github.com | cut -d\" -f2 | grep -v torrentz-hydra | while r
     echo " - already installed"
   else
     echo " - installing:"
-    if ! git clone "$REPO_URL" "$THEME_PATH"; then
-      echo "Error: Failed to clone $THEME_PATH"
+    REPO=$(echo $REPO_URL | cut -d/ -f4,5)
+    if curl -f -s "https://api.github.com/repos/$REPO" >/dev/null; then
+      VISIBILITY=$(curl -s "https://api.github.com/repos/$REPO" | jq -r '.visibility // .private')
+      if [[ "$VISIBILITY" == "public" ]]; then
+        if ! GIT_TERMINAL_PROMPT=0 git clone "$REPO_URL" "$THEME_PATH"; then
+          echo "Error: Failed to clone $THEME_PATH"
+        fi
+      fi
     fi
 
   fi
 
   echo
-
 done

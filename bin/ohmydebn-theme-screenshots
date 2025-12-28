@@ -1,0 +1,10 @@
+#!/bin/bash
+
+xdotool getactivewindow windowminimize
+
+cd ~/.config/ohmydebn/themes
+for i in *; do
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set $i
+  sleep 3s
+  gnome-screenshot -f ~/Pictures/ohmydebn-$i.png
+done

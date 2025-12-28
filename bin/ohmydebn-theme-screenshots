@@ -1,9 +1,17 @@
 #!/bin/bash
 
 cat <<EOF
-Continuing will iterate through all installed themes and take a screenshot of each one
+Continuing will iterate through all installed themes and take a screenshot of each.
 
-Press Enter to continue or Ctrl-C to cancel
+Please arrange all windows as you like. Recommendation:
+- upper left - terminal running lt
+- upper right - file manager
+- lower left - screenfetch
+- lower right - btop
+
+This current window automatically minimize.
+
+Press Enter to continue or Ctrl-C to cancel.
 EOF
 
 read input

@@ -1,10 +1,18 @@
 #!/bin/bash
 
-xdotool getactivewindow windowminimize
+cat <<EOF
+Continuing will iterate through all installed themes and take a screenshot of each one
+
+Press Enter to continue or Ctrl-C to cancel
+EOF
+
+read input
+
+/usr/bin/xdotool getactivewindow windowminimize
 
 cd ~/.config/ohmydebn/themes
 for i in *; do
   /usr/share/ohmydebn/bin/ohmydebn-theme-set $i
   sleep 3s
-  gnome-screenshot -f ~/Pictures/ohmydebn-$i.png
+  /usr/bin/gnome-screenshot -f ~/Pictures/ohmydebn-theme-$i.png
 done

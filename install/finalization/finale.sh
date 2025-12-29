@@ -1,7 +1,8 @@
 #!/bin/bash
 
 if [ -f ~/.local/state/ohmydebn ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "OhMyDebn update complete!"
+  VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
+  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "OhMyDebn update complete - version: $VERSION"
 else
   echo
   /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Installation complete!"

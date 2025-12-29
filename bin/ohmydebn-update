@@ -8,11 +8,13 @@ else
   DIR=~/.local/share/ohmydebn
 fi
 
-$DIR/bin/ohmydebn-headline "cat" "OhMyDebn Update"
+VERSION=$($DIR/bin/ohmydebn-version)
+
+$DIR/bin/ohmydebn-headline "cat" "OhMyDebn Update - current OhMyDebn version: $VERSION"
 
 cat <<EOF
-Continuing will update the base Debian OS packages and OhMyDebn
-components like themes and the Aether theme builder.
+Continuing will check for any updates for the base Debian OS packages
+and OhMyDebn components like themes and the Aether theme builder.
 
 You can check the OhMyDebn release notes here:
 https://github.com/dougburks/ohmydebn/releases

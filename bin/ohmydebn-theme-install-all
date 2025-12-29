@@ -15,21 +15,17 @@ read input
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 
-curl -s $URL | grep github.com | cut -d\" -f2 | grep -v torrentz-hydra | while read REPO_URL; do
+curl -s $URL | grep github.com | cut -d\" -f2 | while read REPO_URL; do
   THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//')
-  echo -n $THEME_NAME
   THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
   if [ -d "$THEME_PATH" ]; then
-    echo " - already installed"
+    echo "$THEME_NAME - already installed"
   else
-    echo " - installing:"
-    if ! git clone "$REPO_URL" "$THEME_PATH"; then
+    echo "$THEME_NAME - installing:"
+    if ! GIT_TERMINAL_PROMPT=0 git clone "$REPO_URL" "$THEME_PATH"; then
       echo "Error: Failed to clone $THEME_PATH"
     fi
-
   fi
-
   echo
-
 done

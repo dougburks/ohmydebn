@@ -2,10 +2,14 @@
 
 # Cycles through the background images available
 
-BACKGROUNDS_DIR="$HOME/.config/ohmydebn/current/theme/backgrounds/"
+THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null)
+THEME_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/current/theme/backgrounds/"
+USER_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/backgrounds/$THEME_NAME/"
 CURRENT_BACKGROUND_LINK="$HOME/.config/ohmydebn/current/background"
 
-mapfile -d '' -t BACKGROUNDS < <(find "$BACKGROUNDS_DIR" -type f -print0 | sort -z)
+mapfile -d '' -t BACKGROUNDS < <(
+  find -L "$USER_BACKGROUNDS_PATH" "$THEME_BACKGROUNDS_PATH" -maxdepth 1 -type f -print0 2>/dev/null | sort -z
+)
 TOTAL=${#BACKGROUNDS[@]}
 
 if [[ $TOTAL -eq 0 ]]; then

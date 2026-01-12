@@ -1,0 +1,176 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Configuration
+REPO="anomalyco/opencode"
+VERSION=${1:-latest} # Use first argument or default to latest
+
+# Detect system architecture
+detect_arch() {
+  local arch=$(uname -m)
+  case $arch in
+  x86_64)
+    echo "amd64"
+    ;;
+  aarch64 | arm64)
+    echo "arm64"
+    ;;
+  armv7l)
+    echo "armhf"
+    ;;
+  *)
+    echo "Unsupported architecture: $arch"
+    exit 1
+    ;;
+  esac
+}
+
+ARCH=$(detect_arch)
+
+# Check if OpenCode is already installed and get its version
+check_installed_version() {
+  # Try dpkg first for desktop package
+  INSTALLED_VERSION=$(dpkg -l | grep -E "^ii.*open-code" | awk '{print $3}' | head -1)
+  if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" != "none" ]]; then
+    echo "$INSTALLED_VERSION"
+    return
+  fi
+
+  # Fallback to CLI command
+  if command -v opencode &>/dev/null; then
+    INSTALLED_VERSION=$(opencode --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "unknown")
+    echo "$INSTALLED_VERSION"
+  else
+    echo ""
+  fi
+}
+
+# Convert version string to comparable number
+version_to_number() {
+  local version=$1
+  echo "$version" | awk -F. '{ printf "%d%03d%03d", $1, $2, $3 }'
+}
+TEMP_DIR=$(mktemp -d)
+DEB_FILE="opencode-desktop-linux-${ARCH}.deb"
+SIG_FILE="${DEB_FILE}.sig"
+
+# Cleanup function
+cleanup() {
+  rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT
+
+echo "OpenCode Package Check"
+echo "======================"
+echo "Requested version: $VERSION"
+
+# Check if OpenCode is already installed
+INSTALLED_VERSION=$(check_installed_version)
+if [[ -n "$INSTALLED_VERSION" ]]; then
+  echo "Currently installed version: $INSTALLED_VERSION"
+else
+  echo "OpenCode is not currently installed"
+fi
+
+if [[ "$VERSION" == "latest" ]]; then
+  echo "Getting latest release..."
+  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest")
+  VERSION=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
+  echo "Latest version: $VERSION"
+else
+  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${REPO}/releases/tags/v${VERSION}")
+fi
+
+# Check if latest version is already installed
+if [[ -n "$INSTALLED_VERSION" && "$INSTALLED_VERSION" != "unknown" ]]; then
+  INSTALLED_NUM=$(version_to_number "$INSTALLED_VERSION")
+  LATEST_NUM=$(version_to_number "${VERSION#v}")
+
+  if [[ "$INSTALLED_NUM" -ge "$LATEST_NUM" ]]; then
+    echo "No update necessary"
+    exit 0
+  fi
+fi
+
+if [[ -z "$RELEASE_INFO" ]]; then
+  echo "Error: Failed to fetch release information"
+  exit 1
+fi
+
+# Extract SHA256 and download URL for the deb file
+echo "Extracting download URLs and checksums..."
+DEB_INFO=$(echo "$RELEASE_INFO" | jq -r ".assets[] | select(.name == \"${DEB_FILE}\")")
+
+if [[ -z "$DEB_INFO" || "$DEB_INFO" == "null" ]]; then
+  echo "Error: Could not find ${DEB_FILE} in release assets"
+  exit 1
+fi
+
+DEB_URL=$(echo "$DEB_INFO" | jq -r '.browser_download_url')
+GITHUB_SHA256=$(echo "$DEB_INFO" | jq -r '.digest' | sed 's/^sha256://')
+
+if [[ -z "$DEB_URL" || "$DEB_URL" == "null" || -z "$GITHUB_SHA256" || "$GITHUB_SHA256" == "null" ]]; then
+  echo "Error: Could not extract download URL or SHA256"
+  exit 1
+fi
+
+echo "Download URL: $DEB_URL"
+echo "GitHub SHA256: $GITHUB_SHA256"
+echo
+
+# Download the deb file
+echo "Downloading ${DEB_FILE}..."
+cd "$TEMP_DIR"
+curl -L -o "$DEB_FILE" "$DEB_URL"
+
+# Calculate local SHA256
+echo "Calculating local checksum..."
+LOCAL_SHA256=$(sha256sum "$DEB_FILE" | cut -d' ' -f1)
+
+echo "Local SHA256:  $LOCAL_SHA256"
+echo "GitHub SHA256:  $GITHUB_SHA256"
+echo
+
+# Verify checksums match
+if [[ "$LOCAL_SHA256" == "$GITHUB_SHA256" ]]; then
+  echo "✅ SHA256 checksum verification PASSED"
+  echo
+
+  # Get file size for user info
+  FILE_SIZE=$(ls -lh "$DEB_FILE" | awk '{print $5}')
+  echo "File details:"
+  echo "  Name: $DEB_FILE"
+  echo "  Size: $FILE_SIZE"
+  echo "  SHA256: $LOCAL_SHA256"
+  echo
+
+  # Automatically proceed with installation
+  echo "Installing ${DEB_FILE}..."
+  if sudo dpkg -i "$DEB_FILE"; then
+    echo "✅ Package installed successfully"
+
+    # Fix any missing dependencies
+    if sudo apt-get install -f -y; then
+      echo "✅ Dependencies resolved"
+    else
+      echo "⚠️  Warning: Dependency resolution had issues"
+    fi
+  else
+    echo "❌ Package installation failed"
+    exit 1
+  fi
+else
+  echo "❌ SHA256 checksum verification FAILED"
+  echo "The downloaded file does not match the expected checksum from GitHub."
+  echo "This could indicate:"
+  echo "  - File corruption during download"
+  echo "  - Man-in-the-middle attack"
+  echo "  - Modified release"
+  echo
+  echo "DO NOT INSTALL THIS PACKAGE"
+  exit 1
+fi
+
+echo
+echo "Installation complete!"

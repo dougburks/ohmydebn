@@ -8,20 +8,48 @@ if [[ -z "$1" && "$1" != "CNCLD" ]]; then
   exit 1
 fi
 
-THEMES_DIR="$HOME/.config/ohmydebn/themes/"
-CURRENT_THEME_DIR="$HOME/.config/ohmydebn/current/theme"
+# Remove all old symlinks from themes dir except aether
+THEMES_DIR="$HOME/.config/ohmydebn/themes"
+find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type l | grep -v "$THEMES_DIR/aether$" | while read LINK; do
+  rm -f $LINK
+done
+
+# Now that the old theme config has been cleaned up, proceed with setting new theme
+CURRENT_THEME_PATH="$HOME/.config/ohmydebn/current/theme"
+NEXT_THEME_PATH="$HOME/.config/ohmydebn/current/next-theme"
+USER_THEMES_PATH="$HOME/.config/ohmydebn/themes"
+OMARCHY_THEMES_PATH="/usr/share/ohmydebn-themes-omarchy"
+OHMYDEBN_THEMES_PATH="/usr/share/ohmydebn-themes"
 
 THEME_NAME=$(echo "$1" | sed -E 's/<[^>]+>//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
-# Check if the theme entered exists
-if [[ ! -d "$THEME_PATH" ]]; then
-  echo "Theme '$THEME_NAME' does not exist in $THEMES_DIR" >&2
-  exit 2
+if [[ -d "$USER_THEMES_PATH/$THEME_NAME" ]]; then
+  THEME_PATH="$USER_THEMES_PATH/$THEME_NAME"
+elif [[ -d "$OMARCHY_THEMES_PATH/$THEME_NAME" ]]; then
+  THEME_PATH="$OMARCHY_THEMES_PATH/$THEME_NAME"
+elif [[ -d "$OHMYDEBN_THEMES_PATH/$THEME_NAME" ]]; then
+  THEME_PATH="$OHMYDEBN_THEMES_PATH/$THEME_NAME"
+else
+  echo "Theme '$THEME_NAME' does not exist"
+  exit 1
 fi
 
-# Update theme symlinks
-ln -nsf "$THEME_PATH" "$CURRENT_THEME_DIR"
+# Setup clean next theme directory (for atomic theme config swapping)
+rm -rf "$NEXT_THEME_PATH"
+mkdir -p "$NEXT_THEME_PATH"
+
+# Copy static configs
+cp -r "$THEME_PATH/"* "$NEXT_THEME_PATH/" 2>/dev/null
+
+# Generate dynamic configs
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-templates
+
+# Swap next theme in as current
+rm -rf "$CURRENT_THEME_PATH"
+mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
+
+# Store theme name for reference
+echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
 
 # Determine light or dark mode
 if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
@@ -283,5 +311,7 @@ fi
 # Set new background
 /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
 
+# Update app themes
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-opencode
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-vscode

@@ -15,6 +15,7 @@ source $OHMYDEBN_INSTALL/config/menu.sh
 source $OHMYDEBN_INSTALL/config/mimetypes.sh
 source $OHMYDEBN_INSTALL/config/nvim.sh
 source $OHMYDEBN_INSTALL/config/ohmyzsh.sh
+source $OHMYDEBN_INSTALL/config/opencode.sh
 source $OHMYDEBN_INSTALL/config/rofi.sh
 source $OHMYDEBN_INSTALL/config/theme.sh
 source $OHMYDEBN_INSTALL/config/ufw.sh

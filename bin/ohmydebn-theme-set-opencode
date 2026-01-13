@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# Reload opencode configuration for new theme to take effect
+
+killall -SIGUSR2 opencode-cli

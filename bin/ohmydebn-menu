@@ -148,10 +148,11 @@ show_install_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server\n  Virtualization") in
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server\n  Virtualization\n🛜︎ UxPlay Airplay Receiver") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
   *Virtualization*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtualization-install ;;
+  *UxPlay*) install "UxPlay Airplay Receiver" "uxplay" ;;
   *) show_install_menu ;;
   esac
 }

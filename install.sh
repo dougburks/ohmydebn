@@ -53,7 +53,7 @@ WARNING!
 - OhMyDebn is intended for a clean new installation.
 - OhMyDebn will remove apps like FireFox, Thunderbird, and others (unless you use the --no-uninstall option).
 - OhMyDebn will make changes to your APT configuration.
-- OhMyDebn is totally unsupported. If it breaks your system, you get to keep both pieces!
+- If it breaks your system, you get to keep both pieces!
 
 Press Enter to continue or Ctrl-c to cancel.
 EOF

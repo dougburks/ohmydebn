@@ -1,0 +1,3 @@
+#!/bin/bash
+
+mkdir -p ~/opencode-sessions && cd $(mktemp -d ~/opencode-sessions/session-XXXXXX) && /usr/bin/opencode-cli

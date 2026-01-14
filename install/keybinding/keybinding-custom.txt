@@ -16,7 +16,7 @@ keybinding-custom 14 "Theme selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-se
 keybinding-custom 15 "Background selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next" "['<Ctrl><Super>B']" "Press Ctrl + Super + B to change to next background in the current theme"
 keybinding-custom 16 "Rofi window switcher" "/usr/share/ohmydebn/bin/ohmydebn-rofi-window-switcher" "['<Ctrl><Alt>Tab']" "Press Ctrl + Alt + Tab for an alt-tab switcher that shows more info"
 keybinding-custom 17 "OhMyDebn Demo" "/usr/share/ohmydebn/bin/ohmydebn-demo-gui" "['<Ctrl><Alt>D']" "Press Ctrl + Alt + D for a demo version of the OhMyDebn logo"
-keybinding-custom 18 "AI (OpenCode)" "/usr/bin/alacritty --title 'OpenCode' -e /usr/bin/opencode-cli" "['<Super>A']" "Press Super + A for AI (OpenCode)"
+keybinding-custom 18 "AI (OpenCode)" "/usr/bin/alacritty --title 'OpenCode' -e /usr/share/ohmydebn/bin/ohmydebn-opencode" "['<Super>A']" "Press Super + A for AI (OpenCode)"
 keybinding-custom 19 "OhMyDebn website" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org" "['<Super>O']" "Press Super + O for OhMyDebn website"
 keybinding-custom 20 "OhMyDebn menu" "/usr/share/ohmydebn/bin/ohmydebn-menu" "['<Super><Alt>Space']" "Press Super + Alt + Space for OhMyDebn menu"
 keybinding-custom 21 "Tile with gaps 1 bottom left corner" "/usr/bin/gdbus call --session --dest org.gTile.Control --object-path /org/gTile/Control --method org.gTile.Control.TileFocusedWindow 2 2 0 1 1 1" "['<Ctrl><Shift>KP_End']" "Press Ctrl + Shift + 1 (numeric keypad) to tile to bottom left corner with gaps"

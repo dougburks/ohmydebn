@@ -1,5 +1,6 @@
 #!/bin/bash
 
-# Reload opencode configuration for new theme to take effect
-
-killall -SIGUSR2 opencode-cli
+# If opencode-cli is running, then ask it to reload config for new theme to take effect
+if pgrep opencode-cli >/dev/null; then
+  killall -SIGUSR2 opencode-cli
+fi

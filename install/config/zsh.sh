@@ -1,8 +1,16 @@
 #!/bin/bash
 
-if [ ! -f ~/.zshrc ]; then
+ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116
+if [ ! -f $ZSHRC_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring Zsh"
-  cp /usr/share/ohmydebn/config/.zshrc ~/
+  ZSHRC=~/.zshrc
+  if [ -f $ZSHRC ]; then
+    mv $ZSHRC $ZSHRC-backup-$(date +%Y%m%d-%H%M%S)
+  fi
+  mkdir -p ~/.config
+  cp -av /usr/share/ohmydebn/config/.zshrc $ZSHRC
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $ZSHRC_STATE
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do

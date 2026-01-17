@@ -3,13 +3,13 @@
 cat <<EOF
 Continuing will iterate through all installed themes and take a screenshot of each.
 
-Please arrange all windows as you like. Recommendation:
+Please arrange all windows as you like. For example:
 - upper left - terminal running lt
 - upper right - file manager
 - lower left - screenfetch
 - lower right - btop
 
-This current window automatically minimize.
+This current window will automatically minimize.
 
 Press Enter to continue or Ctrl-C to cancel.
 EOF
@@ -18,7 +18,7 @@ read input
 
 /usr/bin/xdotool getactivewindow windowminimize
 
-cd ~/.config/ohmydebn/themes
+cd /usr/share/ohmydebn-themes-omarchy/
 for i in *; do
   /usr/share/ohmydebn/bin/ohmydebn-theme-set $i
   sleep 3s

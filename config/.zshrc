@@ -115,6 +115,9 @@ eval "$(zoxide init zsh)"
 # Enable starship prompt
 eval "$(starship init zsh)"
 
-# Use eza as default ls
-alias ls='eza -lh --group-directories-first --icons=auto'
-alias lt='eza --tree --level=2 --long --icons --git'
+# Aliases
+alias c='/usr/bin/opencode-cli'
+alias ls='/usr/bin/eza -lh --group-directories-first --icons=auto'
+alias lsa='ls -a'
+alias lt='/usr/bin/eza --tree --level=2 --long --icons --git'
+alias lta='lt -a'

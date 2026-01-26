@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if ! dpkg -s "antigravity" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-antigravity-install
+fi
+
+if dpkg -s "antigravity" >/dev/null 2>&1; then
+  /usr/share/antigravity/bin/antigravity
+fi

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+if ! dpkg -s "code" >/dev/null 2>&1; then
+  echo
+  echo "Visual Studio Code is not currently installed."
+  echo
+  echo "Press Enter to install it or Ctrl-C to cancel."
+  read input
+
+  ARCH=$(uname -m)
+  TEMP=$(mktemp)
+  if [ "$ARCH" == "x86_64" ]; then
+    curl -L "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP
+  elif [ "$ARCH" == "aarch64" ]; then
+    curl -L "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP
+  else
+    echo "x86_64 and aarch64 are the only supported architectures!"
+  fi
+fi

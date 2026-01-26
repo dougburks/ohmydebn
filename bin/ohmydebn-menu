@@ -56,21 +56,6 @@ install_from_url() {
   present_terminal "echo 'Installing $1...'; curl -L \"$2\" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP"
 }
 
-install_vscode() {
-  if dpkg -s code >/dev/null 2>&1; then
-    present_terminal "echo 'The code package is already installed.'"
-  else
-    ARCH=$(uname -m)
-    if [ "$ARCH" == "x86_64" ]; then
-      install_from_url "VSCode" "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64"
-    elif [ "$ARCH" == "aarch64" ]; then
-      install_from_url "VSCode" "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64"
-    else
-      present_terminal "echo 'x86_64 and aarch64 are the only supported architectures!'"
-    fi
-  fi
-}
-
 install_chrome() {
   if dpkg -s google-chrome-stable >/dev/null 2>&1; then
     present_terminal "echo 'The google-chrome-stable package is already installed.'"
@@ -134,13 +119,13 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  #case $(menu "Install" "  Package\n  Web App\n  TUI\n  Service\n  Style") in
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n  Editor\n  Utility") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n  Utility") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
   *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-install ;;
   *Style*) show_install_style_menu ;;
+  *AI*) show_install_ai_menu ;;
   *Editor*) show_install_editor_menu ;;
   *Utility*) show_install_utility_menu ;;
   *) show_main_menu ;;
@@ -166,14 +151,19 @@ show_install_browser_menu() {
   esac
 }
 
+show_install_ai_menu() {
+  case $(menu "Install" "󱚤  OpenCode (installed by default)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
+  *OpenCode*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-update-opencode ;;
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
+  *) show_install_menu ;;
+  esac
+}
+
 show_install_editor_menu() {
-  #case $(menu "Install" "  VSCode\n  Cursor\n  Zed\n  Sublime Text\n  Helix\n  Emacs") in
-  case $(menu "Install" "  VSCode\n  Emacs") in
-  *VSCode*) install_vscode ;;
-  *Cursor*) install_and_launch "Cursor" "cursor-bin" "cursor" ;;
-  *Zed*) install_and_launch "Zed" "zed" "dev.zed.Zed" ;;
-  *Sublime*) aur_install_and_launch "Sublime Text" "sublime-text-4" "sublime_text" ;;
-  *Helix*) install "Helix" "helix" ;;
+  case $(menu "Install" "  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)\n  Emacs") in
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
   *Emacs*) install "Emacs" "emacs" ;;
   *) show_install_menu ;;
   esac

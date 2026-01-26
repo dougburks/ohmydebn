@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-virtualization-install
+fi
+
+if dpkg -s "virt-manager" >/dev/null 2>&1; then
+  /usr/bin/virt-manager
+fi

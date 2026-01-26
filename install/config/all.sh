@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source $OHMYDEBN_INSTALL/config/alacritty.sh
+source $OHMYDEBN_INSTALL/config/antigravity.sh
 source $OHMYDEBN_INSTALL/config/bat.sh
 source $OHMYDEBN_INSTALL/config/btop.sh
 source $OHMYDEBN_INSTALL/config/cava.sh

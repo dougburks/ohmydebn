@@ -189,7 +189,7 @@ show_remove_menu() {
 
 show_update_menu() {
   case $(menu "Update" "  OhMyDebn\n  Password\n  Timezone") in
-  *OhMyDebn*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-update ;;
+  *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
   *) show_main_menu ;;

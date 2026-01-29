@@ -1,0 +1,3 @@
+#!/bin/bash
+
+/usr/bin/alacritty --title 'OhMyDebn Update' -e /usr/share/ohmydebn/bin/ohmydebn-update-pause

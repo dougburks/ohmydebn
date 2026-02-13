@@ -1,0 +1,424 @@
+#!/bin/bash
+#
+# ohmydebn-theme-generate: Generate a dynamic theme from colors.toml
+# Usage: ohmydebn-theme-generate <theme-name> <colors.toml-path> <is-light-mode>
+#
+
+set -e
+
+if [[ $# -lt 3 ]]; then
+    echo "Usage: ohmydebn-theme-generate <theme-name> <colors.toml-path> <is-light-mode>" >&2
+    echo "  theme-name: The name for the generated theme (e.g., 'tokyo-night')" >&2
+    echo "  colors.toml-path: Path to the colors.toml file" >&2
+    echo "  is-light-mode: 'true' or 'false'" >&2
+    exit 1
+fi
+
+THEME_NAME="$1"
+COLORS_TOML="$2"
+IS_LIGHT_MODE="$3"
+
+if [[ ! -f "$COLORS_TOML" ]]; then
+    echo "Error: colors.toml not found at $COLORS_TOML" >&2
+    exit 1
+fi
+
+# Get the actual user (not root) from HOME directory
+if [[ -n "$HOME" && "$HOME" != "/root" ]]; then
+    ACTUAL_USER=$(stat -c '%U' "$HOME" 2>/dev/null || echo "$USER")
+else
+    ACTUAL_USER="$USER"
+fi
+
+# Parse colors from TOML file
+parse_toml() {
+    local key="$1"
+    grep -E "^${key}\s*=" "$COLORS_TOML" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
+}
+
+BACKGROUND=$(parse_toml "background")
+FOREGROUND=$(parse_toml "foreground")
+ACCENT=$(parse_toml "accent")
+CURSOR=$(parse_toml "cursor")
+
+# Get terminal colors for additional variations
+COLOR0=$(parse_toml "color0")
+COLOR7=$(parse_toml "color7")
+COLOR8=$(parse_toml "color8")
+COLOR15=$(parse_toml "color15")
+
+if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
+    echo "Error: Required colors (background, foreground, accent) not found in $COLORS_TOML" >&2
+    exit 1
+fi
+
+# Function to calculate relative luminance (0-1 range)
+# Uses the formula for relative luminance in sRGB space
+calculate_luminance() {
+    local hex="$1"
+    # Remove # if present
+    hex="${hex#\#}"
+    
+    # Convert hex to RGB
+    local r=$((16#${hex:0:2}))
+    local g=$((16#${hex:2:2}))
+    local b=$((16#${hex:4:2}))
+    
+    # Convert to sRGB
+    local rs=$(echo "scale=10; $r / 255" | bc -l)
+    local gs=$(echo "scale=10; $g / 255" | bc -l)
+    local bs=$(echo "scale=10; $b / 255" | bc -l)
+    
+    # Apply gamma correction
+    local rl=$(echo "if ($rs <= 0.03928) $rs / 12.92 else e(l(($rs + 0.055) / 1.055) * 2.4)" | bc -l)
+    local gl=$(echo "if ($gs <= 0.03928) $gs / 12.92 else e(l(($gs + 0.055) / 1.055) * 2.4)" | bc -l)
+    local bl=$(echo "if ($bs <= 0.03928) $bs / 12.92 else e(l(($bs + 0.055) / 1.055) * 2.4)" | bc -l)
+    
+    # Calculate luminance
+    echo "0.2126 * $rl + 0.7152 * $gl + 0.0722 * $bl" | bc -l
+}
+
+# Function to determine if color is light or dark (returns "light" or "dark")
+is_color_light() {
+    local hex="$1"
+    local lum=$(calculate_luminance "$hex")
+    local threshold="0.5"
+    
+    if (( $(echo "$lum > $threshold" | bc -l) )); then
+        echo "light"
+    else
+        echo "dark"
+    fi
+}
+
+# Function to calculate contrast ratio between two colors
+calculate_contrast() {
+    local color1="$1"
+    local color2="$2"
+    
+    local lum1=$(calculate_luminance "$color1")
+    local lum2=$(calculate_luminance "$color2")
+    
+    # Ensure lum1 is the lighter color
+    if (( $(echo "$lum1 < $lum2" | bc -l) )); then
+        local temp="$lum1"
+        lum1="$lum2"
+        lum2="$temp"
+    fi
+    
+    echo "scale=2; ($lum1 + 0.05) / ($lum2 + 0.05)" | bc -l
+}
+
+# Check contrast between background and foreground
+contrast=$(calculate_contrast "$BACKGROUND" "$FOREGROUND")
+min_contrast="4.5"  # WCAG AA standard for normal text
+
+# If contrast is insufficient, find a better foreground color
+if (( $(echo "$contrast < $min_contrast" | bc -l) )); then
+    echo "Warning: Contrast ratio $contrast is below minimum $min_contrast for $THEME_NAME" >&2
+    
+    # Find best contrast color from available colors
+    BEST_FG=""
+    BEST_CONTRAST="0"
+    
+    for color in "$FOREGROUND" "$COLOR7" "$COLOR15" "$COLOR0" "$COLOR8"; do
+        if [[ -n "$color" ]]; then
+            c=$(calculate_contrast "$BACKGROUND" "$color")
+            if (( $(echo "$c > $BEST_CONTRAST" | bc -l) )); then
+                BEST_CONTRAST="$c"
+                BEST_FG="$color"
+            fi
+        fi
+    done
+    
+    # If still insufficient, use black or white based on light mode setting
+    if (( $(echo "$BEST_CONTRAST < $min_contrast" | bc -l) )); then
+        if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+            BEST_FG="#1a1a1a"  # Dark text for light background
+        else
+            BEST_FG="#f0f0f0"  # Light text for dark background
+        fi
+        BEST_CONTRAST=$(calculate_contrast "$BACKGROUND" "$BEST_FG")
+    fi
+    
+    echo "Adjusted foreground from $FOREGROUND to $BEST_FG for contrast $BEST_CONTRAST" >&2
+    FOREGROUND="$BEST_FG"
+fi
+
+# Determine which template to use based on is_light_mode parameter
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+    TEMPLATE_NAME="Gruvbox-Yellow-Light"
+    # Avoid duplicate "-light" suffix if theme name already ends with "-light"
+    if [[ "$THEME_NAME" == *-light ]]; then
+        GENERATED_THEME_NAME="ohmydebn-dynamic-${THEME_NAME}"
+    else
+        GENERATED_THEME_NAME="ohmydebn-dynamic-${THEME_NAME}-light"
+    fi
+else
+    TEMPLATE_NAME="Gruvbox-Yellow-Dark"
+    GENERATED_THEME_NAME="ohmydebn-dynamic-${THEME_NAME}"
+fi
+
+TEMPLATE_DIR="/usr/share/ohmydebn-templates/$TEMPLATE_NAME"
+OUTPUT_DIR="$HOME/.themes/$GENERATED_THEME_NAME"
+
+if [[ ! -d "$TEMPLATE_DIR" ]]; then
+    echo "Error: Template theme not found at $TEMPLATE_DIR" >&2
+    exit 1
+fi
+
+# Create output directory
+echo "Generating dynamic theme: $GENERATED_THEME_NAME" >&2
+rm -rf "$OUTPUT_DIR"
+cp -r "$TEMPLATE_DIR" "$OUTPUT_DIR"
+
+# Process thumbnails to update colors
+# Dark mode: black->background, yellow->accent
+# Light mode: orange->accent, yellow->background
+process_thumbnails() {
+    local thumb_dir="$1"
+    
+    # Define original template colors
+    local ORIG_BLACK="#000000"
+    local ORIG_YELLOW="#d8a657"
+    local ORIG_ORANGE="#b47109"
+    local ORIG_LIGHT="#fbf1c7"
+    
+    # Convert hex colors to ImageMagick format (remove #)
+    local IM_ORIG_BLACK="${ORIG_BLACK#\#}"
+    local IM_ORIG_YELLOW="${ORIG_YELLOW#\#}"
+    local IM_ORIG_ORANGE="${ORIG_ORANGE#\#}"
+    local IM_ORIG_LIGHT="${ORIG_LIGHT#\#}"
+    local IM_NEW_BG="${BACKGROUND#\#}"
+    local IM_NEW_FG="${FOREGROUND#\#}"
+    local IM_NEW_ACCENT="${ACCENT#\#}"
+    
+    # Process each thumbnail.png file
+    find "$thumb_dir" -name "thumbnail.png" -type f | while read -r thumb_file; do
+        if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+            # Light mode: #b47109->accent, #fbf1c7->background
+            convert "$thumb_file" \
+                -fill "#$IM_NEW_ACCENT" -opaque "#$IM_ORIG_ORANGE" \
+                -fill "#$IM_NEW_BG" -opaque "#$IM_ORIG_LIGHT" \
+                "$thumb_file"
+        else
+            # Dark mode: black->background, yellow->accent
+            convert "$thumb_file" \
+                -fill "#$IM_NEW_BG" -opaque "#$IM_ORIG_BLACK" \
+                -fill "#$IM_NEW_ACCENT" -opaque "#$IM_ORIG_YELLOW" \
+                "$thumb_file"
+        fi
+    done
+}
+
+# Process thumbnails in the main output directory
+process_thumbnails "$OUTPUT_DIR"
+
+# Helper function to convert hex to RGBA hex
+to_rgba() {
+    local hex="$1"
+    local alpha="$2"
+    # Remove # if present
+    hex="${hex#\#}"
+    # Convert to rgba format for CSS
+    local r=$((16#${hex:0:2}))
+    local g=$((16#${hex:2:2}))
+    local b=$((16#${hex:4:2}))
+    printf "rgba(%d, %d, %d, %s)" "$r" "$g" "$b" "$alpha"
+}
+
+# Helper function to lighten/darken a hex color
+adjust_color() {
+    local hex="$1"
+    local amount="$2"  # Positive to lighten, negative to darken
+    
+    # Remove # if present
+    hex="${hex#\#}"
+    
+    local r=$((16#${hex:0:2}))
+    local g=$((16#${hex:2:2}))
+    local b=$((16#${hex:4:2}))
+    
+    # Adjust
+    r=$((r + amount))
+    g=$((g + amount))
+    b=$((b + amount))
+    
+    # Clamp to 0-255
+    r=$((r < 0 ? 0 : r > 255 ? 255 : r))
+    g=$((g < 0 ? 0 : g > 255 ? 255 : g))
+    b=$((b < 0 ? 0 : b > 255 ? 255 : b))
+    
+    printf "#%02x%02x%02x" "$r" "$g" "$b"
+}
+
+# Generate color variations based on theme mode
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+    # Light theme variations
+    BG_LIGHTER=$(adjust_color "$BACKGROUND" 15)
+    BG_DARKER=$(adjust_color "$BACKGROUND" -15)
+    BG_SECONDARY=$(adjust_color "$BACKGROUND" -8)
+    
+    # For light themes, we need dark text
+    FG_RGBA="rgba(29, 32, 33, 0.87)"
+    FG_RGBA_70="rgba(29, 32, 33, 0.6)"
+    FG_RGBA_50="rgba(29, 32, 33, 0.38)"
+    FG_RGBA_32="rgba(29, 32, 33, 0.3)"
+    FG_RGBA_04="rgba(29, 32, 33, 0.04)"
+    FG_RGBA_08="rgba(29, 32, 33, 0.08)"
+    FG_RGBA_12="rgba(29, 32, 33, 0.12)"
+    FG_HEX="#0d0907"
+    
+    # Original template colors for light theme
+    ORIG_BG="#fbf1c7"
+    ORIG_FG="rgba(29, 32, 33, 0.87)"
+    ORIG_FG_70="rgba(29, 32, 33, 0.6)"
+    ORIG_FG_50="rgba(29, 32, 33, 0.38)"
+    ORIG_FG_32="rgba(29, 32, 33, 0.3)"
+    ORIG_FG_04="rgba(29, 32, 33, 0.04)"
+    ORIG_FG_08="rgba(29, 32, 33, 0.08)"
+    ORIG_FG_12="rgba(29, 32, 33, 0.12)"
+    ORIG_ACCENT="#b47109"
+    ORIG_BG_LIGHTER="#f9ebaf"
+    ORIG_BG_LIGHTER2="#f8e597"
+    
+    # Panel background in rgba format (needs separate replacement)
+    ORIG_PANEL_BG="rgba(213, 196, 161, 0.75)"
+    # Calculate rgba version of new background
+    BG_HEX="${BACKGROUND#\#}"
+    BG_R=$((16#${BG_HEX:0:2}))
+    BG_G=$((16#${BG_HEX:2:2}))
+    BG_B=$((16#${BG_HEX:4:2}))
+    NEW_PANEL_BG="rgba($BG_R, $BG_G, $BG_B, 0.75)"
+else
+    # Dark theme variations
+    BG_LIGHTER=$(adjust_color "$BACKGROUND" 20)
+    BG_SECONDARY=$(adjust_color "$BACKGROUND" 8)
+    
+    # For dark themes, we need light text (using the foreground color)
+    # Extract RGB from foreground hex for rgba calculations
+    FG_HEX_PURE="${FOREGROUND#\#}"
+    FG_R=$((16#${FG_HEX_PURE:0:2}))
+    FG_G=$((16#${FG_HEX_PURE:2:2}))
+    FG_B=$((16#${FG_HEX_PURE:4:2}))
+    
+    FG_RGBA="$FOREGROUND"
+    FG_RGBA_70="rgba($FG_R, $FG_G, $FG_B, 0.7)"
+    FG_RGBA_50="rgba($FG_R, $FG_G, $FG_B, 0.5)"
+    FG_RGBA_32="rgba($FG_R, $FG_G, $FG_B, 0.32)"
+    FG_RGBA_04="rgba($FG_R, $FG_G, $FG_B, 0.04)"
+    FG_RGBA_08="rgba($FG_R, $FG_G, $FG_B, 0.08)"
+    FG_RGBA_12="rgba($FG_R, $FG_G, $FG_B, 0.12)"
+    FG_HEX="$FOREGROUND"
+    
+    # Original template colors for dark theme
+    ORIG_BG="#0f0e0e"
+    ORIG_FG="#fbf1c7"
+    ORIG_FG_70="rgba(251, 241, 199, 0.7)"
+    ORIG_FG_50="rgba(251, 241, 199, 0.5)"
+    ORIG_FG_32="rgba(251, 241, 199, 0.32)"
+    ORIG_FG_04="rgba(251, 241, 199, 0.04)"
+    ORIG_FG_08="rgba(251, 241, 199, 0.08)"
+    ORIG_FG_12="rgba(251, 241, 199, 0.12)"
+    ORIG_ACCENT="#d8a657"
+    ORIG_VIEW_BG="#1d2021"
+    ORIG_SECONDARY_BG="#141617"
+    ORIG_SECONDARY_BG2="#211f1e"
+    
+    # Panel background in rgba format (needs separate replacement)
+    ORIG_PANEL_BG="rgba(15, 14, 14, 0.75)"
+    # Calculate rgba version of new background
+    BG_HEX="${BACKGROUND#\#}"
+    BG_R=$((16#${BG_HEX:0:2}))
+    BG_G=$((16#${BG_HEX:2:2}))
+    BG_B=$((16#${BG_HEX:4:2}))
+    NEW_PANEL_BG="rgba($BG_R, $BG_G, $BG_B, 0.75)"
+fi
+
+# Function to replace colors in a file
+replace_colors() {
+    local file="$1"
+    
+    if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+        # Light theme replacements
+        sed -i "s/$ORIG_BG/$BACKGROUND/g" "$file"
+        sed -i "s/$ORIG_BG_LIGHTER/$BG_LIGHTER/g" "$file"
+        sed -i "s/$ORIG_BG_LIGHTER2/$BG_DARKER/g" "$file"
+        sed -i "s/$ORIG_FG/$FOREGROUND/g" "$file"
+        sed -i "s/$ORIG_ACCENT/$ACCENT/g" "$file"
+        
+        # Replace rgba variants
+        sed -i "s/$ORIG_FG_70/$FG_RGBA_70/g" "$file"
+        sed -i "s/$ORIG_FG_50/$FG_RGBA_50/g" "$file"
+        sed -i "s/$ORIG_FG_32/$FG_RGBA_32/g" "$file"
+        sed -i "s/$ORIG_FG_04/$FG_RGBA_04/g" "$file"
+        sed -i "s/$ORIG_FG_08/$FG_RGBA_08/g" "$file"
+        sed -i "s/$ORIG_FG_12/$FG_RGBA_12/g" "$file"
+        
+        # Replace panel background
+        sed -i "s/$ORIG_PANEL_BG/$NEW_PANEL_BG/g" "$file"
+    else
+        # Dark theme replacements
+        sed -i "s/$ORIG_BG/$BACKGROUND/g" "$file"
+        sed -i "s/$ORIG_FG/$FOREGROUND/g" "$file"
+        sed -i "s/$ORIG_ACCENT/$ACCENT/g" "$file"
+        
+        # Replace rgba variants
+        sed -i "s/$ORIG_FG_70/$FG_RGBA_70/g" "$file"
+        sed -i "s/$ORIG_FG_50/$FG_RGBA_50/g" "$file"
+        sed -i "s/$ORIG_FG_32/$FG_RGBA_32/g" "$file"
+        sed -i "s/$ORIG_FG_04/$FG_RGBA_04/g" "$file"
+        sed -i "s/$ORIG_FG_08/$FG_RGBA_08/g" "$file"
+        sed -i "s/$ORIG_FG_12/$FG_RGBA_12/g" "$file"
+        
+        # Replace secondary background colors with variations of main background
+        sed -i "s/$ORIG_VIEW_BG/$BG_LIGHTER/g" "$file"
+        sed -i "s/$ORIG_SECONDARY_BG/$BG_SECONDARY/g" "$file"
+        sed -i "s/$ORIG_SECONDARY_BG2/$BACKGROUND/g" "$file"
+        
+        # Replace panel background
+        sed -i "s/$ORIG_PANEL_BG/$NEW_PANEL_BG/g" "$file"
+    fi
+}
+
+# Process all CSS files
+find "$OUTPUT_DIR" -name "*.css" -type f | while read -r css_file; do
+    replace_colors "$css_file"
+done
+
+# Update index.theme
+INDEX_THEME="$OUTPUT_DIR/index.theme"
+if [[ -f "$INDEX_THEME" ]]; then
+    sed -i "s/Name=$TEMPLATE_NAME/Name=$GENERATED_THEME_NAME/g" "$INDEX_THEME"
+    sed -i "s/GtkTheme=$TEMPLATE_NAME/GtkTheme=$GENERATED_THEME_NAME/g" "$INDEX_THEME"
+    sed -i "s/MetacityTheme=$TEMPLATE_NAME/MetacityTheme=$GENERATED_THEME_NAME/g" "$INDEX_THEME"
+fi
+
+# Also generate hdpi and xhdpi variants if they exist
+for suffix in "-hdpi" "-xhdpi"; do
+    TEMPLATE_VARIANT="$HOME/.themes/${TEMPLATE_NAME}${suffix}"
+    OUTPUT_VARIANT="$HOME/.themes/${GENERATED_THEME_NAME}${suffix}"
+    
+    if [[ -d "$TEMPLATE_VARIANT" ]]; then
+        rm -rf "$OUTPUT_VARIANT"
+        cp -r "$TEMPLATE_VARIANT" "$OUTPUT_VARIANT"
+        
+        # Update index.theme in variant
+        VARIANT_INDEX="$OUTPUT_VARIANT/index.theme"
+        if [[ -f "$VARIANT_INDEX" ]]; then
+            sed -i "s/Name=${TEMPLATE_NAME}${suffix}/Name=${GENERATED_THEME_NAME}${suffix}/g" "$VARIANT_INDEX"
+        fi
+        
+        # Set proper ownership for variant
+        if [[ -d "$OUTPUT_VARIANT" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
+            chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_VARIANT" 2>/dev/null || true
+        fi
+    fi
+done
+
+# Set proper ownership for the generated theme directory
+if [[ -d "$OUTPUT_DIR" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
+    chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_DIR" 2>/dev/null || true
+fi
+
+echo "$GENERATED_THEME_NAME"

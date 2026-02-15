@@ -77,20 +77,20 @@ if [[ -f "$THEME_PATH/colors.toml" ]]; then
 elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
   TEMP_COLORS_TOML=$(mktemp)
   ALACRITTY_TOML="$THEME_PATH/alacritty.toml"
-  
-  BG=$(grep -E "^background\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/')
-  FG=$(grep -E "^foreground\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/')
-  CURSOR=$(grep -E "^cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' || echo "$FG")
-  
-  BLUE=$(grep -E "^\s*blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/")
-  ACCENT="${BLUE:-$FG}"
-  
-  BLACK=$(grep -E "^\s*black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/")
-  WHITE=$(grep -E "^\s*white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/")
-  BRIGHT_BLACK=$(grep -E "^\s*black\s*=" "$ALACRITTY_TOML" | tail -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/")
-  BRIGHT_WHITE=$(grep -E "^\s*white\s*=" "$ALACRITTY_TOML" | tail -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/")
 
-  cat > "$TEMP_COLORS_TOML" << EOF
+  BG=$(grep -E "(^|[.])background\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
+  FG=$(grep -E "(^|[.])foreground\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
+  CURSOR=$(grep -E "(^|[.])cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|' || echo "$FG")
+
+  BLUE=$(grep -E "(^|[.])(normal\.)?blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  ACCENT="${BLUE:-$FG}"
+
+  BLACK=$(grep -E "(^|[.])(normal\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  WHITE=$(grep -E "(^|[.])(normal\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  BRIGHT_BLACK=$(grep -E "(^|[.])(bright\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  BRIGHT_WHITE=$(grep -E "(^|[.])(bright\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+
+  cat >"$TEMP_COLORS_TOML" <<EOF
 accent = "$ACCENT"
 cursor = "$CURSOR"
 foreground = "$FG"
@@ -114,9 +114,9 @@ EOF
 fi
 
 # Define default themes for gtk, icon, cinnamon, and rofi
-GTK_THEME="Catppuccin-Dark"
+GTK_THEME="Mint-Y-Dark-Grey"
 ICON_THEME="Mint-Y-Grey"
-CINNAMON_THEME="Catppuccin-Dark"
+CINNAMON_THEME="Mint-Y-Dark-Grey"
 ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
 
 # If we generated a dynamic theme, use it for GTK and Cinnamon
@@ -125,8 +125,7 @@ if [[ -n "$DYNAMIC_THEME" && -d "$HOME/.themes/$DYNAMIC_THEME" ]]; then
   CINNAMON_THEME="$DYNAMIC_THEME"
 fi
 
-# Override those settings for our default OhMyDebn/Omarchy themes
-# Only override if we haven't already set a dynamic theme from colors.toml
+# Set icon theme and rofi theme for our default OhMyDebn/Omarchy themes
 case $THEME_NAME in
 ash)
   ICON_THEME="Mint-Y-Grey"
@@ -199,7 +198,7 @@ tokyo-night)
     ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ICON_THEME in
     # blue
-    Yaru-blue | Yaru-blue-dark)
+    DodgerBlue | Papirus-Dark | Yaru-blue | Yaru-blue-dark)
       ICON_THEME="Mint-Y-Blue"
       ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
       ;;
@@ -209,7 +208,7 @@ tokyo-night)
       ROFI_THEME="$ROFI_DIR/square-green-dark.rasi"
       ;;
     # grey
-    Yaru-black | Yaru-grey | Yaru-wartybrown)
+    hi-color | Yaru-black | Yaru-grey | Yaru-wartybrown)
       ICON_THEME="Mint-Y-Grey"
       ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
       ;;

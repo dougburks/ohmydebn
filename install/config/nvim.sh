@@ -81,9 +81,11 @@ if [ ! -f $HOTRELOAD ]; then
 fi
 
 # 20260109 Similar to the LazyVim pin above, we now need to pin treesitter
+# 20260214 we now need to pin treesitter-textobjects as well
 TREESITTER=$NVIM_CONFIG_DIR/lua/plugins/treesitter.lua
-if [ ! -f $TREESITTER ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $TREESITTER"
+TREESITTER_STATE=~/.local/state/ohmydebn-config/nvim-treesitter-20260214
+if [ ! -f $TREESITTER_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating $TREESITTER"
   mkdir -p $NVIM_CONFIG_DIR/lua/plugins
   cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/treesitter.lua $TREESITTER
   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
@@ -99,4 +101,5 @@ if [ ! -f $TREESITTER ]; then
   if [ -f $LAZYLOCK ]; then
     mv $LAZYLOCK $LAZYLOCK-backup-$TIMESTAMP
   fi
+  touch $TREESITTER_STATE
 fi

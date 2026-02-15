@@ -12,18 +12,8 @@ if [ ! -f $THEME_SYMLINK_STATE ]; then
   touch $THEME_SYMLINK_STATE
 fi
 
-# Download theme support
-THEME_STATE=~/.local/state/ohmydebn-config/ohmydebn-themes-20250911
-if [ ! -f $THEME_STATE ]; then
-  cd
-  echo "Downloading themes..."
-  wget https://github.com/dougburks/ohmydebn-themes/releases/download/20250911/ohmydebn-themes.tar.gz
-  echo -n "Installing themes..."
-  tar zxf ohmydebn-themes.tar.gz
-  echo "done"
-  rm -f ohmydebn-themes.tar.gz
-  touch $THEME_STATE
-fi
+# Create directory for user themes
+mkdir -p ~/.themes
 
 # Make sure default theme is set
 if [ ! -f ~/.local/state/ohmydebn ]; then

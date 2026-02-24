@@ -1,0 +1,11 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-colors-delete: Delete temporary colors source if in /tmp
+# Usage: ohmydebn-theme-set-colors-delete <colors-source>
+#
+
+set -e
+
+if [[ -n "$1" && -f "$1" && "$1" == /tmp/* ]]; then
+  rm -f "$1"
+fi

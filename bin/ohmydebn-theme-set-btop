@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-btop: Set btop theme configuration
+# Usage: ohmydebn-theme-set-btop
+#
+
+set -e
+
+# Restart btop to apply new theme
+pkill -SIGUSR2 btop

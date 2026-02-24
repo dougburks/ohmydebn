@@ -1,0 +1,200 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-cava: Generate gradient colors for cava to match the ohmydebn theme
+#
+
+set -euo pipefail
+shopt -s nullglob
+
+CAVA_CONFIG=~/.config/cava/config
+THEME_DIR=~/.config/ohmydebn/current/theme
+COLORS_FILE="$THEME_DIR/colors.toml"
+
+# Function to interpolate between two hex colors
+# Returns intermediate colors as a gradient
+interpolate_colors() {
+    local start_color="${1#\#}"
+    local end_color="${2#\#}"
+    local num_colors=$3
+    
+    # Handle edge case to prevent division by zero
+    if [[ $num_colors -le 1 ]]; then
+        printf "#%02x%02x%02x\n" $r1 $g1 $b1
+        return
+    fi
+    
+    # Convert hex to RGB
+    local r1=$((16#${start_color:0:2}))
+    local g1=$((16#${start_color:2:2}))
+    local b1=$((16#${start_color:4:2}))
+    
+    local r2=$((16#${end_color:0:2}))
+    local g2=$((16#${end_color:2:2}))
+    local b2=$((16#${end_color:4:2}))
+    
+    # Generate interpolated colors
+    for ((i=0; i<num_colors; i++)); do
+        local ratio=$(( (i * 100) / (num_colors - 1) ))
+        local r=$(( r1 + (r2 - r1) * ratio / 100 ))
+        local g=$(( g1 + (g2 - g1) * ratio / 100 ))
+        local b=$(( b1 + (b2 - b1) * ratio / 100 ))
+        printf "#%02x%02x%02x\n" $r $g $b
+    done
+}
+
+# Function to get color from colors.toml or alacritty.toml
+get_theme_color() {
+    local color_name=$1
+    local default_color=$2
+    
+    if [[ -f "$COLORS_FILE" ]]; then
+        # Try to get from colors.toml
+        local color
+        color=$(grep -E "^\s*${color_name}\s*=" "$COLORS_FILE" | head -1 | sed -E 's/.*=\s*["'\''"]+([^"'\''"]+)["'\''"]+.*/\1/')
+        if [[ -n "$color" ]]; then
+            echo "$color"
+            return
+        fi
+    fi
+    
+    # Fallback to alacritty.toml
+    if [[ -f "$THEME_DIR/alacritty.toml" ]]; then
+        local color=""
+        case "$color_name" in
+            "accent")
+                # Use blue as accent from alacritty
+                color=$(grep -E "^\s*(.*\.)?blue\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "foreground")
+                color=$(grep -E "^\s*(.*\.)?foreground\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "background")
+                color=$(grep -E "^\s*(.*\.)?background\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "color1")
+                # red
+                color=$(grep -E "^\s*(.*\.)?red\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "color4")
+                # blue
+                color=$(grep -E "^\s*(.*\.)?blue\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "color5")
+                # magenta
+                color=$(grep -E "^\s*(.*\.)?magenta\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+            "color6")
+                # cyan
+                color=$(grep -E "^\s*(.*\.)?cyan\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+                ;;
+        esac
+        if [[ -n "$color" ]]; then
+            echo "$color"
+            return
+        fi
+    fi
+    
+    echo "$default_color"
+}
+
+# Main function to update cava config
+update_cava_theme() {
+    # Check if cava config exists
+    if [[ ! -f "$CAVA_CONFIG" ]]; then
+        echo "Cava config not found at $CAVA_CONFIG"
+        return 1
+    fi
+    
+    # Get theme colors
+    local background
+    local accent
+    local foreground
+    local color6
+    local color5
+    local color4
+    local color1
+    
+    background=$(get_theme_color "background" "#1e1e2e")
+    accent=$(get_theme_color "accent" "#89b4fa")
+    foreground=$(get_theme_color "foreground" "#cdd6f4")
+    
+    # Get additional colors for gradient (color6/cyan and color5/magenta for variety)
+    color6=$(get_theme_color "color6" "#94e2d5")
+    color5=$(get_theme_color "color5" "#f5c2e7")
+    color4=$(get_theme_color "color4" "#89b4fa")
+    color1=$(get_theme_color "color1" "#f38ba8")
+    
+    # Generate gradient colors
+    # Create a nice gradient from cyan -> blue -> magenta -> pink
+    local gradient_colors=()
+    
+    # Generate 8 colors for the gradient
+    # We'll create a smooth transition through the theme colors
+    gradient_colors[0]=$color6  # cyan/teal
+    gradient_colors[1]=$(interpolate_colors "$color6" "$color4" 3 | sed -n '2p')
+    gradient_colors[2]=$color4  # blue/accent
+    gradient_colors[3]=$(interpolate_colors "$color4" "$color5" 3 | sed -n '2p')
+    gradient_colors[4]=$color5  # magenta
+    gradient_colors[5]=$(interpolate_colors "$color5" "$color1" 3 | sed -n '2p')
+    gradient_colors[6]=$(interpolate_colors "$color5" "$color1" 3 | sed -n '3p')
+    gradient_colors[7]=$color1  # pink/red
+    
+    # Update cava config
+    # First, check if there's already a color section with gradient settings
+    if grep -q "^\[color\]" "$CAVA_CONFIG"; then
+        # Backup original config
+        cp "$CAVA_CONFIG" "$CAVA_CONFIG.backup.$(date +%Y%m%d-%H%M%S)"
+        
+        # Remove old gradient and background settings from the color section
+        sed -i '/^\[color\]/,/^\[/ { /^background\s*=/d; /^gradient\s*=/d; /^gradient_color_[0-9]\+\s*=/d; /^$/d; }' "$CAVA_CONFIG"
+        
+        # Create a temporary file with the new color settings
+        local temp_file
+        temp_file=$(mktemp)
+        
+        # Read the config and insert colors after [color] section
+        awk -v bg="$background" \
+            -v c1="${gradient_colors[0]}" \
+            -v c2="${gradient_colors[1]}" \
+            -v c3="${gradient_colors[2]}" \
+            -v c4="${gradient_colors[3]}" \
+            -v c5="${gradient_colors[4]}" \
+            -v c6="${gradient_colors[5]}" \
+            -v c7="${gradient_colors[6]}" \
+            -v c8="${gradient_colors[7]}" \
+        '/^\[color\]/ {
+            print
+            print "background = \047" bg "\047"
+            print ""
+            print "gradient = 1"
+            print "gradient_color_1 = \047" c1 "\047"
+            print "gradient_color_2 = \047" c2 "\047"
+            print "gradient_color_3 = \047" c3 "\047"
+            print "gradient_color_4 = \047" c4 "\047"
+            print "gradient_color_5 = \047" c5 "\047"
+            print "gradient_color_6 = \047" c6 "\047"
+            print "gradient_color_7 = \047" c7 "\047"
+            print "gradient_color_8 = \047" c8 "\047"
+            next
+        }
+        { print }' "$CAVA_CONFIG" > "$temp_file"
+        
+        # Replace original config with new one
+        mv "$temp_file" "$CAVA_CONFIG"
+        
+        # Reload cava colors if it's running
+        reload_cava_colors
+    else
+        echo "No [color] section found in cava config"
+        return 1
+    fi
+}
+
+# Function to reload cava config
+reload_cava_colors() {
+    # Send USR2 signal to cava to reload config
+    pkill -USR2 cava 2>/dev/null || true
+}
+
+# Run the update
+update_cava_theme

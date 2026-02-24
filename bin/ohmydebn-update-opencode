@@ -63,7 +63,6 @@ trap cleanup EXIT
 
 echo "OpenCode Package Check"
 echo "======================"
-echo "Requested version: $VERSION"
 
 # Check if OpenCode is already installed
 INSTALLED_VERSION=$(check_installed_version)
@@ -72,6 +71,7 @@ if [[ -n "$INSTALLED_VERSION" ]]; then
 else
   echo "OpenCode is not currently installed"
 fi
+echo "Requested version: $VERSION"
 
 if [[ "$VERSION" == "latest" ]]; then
   echo "Getting latest release..."

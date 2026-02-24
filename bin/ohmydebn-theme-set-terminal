@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-terminal: Set terminal-related theme configurations
+# Usage: ohmydebn-theme-set-terminal
+#
+
+set -e
+
+ALACRITTY_CONFIG_DIR=~/.config/alacritty
+mkdir -p $ALACRITTY_CONFIG_DIR
+ALACRITTY_CONFIG=$ALACRITTY_CONFIG_DIR/alacritty.toml
+touch $ALACRITTY_CONFIG
+
+# Determine light or dark mode
+if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
+  THEME_VARIANT="Light"
+else
+  THEME_VARIANT="Dark"
+fi
+
+# Tell Alacritty whether its window decorations should be light or dark
+if grep -q '^\s*decorations_theme_variant\s*=' "$ALACRITTY_CONFIG" 2>/dev/null; then
+  sed -i -E "s|^\s*decorations_theme_variant\s*=.*|decorations_theme_variant = \"$THEME_VARIANT\"|" "$ALACRITTY_CONFIG"
+else
+  if grep -q '^\[window\]' "$ALACRITTY_CONFIG" 2>/dev/null; then
+    sed -i "/^\[window\]/a\\decorations_theme_variant = \"$THEME_VARIANT\"" "$ALACRITTY_CONFIG"
+  else
+    echo "" >>"$ALACRITTY_CONFIG"
+    echo "[window]" >>"$ALACRITTY_CONFIG"
+    echo "decorations_theme_variant = \"$THEME_VARIANT\"" >>"$ALACRITTY_CONFIG"
+  fi
+fi

@@ -35,10 +35,12 @@ if [ ! -f $SCROLLING ]; then
 fi
 
 TRANSPARENCY=$NVIM_CONFIG_DIR/plugin/after/transparency.lua
-if [ ! -f $TRANSPARENCY ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating $TRANSPARENCY"
+TRANSPARENCY_STATE=~/.local/state/ohmydebn-config/nvim-transparency-20260221
+if [ ! -f $TRANSPARENCY_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating $TRANSPARENCY"
   mkdir -p $NVIM_CONFIG_DIR/plugin/after
   cp -av /usr/share/ohmydebn/config/nvim/plugin/after/transparency.lua $TRANSPARENCY
+  touch $TRANSPARENCY_STATE
 fi
 
 NVIM_OPTIONS=$NVIM_CONFIG_DIR/lua/config/options.lua

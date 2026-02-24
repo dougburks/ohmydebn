@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-icon: Set icon theme based on current theme
+# Usage: ohmydebn-theme-set-icon
+#
+
+set -e
+
+# Read theme name from current theme file
+THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || echo "ohmydebn")
+ICON_THEME="Mint-Y-Grey"
+
+case $THEME_NAME in
+ash)
+  ICON_THEME="Mint-Y-Grey"
+  ;;
+catppuccin)
+  ICON_THEME="Mint-Y-Purple"
+  ;;
+catppuccin-latte)
+  ICON_THEME="Mint-Y-Purple"
+  ;;
+ethereal)
+  ICON_THEME="Mint-Y-Blue"
+  ;;
+everforest)
+  ICON_THEME="Mint-Y-Grey"
+  ;;
+flexoki-light)
+  ICON_THEME="Mint-Y-Grey"
+  ;;
+gruvbox)
+  ICON_THEME="Mint-Y"
+  ;;
+hackerman)
+  ICON_THEME="Mint-Y-Blue"
+  ;;
+kanagawa)
+  ICON_THEME="Mint-Y-Navy"
+  ;;
+matte-black)
+  ICON_THEME="Mint-Y-Sand"
+  ;;
+nord)
+  ICON_THEME="Mint-Y-Navy"
+  ;;
+ohmydebn)
+  ICON_THEME="Mint-Y-Blue"
+  ;;
+osaka-jade)
+  ICON_THEME="Mint-Y"
+  ;;
+ristretto)
+  ICON_THEME="Mint-Y-Sand"
+  ;;
+rose-pine)
+  ICON_THEME="Mint-Y-Purple"
+  ;;
+tokyo-night)
+  ICON_THEME="Mint-Y-Purple"
+  ;;
+*)
+  # If the user has installed extra themes, then check to see if the theme specifies an icon theme
+  # If so, then use the the icon theme to pick an appropriate color palette
+  if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
+    ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
+    case $ICON_THEME in
+    # blue
+    DodgerBlue | Papirus-Dark | Yaru-blue | Yaru-blue-dark)
+      ICON_THEME="Mint-Y-Blue"
+      ;;
+    # green
+    Yaru-sage | Yaru-olive | Yaru-prussiangreen)
+      ICON_THEME="Mint-Y"
+      ;;
+    # grey
+    hi-color | Yaru-black | Yaru-grey | Yaru-wartybrown)
+      ICON_THEME="Mint-Y-Grey"
+      ;;
+    # purple
+    Yaru-magenta | Yaru-purple)
+      ICON_THEME="Mint-Y-Purple"
+      ;;
+    # red
+    Yaru | Yaru-dark | Yaru-red | Yaru-red-dark)
+      ICON_THEME="Mint-Y-Red"
+      ;;
+    # yellow
+    Yaru-yellow | Yaru-yellow-dark)
+      ICON_THEME="Mint-Y-Sand"
+      ;;
+    esac
+  fi
+  ;;
+esac
+
+# Apply icon theme using gsettings
+gsettings set org.cinnamon.desktop.interface icon-theme "$ICON_THEME"

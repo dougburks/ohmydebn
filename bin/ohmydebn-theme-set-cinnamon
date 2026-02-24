@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# ohmydebn-theme-generate: Generate a dynamic theme from colors.toml
-# Usage: ohmydebn-theme-generate <theme-name> <colors.toml-path> <is-light-mode>
+# ohmydebn-theme-set-cinnamon: Generate a dynamic cinnamon theme from colors.toml and apply it
+# Usage: ohmydebn-theme-set-cinnamon <theme-name> <colors.toml-path> <is-light-mode>
 #
 
 set -e
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: ohmydebn-theme-generate <theme-name> <colors.toml-path> <is-light-mode>" >&2
+  echo "Usage: ohmydebn-theme-set-cinnamon <theme-name> <colors.toml-path> <is-light-mode>" >&2
   echo "  theme-name: The name for the generated theme (e.g., 'tokyo-night')" >&2
   echo "  colors.toml-path: Path to the colors.toml file" >&2
   echo "  is-light-mode: 'true' or 'false'" >&2
@@ -33,7 +33,7 @@ fi
 # Parse colors from TOML file
 parse_toml() {
   local key="$1"
-  grep -E "^${key}\s*=" "$COLORS_TOML" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
+  grep -E "^\s*${key}\s*=" "$COLORS_TOML" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
 }
 
 BACKGROUND=$(parse_toml "background")
@@ -314,4 +314,17 @@ if [[ -d "$OUTPUT_DIR" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
   chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_DIR" 2>/dev/null || true
 fi
 
-echo "$GENERATED_THEME_NAME"
+# In case we are changing from one aether theme to another aether theme, switch to non-aether GTK theme temporarily
+if [[ "$THEME_NAME" == "aether" ]]; then
+  gsettings set org.cinnamon.desktop.interface gtk-theme "Mint-Y-Dark"
+fi
+
+# Apply GTK and Cinnamon themes using gsettings
+gsettings set org.cinnamon.desktop.interface gtk-theme "$GENERATED_THEME_NAME"
+gsettings set org.cinnamon.theme name "$GENERATED_THEME_NAME"
+
+# If using aether to change theme then restart cinnamon to force window decoration update
+THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name")
+if [[ "$THEME_NAME" == "aether" ]]; then
+  setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+fi

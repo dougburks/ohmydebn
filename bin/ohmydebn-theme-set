@@ -34,6 +34,11 @@ else
   exit 1
 fi
 
+if [[ ! -f "$THEME_PATH/colors.toml" && ! -f "$THEME_PATH/alacritty.toml" ]]; then
+  echo "Theme '$THEME_NAME' does not have colors.toml or alacritty.toml"
+  exit 1
+fi
+
 # Setup clean next theme directory (for atomic theme config swapping)
 rm -rf "$NEXT_THEME_PATH"
 mkdir -p "$NEXT_THEME_PATH"
@@ -52,285 +57,36 @@ mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
 echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
 
 # Determine light or dark mode
+IS_LIGHT_MODE="false"
 if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
   gsettings set org.x.apps.portal color-scheme "prefer-light"
-  LIGHT_DARK="Light"
+  IS_LIGHT_MODE="true"
 else
   gsettings set org.x.apps.portal color-scheme "prefer-dark"
-  LIGHT_DARK="Dark"
-fi
-
-# Define ROFI_DIR
-ROFI_DIR=~/.config/rofi
-
-# Check if the theme has a colors.toml file for dynamic theme generation
-# If not, fall back to alacritty.toml
-DYNAMIC_THEME=""
-COLORS_SOURCE=""
-if [[ -f "$THEME_PATH/colors.toml" ]]; then
-  COLORS_SOURCE="$THEME_PATH/colors.toml"
-  IS_LIGHT_MODE="false"
-  if [[ -f "$THEME_PATH/light.mode" ]]; then
-    IS_LIGHT_MODE="true"
-  fi
-  DYNAMIC_THEME=$(/usr/share/ohmydebn/bin/ohmydebn-theme-generate "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE")
-elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
-  TEMP_COLORS_TOML=$(mktemp)
-  ALACRITTY_TOML="$THEME_PATH/alacritty.toml"
-
-  BG=$(grep -E "(^|[.])background\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
-  FG=$(grep -E "(^|[.])foreground\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
-  CURSOR=$(grep -E "(^|[.])cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|' || echo "$FG")
-
-  BLUE=$(grep -E "(^|[.])(normal\.)?blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  ACCENT="${BLUE:-$FG}"
-
-  BLACK=$(grep -E "(^|[.])(normal\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  WHITE=$(grep -E "(^|[.])(normal\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  BRIGHT_BLACK=$(grep -E "(^|[.])(bright\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  BRIGHT_WHITE=$(grep -E "(^|[.])(bright\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-
-  cat >"$TEMP_COLORS_TOML" <<EOF
-accent = "$ACCENT"
-cursor = "$CURSOR"
-foreground = "$FG"
-background = "$BG"
-selection_foreground = "$BG"
-selection_background = "$FG"
-
-color0 = "$BLACK"
-color7 = "$WHITE"
-color8 = "$BRIGHT_BLACK"
-color15 = "$BRIGHT_WHITE"
-EOF
-
-  COLORS_SOURCE="$TEMP_COLORS_TOML"
-  IS_LIGHT_MODE="false"
-  if [[ -f "$THEME_PATH/light.mode" ]]; then
-    IS_LIGHT_MODE="true"
-  fi
-  DYNAMIC_THEME=$(/usr/share/ohmydebn/bin/ohmydebn-theme-generate "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE")
-  rm -f "$TEMP_COLORS_TOML"
-fi
-
-# Define default themes for gtk, icon, cinnamon, and rofi
-GTK_THEME="Mint-Y-Dark-Grey"
-ICON_THEME="Mint-Y-Grey"
-CINNAMON_THEME="Mint-Y-Dark-Grey"
-ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
-
-# If we generated a dynamic theme, use it for GTK and Cinnamon
-if [[ -n "$DYNAMIC_THEME" && -d "$HOME/.themes/$DYNAMIC_THEME" ]]; then
-  GTK_THEME="$DYNAMIC_THEME"
-  CINNAMON_THEME="$DYNAMIC_THEME"
-fi
-
-# Set icon theme and rofi theme for our default OhMyDebn/Omarchy themes
-case $THEME_NAME in
-ash)
-  ICON_THEME="Mint-Y-Grey"
-  ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
-  ;;
-catppuccin)
-  ICON_THEME="Mint-Y-Purple"
-  ROFI_THEME="$ROFI_DIR/catppuccin.rasi"
-  ;;
-catppuccin-latte)
-  ICON_THEME="Mint-Y-Purple"
-  ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
-  ;;
-ethereal)
-  ICON_THEME="Mint-Y-Blue"
-  ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
-  ;;
-everforest)
-  ICON_THEME="Mint-Y-Grey"
-  ROFI_THEME="$ROFI_DIR/everforest.rasi"
-  ;;
-flexoki-light)
-  ICON_THEME="Mint-Y-Grey"
-  ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
-  ;;
-gruvbox)
-  ICON_THEME="Mint-Y"
-  ROFI_THEME="$ROFI_DIR/gruvbox.rasi"
-  ;;
-hackerman)
-  ICON_THEME="Mint-Y-Blue"
-  ROFI_THEME="$ROFI_DIR/osaka-jade.rasi"
-  ;;
-kanagawa)
-  ICON_THEME="Mint-Y-Navy"
-  ROFI_THEME="$ROFI_DIR/kanagawa.rasi"
-  ;;
-matte-black)
-  ICON_THEME="Mint-Y-Sand"
-  ROFI_THEME="$ROFI_DIR/matte-black.rasi"
-  ;;
-nord)
-  ICON_THEME="Mint-Y-Navy"
-  ROFI_THEME="$ROFI_DIR/square-nord-dark.rasi"
-  ;;
-ohmydebn)
-  ICON_THEME="Mint-Y-Blue"
-  ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
-  ;;
-osaka-jade)
-  ICON_THEME="Mint-Y"
-  ROFI_THEME="$ROFI_DIR/osaka-jade.rasi"
-  ;;
-ristretto)
-  ICON_THEME="Mint-Y-Sand"
-  ROFI_THEME="$ROFI_DIR/ristretto.rasi"
-  ;;
-rose-pine)
-  ICON_THEME="Mint-Y-Purple"
-  ROFI_THEME="$ROFI_DIR/square-pink-dark.rasi"
-  ;;
-tokyo-night)
-  ICON_THEME="Mint-Y-Purple"
-  ROFI_THEME="$ROFI_DIR/tokyo-night.rasi"
-  ;;
-*)
-  # If the user has installed extra themes, then check to see if the theme specifies an icon theme
-  # If so, then use the the icon theme to pick an appropriate color palette
-  if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
-    ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
-    case $ICON_THEME in
-    # blue
-    DodgerBlue | Papirus-Dark | Yaru-blue | Yaru-blue-dark)
-      ICON_THEME="Mint-Y-Blue"
-      ROFI_THEME="$ROFI_DIR/square-blue-dark.rasi"
-      ;;
-    # green
-    Yaru-sage | Yaru-olive | Yaru-prussiangreen)
-      ICON_THEME="Mint-Y"
-      ROFI_THEME="$ROFI_DIR/square-green-dark.rasi"
-      ;;
-    # grey
-    hi-color | Yaru-black | Yaru-grey | Yaru-wartybrown)
-      ICON_THEME="Mint-Y-Grey"
-      ROFI_THEME="$ROFI_DIR/square-gray-dark.rasi"
-      ;;
-    # purple
-    Yaru-magenta | Yaru-purple)
-      ICON_THEME="Mint-Y-Purple"
-      ROFI_THEME="$ROFI_DIR/square-purple-dark.rasi"
-      ;;
-    # red
-    Yaru | Yaru-dark | Yaru-red | Yaru-red-dark)
-      ICON_THEME="Mint-Y-Red"
-      ROFI_THEME="$ROFI_DIR/square-red-dark.rasi"
-      ;;
-    # yellow
-    Yaru-yellow | Yaru-yellow-dark)
-      ICON_THEME="Mint-Y-Sand"
-      ROFI_THEME="$ROFI_DIR/square-yellow-dark.rasi"
-      ;;
-    esac
-  fi
-  ;;
-esac
-
-# If using an aether theme, then pull the colors from its wofi.css and convert them for rofi
-WOFI_CSS=~/.config/ohmydebn/current/theme/wofi.css
-if [[ -f $WOFI_CSS ]] && grep -q "@define-color bg " $WOFI_CSS && grep -q "@define-color fg " $WOFI_CSS ]]; then
-  BG=$(grep "@define-color bg " $WOFI_CSS | awk '{print $3}')
-  FG=$(grep "@define-color fg " $WOFI_CSS | awk '{print $3}')
-  # Some themes do not contain certain colors so fall back to FG/BG when necessary
-  if grep -q "@define-color gray1 " $WOFI_CSS; then
-    GRAY1=$(grep "@define-color gray1 " $WOFI_CSS | awk '{print $3}')
-  else
-    GRAY1=$FG
-  fi
-  if grep -q "@define-color gray2 " $WOFI_CSS; then
-    GRAY2=$(grep "@define-color gray2 " $WOFI_CSS | awk '{print $3}')
-  else
-    GRAY2=$FG
-  fi
-  if grep -q "@define-color gray3 " $WOFI_CSS; then
-    GRAY3=$(grep "@define-color gray3 " $WOFI_CSS | awk '{print $3}')
-  else
-    GRAY3=$FG
-  fi
-  if grep -q "@define-color gray4 " $WOFI_CSS; then
-    GRAY4=$(grep "@define-color gray4 " $WOFI_CSS | awk '{print $3}')
-  else
-    GRAY4=$BG
-  fi
-  if grep -q "@define-color gray5 " $WOFI_CSS; then
-    GRAY5=$(grep "@define-color gray5 " $WOFI_CSS | awk '{print $3}')
-  else
-    GRAY5=$BG
-  fi
-  if grep -q "@define-color fg_bright " $WOFI_CSS; then
-    FG_BRIGHT=$(grep "@define-color fg_bright " $WOFI_CSS | awk '{print $3}')
-  else
-    FG_BRIGHT=$FG
-  fi
-
-  AETHER_RASI=$ROFI_DIR/aether.rasi
-  cp $ROFI_DIR/square-nord-dark.rasi $AETHER_RASI
-  # bg0 - window background color
-  sed -i "s|bg0:.*$|bg0:    $BG|" $AETHER_RASI
-  # bg1 - inputbar background color
-  sed -i "s|bg1:.*$|bg1:    $BG|" $AETHER_RASI
-  # bg2 - message background color
-  sed -i "s|bg2:.*$|bg2:    $BG|" $AETHER_RASI
-  # bg3 - border color for window and inputbar
-  sed -i "s|bg3:.*$|bg3:    $GRAY3|" $AETHER_RASI
-  # fg0 - text color
-  sed -i "s|fg0:.*$|fg0:    $FG|" $AETHER_RASI
-  # fg1 - not used currently
-  sed -i "s|fg1:.*$|fg1:    $FG|" $AETHER_RASI
-  # fg2 - inputbar prompt color
-  sed -i "s|fg2:.*$|fg2:    $GRAY1|" $AETHER_RASI
-  # fg3 - inputbar placeholder color
-  sed -i "s|fg3:.*$|fg3:    #3D3D3D;|" $AETHER_RASI
-  ROFI_THEME="$AETHER_RASI"
-fi
-
-# use gsettings to update gtk theme, icon theme, and cinnamon theme
-gsettings set org.cinnamon.desktop.interface gtk-theme "$GTK_THEME"
-gsettings set org.cinnamon.desktop.interface icon-theme "$ICON_THEME"
-gsettings set org.cinnamon.theme name "$CINNAMON_THEME"
-
-# update rofi theme
-mkdir -p $ROFI_DIR
-ROFI_CONFIG=$ROFI_DIR/config.rasi
-if [ -f $ROFI_CONFIG ]; then
-  mv $ROFI_CONFIG $ROFI_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
-fi
-cat <<EOF >$ROFI_CONFIG
-@theme "$ROFI_THEME"
-EOF
-
-# Trigger alacritty config reload
-ALACRITTY_CONFIG_DIR=~/.config/alacritty
-mkdir -p $ALACRITTY_CONFIG_DIR
-touch $ALACRITTY_CONFIG_DIR/alacritty.toml
-
-# Restart components to apply new theme
-pkill -SIGUSR2 btop
-
-# Update starship prompt
-STARSHIP_STATE=~/.local/state/ohmydebn-config/starship-20251109
-if [ ! -f $STARSHIP_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
-  STARSHIP_CONFIG=~/.config/starship.toml
-  if [ -f $STARSHIP_CONFIG ]; then
-    mv $STARSHIP_CONFIG $STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
-  fi
-  cp /usr/share/ohmydebn/config/starship.toml $STARSHIP_CONFIG
-  mkdir -p ~/.local/state/ohmydebn-config
-  touch $STARSHIP_STATE
 fi
 
 # Set new background
 /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
 
-# Update app themes
+# If colors.toml does not exist, then dynamically generate it using alacritty.toml
+COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors "$THEME_PATH")
+
+# Use COLORS_SOURCE to update cinnamon and gtk themes
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-cinnamon "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
+# Use COLORS_SOURCE to update rofi theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-rofi "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
+# If COLORS_SOURCE was dynamically generated, delete it
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"
+
+# Set all remaining themes
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-icon
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-terminal
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-btop
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-starship
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-antigravity
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-cava
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-opencode
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-vscode
-/usr/share/ohmydebn/bin/ohmydebn-theme-set-antigravity

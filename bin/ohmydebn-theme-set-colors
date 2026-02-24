@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-colors: Get colors source file for theme
+# Usage: ohmydebn-theme-set-colors <theme-path>
+# Returns: colors-source path (and temp-file path if created)
+#
+
+set -e
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: ohmydebn-theme-set-colors <theme-path>" >&2
+  exit 1
+fi
+
+THEME_PATH="$1"
+
+if [[ -f "$THEME_PATH/colors.toml" ]]; then
+  echo "$THEME_PATH/colors.toml"
+elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
+  TEMP_COLORS_TOML=$(mktemp)
+  ALACRITTY_TOML="$THEME_PATH/alacritty.toml"
+
+  BG=$(grep -E "^\s*(.*\.)?background\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
+  FG=$(grep -E "^\s*(.*\.)?foreground\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
+  CURSOR=$(grep -E "^\s*(.*\.)?cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|' || echo "$FG")
+
+  BLUE=$(grep -E "^\s*(.*\.)?(normal\.)?blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  ACCENT="${BLUE:-$FG}"
+
+  BLACK=$(grep -E "^\s*(.*\.)?(normal\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  WHITE=$(grep -E "^\s*(.*\.)?(normal\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  BRIGHT_BLACK=$(grep -E "^\s*(.*\.)?(bright\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  BRIGHT_WHITE=$(grep -E "^\s*(.*\.)?(bright\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+
+  BLACK=${BLACK:-$FG}
+  WHITE=${WHITE:-$FG}
+  BRIGHT_BLACK=${BRIGHT_BLACK:-$FG}
+  BRIGHT_WHITE=${BRIGHT_WHITE:-$FG}
+
+  cat >"$TEMP_COLORS_TOML" <<EOF
+accent = "$ACCENT"
+cursor = "$CURSOR"
+foreground = "$FG"
+background = "$BG"
+selection_foreground = "$BG"
+selection_background = "$FG"
+
+color0 = "$BLACK"
+color7 = "$WHITE"
+color8 = "$BRIGHT_BLACK"
+color15 = "$BRIGHT_WHITE"
+EOF
+
+  echo "$TEMP_COLORS_TOML"
+else
+  echo ""
+fi

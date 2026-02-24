@@ -30,7 +30,7 @@ if [[ -f $COLORS_FILE ]]; then
   shopt -s nullglob
 
   # Process templates
-  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl; do
+  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl /usr/share/ohmydebn/config/btop/*.tpl; do
     filename=$(basename "$tpl" .tpl)
     output_path="$NEXT_THEME_DIR/$filename"
 

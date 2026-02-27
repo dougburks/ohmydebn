@@ -18,15 +18,12 @@ done
 CURRENT_THEME_PATH="$HOME/.config/ohmydebn/current/theme"
 NEXT_THEME_PATH="$HOME/.config/ohmydebn/current/next-theme"
 USER_THEMES_PATH="$HOME/.config/ohmydebn/themes"
-OMARCHY_THEMES_PATH="/usr/share/ohmydebn-themes-omarchy"
 OHMYDEBN_THEMES_PATH="/usr/share/ohmydebn-themes"
 
 THEME_NAME=$(echo "$1" | sed -E 's/<[^>]+>//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 
 if [[ -d "$USER_THEMES_PATH/$THEME_NAME" ]]; then
   THEME_PATH="$USER_THEMES_PATH/$THEME_NAME"
-elif [[ -d "$OMARCHY_THEMES_PATH/$THEME_NAME" ]]; then
-  THEME_PATH="$OMARCHY_THEMES_PATH/$THEME_NAME"
 elif [[ -d "$OHMYDEBN_THEMES_PATH/$THEME_NAME" ]]; then
   THEME_PATH="$OHMYDEBN_THEMES_PATH/$THEME_NAME"
 else

@@ -53,7 +53,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 - Understand how ohmydebn commands work: `cat $(which ohmydebn-theme-set)`
 - See default configs before customizing: `cat /usr/share/ohmydebn/config/cinnamon/cinnamon-settings`
 - Check stock theme files to copy for customization: `ls /usr/share/ohmydebn-themes/`
-- Check original Omarchy themes: `ls /usr/share/ohmydebn-themes-omarchy/`
+- Check original Omarchy themes: `ls /usr/share/ohmydebn-themes/`
 - Reference default cinnamon settings from the config templates: `cat /usr/share/ohmydebn/config/cinnamon/*`
 
 **Always use these safe locations instead:**
@@ -229,7 +229,7 @@ cp ~/.config/cinnamon/cinnamon-settings ~/.config/cinnamon/cinnamon-settings.bak
 1. Create a directory under ~/.config/ohmydebn/themes.
 2. See how existing themes are done via:
    - `/usr/share/ohmydebn-themes/ohmydebn/` for the native OhMyDebn theme
-   - `/usr/share/ohmydebn-themes-omarchy/tokyo-night/` for original Omarchy themes (interpreted for Cinnamon)
+   - `/usr/share/ohmydebn-themes/tokyo-night/` for original Omarchy themes (interpreted for Cinnamon)
 3. Download a matching background (or several) from the internet and put them in ~/.config/ohmydebn/themes/[name-of-new-theme]
 4. When done with the theme, run ohmydebn-theme-set "Name of new theme"
 

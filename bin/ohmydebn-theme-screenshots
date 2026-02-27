@@ -18,7 +18,7 @@ read input
 
 /usr/bin/xdotool getactivewindow windowminimize
 
-cd /usr/share/ohmydebn-themes-omarchy/
+cd /usr/share/ohmydebn-themes/
 for i in *; do
   /usr/share/ohmydebn/bin/ohmydebn-theme-set $i
   sleep 3s

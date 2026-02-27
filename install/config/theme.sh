@@ -4,7 +4,7 @@
 THEME_SYMLINK_STATE=~/.local/state/ohmydebn-config/ohmydebn-theme-symlink-20251121
 if [ ! -f $THEME_SYMLINK_STATE ]; then
   mkdir -p ~/.config/ohmydebn/themes
-  for f in /usr/share/ohmydebn-themes/* /usr/share/ohmydebn-themes-omarchy/*; do
+  for f in /usr/share/ohmydebn-themes/*; do
     THEME=$(basename $f)
     rm -f ~/.config/ohmydebn/themes/$THEME
     ln -nfs "$f" ~/.config/ohmydebn/themes/

@@ -6,62 +6,45 @@
 
 set -e
 
-# Read theme name from current theme file
-THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || echo "ohmydebn")
+# Default icon theme is grey which should look ok with just about any theme
 ICON_THEME="Mint-Y-Grey"
 
+# Read theme name from current theme file
+THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || echo "ohmydebn")
+
+# For our default themes and certain extra themes, select a corresponding mint icon theme
 case $THEME_NAME in
-ash)
-  ICON_THEME="Mint-Y-Grey"
-  ;;
-catppuccin)
-  ICON_THEME="Mint-Y-Purple"
-  ;;
-catppuccin-latte)
-  ICON_THEME="Mint-Y-Purple"
-  ;;
-ethereal)
+# blue
+ethereal | hackerman | ohmydebn | solarizedosaka | white)
   ICON_THEME="Mint-Y-Blue"
   ;;
-everforest)
-  ICON_THEME="Mint-Y-Grey"
-  ;;
-flexoki-light)
-  ICON_THEME="Mint-Y-Grey"
-  ;;
-gruvbox)
+# green
+gruvbox | osaka-jade | solarized)
   ICON_THEME="Mint-Y"
   ;;
-hackerman)
-  ICON_THEME="Mint-Y-Blue"
+# grey
+ash | everforest | flexoki-light | miasma | vantablack)
+  ICON_THEME="Mint-Y-Grey"
   ;;
-kanagawa)
+# navy
+kanagawa | nord | solarized-light)
   ICON_THEME="Mint-Y-Navy"
   ;;
-matte-black)
-  ICON_THEME="Mint-Y-Sand"
+# pink
+pink-blood-omarchy | rose-pine-dark)
+  ICON_THEME="Mint-Y-Pink"
   ;;
-nord)
-  ICON_THEME="Mint-Y-Navy"
-  ;;
-ohmydebn)
-  ICON_THEME="Mint-Y-Blue"
-  ;;
-osaka-jade)
-  ICON_THEME="Mint-Y"
-  ;;
-ristretto)
-  ICON_THEME="Mint-Y-Sand"
-  ;;
-rose-pine)
+# purple
+catppuccin | catppuccin-latte | rose-pine | synthwave84 | tokyo-night)
   ICON_THEME="Mint-Y-Purple"
   ;;
-tokyo-night)
-  ICON_THEME="Mint-Y-Purple"
+# yellow
+matte-black | retropc | ristretto)
+  ICON_THEME="Mint-Y-Sand"
   ;;
 *)
-  # If the user has installed extra themes, then check to see if the theme specifies an icon theme
-  # If so, then use the the icon theme to pick an appropriate color palette
+  # For any other theme, check to see if it specifies an icon theme
+  # If so, then use the that icon theme to select a corresponding mint icon theme
   if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
     ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ICON_THEME in
@@ -74,7 +57,7 @@ tokyo-night)
       ICON_THEME="Mint-Y"
       ;;
     # grey
-    hi-color | Yaru-black | Yaru-grey | Yaru-wartybrown)
+    hi-color | Yaru-black | Yaru-dark | Yaru-grey | Yaru-wartybrown)
       ICON_THEME="Mint-Y-Grey"
       ;;
     # purple
@@ -82,7 +65,7 @@ tokyo-night)
       ICON_THEME="Mint-Y-Purple"
       ;;
     # red
-    Yaru | Yaru-dark | Yaru-red | Yaru-red-dark)
+    Yaru | Yaru-red | Yaru-red-dark)
       ICON_THEME="Mint-Y-Red"
       ;;
     # yellow

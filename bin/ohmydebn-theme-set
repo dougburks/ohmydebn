@@ -81,6 +81,7 @@ COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors "$THEME_PATH")
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-icon
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-terminal
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-btop
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-gedit
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-starship
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-antigravity
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-cava

@@ -1,0 +1,11 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-gedit: Set gedit theme configuration
+# Usage: ohmydebn-theme-set-gedit
+#
+
+set -e
+
+# set theme-variant to dark and then to light to force update
+gsettings set org.gnome.gedit.preferences.ui theme-variant 'dark'
+gsettings set org.gnome.gedit.preferences.ui theme-variant 'light'

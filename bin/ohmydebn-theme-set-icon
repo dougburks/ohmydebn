@@ -6,7 +6,7 @@
 
 set -e
 
-# Set default icon theme to grey which should be work with most themes
+# Set default icon theme to grey which should work with most themes
 ICON_THEME="Mint-Y-Grey"
 
 # Read theme name from current theme file

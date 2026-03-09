@@ -6,7 +6,7 @@
 
 set -e
 
-# Default icon theme is grey which should look ok with just about any theme
+# Set default icon theme to grey which should work with most themes
 ICON_THEME="Mint-Y-Grey"
 
 # Read theme name from current theme file
@@ -46,8 +46,8 @@ matte-black | retropc | ristretto)
   # For any other theme, check to see if it specifies an icon theme
   # If so, then use the that icon theme to select a corresponding mint icon theme
   if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
-    ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
-    case $ICON_THEME in
+    ORIG_ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
+    case $ORIG_ICON_THEME in
     # blue
     DodgerBlue | Papirus-Dark | Yaru-blue | Yaru-blue-dark)
       ICON_THEME="Mint-Y-Blue"
@@ -56,12 +56,8 @@ matte-black | retropc | ristretto)
     Yaru-sage | Yaru-olive | Yaru-prussiangreen)
       ICON_THEME="Mint-Y"
       ;;
-    # grey
-    hi-color | Yaru-black | Yaru-dark | Yaru-grey | Yaru-wartybrown)
-      ICON_THEME="Mint-Y-Grey"
-      ;;
     # purple
-    Yaru-magenta | Yaru-purple)
+    Yaru-magenta | Yaru-purple | Yaru-purple-dark)
       ICON_THEME="Mint-Y-Purple"
       ;;
     # red

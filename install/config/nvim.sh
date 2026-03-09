@@ -35,7 +35,7 @@ if [ ! -f $SCROLLING ]; then
 fi
 
 TRANSPARENCY=$NVIM_CONFIG_DIR/plugin/after/transparency.lua
-TRANSPARENCY_STATE=~/.local/state/ohmydebn-config/nvim-transparency-20260221
+TRANSPARENCY_STATE=~/.local/state/ohmydebn-config/nvim-transparency-20260308
 if [ ! -f $TRANSPARENCY_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating $TRANSPARENCY"
   mkdir -p $NVIM_CONFIG_DIR/plugin/after

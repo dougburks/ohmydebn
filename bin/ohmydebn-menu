@@ -133,7 +133,8 @@ show_install_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server\n  Virtualization\n🛜︎ UxPlay Airplay Receiver") in
+  case $(menu "Install" "♫  cliamp terminal music player\n󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server\n  Virtualization\n🛜︎ UxPlay Airplay Receiver") in
+  *cliamp*) install "cliamp" "cliamp" ;;
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
   *Virtualization*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtualization-install ;;

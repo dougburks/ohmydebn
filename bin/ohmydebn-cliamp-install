@@ -1,0 +1,26 @@
+#!/bin/bash
+
+cat <<EOF
+Continuing will install the cliamp package and its dependencies.
+
+Press Enter to continue or Ctrl-c to cancel.
+EOF
+
+read input
+
+# Install packages
+sudo apt update
+sudo apt -y install cliamp
+
+# Output message to user
+cat <<EOF
+
+================================================================================
+
+cliamp is now installed.
+
+You can start it from the command line or by pressing:
+
+Ctrl + Alt + M
+
+EOF

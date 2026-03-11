@@ -35,10 +35,10 @@ cat <<EOF
 
 ================================================================================
 
-Virtualization support is now installed.
+The virt-manager packages are now installed.
 
 You can start Virtual Machine Manager from the menu or by pressing:
 
-Ctrl + Super + V
+Ctrl + Alt + V
 
 EOF

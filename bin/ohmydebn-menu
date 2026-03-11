@@ -119,7 +119,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n  Utility") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n󰒒  Utility\n♫  Media\n  Virtualization") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -128,17 +128,32 @@ show_install_menu() {
   *AI*) show_install_ai_menu ;;
   *Editor*) show_install_editor_menu ;;
   *Utility*) show_install_utility_menu ;;
+  *Media*) show_install_media_menu ;;
+  *Virtualization*) show_install_virtualization_menu ;;
   *) show_main_menu ;;
   esac
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "♫  cliamp terminal music player\n󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server\n  Virtualization\n🛜︎ UxPlay Airplay Receiver") in
-  *cliamp*) install "cliamp" "cliamp" ;;
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
-  *Virtualization*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtualization-install ;;
+  *) show_install_menu ;;
+  esac
+}
+
+show_install_media_menu() {
+  case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay Airplay receiver") in
+  *cliamp*) install "cliamp" "cliamp" ;;
   *UxPlay*) install "UxPlay Airplay Receiver" "uxplay" ;;
+  *) show_install_menu ;;
+  esac
+}
+
+show_install_virtualization_menu() {
+  case $(menu "Install" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)") in
+  *Boxes*) install "Boxes Virtualization" "gnome-boxes" ;;
+  *Manager*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtmanager-install ;;
   *) show_install_menu ;;
   esac
 }

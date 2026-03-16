@@ -1,19 +1,23 @@
 #!/bin/bash
 
-cat <<EOF
-Continuing will install the cliamp package and its dependencies.
+set -euo pipefail
 
-Press Enter to continue or Ctrl-c to cancel.
-EOF
+if ! dpkg -s "cliamp" >/dev/null 2>&1; then
+  echo
+  echo "cliamp is not currently installed."
+  echo
+  echo "Continuing will install a package built from:"
+  echo "https://github.com/bjarneo/cliamp"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
 
-read input
+  # Install packages
+  sudo apt update
+  sudo apt -y install cliamp
 
-# Install packages
-sudo apt update
-sudo apt -y install cliamp
-
-# Output message to user
-cat <<EOF
+  # Output message to user
+  cat <<EOF
 
 ================================================================================
 
@@ -24,3 +28,4 @@ You can start it from the command line or by pressing:
 Ctrl + Alt + M
 
 EOF
+fi

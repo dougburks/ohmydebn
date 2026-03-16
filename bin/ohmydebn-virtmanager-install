@@ -1,44 +1,46 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # If running on Proxmox, output error message and exit
 if [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
   echo "This is not supported on Proxmox since Proxmox already provides virtualization."
   exit 0
 fi
 
-cat <<EOF
-Continuing will install the following packages (and their dependencies) for virtualization support:
+if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
+  echo
+  echo "Virtual Machine Manager is not currently installed."
+  echo
+  echo "Continuing will install it from the standard Debian repos."
+  echo
+  echo "Press Enter to install it or Ctrl-C to cancel."
+  read input
 
-qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
+  # Install virtualization packages
+  sudo apt update
+  sudo apt -y install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
 
-Press Enter to continue or Ctrl-c to cancel.
-EOF
+  # Add user account to the libvirt and kvm groups
+  sudo adduser $USER libvirt
+  sudo adduser $USER kvm
 
-read input
+  # Restart cinnamon desktop to make user account changes take effect
+  setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
 
-# Install virtualization packages
-sudo apt update
-sudo apt -y install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
+  # Enable and start libvirtd
+  sudo systemctl enable --now libvirtd
 
-# Add user account to the libvirt and kvm groups
-sudo adduser $USER libvirt
-sudo adduser $USER kvm
-
-# Restart cinnamon desktop to make user account changes take effect
-setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
-
-# Enable and start libvirtd
-sudo systemctl enable --now libvirtd
-
-# Output message to user
-cat <<EOF
+  # Output message to user
+  cat <<EOF
 
 ================================================================================
 
-The virt-manager packages are now installed.
+Virtual Machine Manager is now installed.
 
 You can start Virtual Machine Manager from the menu or by pressing:
 
 Ctrl + Alt + V
 
 EOF
+fi

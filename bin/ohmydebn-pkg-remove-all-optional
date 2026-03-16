@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -euo pipefail
+
+echo "Continuing will remove all optional packages."
+echo
+echo "Press Enter to continue or Ctrl-C to cancel."
+read input
+
+for PACKAGE in antigravity cliamp code gnome-boxes localsend open-code virt-manager; do
+  if dpkg -s $PACKAGE >/dev/null 2>&1; then
+    sudo apt -y purge $PACKAGE
+  fi
+done
+
+sudo apt -y autoremove

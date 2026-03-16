@@ -1,32 +1,37 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # If running on Proxmox, output error message and exit
 if [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
   echo "This is not supported on Proxmox since Proxmox already provides virtualization."
   exit 0
 fi
 
-cat <<EOF
-Continuing will install the gnome-boxes package and its dependencies.
+if ! dpkg -s "gnome-boxes" >/dev/null 2>&1; then
+  echo
+  echo "Boxes virtualization support is not currently installed."
+  echo
+  echo "Continuing will install it from the standard Debian repos."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
 
-Press Enter to continue or Ctrl-c to cancel.
-EOF
+  read input
 
-read input
+  # Install gnome-boxes packages
+  sudo apt update
+  sudo apt -y install gnome-boxes
 
-# Install gnome-boxes packages
-sudo apt update
-sudo apt -y install gnome-boxes
-
-# Output message to user
-cat <<EOF
+  # Output message to user
+  cat <<EOF
 
 ================================================================================
 
-Boxes virtualization is now installed.
+Boxes virtualization support is now installed.
 
 You can start Boxes from the menu or by pressing:
 
 Ctrl + Alt + B
 
 EOF
+fi

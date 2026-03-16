@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+VERSION="1.2.27"
+SCRIPT_DIR="/usr/share/ohmydebn/bin"
+
+# Only prompt if the package is not installed at all
+if ! dpkg -s "open-code" >/dev/null 2>&1; then
+  echo
+  echo "OpenCode is not currently installed."
+  echo
+  echo "Continuing will install OpenCode $VERSION from:"
+  echo "https://github.com/anomalyco/opencode"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+fi
+
+if [[ $# -eq 0 ]]; then
+  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb" "${VERSION}"
+elif [[ "$1" == "latest" ]]; then
+  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb"
+fi

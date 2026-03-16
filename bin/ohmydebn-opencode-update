@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if dpkg -s "open-code" >/dev/null 2>&1; then
+  echo
+  /usr/share/ohmydebn/bin/ohmydebn-opencode-install
+fi

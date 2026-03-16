@@ -1,0 +1,135 @@
+#!/bin/bash
+
+set -euo pipefail
+
+GITHUB_REPO=${1:-}
+DEB_PATTERN=${2:-}
+
+if [[ -z "$GITHUB_REPO" || -z "$DEB_PATTERN" ]]; then
+  echo "Usage: $0 <github-repo> <deb-pattern> [version]"
+  echo "Example: $0 localsend/localsend localsend_\${ARCH}.deb"
+  exit 1
+fi
+
+VERSION=${3:-latest}
+
+# Fetch release info and get actual version
+if [[ "$VERSION" == "latest" ]]; then
+  echo "Getting latest release..."
+  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest")
+  VERSION=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
+  echo "Latest version: $VERSION"
+else
+  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${VERSION}")
+fi
+
+if [[ -z "$RELEASE_INFO" ]]; then
+  echo "Error: Failed to fetch release information"
+  exit 1
+fi
+
+# Normalize version for comparison (strip leading 'v' if present)
+VERSION_CLEAN=$(echo "$VERSION" | sed 's/^v//')
+
+detect_arch() {
+  local arch=$(uname -m)
+  case $arch in
+  x86_64)
+    echo "amd64"
+    ;;
+  aarch64 | arm64)
+    echo "arm64"
+    ;;
+  armv7l)
+    echo "armhf"
+    ;;
+  *)
+    echo "Unsupported architecture: $arch"
+    exit 1
+    ;;
+  esac
+}
+
+ARCH=$(detect_arch)
+DEB_FILE=$(echo "$DEB_PATTERN" | sed "s/\${ARCH}/$ARCH/g")
+
+# Extract download URL
+DEB_URL=$(echo "$RELEASE_INFO" | jq -r ".assets[] | select(.name == \"${DEB_FILE}\") | .browser_download_url")
+
+if [[ -z "$DEB_URL" || "$DEB_URL" == "null" ]]; then
+  echo "Error: Could not find ${DEB_FILE} in release assets"
+  exit 1
+fi
+
+PKG_NAME=""
+INSTALLED_VERSION=""
+
+# Try to guess package name from deb filename (common patterns)
+SUGGESTED_PKG=$(echo "$DEB_FILE" | sed 's/_.*$//' | tr '-' '_')
+if dpkg-query -W -f='${Version}' "$SUGGESTED_PKG" &>/dev/null; then
+  PKG_NAME="$SUGGESTED_PKG"
+  INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' "$PKG_NAME")
+# Try the repo name (second part of GITHUB_REPO)
+elif dpkg-query -W -f='${Version}' "$(echo "$GITHUB_REPO" | cut -d'/' -f2)" &>/dev/null; then
+  PKG_NAME=$(echo "$GITHUB_REPO" | cut -d'/' -f2)
+  INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' "$PKG_NAME")
+# Special case for known packages
+elif [[ "$GITHUB_REPO" == "anomalyco/opencode" ]]; then
+  if dpkg-query -W -f='${Version}' "open-code" &>/dev/null; then
+    PKG_NAME="open-code"
+    INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' "$PKG_NAME")
+  fi
+fi
+
+if [[ -n "$INSTALLED_VERSION" ]]; then
+  # Extract upstream version (remove local version suffix after '+')
+  if [[ "$INSTALLED_VERSION" == *"+"* ]]; then
+    UPSTREAM_VERSION="${INSTALLED_VERSION%%+*}"
+  else
+    UPSTREAM_VERSION="$INSTALLED_VERSION"
+  fi
+
+  echo "Package '$PKG_NAME' is already installed"
+  echo "  Installed version: $INSTALLED_VERSION"
+  echo "  Requested version: $VERSION"
+
+  if dpkg --compare-versions "$UPSTREAM_VERSION" eq "$VERSION_CLEAN"; then
+    echo "✅ Package is up to date."
+    exit 0
+  else
+    echo "Installed version differs from requested version. Proceeding with installation..."
+  fi
+  echo
+fi
+
+TEMP_DIR=$(mktemp -d)
+DEB_PATH="${TEMP_DIR}/${DEB_FILE}"
+
+echo "Downloading ${DEB_FILE}..."
+curl -L -o "$DEB_PATH" "$DEB_URL"
+
+FILE_SIZE=$(ls -lh "$DEB_PATH" | awk '{print $5}')
+LOCAL_SHA256=$(sha256sum "$DEB_PATH" | cut -d' ' -f1)
+
+echo "File details:"
+echo "  Name: $DEB_FILE"
+echo "  Size: $FILE_SIZE"
+echo "  SHA256: $LOCAL_SHA256"
+echo
+
+echo "Installing ${DEB_FILE}..."
+if sudo dpkg -i "$DEB_PATH"; then
+  echo "✅ Package installed successfully"
+
+  if sudo apt-get install -f -y; then
+    echo "✅ Dependencies resolved"
+  else
+    echo "⚠️  Warning: Dependency resolution had issues"
+  fi
+else
+  echo "❌ Package installation failed"
+  exit 1
+fi
+
+echo
+echo "Installation complete!"

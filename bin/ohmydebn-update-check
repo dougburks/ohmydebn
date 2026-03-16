@@ -1,0 +1,102 @@
+#!/bin/bash
+
+# ohmydebn-update-check - Check if ohmydebn needs updating
+# Fetches latest release from GitHub and compares with current version
+
+set -euo pipefail
+
+# Fetch latest release from GitHub API
+fetch_latest_release() {
+  local api_url="https://api.github.com/repos/dougburks/ohmydebn/releases/latest"
+  local response
+  response=$(curl -fsSL "$api_url") || {
+    echo "Error: Failed to fetch latest release from GitHub" >&2
+    return 1
+  }
+
+  # Extract tag_name from JSON response
+  local tag_name
+  tag_name=$(echo "$response" | grep -o '"tag_name": "[^"]*"' | cut -d'"' -f4) || {
+    echo "Error: Could not parse tag name from GitHub response" >&2
+    return 1
+  }
+
+  # Remove leading 'v' if present
+  echo "${tag_name#v}"
+}
+
+# Get current version
+get_current_version() {
+  local version
+  version=$(/usr/share/ohmydebn/bin/ohmydebn-version 2>/dev/null) || {
+    echo "Error: Failed to get current version via 'ohmydebn-version'" >&2
+    return 1
+  }
+  # Remove leading 'v' if present
+  echo "${version#v}"
+}
+
+# Compare two version strings (returns 0 if v1 < v1, 1 if equal, 2 if v1 > v2)
+compare_versions() {
+  local v1="$1" v2="$2"
+  if [[ "$v1" == "$v2" ]]; then
+    return 1
+  fi
+
+  # Split into parts and compare numerically
+  local IFS=.
+  local i v1parts=($v1) v2parts=($v2)
+  # Fill empty parts with 0
+  for ((i = ${#v1parts[@]}; i < ${#v2parts[@]}; i++)); do
+    v1parts[i]=0
+  done
+  for ((i = ${#v2parts[@]}; i < ${#v1parts[@]}; i++)); do
+    v2parts[i]=0
+  done
+
+  for ((i = 0; i < ${#v1parts[@]}; i++)); do
+    if [[ ${v1parts[i]} -lt ${v2parts[i]} ]]; then
+      return 0
+    elif [[ ${v1parts[i]} -gt ${v2parts[i]} ]]; then
+      return 2
+    fi
+  done
+  return 1 # Should not reach here if versions are not equal
+}
+
+main() {
+  local latest_version current_version
+
+  latest_version=$(fetch_latest_release) || exit 1
+  current_version=$(get_current_version) || exit 1
+
+  local result
+  set +e
+  compare_versions "$current_version" "$latest_version"
+  result=$?
+  set -e
+
+  case $result in
+  0) # current < latest
+    local msg="Update available: $latest_version (current: $current_version)"
+    echo "$msg"
+    # Send desktop notification if notify-send is available (ignore errors)
+    if command -v notify-send >/dev/null 2>&1; then
+      local action
+      action=$(notify-send "OhMyDebn Update" "$msg" -u normal -t 0 -h int:transient:0 -h string:resident:true -h string:desktop-entry:ohmydebn-update-check -h string:appname:OhMyDebn --action="update=Click here to update" 2>/dev/null || true)
+      # If user clicked the notification, execute the update command
+      if [[ "$action" == "update" ]]; then
+        /usr/share/ohmydebn/bin/ohmydebn-update-gui
+      fi
+    fi
+    ;;
+  1) # equal
+    echo "OhMyDebn is up to date ($current_version)"
+    ;;
+  2) # current > latest
+    echo "Warning: Current version ($current_version) is newer than latest release ($latest_version)"
+    ;;
+  esac
+}
+
+main "$@"

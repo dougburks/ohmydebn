@@ -59,6 +59,9 @@ Press Enter to continue or Ctrl-c to cancel.
 EOF
   read input
 
+  # Update time
+  sudo systemctl restart systemd-timesyncd
+
   # Check to see if we have an APT configuration
   if [ -f /etc/apt/sources.list.d/debian.sources ] || [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
@@ -111,8 +114,9 @@ if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
 fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
+  echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
   sudo apt update
-  sudo DEBIAN_FRONTEND=noninteractive apt install -y ohmydebn
+  sudo apt install -y ohmydebn
 fi
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"

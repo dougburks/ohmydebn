@@ -135,8 +135,9 @@ show_install_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n󰒒  SSH Server") in
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n󰒒  SSH Server") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
+  *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
   *) show_install_menu ;;
   esac
@@ -152,8 +153,8 @@ show_install_media_menu() {
 
 show_install_virtualization_menu() {
   case $(menu "Install" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)") in
-  *Boxes*) install "Boxes Virtualization" "gnome-boxes" ;;
-  *Manager*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-virtmanager-install ;;
+  *Boxes*) /usr/share/ohmydebn/bin/ohmydebn-boxes ;;
+  *Manager*) /usr/share/ohmydebn/bin/ohmydebn-virtmanager ;;
   *) show_install_menu ;;
   esac
 }
@@ -168,8 +169,8 @@ show_install_browser_menu() {
 }
 
 show_install_ai_menu() {
-  case $(menu "Install" "󱚤  OpenCode (installed by default)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
-  *OpenCode*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-update-opencode ;;
+  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
+  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
   *) show_install_menu ;;

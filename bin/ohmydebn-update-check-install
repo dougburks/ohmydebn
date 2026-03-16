@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# ohmydebn-update-check-install - Install a systemd user timer to run ohmydebn-update-check regularly
+# Default interval: 6 hours. For testing, set environment variable OHMYDEBN_TEST_INTERVAL (in seconds)
+# e.g. OHMYDEBN_TEST_INTERVAL=60   # every minute
+
+set -euo pipefail
+
+SCRIPT_PATH="/usr/share/ohmydebn/bin/ohmydebn-update-check"
+USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
+SERVICE_NAME="ohmydebn-update-check.service"
+TIMER_NAME="ohmydebn-update-check.timer"
+
+# Determine interval
+if [ -n "${OHMYDEBN_TEST_INTERVAL:-}" ]; then
+  INTERVAL_SEC="$OHMYDEBN_TEST_INTERVAL"
+else
+  INTERVAL_SEC=$((6 * 60 * 60)) # 6 hours
+fi
+
+# Ensure user systemd directory exists
+mkdir -p "$USER_SYSTEMD_DIR"
+
+# Service file content - include environment for display/dbus so notifications work
+SERVICE_CONTENT="[Unit]
+Description=Check for OhMyDebn updates
+
+[Service]
+Type=oneshot
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+ExecStart=$SCRIPT_PATH
+"
+
+# Timer file content
+TIMER_CONTENT="[Unit]
+Description=Run ohmydebn-update-check every ${INTERVAL_SEC}s
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=${INTERVAL_SEC}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"
+
+# Write service file if not exists or differs
+SERVICE_PATH="$USER_SYSTEMD_DIR/$SERVICE_NAME"
+if [ ! -f "$SERVICE_PATH" ] || ! diff -u <(echo "$SERVICE_CONTENT") "$SERVICE_PATH" >/dev/null 2>&1; then
+  echo "$SERVICE_CONTENT" >"$SERVICE_PATH"
+  echo "Updated service file: $SERVICE_PATH"
+else
+  echo "Service file already up-to-date: $SERVICE_PATH"
+fi
+
+# Write timer file if not exists or differs
+TIMER_PATH="$USER_SYSTEMD_DIR/$TIMER_NAME"
+if [ ! -f "$TIMER_PATH" ] || ! diff -u <(echo "$TIMER_CONTENT") "$TIMER_PATH" >/dev/null 2>&1; then
+  echo "$TIMER_CONTENT" >"$TIMER_PATH"
+  echo "Updated timer file: $TIMER_PATH"
+else
+  echo "Timer file already up-to-date: $TIMER_PATH"
+fi
+
+# Reload systemd user daemon to pick up new/changed units
+systemctl --user daemon-reload >/dev/null 2>&1
+
+# Enable and start the timer (if not already enabled)
+if ! systemctl --user is-enabled "$TIMER_NAME" >/dev/null 2>&1; then
+  systemctl --user enable "$TIMER_NAME"
+  echo "Enabled timer: $TIMER_NAME"
+else
+  echo "Timer already enabled: $TIMER_NAME"
+fi
+
+# Start (or restart) the timer to apply changes immediately
+systemctl --user restart "$TIMER_NAME"
+echo "Started timer: $TIMER_NAME (interval: ${INTERVAL_SEC}s)"
+
+#echo "Installation complete."
+#echo "To view logs:"
+#echo "journalctl --user -u $SERVICE_NAME -f"
+#echo "To change interval, edit $TIMER_PATH and then run:"
+#echo "systemctl --user daemon-reload"

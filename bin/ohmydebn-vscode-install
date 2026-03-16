@@ -1,10 +1,15 @@
 #!/bin/bash
 
+set -euo pipefail
+
 if ! dpkg -s "code" >/dev/null 2>&1; then
   echo
   echo "Visual Studio Code is not currently installed."
   echo
-  echo "Press Enter to install it or Ctrl-C to cancel."
+  echo "Continuing will install it from:"
+  echo "https://code.visualstudio.com"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
   read input
 
   ARCH=$(uname -m)

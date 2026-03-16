@@ -13,8 +13,8 @@ VERSION=$($DIR/bin/ohmydebn-version)
 $DIR/bin/ohmydebn-headline "cat" "OhMyDebn Update - current OhMyDebn version: $VERSION"
 
 cat <<EOF
-Continuing will check for any updates for the base Debian OS packages
-and OhMyDebn components like themes and the Aether theme builder.
+Continuing will check for any updates for the
+base Debian OS packages and OhMyDebn components.
 
 You can check the OhMyDebn release notes here:
 https://github.com/dougburks/ohmydebn/releases
@@ -28,10 +28,13 @@ EOF
 
 read input
 
+# Update time
+sudo systemctl restart systemd-timesyncd
+
 # Update the ohmydebn package first to get the latest code
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "cat" "Checking for an updated ohmydebn package"
-  sudo apt update && sudo DEBIAN_FRONTEND=noninteractive apt -y install ohmydebn
+  sudo apt update && sudo apt -y install ohmydebn
 fi
 
 bash $DIR/install.sh --no-uninstall

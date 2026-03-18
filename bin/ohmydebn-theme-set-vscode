@@ -9,7 +9,7 @@ SETTINGS_PATH="${2:-$HOME/.config/Code/User/settings.json}"
 SKIP_FLAG="${3:-$HOME/.local/state/ohmydebn/toggles/skip-vscode-theme-changes}"
 VS_CODE_THEME="$HOME/.config/ohmydebn/current/theme/vscode.json"
 
-if ohmydebn-cmd-present "$EDITOR_CMD" && [[ ! -f "$SKIP_FLAG" ]]; then
+if /usr/share/ohmydebn/bin/ohmydebn-cmd-present "$EDITOR_CMD" && [[ ! -f "$SKIP_FLAG" ]]; then
   if [[ -f "$VS_CODE_THEME" ]]; then
     theme_name=$(jq -r '.name' "$VS_CODE_THEME")
     extension=$(jq -r '.extension' "$VS_CODE_THEME")

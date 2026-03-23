@@ -4,8 +4,9 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   if [ "$NO_UNINSTALL" = false ]; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Removing any unnecessary packages"
     sudo apt -y purge brasero \
+      deja-dup \
+      duplicity \
       firefox* \
-      thunderbird \
       gnome-calculator \
       gnome-chess \
       gnome-games \
@@ -14,6 +15,7 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
       hoichess \
       pidgin \
       remmina \
+      thunderbird \
       transmission* \
       x11vnc
     sudo apt -y autoremove

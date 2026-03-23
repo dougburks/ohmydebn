@@ -19,7 +19,7 @@ mkdir -p ~/.themes
 if [ ! -f ~/.local/state/ohmydebn ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
   mkdir -p ~/.config/ohmydebn/current
-  /usr/share/ohmydebn/bin/ohmydebn-theme-set Ohmydebn
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set --background 3 Ohmydebn
 fi
 
 # Symlink ~/.config/omarchy to ~/.config/ohmydebn for Aether theme builder

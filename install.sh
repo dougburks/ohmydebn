@@ -60,7 +60,7 @@ EOF
   read input
 
   # Update time
-  sudo systemctl restart systemd-timesyncd
+  sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
   # Check to see if we have an APT configuration
   if [ -f /etc/apt/sources.list.d/debian.sources ] || [ -f /etc/apt/sources.list.d/proxmox.sources ]; then

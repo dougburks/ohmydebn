@@ -29,7 +29,7 @@ EOF
 read input
 
 # Update time
-sudo systemctl restart systemd-timesyncd
+sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
 # Update the ohmydebn package first to get the latest code
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then

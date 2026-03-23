@@ -1,6 +1,8 @@
 #!/bin/bash
+#
+# ohmydebn-theme-set-opencode: Set opencode theme configuration
+# Usage: ohmydebn-theme-set-opencode
+#
 
 # If opencode-cli is running, then ask it to reload config for new theme to take effect
-if pgrep opencode-cli >/dev/null; then
-  killall -SIGUSR2 opencode-cli
-fi
+pkill -SIGUSR2 opencode-cli 2>/dev/null || true

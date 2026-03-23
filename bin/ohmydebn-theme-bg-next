@@ -1,8 +1,20 @@
 #!/bin/bash
+set -euo pipefail
 
 # Cycles through the background images available
+# Usage: ohmydebn-theme-bg-next [--background <arg>]
+#   <arg> can be "random" or a number (1-based index)
 
-THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null)
+BG_ARG=""
+if [[ "${1:-}" == "--background" ]]; then
+  BG_ARG="${2:-}"
+  if [[ -n "$BG_ARG" && "$BG_ARG" != "random" && ! "$BG_ARG" =~ ^[0-9]+$ ]]; then
+    echo "Error: --background argument must be 'random' or a number" >&2
+    exit 1
+  fi
+fi
+
+THEME_NAME=$(<"$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
 THEME_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/current/theme/backgrounds/"
 USER_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/backgrounds/$THEME_NAME/"
 CURRENT_BACKGROUND_LINK="$HOME/.config/ohmydebn/current/background"
@@ -32,8 +44,14 @@ else
     fi
   done
 
-  # Get next background (wrap around)
-  if [[ $INDEX -eq -1 ]]; then
+  if [[ "$BG_ARG" == "random" ]]; then
+    RANDOM_INDEX=$(( RANDOM % TOTAL ))
+    NEW_BACKGROUND="${BACKGROUNDS[$RANDOM_INDEX]}"
+  elif [[ "$BG_ARG" =~ ^[0-9]+$ ]]; then
+    # 1-based index, clamp to valid range
+    SPECIFIC_INDEX=$(( (BG_ARG - 1) % TOTAL ))
+    NEW_BACKGROUND="${BACKGROUNDS[$SPECIFIC_INDEX]}"
+  elif [[ $INDEX -eq -1 ]]; then
     # Use the first background when no match was found
     NEW_BACKGROUND="${BACKGROUNDS[0]}"
   else

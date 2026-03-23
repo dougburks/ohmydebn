@@ -1,17 +1,34 @@
 #!/bin/bash
+set -euo pipefail
 
 # ohmydebn-theme-set: Set a theme, specified by its name.
-# Usage: ohmydebn-theme-set <theme-name>
+# Usage: ohmydebn-theme-set [--background <arg>] <theme-name>
+#   <arg> can be "random" or a number (1-based index)
+
+BG_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --background)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: ohmydebn-theme-set [--background <arg>] <theme-name>" >&2
+      exit 1
+    fi
+    BG_ARG="$2"
+    shift 2
+    ;;
+  *) break ;;
+  esac
+done
 
 if [[ -z "$1" && "$1" != "CNCLD" ]]; then
-  echo "Usage: ohmydebn-theme-set <theme-name>" >&2
+  echo "Usage: ohmydebn-theme-set [--background <arg>] <theme-name>" >&2
   exit 1
 fi
 
 # Remove all old symlinks from themes dir except aether
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
-find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type l | grep -v "$THEMES_DIR/aether$" | while read LINK; do
-  rm -f $LINK
+find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type l ! -name aether -print0 | while read -r -d '' LINK; do
+  rm -f "$LINK"
 done
 
 # Now that the old theme config has been cleaned up, proceed with setting new theme
@@ -41,7 +58,7 @@ rm -rf "$NEXT_THEME_PATH"
 mkdir -p "$NEXT_THEME_PATH"
 
 # Copy static configs
-cp -r "$THEME_PATH/"* "$NEXT_THEME_PATH/" 2>/dev/null
+find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
 
 # Generate dynamic configs
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-templates
@@ -55,7 +72,7 @@ echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
 
 # Determine light or dark mode
 IS_LIGHT_MODE="false"
-if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
+if [ -f "$HOME/.config/ohmydebn/current/theme/light.mode" ]; then
   gsettings set org.x.apps.portal color-scheme "prefer-light"
   IS_LIGHT_MODE="true"
 else
@@ -63,7 +80,11 @@ else
 fi
 
 # Set new background
-/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
+if [[ -n "$BG_ARG" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --background "$BG_ARG"
+else
+  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
+fi
 
 # If colors.toml does not exist, then dynamically generate it using alacritty.toml
 COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors "$THEME_PATH")

@@ -4,7 +4,5 @@
 # Usage: ohmydebn-theme-set-btop
 #
 
-set -e
-
 # Restart btop to apply new theme
-pkill -SIGUSR2 btop
+pkill -SIGUSR2 btop 2>/dev/null || true

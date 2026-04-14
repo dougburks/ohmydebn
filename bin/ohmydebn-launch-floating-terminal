@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cmd="$*"
+setsid alacritty --class OhMyDebn -e bash -c "$cmd"

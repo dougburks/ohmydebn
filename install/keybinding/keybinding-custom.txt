@@ -39,3 +39,4 @@ keybinding-custom 37 "Virtual Machine Manager" "/usr/share/ohmydebn/bin/ohmydebn
 keybinding-custom 38 "Boxes Virtualization" "/usr/share/ohmydebn/bin/ohmydebn-boxes" "['<Ctrl><Alt>B']" "Press Ctrl + Alt + B to launch Boxes Virtualization"
 keybinding-custom 39 "cliamp" "/usr/share/ohmydebn/bin/ohmydebn-cliamp" "['<Ctrl><Alt>M']" "Press Ctrl + Alt + M to launch cliamp terminal music player"
 keybinding-custom 40 "LocalSend" "/usr/share/ohmydebn/bin/ohmydebn-localsend" "['<Ctrl><Super>L']" "Press Ctrl + Super + L to launch LocalSend"
+keybinding-custom 41 "OhMyPCAP" "/usr/share/ohmydebn/bin/ohmydebn-ohmypcap" "['<Ctrl><Alt>P']" "Press Ctrl + Alt + P to launch OhMyPCAP"

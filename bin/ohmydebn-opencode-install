@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-VERSION="1.14.21"
+VERSION="1.14.22"
 SCRIPT_DIR="/usr/share/ohmydebn/bin"
 
 # Only prompt if the package is not installed at all

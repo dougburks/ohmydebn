@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-if dpkg -s "docker.io" >/dev/null 2>&1; then
+if dpkg -s "distrobox" >/dev/null 2>&1; then
   echo
-  echo "Docker is already installed."
+  echo "Distrobox is already installed."
 else
   echo
-  echo "Docker is not currently installed."
+  echo "Distrobox is not currently installed."
   echo
   echo "Continuing will install it from the standard Debian repos."
   echo
@@ -17,15 +17,14 @@ else
 
   # Install packages
   sudo apt update
-  sudo apt -y install docker.io
-  sudo usermod -aG docker $USER
+  sudo apt -y install distrobox
 
   # Output message to user
   cat <<EOF
 
 ================================================================================
 
-Docker is now installed.
+Distrobox is now installed.
 
 EOF
 fi

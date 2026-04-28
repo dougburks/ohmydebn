@@ -1,0 +1,14 @@
+#!/bin/bash
+
+mkdir -p ~/ohmypcap-data
+/usr/bin/podman run --userns=keep-id --user $(id -u):$(id -g) -v ~/ohmypcap-data:/data -p 8000:8000 ghcr.io/dougburks/ohmypcap:main
+
+exit_code=$?
+# exit_code 0 is a clean exit and 130 is the user pressing Ctrl-C
+if [ $exit_code -ne 0 ] && [ $exit_code -ne 130 ]; then
+  echo
+  echo "Review the output above for errors."
+  echo
+  echo "Press Enter to close this window."
+  read input
+fi

@@ -119,7 +119,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ PCAP Analysis\n♫  Media\n  Virtualization") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ PCAP Analysis\n♫  Media\n  Virtualization\n  Containerization") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -131,6 +131,7 @@ show_install_menu() {
   *Utility*) show_install_utility_menu ;;
   *Media*) show_install_media_menu ;;
   *Virtualization*) show_install_virtualization_menu ;;
+  *Containerization*) show_install_containerization_menu ;;
   *) show_main_menu ;;
   esac
 }
@@ -158,6 +159,15 @@ show_install_media_menu() {
   case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay Airplay receiver") in
   *cliamp*) install "cliamp" "cliamp" ;;
   *UxPlay*) install "UxPlay Airplay Receiver" "uxplay" ;;
+  *) show_install_menu ;;
+  esac
+}
+
+show_install_containerization_menu() {
+  case $(menu "Install" "  Docker\n  Podman\n  Distrobox") in
+  *Docker*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-docker-install ;;
+  *Podman*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-podman-install ;;
+  *Distrobox*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-distrobox-install ;;
   *) show_install_menu ;;
   esac
 }

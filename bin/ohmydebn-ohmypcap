@@ -1,10 +1,9 @@
 #!/bin/bash
 
-if ! dpkg -s "docker.io" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-docker-install
+if ! dpkg -s "podman" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-podman-install
 fi
 
-if dpkg -s "docker.io" >/dev/null 2>&1; then
-  mkdir -p ~/ohmypcap-data
-  newgrp docker "/usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/bin/docker run -v ~/ohmypcap-data:/data -p 8000:8000 ghcr.io/dougburks/ohmypcap:main"
+if dpkg -s "podman" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/share/ohmydebn/bin/ohmydebn-ohmypcap-run
 fi

@@ -14,6 +14,7 @@ source $OHMYDEBN_INSTALL/config/keepassxc.sh
 source $OHMYDEBN_INSTALL/config/logo.sh
 source $OHMYDEBN_INSTALL/config/menu.sh
 source $OHMYDEBN_INSTALL/config/mimetypes.sh
+source $OHMYDEBN_INSTALL/config/modprobe.sh
 source $OHMYDEBN_INSTALL/config/nvim.sh
 source $OHMYDEBN_INSTALL/config/ohmydebn-ai-skill.sh
 source $OHMYDEBN_INSTALL/config/ohmyzsh.sh

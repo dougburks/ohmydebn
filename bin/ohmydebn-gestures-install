@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -euo pipefail
+
+VERSION="2.0.17"
+SCRIPT_DIR="/usr/share/ohmydebn/bin"
+
+# Only prompt if the package is not installed at all
+if ! dpkg -s "touchegg" >/dev/null 2>&1; then
+  echo
+  echo "touchegg is not currently installed."
+  echo
+  echo "Continuing will install touchegg $VERSION from:"
+  echo "https://github.com/JoseExposito/touchegg"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+
+  read input
+fi
+
+# Install dependencies
+sudo apt -y install libpugixml1v5
+
+# Determine the asset architecture string for touchegg
+case "$(uname -m)" in
+x86_64) ASSET_ARCH="amd64" ;;
+aarch64) ASSET_ARCH="arm64" ;;
+*)
+  echo "Unsupported architecture for touchegg: $(uname -m)"
+  exit 1
+  ;;
+esac
+
+DEB_PATTERN="touchegg_${VERSION}_${ASSET_ARCH}.deb"
+
+if [[ $# -eq 0 ]]; then
+  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "JoseExposito/touchegg" "${DEB_PATTERN}" "${VERSION}"
+elif [[ "$1" == "latest" ]]; then
+  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "JoseExposito/touchegg" "${DEB_PATTERN}"
+fi

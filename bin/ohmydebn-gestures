@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# If not installed, then offer to install it
+if ! dpkg -s "touchegg" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-gestures-install
+fi
+
+# If touchegg is now installed, then run gestures
+if dpkg -s "touchegg" >/dev/null 2>&1; then
+  cinnamon-settings gestures
+fi

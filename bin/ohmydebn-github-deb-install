@@ -20,7 +20,11 @@ if [[ "$VERSION" == "latest" ]]; then
   VERSION=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
   echo "Latest version: $VERSION"
 else
-  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${VERSION}")
+  # Try without 'v' prefix first, then with 'v' prefix
+  RELEASE_INFO=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${VERSION}")
+  if [[ -z "$RELEASE_INFO" || "$(echo "$RELEASE_INFO" | jq -r '.message')" == "Not Found" ]]; then
+    RELEASE_INFO=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${VERSION}")
+  fi
 fi
 
 if [[ -z "$RELEASE_INFO" ]]; then

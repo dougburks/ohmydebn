@@ -6,7 +6,7 @@ mkdir -p ~/ohmypcap-data
   --user $(id -u):$(id -g) \
   -v ~/ohmypcap-data:/data \
   -p 8000:8000 \
-  ghcr.io/dougburks/ohmypcap@sha256:c7a9ff476414622b0d2341d0b0c7f92232999d92d5be9f36e223f3d7fd08a4b7
+  ghcr.io/dougburks/ohmypcap@sha256:1b23406d9cadcde5c3b79445cc0df632cb08ee8f5453d345f6c35fe3fc638ca6
 
 exit_code=$?
 # exit_code 0 is a clean exit and 130 is the user pressing Ctrl-C

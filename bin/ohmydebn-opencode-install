@@ -14,11 +14,16 @@ if ! dpkg -s "open-code" >/dev/null 2>&1; then
   echo "https://github.com/anomalyco/opencode"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
 fi
 
-if [[ $# -eq 0 ]]; then
-  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb" "${VERSION}"
-elif [[ "$1" == "latest" ]]; then
-  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb"
+# Set autoupdate to false
+OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+OPENCODE_CONFIG_BACKUP="$HOME/.config/opencode/opencode.json.before.disabling.autoupdate"
+if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ]; then
+  cp "$OPENCODE_CONFIG" "$OPENCODE_CONFIG_BACKUP"
+  jq '.autoupdate = false' "$OPENCODE_CONFIG" >"${OPENCODE_CONFIG}.tmp" && mv "${OPENCODE_CONFIG}.tmp" "$OPENCODE_CONFIG"
 fi
+
+# Install the package
+exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb" "${VERSION}"

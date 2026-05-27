@@ -1,8 +1,0 @@
-#!/bin/bash
-
-set -euo pipefail
-
-if dpkg -s "localsend" >/dev/null 2>&1; then
-  echo
-  /usr/share/ohmydebn/bin/ohmydebn-localsend-install
-fi

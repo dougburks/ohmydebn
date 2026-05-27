@@ -2,15 +2,12 @@
 
 set -euo pipefail
 
-VERSION="1.17.0"
-SCRIPT_DIR="/usr/share/ohmydebn/bin"
-
 # Only prompt if the package is not installed at all
 if ! dpkg -s "localsend" >/dev/null 2>&1; then
   echo
   echo "LocalSend is not currently installed."
   echo
-  echo "Continuing will install LocalSend $VERSION from:"
+  echo "Continuing will install LocalSend package from:"
   echo "https://github.com/localsend/localsend"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
@@ -18,23 +15,5 @@ if ! dpkg -s "localsend" >/dev/null 2>&1; then
   read input
 fi
 
-# Install dependencies
-sudo apt -y install gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 libayatana-ido3-0.4-0 libayatana-indicator3-7
-
-# Determine the asset architecture string for LocalSend
-case "$(uname -m)" in
-x86_64) ASSET_ARCH="x86-64" ;;
-aarch64) ASSET_ARCH="arm-64" ;;
-*)
-  echo "Unsupported architecture for localsend: $(uname -m)"
-  exit 1
-  ;;
-esac
-
-DEB_PATTERN="LocalSend-${VERSION}-linux-${ASSET_ARCH}.deb"
-
-if [[ $# -eq 0 ]]; then
-  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "localsend/localsend" "${DEB_PATTERN}" "${VERSION}"
-elif [[ "$1" == "latest" ]]; then
-  exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "localsend/localsend" "${DEB_PATTERN}"
-fi
+# Install package and its dependencies
+sudo apt -y install localsend gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator3-1 libayatana-ido3-0.4-0 libayatana-indicator3-7

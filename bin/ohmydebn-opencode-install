@@ -2,19 +2,23 @@
 
 set -euo pipefail
 
-VERSION="1.14.33"
-SCRIPT_DIR="/usr/share/ohmydebn/bin"
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
 
-# Only prompt if the package is not installed at all
-if ! dpkg -s "open-code" >/dev/null 2>&1; then
-  echo
-  echo "OpenCode is not currently installed."
-  echo
-  echo "Continuing will install OpenCode $VERSION from:"
-  echo "https://github.com/anomalyco/opencode"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+# Check to see if new package is installed
+if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "The ohmydebn-opencode-cli package is not currently installed."
+    echo
+    echo "Continuing will install this package which was built from:"
+    echo "https://github.com/anomalyco/opencode"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 fi
 
 # Set autoupdate to false
@@ -26,4 +30,4 @@ if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ]; then
 fi
 
 # Install the package
-exec "$SCRIPT_DIR/ohmydebn-github-deb-install" "anomalyco/opencode" "opencode-desktop-linux-\${ARCH}.deb" "${VERSION}"
+sudo apt -y install ohmydebn-opencode-cli

@@ -35,3 +35,14 @@ if [ ! -f $GRC_STATE ]; then
 EOF
   touch $GRC_STATE
 fi
+
+COLOR_MAN_STATE=~/.local/state/ohmydebn-config/color-man
+if [ ! -f $COLOR_MAN_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Color man pages with bat
+export MANROFFOPT="-c"
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+EOF
+  touch $COLOR_MAN_STATE
+fi

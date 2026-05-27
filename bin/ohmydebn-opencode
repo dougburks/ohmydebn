@@ -3,12 +3,12 @@
 set -euo pipefail
 
 # If not installed, then offer to install it
-if ! dpkg -s "open-code" >/dev/null 2>&1; then
+if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-opencode-install
 fi
 
 # If installed, then run it in a terminal window
-if dpkg -s "open-code" >/dev/null 2>&1; then
+if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
   mkdir -p ~/opencode-sessions && cd $(mktemp -d ~/opencode-sessions/session-XXXXXX)
   /usr/bin/alacritty --title 'OpenCode' -e /usr/bin/opencode-cli
 fi

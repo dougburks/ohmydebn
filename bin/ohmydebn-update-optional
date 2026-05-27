@@ -3,4 +3,3 @@
 set -euo pipefail
 
 /usr/share/ohmydebn/bin/ohmydebn-opencode-update
-/usr/share/ohmydebn/bin/ohmydebn-localsend-update

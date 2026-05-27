@@ -7,7 +7,7 @@ echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read input
 
-for PACKAGE in antigravity cliamp code gnome-boxes localsend open-code virt-manager; do
+for PACKAGE in antigravity cliamp code gnome-boxes localsend ohmydebn-opencode-cli open-code virt-manager; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
     sudo apt -y purge $PACKAGE
   fi

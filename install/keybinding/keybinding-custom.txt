@@ -39,5 +39,6 @@ keybinding-custom 37 "Virtual Machine Manager" "/usr/share/ohmydebn/bin/ohmydebn
 keybinding-custom 38 "Boxes Virtualization" "/usr/share/ohmydebn/bin/ohmydebn-boxes" "['<Ctrl><Alt>B']" "Press Ctrl + Alt + B to launch Boxes Virtualization"
 keybinding-custom 39 "cliamp" "/usr/share/ohmydebn/bin/ohmydebn-cliamp" "['<Ctrl><Alt>M']" "Press Ctrl + Alt + M to launch cliamp terminal music player"
 keybinding-custom 40 "LocalSend" "/usr/share/ohmydebn/bin/ohmydebn-localsend" "['<Ctrl><Super>L']" "Press Ctrl + Super + L to launch LocalSend"
-keybinding-custom 41 "OhMyPCAP" "/usr/share/ohmydebn/bin/ohmydebn-ohmypcap" "['<Ctrl><Alt>P']" "Press Ctrl + Alt + P to launch OhMyPCAP"
+keybinding-custom 41 "SO-CRATES" "/usr/share/ohmydebn/bin/ohmydebn-socrates" "['<Ctrl><Alt>P']" "Press Ctrl + Alt + P to launch SO-CRATES (formerly OhMyPCAP)"
 keybinding-custom 42 "Gestures" "/usr/share/ohmydebn/bin/ohmydebn-gestures" "['<Ctrl><Alt>G']" "Press Ctrl + Alt + G to launch Gestures"
+keybinding-custom 43 "SO-CRATES" "/usr/share/ohmydebn/bin/ohmydebn-socrates" "['<Ctrl><Alt>S']" "Press Ctrl + Alt + S to launch SO-CRATES"

@@ -5,5 +5,5 @@ if ! dpkg -s "podman" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "podman" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/share/ohmydebn/bin/ohmydebn-ohmypcap-run
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/share/ohmydebn/bin/ohmydebn-socrates-run
 fi

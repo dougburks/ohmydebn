@@ -1,12 +1,12 @@
 #!/bin/bash
 
-mkdir -p ~/ohmypcap-data
+mkdir -p ~/socrates-data
 /usr/bin/podman run \
   --userns=keep-id \
   --user $(id -u):$(id -g) \
-  -v ~/ohmypcap-data:/data \
+  -v ~/socrates-data:/data \
   -p 8000:8000 \
-  ghcr.io/dougburks/ohmypcap@sha256:17040d005db871adc779624ac55a9b5833f5f0e7d31d8d7317d81aac07fdccae
+  ghcr.io/dougburks/so-crates@sha256:3e5f87a205e78481584ab0d3158529540e43b3bf1b05b8bf2012b86b559f2496
 
 exit_code=$?
 # exit_code 0 is a clean exit and 130 is the user pressing Ctrl-C

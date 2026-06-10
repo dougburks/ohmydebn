@@ -137,8 +137,8 @@ show_install_menu() {
 }
 
 show_install_pcap_menu() {
-  case $(menu "Install" "🔍︎ OhMyPCAP\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
-  *OhMyPCAP*) /usr/share/ohmydebn/bin/ohmydebn-ohmypcap ;;
+  case $(menu "Install" "🔍︎ SO-CRATES\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
+  *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;
   *tshark*) install "tshark" "tshark" ;;
   *wireshark*) install "wireshark" "wireshark" ;;

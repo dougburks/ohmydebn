@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
+  echo
+  echo "Cloudflare Warp is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://pkg.cloudflareclient.com/"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo mkdir -p /usr/share/keyrings
+
+  curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg |
+    sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" |
+    sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+
+  sudo apt update
+  sudo apt -y install cloudflare-warp
+fi

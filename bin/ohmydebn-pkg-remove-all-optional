@@ -7,10 +7,18 @@ echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read input
 
-for PACKAGE in antigravity cliamp code gnome-boxes localsend ohmydebn-opencode-cli open-code virt-manager; do
+for PACKAGE in cliamp code gnome-boxes localsend ohmydebn-opencode-cli virt-manager; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
     sudo apt -y purge $PACKAGE
   fi
 done
 
 sudo apt -y autoremove
+
+if dpkg -s antigravity >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove
+fi
+
+if dpkg -s cloudflare-warp >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-warp-remove
+fi

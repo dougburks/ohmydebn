@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
+  echo
+  echo "Cloudflare Warp is not currently installed."
+else
+  echo
+  echo "Continuing will remove Cloudflare Warp and its repo."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo rm -f /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+  sudo rm -f /etc/apt/sources.list.d/cloudflare-client.list
+  sudo apt update
+  sudo apt -y purge cloudflare-warp
+  sudo apt -y autoremove
+fi

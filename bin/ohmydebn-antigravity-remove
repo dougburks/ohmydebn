@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "antigravity" >/dev/null 2>&1; then
+  echo
+  echo "Antigravity is not currently installed."
+else
+  echo
+  echo "Continuing will remove Antigravity and its repo."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo rm -f /etc/apt/keyrings/antigravity-repo-key.gpg
+  sudo rm -f /etc/apt/sources.list.d/antigravity.list
+  sudo apt update
+  sudo apt -y purge antigravity
+  sudo apt -y autoremove
+fi

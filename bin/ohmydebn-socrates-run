@@ -6,7 +6,7 @@ mkdir -p ~/socrates-data
   --user $(id -u):$(id -g) \
   -v ~/socrates-data:/data \
   -p 8000:8000 \
-  ghcr.io/dougburks/so-crates@sha256:3e5f87a205e78481584ab0d3158529540e43b3bf1b05b8bf2012b86b559f2496
+  ghcr.io/dougburks/so-crates@sha256:481212f365a715bad2be67c49a4c13c7fc5851fdade534dc25f21faf6345ed5c
 
 exit_code=$?
 # exit_code 0 is a clean exit and 130 is the user pressing Ctrl-C

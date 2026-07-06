@@ -1,4 +1,4 @@
-keybinding-custom 0 "Browser" "/usr/bin/chromium" "['<Super>B']" "Press Super + B for browser (Chromium)"
+keybinding-custom 0 "Browser" "/usr/bin/gnome-www-browser" "['<Super>B']" "Press Super + B for browser"
 keybinding-custom 1 "Calendar" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://calendar.google.com" "['<Super>C']" "Press Super + C for calendar (Google Calendar)"
 keybinding-custom 2 "GMail" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com" "['<Super>E']" "Press Super + E for email (GMail)"
 keybinding-custom 3 "Google" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://google.com" "['<Super>G']" "Press Super + G for Google search"

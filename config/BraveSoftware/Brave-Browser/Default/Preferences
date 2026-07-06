@@ -1,0 +1,13 @@
+{
+  "extensions": {
+    "theme": {
+      "id": "",
+      "system_theme": 1
+    }
+  },
+  "profile": {
+    "content_settings": {
+      "exceptions": {}
+    }
+  }
+}

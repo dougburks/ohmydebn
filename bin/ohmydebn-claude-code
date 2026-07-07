@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "claude-code" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-claude-code-install
+fi
+
+if dpkg -s "claude-code" >/dev/null 2>&1; then
+  mkdir -p ~/claude-sessions && cd $(mktemp -d ~/claude-sessions/session-XXXXXX)
+  /usr/bin/alacritty --title 'Claude Code' -e /usr/bin/claude
+fi

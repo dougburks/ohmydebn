@@ -43,3 +43,4 @@ keybinding-custom 41 "SO-CRATES" "/usr/share/ohmydebn/bin/ohmydebn-socrates" "['
 keybinding-custom 42 "Gestures" "/usr/share/ohmydebn/bin/ohmydebn-gestures" "['<Ctrl><Alt>G']" "Press Ctrl + Alt + G to launch Gestures"
 keybinding-custom 43 "SO-CRATES" "/usr/share/ohmydebn/bin/ohmydebn-socrates" "['<Ctrl><Alt>S']" "Press Ctrl + Alt + S to launch SO-CRATES"
 keybinding-custom 44 "Cloudflare Warp" "/usr/share/ohmydebn/bin/ohmydebn-warp" "['<Ctrl><Alt>W']" "Press Ctrl + Alt + W to launch Cloudflare Warp"
+keybinding-custom 45 "Claude Code" "/usr/share/ohmydebn/bin/ohmydebn-claude-code" "['<Ctrl><Alt>C']" "Press Ctrl + Alt + C to launch Claude Code"

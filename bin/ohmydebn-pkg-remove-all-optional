@@ -26,3 +26,7 @@ fi
 if dpkg -s brave-browser >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-brave-remove
 fi
+
+if dpkg -s claude-code >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-claude-code-remove
+fi

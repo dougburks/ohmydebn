@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "claude-code" >/dev/null 2>&1; then
+  echo
+  echo "Claude Code is not currently installed."
+else
+  echo
+  echo "Continuing will remove Claude Code and its repo."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo rm -f /usr/share/keyrings/claude-code.asc
+  sudo rm -f /etc/apt/sources.list.d/claude-code.list
+  sudo apt update
+  sudo apt -y purge claude-code
+  sudo apt -y autoremove
+fi

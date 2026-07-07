@@ -41,7 +41,7 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   cat <<EOF
 Welcome to OhMyDebn!
 
-OhMyDebn is a debonair Linux platform that combines the stability of the Debian distro, the ease of use of the Cinnamon desktop, the beauty of Omarchy, and the power of AI.
+OhMyDebn is a debonair Linux desktop for power users. It gives you the stability of the Debian distro, the ease of use of the Cinnamon desktop, and the power of AI, containers, and virtualization.
 
 Debonair strides bold,
 Elegance in every step,

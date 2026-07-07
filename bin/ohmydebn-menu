@@ -191,8 +191,9 @@ show_install_browser_menu() {
 }
 
 show_install_ai_menu() {
-  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
+  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
+  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
   *) show_install_menu ;;
@@ -200,7 +201,7 @@ show_install_ai_menu() {
 }
 
 show_install_editor_menu() {
-  case $(menu "Install" "  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)\n  Emacs") in
+  case $(menu "Install" "  VSCode\n  Antigravity\n  Emacs") in
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
   *Emacs*) install "Emacs" "emacs" ;;

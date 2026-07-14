@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE_PREFIX="ghcr.io/dougburks/so-crates"
+FORCE=false
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Remove old so-crates podman images, keeping only the most recent.
+
+Options:
+  --force, -f   Remove without prompting
+  --help        Show this help message
+EOF
+  exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force|-f) FORCE=true; shift ;;
+    --help)     usage ;;
+    *)          echo "Unknown option: $1"; usage ;;
+  esac
+done
+
+# ── Phase 1: collect everything ─────────────────────────────────────────
+
+mapfile -t IMAGES < <(
+  podman images "$IMAGE_PREFIX" --format '{{.CreatedAt}}|{{.ID}}|{{.Repository}}:{{.Tag}}' 2>/dev/null \
+    | sort -r
+)
+
+if [[ ${#IMAGES[@]} -le 1 ]]; then
+  echo "Found ${#IMAGES[@]} image(s). Nothing to clean up."
+  exit 0
+fi
+
+KEEP="${IMAGES[0]}"
+REMOVE=("${IMAGES[@]:1}")
+
+keep_id=$(awk -F'|' '{print $2}' <<< "$KEEP")
+keep_date=$(awk -F'|' '{print $1}' <<< "$KEEP")
+
+STOPPED_CONTAINERS=()
+RUNNING_CONTAINERS=()
+RUNNING_IMAGE_IDS=()
+
+for entry in "${REMOVE[@]}"; do
+  img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+
+  # Use full image ID for reliable ancestor matching
+  full_img_id=$(podman inspect --format '{{.Id}}' "$img_id" 2>/dev/null || echo "$img_id")
+
+  mapfile -t containers < <(
+    podman container ls -a --filter "ancestor=$full_img_id" --format '{{.ID}}|{{.Names}}|{{.Status}}' 2>/dev/null
+  )
+
+  for container in "${containers[@]}"; do
+    [[ -z "$container" ]] && continue
+    cid=$(awk -F'|' '{print $1}' <<< "$container")
+    cname=$(awk -F'|' '{print $2}' <<< "$container")
+    cstatus=$(awk -F'|' '{print $3}' <<< "$container")
+
+    if [[ "$cstatus" == *"Up"* ]] || [[ "$cstatus" == *"running"* ]]; then
+      RUNNING_CONTAINERS+=("$cname|$cid|$cstatus|$img_id")
+      # Track which images have running containers
+      if [[ ! " ${RUNNING_IMAGE_IDS[*]} " =~ " $img_id " ]]; then
+        RUNNING_IMAGE_IDS+=("$img_id")
+      fi
+    else
+      STOPPED_CONTAINERS+=("$cname|$cid|$cstatus")
+    fi
+  done
+done
+
+# ── Phase 2: display summary ────────────────────────────────────────────
+
+echo "=== so-crates image cleanup ==="
+echo ""
+echo "Keeping (most recent):"
+echo "  $keep_id  ($keep_date)"
+echo ""
+echo "Removing ${#REMOVE[@]} older image(s):"
+
+for entry in "${REMOVE[@]}"; do
+  img_date=$(awk -F'|' '{print $1}' <<< "$entry")
+  img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+  img_name=$(awk -F'|' '{print $3}' <<< "$entry")
+  echo "  - $img_id  $img_name  ($img_date)"
+done
+
+if [[ ${#STOPPED_CONTAINERS[@]} -gt 0 ]]; then
+  echo ""
+  echo "Removing ${#STOPPED_CONTAINERS[@]} stopped container(s):"
+  for c in "${STOPPED_CONTAINERS[@]}"; do
+    cname=$(awk -F'|' '{print $1}' <<< "$c")
+    cid=$(awk -F'|' '{print $2}' <<< "$c")
+    echo "  - $cname ($cid)"
+  done
+fi
+
+if [[ ${#RUNNING_CONTAINERS[@]} -gt 0 ]]; then
+  echo ""
+  echo "Note: ${#RUNNING_CONTAINERS[@]} running container(s) still use older images and will block their removal:"
+  for c in "${RUNNING_CONTAINERS[@]}"; do
+    cname=$(awk -F'|' '{print $1}' <<< "$c")
+    cid=$(awk -F'|' '{print $2}' <<< "$c")
+    cstatus=$(awk -F'|' '{print $3}' <<< "$c")
+    echo "  - $cname ($cid) - $cstatus"
+  done
+fi
+
+# ── Phase 3: prompt (unless --force) ──────────────────────────────────
+
+if [[ "$FORCE" == false ]]; then
+  echo ""
+  read -rp "Remove older images and stopped containers? [y/N] " answer
+  if [[ ! "$answer" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    echo "Cleanup cancelled."
+    exit 0
+  fi
+fi
+
+# ── Phase 4: execute removal ────────────────────────────────────────────
+
+# Remove stopped containers first
+if [[ ${#STOPPED_CONTAINERS[@]} -gt 0 ]]; then
+  echo ""
+  echo "Removing ${#STOPPED_CONTAINERS[@]} stopped container(s)..."
+  for c in "${STOPPED_CONTAINERS[@]}"; do
+    cid=$(awk -F'|' '{print $2}' <<< "$c")
+    cname=$(awk -F'|' '{print $1}' <<< "$c")
+    output=$(podman rm "$cid" 2>&1) && {
+      echo "  removed container $cname ($cid)"
+    } || {
+      if [[ "$output" == *"no such container"* ]] || [[ "$output" == *"container not known"* ]]; then
+        echo "  already removed container $cname ($cid)"
+      else
+        echo "  failed to remove container $cname ($cid): $output"
+      fi
+    }
+  done
+fi
+
+# Remove old images
+if [[ ${#REMOVE[@]} -gt 0 ]]; then
+  echo ""
+  echo "Removing old images..."
+  for entry in "${REMOVE[@]}"; do
+    img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+    img_name=$(awk -F'|' '{print $3}' <<< "$entry")
+
+    # Check if this image has running containers
+    if [[ " ${RUNNING_IMAGE_IDS[*]} " =~ " $img_id " ]]; then
+      echo "  skipped $img_name ($img_id) - still in use by running container(s)"
+      continue
+    fi
+
+    output=$(podman rmi "$img_id" 2>&1) && {
+      echo "  removed $img_name ($img_id)"
+    } || {
+      if [[ "$output" == *"image not known"* ]] || [[ "$output" == *"no image"* ]]; then
+        echo "  already removed $img_name ($img_id)"
+      elif [[ "$output" == *"image is in use by a container"* ]]; then
+        dep_cid=$(grep -oP '[0-9a-f]{64}' <<< "$output" | head -1)
+        if [[ -n "$dep_cid" ]]; then
+          cname=$(podman container inspect --format '{{.Name}}' "$dep_cid" 2>/dev/null || echo "$dep_cid")
+          echo "  removing dependent container $cname ($dep_cid)..."
+          podman rm -f "$dep_cid" &>/dev/null
+          if podman rmi "$img_id" &>/dev/null; then
+            echo "  removed $img_name ($img_id)"
+          else
+            echo "  failed to remove $img_name ($img_id) after removing container"
+          fi
+        else
+          echo "  failed to remove $img_name ($img_id): $output"
+        fi
+      else
+        echo "  failed to remove $img_name ($img_id): $output"
+      fi
+    }
+  done
+fi
+
+echo ""
+echo "Done. Kept: $keep_id"

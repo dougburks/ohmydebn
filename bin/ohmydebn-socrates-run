@@ -6,14 +6,10 @@ mkdir -p ~/socrates-data
   --user $(id -u):$(id -g) \
   -v ~/socrates-data:/data \
   -p 8000:8000 \
-  ghcr.io/dougburks/so-crates@sha256:ecd635c6de2b88986f3c2534c733b4cec9eeede35c34edfcd0e507fc30350039
+  ghcr.io/dougburks/so-crates@sha256:115554af51c97422b0e166096162770731d65bee3c1bcb66a54f1c6a5f886556
 
-exit_code=$?
-# exit_code 0 is a clean exit and 130 is the user pressing Ctrl-C
-if [ $exit_code -ne 0 ] && [ $exit_code -ne 130 ]; then
-  echo
-  echo "Review the output above for errors."
-  echo
-  echo "Press Enter to close this window."
-  read input
-fi
+echo
+/usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup
+echo
+echo "Press Enter to close this window."
+read input

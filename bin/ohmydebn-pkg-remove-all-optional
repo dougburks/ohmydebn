@@ -19,14 +19,22 @@ if dpkg -s antigravity >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove
 fi
 
-if dpkg -s cloudflare-warp >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-warp-remove
-fi
-
 if dpkg -s brave-browser >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-brave-remove
 fi
 
 if dpkg -s claude-code >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-claude-code-remove
+fi
+
+if dpkg -s cloudflare-warp >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-warp-remove
+fi
+
+if dpkg -s helium-bin >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-helium-remove
+fi
+
+if dpkg -s simplescreenrecorder >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder-remove
 fi

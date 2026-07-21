@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder-install
+fi
+
+if dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
+  /usr/bin/simplescreenrecorder
+fi

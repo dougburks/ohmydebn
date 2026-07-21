@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
+  echo
+  echo "simplescreenrecorder is not currently installed."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo apt update
+  sudo apt -y install simplescreenrecorder
+fi

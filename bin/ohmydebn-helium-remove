@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
+  echo
+  echo "Helium browser is not currently installed."
+else
+  echo
+  echo "Continuing will remove Helium browser and its repo."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo rm -f /usr/share/keyrings/helium.gpg
+  sudo rm -f /etc/apt/sources.list.d/helium.list
+  sudo apt update
+  sudo apt -y purge helium-bin
+  sudo apt -y autoremove
+fi

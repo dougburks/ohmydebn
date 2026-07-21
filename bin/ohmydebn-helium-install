@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
+  echo
+  echo "Helium browser is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://pkg.helium.computer"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo mkdir -p /usr/share/keyrings
+  curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor -o /usr/share/keyrings/helium.gpg
+  echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list
+  sudo apt update && sudo apt install helium-bin
+
+  cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/
+fi

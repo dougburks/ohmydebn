@@ -112,8 +112,9 @@ show_screenshot_menu() {
 }
 
 show_screenrecord_menu() {
-  case $(menu "Screenrecord" "  Start/Stop") in
+  case $(menu "Screenrecord" "  Cinnamon Recorder Start/Stop\n  SimpleScreenRecorder") in
   *Start*) /usr/bin/xdotool key Shift+Ctrl+Alt+R ;;
+  *Simple*) /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder ;;
   *) show_capture_menu ;;
   esac
 }

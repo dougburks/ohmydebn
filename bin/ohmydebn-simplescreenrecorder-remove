@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
+  echo
+  echo "simplescreenrecorder is not currently installed."
+else
+  echo
+  echo "Continuing will remove simplescreenrecorder."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo apt update
+  sudo apt -y purge simplescreenrecorder
+  sudo apt -y autoremove
+fi

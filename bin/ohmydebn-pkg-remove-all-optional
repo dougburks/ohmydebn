@@ -34,3 +34,7 @@ fi
 if dpkg -s helium-bin >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-helium-remove
 fi
+
+if dpkg -s simplescreenrecorder >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder-remove
+fi

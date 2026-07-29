@@ -6,7 +6,7 @@ mkdir -p ~/socrates-data
   --user $(id -u):$(id -g) \
   -v ~/socrates-data:/data \
   -p 8000:8000 \
-  ghcr.io/dougburks/so-crates@sha256:1c5ccc73de1a550eb820ecd96ea6c70d60ef7d92abfc1ca92e9f72bbe8601dca
+  ghcr.io/dougburks/so-crates@sha256:3e4f777a54146aa8f8abbd40bd33bdb541d2e75c8e33b8679bb6f68dda5611e6
 
 echo
 /usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup

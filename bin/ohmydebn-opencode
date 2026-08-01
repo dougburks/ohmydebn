@@ -10,5 +10,5 @@ fi
 # If installed, then run it in a terminal window
 if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
   mkdir -p ~/opencode-sessions && cd $(mktemp -d ~/opencode-sessions/session-XXXXXX)
-  /usr/bin/alacritty --title 'OpenCode' -e /usr/bin/opencode-cli
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OpenCode' -e /usr/bin/opencode-cli
 fi

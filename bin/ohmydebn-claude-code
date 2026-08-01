@@ -8,5 +8,5 @@ fi
 
 if dpkg -s "claude-code" >/dev/null 2>&1; then
   mkdir -p ~/claude-sessions && cd $(mktemp -d ~/claude-sessions/session-XXXXXX)
-  /usr/bin/alacritty --title 'Claude Code' -e /usr/bin/claude
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/bin/claude
 fi

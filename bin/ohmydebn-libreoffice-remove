@@ -4,10 +4,10 @@ set -euo pipefail
 
 if ! dpkg -s "libreoffice-common" >/dev/null 2>&1; then
   echo
-  echo "Libreoffice is not currently installed."
+  echo "LibreOffice is not currently installed."
 else
   echo
-  echo "Continuing will remove Libreoffice."
+  echo "Continuing will remove LibreOffice."
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read input

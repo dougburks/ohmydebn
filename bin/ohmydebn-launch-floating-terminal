@@ -1,4 +1,4 @@
 #!/bin/bash
 
 cmd="$*"
-setsid alacritty --class OhMyDebn -e bash -c "$cmd"
+setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$cmd"

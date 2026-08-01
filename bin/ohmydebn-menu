@@ -40,7 +40,7 @@ menu() {
 }
 
 terminal() {
-  alacritty --class OhMyDebn -e "$@"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e "$@"
 }
 
 present_terminal() {

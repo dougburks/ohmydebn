@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+/usr/bin/alacritty "$@" &
+PID=$!
+
+/usr/bin/sleep 0.2
+
+/usr/bin/xdotool windowactivate $(/usr/bin/xdotool search --pid $PID | tail -n 1)
+
+# Wait for the terminal to close so callers can depend on completion
+wait $PID

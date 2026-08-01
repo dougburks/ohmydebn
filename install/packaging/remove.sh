@@ -13,6 +13,7 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
       goldendict-ng \
       hexchat \
       hoichess \
+      libreoffice-* \
       pidgin \
       remmina \
       thunderbird \

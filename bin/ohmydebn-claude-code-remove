@@ -13,7 +13,7 @@ else
   read input
   sudo rm -f /usr/share/keyrings/claude-code.asc
   sudo rm -f /etc/apt/sources.list.d/claude-code.list
-  sudo apt update
-  sudo apt -y purge claude-code
-  sudo apt -y autoremove
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge claude-code
+  sudo /usr/bin/apt -y autoremove
 fi

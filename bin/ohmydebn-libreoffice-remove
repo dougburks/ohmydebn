@@ -11,6 +11,6 @@ else
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read input
-  sudo apt -y purge "libreoffice-*"
-  sudo apt -y autoremove
+  sudo /usr/bin/apt -y purge "libreoffice-*"
+  sudo /usr/bin/apt -y autoremove
 fi

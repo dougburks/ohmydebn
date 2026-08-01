@@ -13,7 +13,7 @@ else
   read input
   sudo rm -f /etc/apt/keyrings/antigravity-repo-key.gpg
   sudo rm -f /etc/apt/sources.list.d/antigravity.list
-  sudo apt update
-  sudo apt -y purge antigravity
-  sudo apt -y autoremove
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge antigravity
+  sudo /usr/bin/apt -y autoremove
 fi

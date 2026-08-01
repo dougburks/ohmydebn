@@ -9,11 +9,11 @@ read input
 
 for PACKAGE in cliamp code gnome-boxes localsend ohmydebn-opencode-cli virt-manager; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
-    sudo apt -y purge $PACKAGE
+    sudo /usr/bin/apt -y purge $PACKAGE
   fi
 done
 
-sudo apt -y autoremove
+sudo /usr/bin/apt -y autoremove
 
 if dpkg -s antigravity >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove

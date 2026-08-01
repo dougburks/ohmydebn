@@ -16,4 +16,4 @@ if ! dpkg -s "touchegg" >/dev/null 2>&1; then
 fi
 
 # Install touchegg and dependency
-sudo apt -y install touchegg libpugixml1v5
+sudo /usr/bin/apt -y install touchegg libpugixml1v5

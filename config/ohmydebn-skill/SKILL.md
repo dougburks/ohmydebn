@@ -379,7 +379,7 @@ System control (lock, shutdown, reboot) is handled through:
 ohmydebn-reset-config
 
 # Full reinstall of OhMyDebn deb package
-sudo apt install --reinstall ohmydebn
+sudo /usr/bin/apt install --reinstall ohmydebn
 ```
 
 ## Decision Framework

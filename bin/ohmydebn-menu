@@ -48,7 +48,7 @@ present_terminal() {
 }
 
 install() {
-  present_terminal "echo 'Installing $1...'; sudo apt -y install $2"
+  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2"
 }
 
 install_from_url() {
@@ -70,7 +70,7 @@ install_chrome() {
 }
 
 install_and_launch() {
-  present_terminal "echo 'Installing $1...'; sudo apt -y install $2 && setsid gtk-launch $3"
+  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2 && setsid gtk-launch $3"
 }
 
 show_learn_menu() {

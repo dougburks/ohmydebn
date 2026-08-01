@@ -11,7 +11,7 @@ else
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read input
-  sudo apt update
-  sudo apt -y purge simplescreenrecorder
-  sudo apt -y autoremove
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge simplescreenrecorder
+  sudo /usr/bin/apt -y autoremove
 fi

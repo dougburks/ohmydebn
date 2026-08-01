@@ -2,8 +2,8 @@
 
 set -e
 
-if ! grep -q "13 (trixie)" /etc/os-release; then
-  echo "OhMyDebn is designed for Debian 13 Cinnamon. Exiting!"
+if ! grep -q "CODENAME=trixie" /etc/os-release; then
+  echo "OhMyDebn is designed for Debian 13 Cinnamon or Linux Mint Debian Edition 7. Exiting!"
   exit 1
 fi
 
@@ -75,7 +75,8 @@ EOF
         sudo mv $SOURCESLIST $SOURCESLIST.orig
       fi
       DEBIANSOURCES=/etc/apt/sources.list.d/debian.sources
-      if [ ! -f $DEBIANSOURCES ]; then
+      MINTSOURCES=/etc/apt/sources.list.d/official-package-repositories.list
+      if [ ! -f $DEBIANSOURCES ] && [ ! -f $MINTSOURCES ]; then
         echo "Creating $DEBIANSOURCES and adding the following:"
         cat <<EOF | sudo tee -a $DEBIANSOURCES
 Types: deb
@@ -94,7 +95,7 @@ EOF
     fi
   fi
 
-  sudo apt update && sudo apt install -y curl gpg
+  sudo /usr/bin/apt update && sudo /usr/bin/apt install -y curl gpg
 
 fi
 
@@ -115,8 +116,8 @@ fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
-  sudo apt update
-  sudo apt install -y ohmydebn
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt install -y ohmydebn
 fi
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sudo apt update && sudo apt -y full-upgrade
+sudo /usr/bin/apt update && sudo /usr/bin/apt -y full-upgrade

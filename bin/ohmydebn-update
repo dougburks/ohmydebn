@@ -34,7 +34,7 @@ sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 # Update the ohmydebn package first to get the latest code
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "cat" "Checking for an updated ohmydebn package"
-  sudo apt update && sudo apt -y install ohmydebn
+  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install ohmydebn
 fi
 
 bash $DIR/install.sh --no-uninstall

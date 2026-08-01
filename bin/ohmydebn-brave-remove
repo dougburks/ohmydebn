@@ -13,7 +13,7 @@ else
   read input
   sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
   sudo rm -f /etc/apt/sources.list.d/brave-browser-release.sources
-  sudo apt update
-  sudo apt -y purge brave-browser
-  sudo apt -y autoremove
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge brave-browser
+  sudo /usr/bin/apt -y autoremove
 fi

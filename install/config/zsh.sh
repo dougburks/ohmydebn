@@ -1,20 +1,48 @@
 #!/bin/bash
 
-SOUNDS_STATE=~/.local/state/ohmydebn-config/sounds-20260801
-if [ ! -f $SOUNDS_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Disabling system sounds"
-  gsettings set org.cinnamon.sounds close-enabled false
-  gsettings set org.cinnamon.sounds login-enabled false
-  gsettings set org.cinnamon.sounds logout-enabled false
-  gsettings set org.cinnamon.sounds map-enabled false
-  gsettings set org.cinnamon.sounds maximize-enabled false
-  gsettings set org.cinnamon.sounds minimize-enabled false
-  gsettings set org.cinnamon.sounds notification-enabled false
-  gsettings set org.cinnamon.sounds plug-enabled false
-  gsettings set org.cinnamon.sounds switch-enabled false
-  gsettings set org.cinnamon.sounds tile-enabled false
-  gsettings set org.cinnamon.sounds unmaximize-enabled false
-  gsettings set org.cinnamon.sounds unplug-enabled false
-  gsettings set org.cinnamon.desktop.sound volume-sound-enabled false
-  touch $SOUNDS_STATE
+ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116
+if [ ! -f $ZSHRC_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring Zsh"
+  ZSHRC=~/.zshrc
+  if [ -f $ZSHRC ]; then
+    mv $ZSHRC $ZSHRC-backup-$(date +%Y%m%d-%H%M%S)
+  fi
+  mkdir -p ~/.config
+  cp -av /usr/share/ohmydebn/config/.zshrc $ZSHRC
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $ZSHRC_STATE
+fi
+
+for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
+  if ! grep "/usr/share/ohmydebn/bin" $FILE >/dev/null 2>&1; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating PATH in $FILE"
+    cat <<'EOF' >>$FILE
+
+# Update PATH to include OhMyDebn binaries
+if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
+  export PATH="/usr/share/ohmydebn/bin:$PATH"
+fi
+EOF
+  fi
+done
+
+GRC_STATE=~/.local/state/ohmydebn-config/grc
+if [ ! -f $GRC_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Use grc to colorize some standard commands
+[[ -s "/etc/grc.zsh" ]] && source /etc/grc.zsh
+EOF
+  touch $GRC_STATE
+fi
+
+COLOR_MAN_STATE=~/.local/state/ohmydebn-config/color-man
+if [ ! -f $COLOR_MAN_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Color man pages with bat
+export MANROFFOPT="-c"
+export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+EOF
+  touch $COLOR_MAN_STATE
 fi

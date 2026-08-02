@@ -120,7 +120,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ PCAP Analysis\n♫  Media\n  Virtualization\n  Containerization") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n  Virtualization\n  Containerization\n  Office Apps") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -128,16 +128,27 @@ show_install_menu() {
   *Style*) show_install_style_menu ;;
   *AI*) show_install_ai_menu ;;
   *Editor*) show_install_editor_menu ;;
-  *PCAP*) show_install_pcap_menu ;;
+  *Cybersecurity*) show_install_cybersecurity_menu ;;
   *Utility*) show_install_utility_menu ;;
   *Media*) show_install_media_menu ;;
   *Virtualization*) show_install_virtualization_menu ;;
   *Containerization*) show_install_containerization_menu ;;
+  *Office*) show_install_office_menu ;;
   *) show_main_menu ;;
   esac
 }
 
-show_install_pcap_menu() {
+show_install_office_menu() {
+  case $(menu "Install" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord") in
+  *LibreOffice*) install "libreoffice" "libreoffice" ;;
+  *Calligra*) install "calligra" "calligra" ;;
+  *Gnumeric*) install "gnumeric" "gnumeric" ;;
+  *AbiWord*) install "abiword" "abiword" ;;
+  *) show_install_menu ;;
+  esac
+}
+
+show_install_cybersecurity_menu() {
   case $(menu "Install" "🔍︎ SO-CRATES\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;

@@ -7,11 +7,15 @@ echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read input
 
-for PACKAGE in cliamp code gnome-boxes localsend ohmydebn-opencode-cli virt-manager; do
+for PACKAGE in abiword calligra cliamp code gnome-boxes gnumeric localsend ohmydebn-opencode-cli tcpdump tshark virt-manager wireshark; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
     sudo /usr/bin/apt -y purge $PACKAGE
   fi
 done
+
+if dpkg -s libreoffice >/dev/null 2>&1; then
+  sudo /usr/bin/apt -y purge "libreoffice-*"
+fi
 
 sudo /usr/bin/apt -y autoremove
 

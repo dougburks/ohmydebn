@@ -94,4 +94,5 @@ element-icon {
 
 element-text {
     text-color: inherit;
+    vertical-align: 0.5;
 }

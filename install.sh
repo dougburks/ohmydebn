@@ -3,8 +3,19 @@
 set -e
 
 if ! grep -q "CODENAME=trixie" /etc/os-release; then
-  echo "OhMyDebn is designed for Debian 13 Cinnamon or Linux Mint Debian Edition 7. Exiting!"
-  exit 1
+  cat <<EOF
+WARNING!
+
+OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7.
+
+Trying to install OhMyDebn on anything else is untested and unsupported.
+
+IF IT BREAKS YOUR SYSTEM, YOU GET TO KEEP BOTH PIECES!
+
+Press Enter if you are sure you want to continue or Ctrl-c to cancel.
+EOF
+
+  read input
 fi
 
 if [ "$UID" -eq 0 ]; then

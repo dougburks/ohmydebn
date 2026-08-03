@@ -5,7 +5,8 @@ set -euo pipefail
 /usr/bin/alacritty "$@" &
 PID=$!
 
-/usr/bin/sleep 0.2
+# Sleeping for 0.2s works on some systems but other systems need 0.4s
+/usr/bin/sleep 0.4
 
 /usr/bin/xdotool windowactivate $(/usr/bin/xdotool search --pid $PID | tail -n 1)
 

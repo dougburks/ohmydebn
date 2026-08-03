@@ -2,7 +2,9 @@
 
 set -e
 
+# Check what Linux distro we're running on
 if ! grep -q "CODENAME=trixie" /etc/os-release; then
+  clear
   cat <<EOF
 WARNING!
 
@@ -14,12 +16,12 @@ IF IT BREAKS YOUR SYSTEM, YOU GET TO KEEP BOTH PIECES!
 
 Press Enter if you are sure you want to continue or Ctrl-c to cancel.
 EOF
-
   read input
 fi
 
+# Check what user is running the script
 if [ "$UID" -eq 0 ]; then
-
+  clear
   cat <<EOF
 Looks like you're running as root.
 
@@ -29,7 +31,6 @@ run this as a normal user that has sudo privileges.
 Press Enter if you are sure you want to continue as root
 or Ctrl-c to cancel.
 EOF
-
   read input
 fi
 
@@ -47,6 +48,7 @@ for arg in "$@"; do
   esac
 done
 
+# Only show welcome message on new installations
 if [ ! -f ~/.local/state/ohmydebn ]; then
   clear
   cat <<EOF

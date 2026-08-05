@@ -14,16 +14,16 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
       goldendict-ng \
       hexchat \
       hoichess \
-      libreoffice-* \
+      "libreoffice-*" \
       pidgin \
       remmina \
       thunderbird \
-      transmission* \
+      "transmission*" \
       x11vnc
 
     # Only remove firefox on non-kali systems
     if ! grep -q "kali" /etc/os-release; then
-      sudo /usr/bin/apt -y purge firefox*
+      sudo /usr/bin/apt -y purge "firefox*"
     fi
 
     sudo /usr/bin/apt -y autoremove

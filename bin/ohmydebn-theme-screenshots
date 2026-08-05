@@ -20,7 +20,7 @@ read input
 
 cd /usr/share/ohmydebn-themes/
 for i in *; do
-  /usr/share/ohmydebn/bin/ohmydebn-theme-set $i
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set "$i"
   sleep 3s
-  /usr/bin/gnome-screenshot -f ~/Pictures/ohmydebn-theme-$i.png
+  /usr/bin/gnome-screenshot -f ~/Pictures/"ohmydebn-theme-$i.png"
 done

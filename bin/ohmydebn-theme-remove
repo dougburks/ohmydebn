@@ -18,12 +18,19 @@ fi
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 CURRENT_DIR="$HOME/.config/ohmydebn/current"
-THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
 # Ensure a theme was set
 if [ -z "$THEME_NAME" ]; then
   exit 1
 fi
+
+# Reject names that could escape THEMES_DIR
+if [[ "$THEME_NAME" == *"/"* || "$THEME_NAME" == "." || "$THEME_NAME" == ".." ]]; then
+  echo "Error: invalid theme name '$THEME_NAME'." >&2
+  exit 1
+fi
+
+THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
 # Check if theme exists before attempting removal
 if [ ! -d "$THEME_PATH" ]; then

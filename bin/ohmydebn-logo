@@ -1,4 +1,5 @@
 #!/bin/bash
 
-toilet -f mono12 "OhMyDebn" | tte rain
+/usr/share/ohmydebn/bin/ohmydebn-logo-generate
+toilet -f mono12 "$(cat ~/.config/ohmydebn/branding/name.txt)" | tte rain
 read input

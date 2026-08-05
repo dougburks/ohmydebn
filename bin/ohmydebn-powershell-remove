@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "powershell" >/dev/null 2>&1; then
+  echo
+  echo "PowerShell is not currently installed."
+else
+  echo
+  echo "Continuing will remove PowerShell and its repo."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge powershell packages-microsoft-prod
+  sudo /usr/bin/apt -y autoremove
+fi

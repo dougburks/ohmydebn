@@ -51,10 +51,9 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **Reading these directories is SAFE and useful** - do it freely to:
 - Understand how ohmydebn commands work: `cat $(which ohmydebn-theme-set)`
-- See default configs before customizing: `cat /usr/share/ohmydebn/config/cinnamon/cinnamon-settings`
+- See default Cinnamon settings before customizing: `cat /usr/share/ohmydebn/install/config/cinnamon.sh` (Cinnamon settings are applied via `gsettings`, not a flat config file)
 - Check stock theme files to copy for customization: `ls /usr/share/ohmydebn-themes/`
 - Check original Omarchy themes: `ls /usr/share/ohmydebn-themes/`
-- Reference default cinnamon settings from the config templates: `cat /usr/share/ohmydebn/config/cinnamon/*`
 
 **Always use these safe locations instead:**
 - `~/.config/` - User configuration (safe to edit)
@@ -62,7 +61,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
-- **OpenCode AI**: CLI (`opencode-cli`, `Super + A`) + GUI versions, update with `ohmydebn-update-opencode`
+- **OpenCode AI**: CLI (`opencode-cli`, `Super + A`) + GUI versions, kept current via `ohmydebn-update`
 - **Apps Menu**: Rofi launcher, `Super + Space` or OhMyDebn Menu → Apps
 
 ## System Architecture
@@ -74,12 +73,12 @@ OhMyDebn is built on:
 | **Debian 13** | Base OS | `/etc/`, `~/.config/` |
 | **Cinnamon** | Desktop environment | `~/.config/cinnamon/` |
 | **Nemo** | File manager | `~/.config/nemo/` |
-| **Cinnamon Panel** | Taskbar/applets | `~/.config/cinnamon/panels/` |
+| **Cinnamon Panel** | Taskbar/applets | `gsettings` (`org.cinnamon`), applet/desklet instance configs under `~/.config/cinnamon/spices/` |
 | **GTK3/GTK4** | Widget toolkit | `~/.config/gtk-3.0/`, `~/.config/gtk-4.0/` |
 | **Rofi** | App launcher | `~/.config/rofi/` |
 | **Alacritty** | Default terminal | `~/.config/alacritty/` |
 | **gTile** | Advanced window tiling | System Settings → Extensions |
-| **Cinnamon Screensaver** | Lock screen | `~/.config/cinnamon-screensaver/` |
+| **Cinnamon Screensaver** | Lock screen | `gsettings` (`org.cinnamon.desktop.screensaver`); trigger with `cinnamon-screensaver-command -l` |
 | **Cinnamon Notification Daemon** | Notifications | System settings |
 
 ## Command Discovery
@@ -106,7 +105,6 @@ cat $(which ohmydebn-theme-set)
 | `ohmydebn-theme-*` | Theme management | `ohmydebn-theme-set <name>` |
 | `ohmydebn-pkg-*` | Package management | `ohmydebn-pkg-install <pkg>` |
 | `ohmydebn-update-*` | System updates | `ohmydebn-update` |
-| `ohmydebn-update-opencode` | Update OpenCode AI to latest | `ohmydebn-update-opencode [version]` |
 
 ## Configuration Locations
 
@@ -114,15 +112,20 @@ cat $(which ohmydebn-theme-set)
 
 ```
 ~/.config/cinnamon/
-├── cinnamon-settings       # Main settings configuration
 ├── panels/                 # Panel configurations
 │   ├── panel1/            # Bottom panel settings
 │   └── panel2/            # Top panel settings (if enabled)
 ├── applets/               # Applet configurations
 ├── desklets/              # Desklet configurations
 ├── extensions/            # Extension configurations
+├── spices/                # Spice (extension/applet/desklet) configs
 └── background-chooser.log # Background selection logs
 ```
+
+Core Cinnamon settings (panels, effects, keybindings, window management, etc.)
+are **not** stored in a flat file — they live in the dconf database under the
+`org.cinnamon` schemas. Read/write them with `gsettings get|set org.cinnamon ...`
+or browse everything with `dconf-editor` / `dconf dump /org/cinnamon/`.
 
 **Key behaviors:**
 - Cinnamon auto-reloads most settings changes (no restart needed)
@@ -156,7 +159,7 @@ cat $(which ohmydebn-theme-set)
 ### Alacritty (Default Terminal)
 
 ```
-~/.config/alacritty/alacritty.yml    # Main configuration
+~/.config/alacritty/alacritty.toml    # Main configuration
 ```
 
 The default terminal is Alacritty with:
@@ -201,7 +204,7 @@ Restart terminal applications by closing and reopening the window or using the a
 | bat | `~/.config/bat/config` |
 | cava | `~/.config/cava/config` |
 | opencode | `~/.config/opencode/` |
-| wallpapers | `~/.local/share/backgrounds/` |
+| wallpapers | `~/.config/ohmydebn/current/theme/backgrounds/` (current theme), `~/.config/ohmydebn/backgrounds/<theme>/` (user overrides) |
 
 ## Safe Customization Patterns
 
@@ -211,16 +214,16 @@ For simple changes, edit files in `~/.config/`:
 
 ```bash
 # 1. Read current config
-cat ~/.config/cinnamon/cinnamon-settings
+cat ~/.config/rofi/config.rasi
 
 # 2. Backup before changes
-cp ~/.config/cinnamon/cinnamon-settings ~/.config/cinnamon/cinnamon-settings.bak.$(date +%s)
+cp ~/.config/rofi/config.rasi ~/.config/rofi/config.rasi.bak.$(date +%s)
 
 # 3. Make changes with Edit tool
 
 # 4. Apply changes
-# - Cinnamon: auto-reloads most settings (no restart needed)
 # - Rofi: auto-reloads on config save
+# - Cinnamon: settings live in dconf (org.cinnamon schemas) — use `gsettings set`, auto-reloads, no flat file to edit
 # - Terminals: restart by closing and reopening window
 ```
 
@@ -313,7 +316,7 @@ xrandr --output eDP-1 --mode 1920x1080 --pos 0x0 --output HDMI-A-1 --mode 2560x1
 Cinnamon window management is configured through:
 - **Cinnamon Settings > Windows**: Window behavior, tiling, workspaces
 - **Cinnamon Settings > Workspaces**: Workspace configuration
-- **Manual editing**: `~/.config/cinnamon/cinnamon-settings`
+- **Manual editing**: `gsettings set org.cinnamon.desktop.wm.preferences <key> <value>` or `dconf-editor`
 
 For advanced window management, additional extensions can be installed from Cinnamon Spices.
 
@@ -362,9 +365,8 @@ Additional tools available in OhMyDebn:
 ### System
 
 ```bash
-ohmydebn-update                  # Full system update
+ohmydebn-update                  # Full system update (includes OpenCode AI)
 ohmydebn-version                 # Show OhMyDebn version
-ohmydebn-update-opencode          # Update OpenCode AI to latest
 ```
 
 System control (lock, shutdown, reboot) is handled through:
@@ -422,7 +424,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
 - "Add a keybinding for Super+E to open file manager" -> Check existing bindings first, then create custom keybinding in Cinnamon Settings
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
-- "Make the window animations faster" -> Edit Cinnamon Settings > Effects or modify `~/.config/cinnamon/cinnamon-settings`
+- "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets
 - "Build a theme from this wallpaper" -> `Ctrl + Shift + A` (Aether theme builder)
 - "Install all Omarchy extra themes" -> OhMyDebn Menu → Style → Theme → "Install All Omarchy Extra Themes"
@@ -431,7 +433,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Show system information" -> `Ctrl + Shift + S` (screenfetch)
 - "Open OhMyDebn menu" -> `Super + Alt + Space`
 - "Launch AI assistant" -> `Super + A` (OpenCode CLI) or from Apps Menu
-- "Update OpenCode to latest version" -> `ohmydebn-update-opencode`
+- "Update OpenCode to latest version" -> `ohmydebn-update` (system update includes OpenCode)
 - "Open apps menu" -> `Super + Space` (Rofi)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`
 - "Show system summary" -> `Ctrl + Shift + S` (screenfetch GUI)

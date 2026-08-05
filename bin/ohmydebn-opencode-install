@@ -30,4 +30,4 @@ if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ]; then
 fi
 
 # Install the package
-sudo apt -y install ohmydebn-opencode-cli
+sudo /usr/bin/apt -y install ohmydebn-opencode-cli

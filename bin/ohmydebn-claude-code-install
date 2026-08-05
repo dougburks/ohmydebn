@@ -15,6 +15,6 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |
     sudo tee /etc/apt/sources.list.d/claude-code.list
-  sudo apt update
-  sudo apt install claude-code
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install claude-code
 fi

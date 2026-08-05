@@ -13,8 +13,8 @@ if ! dpkg -s "cliamp" >/dev/null 2>&1; then
   read input
 
   # Install packages
-  sudo apt update
-  sudo apt -y install cliamp
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install cliamp
 
   # Output message to user
   cat <<EOF

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "powershell" >/dev/null 2>&1; then
+  echo
+  echo "PowerShell is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://packages.microsoft.com/"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read input
+  sudo mkdir -p /usr/share/keyrings
+  TMPDIR=$(mktemp -d)
+  wget -q -O "$TMPDIR/packages-microsoft-prod.deb" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
+  sudo dpkg -i "$TMPDIR/packages-microsoft-prod.deb"
+  rm -rf "$TMPDIR"
+  sudo apt update
+  sudo apt -y install powershell
+fi

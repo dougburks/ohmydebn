@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260706
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260804
 
 if [ ! -f $KEYBINDING_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Updating hotkeys"
@@ -10,13 +10,15 @@ if [ ! -f $KEYBINDING_STATE ]; then
   KEYBINDING_CINNAMON=$KEYBINDING_DIR/keybinding-cinnamon.txt
   KEYBINDING_CUSTOM=$KEYBINDING_DIR/keybinding-custom.txt
 
-  function keybinding-cinnamon (
+  function keybinding-cinnamon() {
+    local CMD
     echo $4
     CMD="gsettings set org.cinnamon.desktop.keybindings.$1 $2 \"$3\""
     eval $CMD
-  )
+  }
 
-  function keybinding-custom (
+  function keybinding-custom() {
+    local GSETTINGS1 GSETTINGS2 GSETTINGS3
     echo $5
     GSETTINGS1="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ name \"$2\""
     GSETTINGS2="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ command \"$3\""
@@ -24,7 +26,7 @@ if [ ! -f $KEYBINDING_STATE ]; then
     eval $GSETTINGS1
     eval $GSETTINGS2
     eval $GSETTINGS3
-  )
+  }
 
   # To create new custom keybindings, first specify how many custom keybindings we're going to load
   CUSTOM_KEYBINDING_TOTAL=$(cat $KEYBINDING_CUSTOM | wc -l)

@@ -19,6 +19,6 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
   echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-central1-apt.pkg.dev/projects/antigravity-auto-updater-dev/ antigravity-debian main" |
     sudo tee /etc/apt/sources.list.d/antigravity.list >/dev/null
 
-  sudo apt update
-  sudo apt -y install antigravity
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install antigravity
 fi

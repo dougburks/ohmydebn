@@ -1,9 +1,11 @@
 #!/bin/bash
 
+set -euo pipefail
+
 if ! dpkg -s "cliamp" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-cliamp-install
 fi
 
 if dpkg -s "cliamp" >/dev/null 2>&1; then
-  /usr/bin/alacritty --title 'cliamp' -e /usr/bin/cliamp
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'cliamp' -e /usr/bin/cliamp
 fi

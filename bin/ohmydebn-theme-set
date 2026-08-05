@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$1" && "$1" != "CNCLD" ]]; then
+if [[ -z "${1:-}" ]]; then
   echo "Usage: ohmydebn-theme-set [--background <arg>] <theme-name>" >&2
   exit 1
 fi

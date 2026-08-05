@@ -40,15 +40,15 @@ menu() {
 }
 
 terminal() {
-  alacritty --class OhMyDebn -e "$@"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e "$@"
 }
 
 present_terminal() {
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation $1
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "$1"
 }
 
 install() {
-  present_terminal "echo 'Installing $1...'; sudo apt -y install $2"
+  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2"
 }
 
 install_from_url() {
@@ -70,7 +70,7 @@ install_chrome() {
 }
 
 install_and_launch() {
-  present_terminal "echo 'Installing $1...'; sudo apt -y install $2 && setsid gtk-launch $3"
+  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2 && setsid gtk-launch $3"
 }
 
 show_learn_menu() {
@@ -120,7 +120,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ PCAP Analysis\n♫  Media\n  Virtualization\n  Containerization") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -128,16 +128,27 @@ show_install_menu() {
   *Style*) show_install_style_menu ;;
   *AI*) show_install_ai_menu ;;
   *Editor*) show_install_editor_menu ;;
-  *PCAP*) show_install_pcap_menu ;;
+  *Cybersecurity*) show_install_cybersecurity_menu ;;
   *Utility*) show_install_utility_menu ;;
   *Media*) show_install_media_menu ;;
   *Virtualization*) show_install_virtualization_menu ;;
   *Containerization*) show_install_containerization_menu ;;
+  *Office*) show_install_office_menu ;;
   *) show_main_menu ;;
   esac
 }
 
-show_install_pcap_menu() {
+show_install_office_menu() {
+  case $(menu "Install" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord") in
+  *LibreOffice*) install "libreoffice" "libreoffice" ;;
+  *Calligra*) install "calligra" "calligra" ;;
+  *Gnumeric*) install "gnumeric" "gnumeric" ;;
+  *AbiWord*) install "abiword" "abiword" ;;
+  *) show_install_menu ;;
+  esac
+}
+
+show_install_cybersecurity_menu() {
   case $(menu "Install" "🔍︎ SO-CRATES\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;
@@ -148,9 +159,10 @@ show_install_pcap_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n󰒒  SSH Server") in
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n󰒒  SSH Server") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
+  *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
   *) show_install_menu ;;
   esac
@@ -197,7 +209,7 @@ show_install_ai_menu() {
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_install_menu ;;
   esac
 }
@@ -205,7 +217,7 @@ show_install_ai_menu() {
 show_install_editor_menu() {
   case $(menu "Install" "  VSCode\n  Antigravity\n  Emacs") in
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-vscode ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *Emacs*) install "Emacs" "emacs" ;;
   *) show_install_menu ;;
   esac

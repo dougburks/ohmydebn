@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if ! dpkg -s "code" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-vscode-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-code-install
 fi
 
 if dpkg -s "code" >/dev/null 2>&1; then

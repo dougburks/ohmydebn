@@ -2,13 +2,26 @@
 
 set -e
 
-if ! grep -q "13 (trixie)" /etc/os-release; then
-  echo "OhMyDebn is designed for Debian 13 Cinnamon. Exiting!"
-  exit 1
+# Check what Linux distro we're running on
+if ! grep -q "CODENAME=trixie" /etc/os-release; then
+  clear
+  cat <<EOF
+WARNING!
+
+OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7.
+
+Trying to install OhMyDebn on anything else is untested and unsupported.
+
+IF IT BREAKS YOUR SYSTEM, YOU GET TO KEEP BOTH PIECES!
+
+Press Enter if you are sure you want to continue or Ctrl-c to cancel.
+EOF
+  read input
 fi
 
+# Check what user is running the script
 if [ "$UID" -eq 0 ]; then
-
+  clear
   cat <<EOF
 Looks like you're running as root.
 
@@ -18,7 +31,6 @@ run this as a normal user that has sudo privileges.
 Press Enter if you are sure you want to continue as root
 or Ctrl-c to cancel.
 EOF
-
   read input
 fi
 
@@ -36,6 +48,7 @@ for arg in "$@"; do
   esac
 done
 
+# Only show welcome message on new installations
 if [ ! -f ~/.local/state/ohmydebn ]; then
   clear
   cat <<EOF
@@ -51,7 +64,7 @@ Stars bow to its charm.
 WARNING!
 
 - OhMyDebn is intended for a clean new installation.
-- OhMyDebn will remove apps like FireFox, Thunderbird, and others (unless you use the --no-uninstall option).
+- OhMyDebn will remove apps like FireFox, Thunderbird, LibreOffice, and others (unless you use the --no-uninstall option).
 - OhMyDebn will make changes to your APT configuration.
 - If it breaks your system, you get to keep both pieces!
 
@@ -75,7 +88,8 @@ EOF
         sudo mv $SOURCESLIST $SOURCESLIST.orig
       fi
       DEBIANSOURCES=/etc/apt/sources.list.d/debian.sources
-      if [ ! -f $DEBIANSOURCES ]; then
+      MINTSOURCES=/etc/apt/sources.list.d/official-package-repositories.list
+      if [ ! -f $DEBIANSOURCES ] && [ ! -f $MINTSOURCES ]; then
         echo "Creating $DEBIANSOURCES and adding the following:"
         cat <<EOF | sudo tee -a $DEBIANSOURCES
 Types: deb
@@ -94,7 +108,7 @@ EOF
     fi
   fi
 
-  sudo apt update && sudo apt install -y curl gpg
+  sudo /usr/bin/apt update && sudo /usr/bin/apt install -y curl gpg
 
 fi
 
@@ -115,8 +129,8 @@ fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
-  sudo apt update
-  sudo apt install -y ohmydebn
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt install -y ohmydebn
 fi
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"

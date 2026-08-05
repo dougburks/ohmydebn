@@ -16,8 +16,8 @@ else
   read input
 
   # Install packages
-  sudo apt update
-  sudo apt -y install podman
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install podman
 
   # Output message to user
   cat <<EOF

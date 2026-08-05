@@ -2,10 +2,13 @@
 
 if [ ! -f ~/.local/state/ohmydebn ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring chromium as default web browser"
-  sudo update-alternatives --set x-www-browser /usr/bin/chromium
-  xdg-settings set default-web-browser chromium.desktop
-  xdg-mime default chromium.desktop x-scheme-handler/http
-  xdg-mime default chromium.desktop x-scheme-handler/https
+  sudo update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/chromium 200 || true
+  sudo update-alternatives --set x-www-browser /usr/bin/chromium || true
+  sudo update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/chromium 200 || true
+  sudo update-alternatives --set gnome-www-browser /usr/bin/chromium || true
+  xdg-settings set default-web-browser chromium.desktop || true
+  xdg-mime default chromium.desktop x-scheme-handler/http || true
+  xdg-mime default chromium.desktop x-scheme-handler/https || true
 
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring ristretto as default image viewer"
   xdg-mime default org.xfce.ristretto.desktop image/bmp image/gif image/jpeg image/png image/tiff image/webp

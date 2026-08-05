@@ -16,22 +16,22 @@ interpolate_colors() {
     local start_color="${1#\#}"
     local end_color="${2#\#}"
     local num_colors=$3
-    
+
+    # Convert hex to RGB
+    local r1=$((16#${start_color:0:2}))
+    local g1=$((16#${start_color:2:2}))
+    local b1=$((16#${start_color:4:2}))
+
+    local r2=$((16#${end_color:0:2}))
+    local g2=$((16#${end_color:2:2}))
+    local b2=$((16#${end_color:4:2}))
+
     # Handle edge case to prevent division by zero
     if [[ $num_colors -le 1 ]]; then
         printf "#%02x%02x%02x\n" $r1 $g1 $b1
         return
     fi
-    
-    # Convert hex to RGB
-    local r1=$((16#${start_color:0:2}))
-    local g1=$((16#${start_color:2:2}))
-    local b1=$((16#${start_color:4:2}))
-    
-    local r2=$((16#${end_color:0:2}))
-    local g2=$((16#${end_color:2:2}))
-    local b2=$((16#${end_color:4:2}))
-    
+
     # Generate interpolated colors
     for ((i=0; i<num_colors; i++)); do
         local ratio=$(( (i * 100) / (num_colors - 1) ))

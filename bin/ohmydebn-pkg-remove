@@ -16,6 +16,6 @@ pkg_names=$(dpkg -l | awk '/^ii/ {print $2}' | fzf "${fzf_args[@]}")
 
 if [[ -n "$pkg_names" ]]; then
   # Convert newline-separated selections to space-separated for apt
-  echo "$pkg_names" | tr '\n' ' ' | xargs sudo apt -y purge
+  echo "$pkg_names" | tr '\n' ' ' | xargs sudo /usr/bin/apt -y purge
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi

@@ -25,7 +25,7 @@ mkdir -p "$ICON_DIR"
 
 if ! curl -sL -o "$ICON_PATH" "$ICON_URL"; then
   echo "Error: Failed to download icon."
-  return 1
+  exit 1
 fi
 
 if [[ $WINDOW_STYLE == "float" ]]; then
@@ -39,7 +39,7 @@ cat >"$DESKTOP_FILE" <<EOF
 Version=1.0
 Name=$APP_NAME
 Comment=$APP_NAME
-Exec=alacritty --class $APP_CLASS -e $APP_EXEC
+Exec=/usr/share/ohmydebn/bin/ohmydebn-terminal --class $APP_CLASS -e $APP_EXEC
 Terminal=false
 Type=Application
 Icon=$ICON_PATH

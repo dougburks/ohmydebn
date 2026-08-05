@@ -12,9 +12,9 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   echo "Press Enter to continue or Ctrl-C to cancel."
   read input
   sudo mkdir -p /usr/share/keyrings
-  curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor -o /usr/share/keyrings/helium.gpg
+  curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg
   echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list
-  sudo apt update && sudo apt install helium-bin
+  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install helium-bin
 
   cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/
 fi

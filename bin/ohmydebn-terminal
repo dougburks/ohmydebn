@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+/usr/bin/alacritty "$@" &
+PID=$!
+
+# Sleeping for 0.2s works on some systems but other systems need 0.4s
+/usr/bin/sleep 0.4
+
+WIN_ID=$(/usr/bin/xdotool search --pid "$PID" | tail -n 1)
+if [ -n "$WIN_ID" ]; then
+  /usr/bin/xdotool windowactivate "$WIN_ID" || true
+fi
+
+# Wait for the terminal to close so callers can depend on completion
+wait "$PID"

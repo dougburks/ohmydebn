@@ -1,10 +1,16 @@
 #!/bin/bash
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes/"
+OHMYDEBN_THEMES_DIR="/usr/share/ohmydebn-themes/"
 CURRENT_THEME_LINK="$HOME/.config/ohmydebn/current/theme"
 
-THEMES=($(find "$THEMES_DIR" -mindepth 1 -maxdepth 1 | sort))
+THEMES=($( { find "$THEMES_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null; find "$OHMYDEBN_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; } | sort))
 TOTAL=${#THEMES[@]}
+
+if [[ "$TOTAL" -eq 0 ]]; then
+  echo "No themes found."
+  exit 1
+fi
 
 # Get current theme from symlink
 if [[ -L "$CURRENT_THEME_LINK" ]]; then

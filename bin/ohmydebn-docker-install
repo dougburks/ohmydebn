@@ -16,8 +16,8 @@ else
   read input
 
   # Install packages
-  sudo apt update
-  sudo apt -y install docker.io
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install docker.io
   sudo usermod -aG docker $USER
 
   # Output message to user

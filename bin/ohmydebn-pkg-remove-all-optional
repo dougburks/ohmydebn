@@ -7,13 +7,18 @@ echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read input
 
-for PACKAGE in cliamp code gnome-boxes localsend ohmydebn-opencode-cli virt-manager; do
+for PACKAGE in abiword calligra cliamp distrobox docker.io emacs firefox-esr gnome-boxes gnumeric \
+  google-chrome-stable localsend ohmydebn-opencode-cli podman tcpdump tshark uxplay virt-manager wireshark; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
-    sudo apt -y purge $PACKAGE
+    sudo /usr/bin/apt -y purge $PACKAGE
   fi
 done
 
-sudo apt -y autoremove
+if dpkg -s libreoffice >/dev/null 2>&1; then
+  sudo /usr/bin/apt -y purge "libreoffice-*"
+fi
+
+sudo /usr/bin/apt -y autoremove
 
 if dpkg -s antigravity >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove
@@ -31,8 +36,16 @@ if dpkg -s cloudflare-warp >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-warp-remove
 fi
 
+if dpkg -s code >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-code-remove
+fi
+
 if dpkg -s helium-bin >/dev/null 2>&1; then
   echo | /usr/share/ohmydebn/bin/ohmydebn-helium-remove
+fi
+
+if dpkg -s powershell >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-powershell-remove
 fi
 
 if dpkg -s simplescreenrecorder >/dev/null 2>&1; then

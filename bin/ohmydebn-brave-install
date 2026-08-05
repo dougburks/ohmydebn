@@ -14,7 +14,7 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
   sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
-  sudo apt update
-  sudo apt -y install brave-browser
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install brave-browser
   cp -av /usr/share/ohmydebn/config/BraveSoftware ~/.config/
 fi

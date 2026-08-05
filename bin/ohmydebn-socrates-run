@@ -1,12 +1,36 @@
 #!/bin/bash
 
 mkdir -p ~/socrates-data
-/usr/bin/podman run \
-  --userns=keep-id \
-  --user $(id -u):$(id -g) \
-  -v ~/socrates-data:/data \
-  -p 8000:8000 \
-  ghcr.io/dougburks/so-crates@sha256:3e4f777a54146aa8f8abbd40bd33bdb541d2e75c8e33b8679bb6f68dda5611e6
+
+IMAGE_REPO="ghcr.io/dougburks/so-crates"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:35f2da77f371a09c28b4dfd23efb5fbcff54a3ba555b35ec9170b7a5aabec9fb"
+
+if [[ -n "$1" ]]; then
+  IMAGE="$IMAGE_REPO:$1"
+else
+  IMAGE="$DEFAULT_IMAGE"
+fi
+
+OHMYDEBN_CURRENT_DIR="$HOME/.config/ohmydebn/current"
+
+PODMAN_ARGS=(
+  run
+  --userns=keep-id
+  --user "$(id -u):$(id -g)"
+  -v ~/socrates-data:/data
+  -p 8000:8000
+)
+
+# Best-effort: only mount if OhMyDebn has ever set a theme.
+if [[ -d "$OHMYDEBN_CURRENT_DIR" ]]; then
+  PODMAN_ARGS+=(
+    -v "$OHMYDEBN_CURRENT_DIR:/run/ohmydebn/current:ro"
+    -e OHMYDEBN_THEME_DIR=/run/ohmydebn
+  )
+fi
+
+/usr/bin/podman "${PODMAN_ARGS[@]}" \
+  "$IMAGE"
 
 echo
 /usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup

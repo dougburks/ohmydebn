@@ -1,7 +1,7 @@
 #!/bin/bash
 
-SKILL_STATE=~/.local/state/ohmydebn-config/skill-20260116
-if [ ! -f $SKILL_STATE ]; then
+SKILL_STATE_OPENCODE=~/.local/state/ohmydebn-config/skill-20260116
+if [ ! -f $SKILL_STATE_OPENCODE ]; then
 
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring AI skill for OpenCode"
 
@@ -9,16 +9,16 @@ if [ ! -f $SKILL_STATE ]; then
   mkdir -p ~/.claude/skills
   ln -s /usr/share/ohmydebn/config/ohmydebn-skill ~/.claude/skills/ohmydebn
 
-  touch $SKILL_STATE
+  touch $SKILL_STATE_OPENCODE
 fi
 
-SKILL_STATE=~/.local/state/ohmydebn-config/skill-antigravity-20260125
-if [ ! -f $SKILL_STATE ]; then
+SKILL_STATE_ANTIGRAVITY=~/.local/state/ohmydebn-config/skill-antigravity-20260125
+if [ ! -f $SKILL_STATE_ANTIGRAVITY ]; then
 
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring AI skill for Antigravity"
 
   mkdir -p ~/.gemini/antigravity/global_skills
   ln -s /usr/share/ohmydebn/config/ohmydebn-skill ~/.gemini/antigravity/global_skills/ohmydebn
 
-  touch $SKILL_STATE
+  touch $SKILL_STATE_ANTIGRAVITY
 fi

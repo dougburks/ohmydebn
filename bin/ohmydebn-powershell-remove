@@ -12,6 +12,9 @@ else
   echo "Press Enter to continue or Ctrl-C to cancel."
   read input
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y purge powershell packages-microsoft-prod
+  sudo /usr/bin/apt -y purge powershell
+  if dpkg -s "packages-microsoft-prod" >/dev/null 2>&1; then
+    sudo /usr/bin/apt -y purge packages-microsoft-prod
+  fi
   sudo /usr/bin/apt -y autoremove
 fi

@@ -194,8 +194,9 @@ show_install_virtualization_menu() {
 }
 
 show_install_browser_menu() {
-  case $(menu "Install" "󰖟  Brave\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium") in
-  *Brave*) /usr/share/ohmydebn/bin/ohmydebn-brave ;;
+  case $(menu "Install" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium") in
+  *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
+  *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
   *Chromium*) install "Chromium" "chromium" ;;
   *Firefox*) install "Firefox" "firefox-esr" ;;
   *Google*) install_chrome ;;

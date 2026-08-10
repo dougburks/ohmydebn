@@ -7,12 +7,21 @@ echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read input
 
-for PACKAGE in abiword calligra cliamp distrobox docker.io emacs firefox-esr gnome-boxes gnumeric \
-  google-chrome-stable localsend ohmydebn-opencode-cli podman tcpdump tshark uxplay virt-manager wireshark; do
+for PACKAGE in abiword calligra cliamp distrobox emacs gnome-boxes gnumeric \
+  google-chrome-stable localsend ohmydebn-opencode-cli podman uxplay virt-manager; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
     sudo /usr/bin/apt -y purge $PACKAGE
   fi
 done
+
+# Some packages need special handling on Kali Linux
+if ! grep -s "kali" /etc/os-release >/dev/null 2>&1; then
+  for PACKAGE in docker.io firefox-esr tcpdump tshark wireshark\
+    if dpkg -s $PACKAGE >/dev/null 2>&1; then
+      sudo /usr/bin/apt -y purge $PACKAGE
+    fi
+  done
+fi
 
 if dpkg -s libreoffice >/dev/null 2>&1; then
   sudo /usr/bin/apt -y purge "libreoffice-*"
@@ -25,7 +34,11 @@ if dpkg -s antigravity >/dev/null 2>&1; then
 fi
 
 if dpkg -s brave-browser >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-brave-remove
+  echo | /usr/share/ohmydebn/bin/ohmydebn-brave-browser-remove
+fi
+
+if dpkg -s brave-origin >/dev/null 2>&1; then
+  echo | /usr/share/ohmydebn/bin/ohmydebn-brave-origin-remove
 fi
 
 if dpkg -s claude-code >/dev/null 2>&1; then

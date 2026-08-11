@@ -1,34 +1,14 @@
 #!/bin/bash
 
 while true; do
-  if tte --help 2>&1 | grep -q -- '--random-effect'; then
-    # Newer tte (0.13+/Debian 14, Kali, etc.)
-    tte -i ~/.config/ohmydebn/branding/logo.txt \
-      --frame-rate 240 --canvas-width 0 --canvas-height $(($(tput lines) - 2)) \
-      --anchor-canvas c --anchor-text c \
-      --random-effect &
-  else
-    # Older tte (0.12.x / Debian 13)
-    effect=$(tte 2>&1 |
-      grep -oE '\{[a-z0-9,]+\}' |
-      tail -n1 |
-      tr -d '{}' |
-      tr ',' '\n' |
-      grep -v '^$' |
-      shuf -n1)
+  /usr/bin/ttfx -i ~/.config/ohmydebn/branding/logo.txt \
+    --frame-rate 240 --canvas-width 0 --canvas-height $(($(tput lines) - 2)) \
+    --anchor-canvas c --anchor-text c \
+    --random-effect &
 
-    # Safety: if parsing still fails, pick a known-good effect
-    [[ -z "$effect" ]] && effect="beams"
-
-    tte -i ~/.config/ohmydebn/branding/logo.txt \
-      --frame-rate 240 --canvas-width 0 --canvas-height $(($(tput lines) - 2)) \
-      --anchor-canvas c --anchor-text c \
-      "$effect" &
-  fi
-
-  while pgrep -x tte >/dev/null; do
-    if read -n 1 -t 0.01; then
-      pkill -x tte 2>/dev/null
+  while pgrep -x ttfx >/dev/null; do
+    if read -r -n 1 -t 0.01; then
+      pkill -x ttfx 2>/dev/null
       pkill -f "alacritty --title \"OhMyDebn Demo\"" 2>/dev/null
       exit 0
     fi

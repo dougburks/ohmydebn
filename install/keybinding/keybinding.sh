@@ -1,10 +1,10 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260804
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260810
 
 if [ ! -f $KEYBINDING_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Updating hotkeys"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Updating hotkeys"
 
   KEYBINDING_DIR=/usr/share/ohmydebn/install/keybinding
   KEYBINDING_CINNAMON=$KEYBINDING_DIR/keybinding-cinnamon.txt
@@ -32,7 +32,7 @@ if [ ! -f $KEYBINDING_STATE ]; then
   CUSTOM_KEYBINDING_TOTAL=$(cat $KEYBINDING_CUSTOM | wc -l)
   let CUSTOM_KEYBINDING_TOTAL--
   CUSTOM_LIST="gsettings set org.cinnamon.desktop.keybindings custom-list \"["
-  for i in $(seq 0 $CUSTOM_KEYBINDING_TOTAL); do 
+  for i in $(seq 0 $CUSTOM_KEYBINDING_TOTAL); do
     CUSTOM_LIST+="'custom-$i'"
     if [ "$i" != "$CUSTOM_KEYBINDING_TOTAL" ]; then
       CUSTOM_LIST+=", "
@@ -43,11 +43,14 @@ if [ ! -f $KEYBINDING_STATE ]; then
   eval $CUSTOM_LIST
 
   # Update all keybindings and sort the output for display
-  (source $KEYBINDING_CINNAMON; source $KEYBINDING_CUSTOM) | grep -v "Removing" | sort
+  (
+    source $KEYBINDING_CINNAMON
+    source $KEYBINDING_CUSTOM
+  ) | grep -v "Removing" | sort
 
   # Apply keybindings
   if pgrep -x cinnamon >/dev/null; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "tte rain" "Restarting desktop to apply hotkey configuration"
+    /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Restarting desktop to apply hotkey configuration"
     sleep 1s
     setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
     echo "You can see all hotkeys by pressing Super + K"

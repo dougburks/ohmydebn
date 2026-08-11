@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
+  ARCH=$(uname -m)
+  if [ "$ARCH" != "x86_64" ]; then
+    echo
+    echo "Sorry, Google does not provide a Chrome package for your architecture!"
+    exit 1
+  fi
+
+  echo
+  echo "Google Chrome is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+
+  TEMP=$(mktemp)
+  echo "Downloading Google Chrome..."
+  curl -fSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o "$TEMP"
+  sudo dpkg -i "$TEMP"
+  rm -f "$TEMP"
+fi

@@ -5,23 +5,14 @@ set -euo pipefail
 echo "Continuing will remove all optional packages."
 echo
 echo "Press Enter to continue or Ctrl-C to cancel."
-read input
+read -r
 
-for PACKAGE in abiword calligra cliamp distrobox emacs gnome-boxes gnumeric \
-  google-chrome-stable localsend ohmydebn-opencode-cli podman uxplay virt-manager; do
+for PACKAGE in abiword calligra cliamp docker.io distrobox emacs firefox-esr gnome-boxes gnumeric \
+  localsend ohmydebn-opencode-cli podman rclone tcpdump tshark uxplay virt-manager wireshark; do
   if dpkg -s $PACKAGE >/dev/null 2>&1; then
     sudo /usr/bin/apt -y purge $PACKAGE
   fi
 done
-
-# Some packages need special handling on Kali Linux
-if ! grep -s "kali" /etc/os-release >/dev/null 2>&1; then
-  for PACKAGE in docker.io firefox-esr tcpdump tshark wireshark\
-    if dpkg -s $PACKAGE >/dev/null 2>&1; then
-      sudo /usr/bin/apt -y purge $PACKAGE
-    fi
-  done
-fi
 
 if dpkg -s libreoffice >/dev/null 2>&1; then
   sudo /usr/bin/apt -y purge "libreoffice-*"
@@ -30,37 +21,53 @@ fi
 sudo /usr/bin/apt -y autoremove
 
 if dpkg -s antigravity >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove
+  /usr/share/ohmydebn/bin/ohmydebn-antigravity-remove --auto
 fi
 
 if dpkg -s brave-browser >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-brave-browser-remove
+  /usr/share/ohmydebn/bin/ohmydebn-brave-browser-remove --auto
 fi
 
 if dpkg -s brave-origin >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-brave-origin-remove
+  /usr/share/ohmydebn/bin/ohmydebn-brave-origin-remove --auto
+fi
+
+if dpkg -s chatgpt >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-chatgpt-remove --auto
 fi
 
 if dpkg -s claude-code >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-claude-code-remove
+  /usr/share/ohmydebn/bin/ohmydebn-claude-code-remove --auto
 fi
 
 if dpkg -s cloudflare-warp >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-warp-remove
+  /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp-remove --auto
 fi
 
 if dpkg -s code >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-code-remove
+  /usr/share/ohmydebn/bin/ohmydebn-code-remove --auto
+fi
+
+if dpkg -s google-chrome-stable >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable-remove --auto
 fi
 
 if dpkg -s helium-bin >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-helium-remove
+  /usr/share/ohmydebn/bin/ohmydebn-helium-remove --auto
+fi
+
+if dpkg -s libreoffice >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-libreoffice-remove --auto
 fi
 
 if dpkg -s powershell >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-powershell-remove
+  /usr/share/ohmydebn/bin/ohmydebn-powershell-remove --auto
 fi
 
 if dpkg -s simplescreenrecorder >/dev/null 2>&1; then
-  echo | /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder-remove
+  /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder-remove --auto
+fi
+
+if dpkg -s tailscale >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-tailscale-remove --auto
 fi

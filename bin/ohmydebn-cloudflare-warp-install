@@ -10,7 +10,7 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   echo "https://pkg.cloudflareclient.com/"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
   sudo mkdir -p /usr/share/keyrings
 
   curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg |

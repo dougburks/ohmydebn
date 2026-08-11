@@ -1,9 +1,11 @@
 #!/bin/bash
 
+set -euo pipefail
+
 export PATH="/usr/share/ohmydebn/bin:$PATH"
 
 # Set to true when going directly to a submenu, so we can exit directly
-BACK_TO_EXIT=false
+DIRECT_ACCESS=false
 
 back_to() {
   local parent_menu="$1"
@@ -20,22 +22,23 @@ back_to() {
 menu() {
   local prompt="$1"
   local options="$2"
-  local extra="$3"
-  local preselect="$4"
+  local extra="${3:-}"
+  local preselect="${4:-}"
 
   read -r -a args <<<"$extra"
 
   if [[ -n "$preselect" ]]; then
     local index
-    index=$(echo -e "$options" | grep -nxF "$preselect" | cut -d: -f1)
+    index=$(printf '%b\n' "$options" | grep -nxF "$preselect" | cut -d: -f1)
     if [[ -n "$index" ]]; then
       args+=("-a" "$index")
     fi
   fi
 
+  local DPI WIDTH
   DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
   WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 410)
-  echo -e "$options" | /usr/bin/rofi -dpi $DPI -theme-str "window {width: $WIDTH;}" \
+  printf '%b\n' "$options" | /usr/bin/rofi -dpi "$DPI" -theme-str "window {width: $WIDTH;}" \
     -dmenu -i -p "$prompt…" "${args[@]}"
 }
 
@@ -48,29 +51,18 @@ present_terminal() {
 }
 
 install() {
-  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2"
-}
-
-install_from_url() {
-  TEMP=$(mktemp)
-  present_terminal "echo 'Installing $1...'; curl -L \"$2\" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP"
-}
-
-install_chrome() {
-  if dpkg -s google-chrome-stable >/dev/null 2>&1; then
-    present_terminal "echo 'The google-chrome-stable package is already installed.'"
-  else
-    ARCH=$(uname -m)
-    if [ "$ARCH" == "x86_64" ]; then
-      install_from_url "Google Chrome" "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
-    else
-      present_terminal "echo 'Sorry, Google does not provide a Chrome package for your architecture!'"
-    fi
-  fi
+  local label pkg
+  printf -v label '%q' "Installing $1..."
+  printf -v pkg '%q' "$2"
+  present_terminal "echo $label; sudo /usr/bin/apt -y install $pkg"
 }
 
 install_and_launch() {
-  present_terminal "echo 'Installing $1...'; sudo /usr/bin/apt -y install $2 && setsid gtk-launch $3"
+  local label pkg launch
+  printf -v label '%q' "Installing $1..."
+  printf -v pkg '%q' "$2"
+  printf -v launch '%q' "$3"
+  present_terminal "echo $label; sudo /usr/bin/apt -y install $pkg && setsid gtk-launch $launch"
 }
 
 show_learn_menu() {
@@ -120,7 +112,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n↔  VPN") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -134,6 +126,7 @@ show_install_menu() {
   *Virtualization*) show_install_virtualization_menu ;;
   *Containerization*) show_install_containerization_menu ;;
   *Office*) show_install_office_menu ;;
+  *VPN*) show_install_vpn_menu ;;
   *) show_main_menu ;;
   esac
 }
@@ -159,19 +152,28 @@ show_install_cybersecurity_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n󰒒  SSH Server") in
+  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰒒  SSH Server") in
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
+  *rclone*) install "rclone" "rclone" ;;
   *SSH*) install "SSH Server" "openssh-server" ;;
   *) show_install_menu ;;
   esac
 }
 
+show_install_vpn_menu() {
+  case $(menu "Install" "↔  Cloudflare Warp\n↔  Tailscale") in
+  *Cloudflare*) /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp ;;
+  *Tailscale*) /usr/share/ohmydebn/bin/ohmydebn-tailscale ;;
+  *) show_install_menu ;;
+  esac
+}
+
 show_install_media_menu() {
-  case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay Airplay receiver") in
+  case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay AirPlay receiver") in
   *cliamp*) install "cliamp" "cliamp" ;;
-  *UxPlay*) install "UxPlay Airplay Receiver" "uxplay" ;;
+  *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;
   *) show_install_menu ;;
   esac
 }
@@ -199,16 +201,17 @@ show_install_browser_menu() {
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
   *Chromium*) install "Chromium" "chromium" ;;
   *Firefox*) install "Firefox" "firefox-esr" ;;
-  *Google*) install_chrome ;;
+  *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
   *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium ;;
   *) show_main_menu ;;
   esac
 }
 
 show_install_ai_menu() {
-  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n  VSCode (Github Copilot AI)\n  Antigravity (Google Agentic AI)") in
+  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)") in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
+  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_install_menu ;;
@@ -227,7 +230,7 @@ show_install_editor_menu() {
 show_install_style_menu() {
   case $(menu "Install" "󰸌  Theme\n  Background") in
   *Theme*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-theme-install ;;
-  *Background*) nemo ~/.config/ohmydebn/current/theme/backgrounds ;;
+  *Background*) nemo "$HOME/.config/ohmydebn/current/theme/backgrounds" ;;
   *) show_install_menu ;;
   esac
 }
@@ -292,8 +295,8 @@ go_to_menu() {
   esac
 }
 
-if [[ -n "$1" ]]; then
-  BACK_TO_EXIT=true
+if [[ -n "${1:-}" ]]; then
+  DIRECT_ACCESS=true
   go_to_menu "$1"
 else
   show_main_menu

@@ -10,7 +10,7 @@ if ! dpkg -s "cliamp" >/dev/null 2>&1; then
   echo "https://github.com/bjarneo/cliamp"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
 
   # Install packages
   sudo /usr/bin/apt update

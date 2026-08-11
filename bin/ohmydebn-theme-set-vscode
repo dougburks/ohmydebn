@@ -32,9 +32,10 @@ if /usr/share/ohmydebn/bin/ohmydebn-cmd-present "$EDITOR_CMD" && [[ ! -f "$SKIP_
       sed -i --follow-symlinks -E '0,/\{/{s/\{/{\ "workbench.colorTheme": "",/}' "$SETTINGS_PATH"
     fi
 
-    # Update theme
+    # Update theme (escape theme_name so a literal / or & can't break the sed substitution)
+    theme_name_escaped=$(printf '%s' "$theme_name" | sed -e 's/[\/&]/\\&/g')
     sed -i --follow-symlinks -E \
-      "s/(\"workbench.colorTheme\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$theme_name\2/" \
+      "s/(\"workbench.colorTheme\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$theme_name_escaped\2/" \
       "$SETTINGS_PATH"
   else
     # Remove theme from settings.json when the theme doesn't have editor support

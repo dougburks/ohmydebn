@@ -36,7 +36,7 @@ get_current_version() {
   echo "${version#v}"
 }
 
-# Compare two version strings (returns 0 if v1 < v1, 1 if equal, 2 if v1 > v2)
+# Compare two version strings (returns 0 if v1 < v2, 1 if equal, 2 if v1 > v2)
 compare_versions() {
   local v1="$1" v2="$2"
   if [[ "$v1" == "$v2" ]]; then
@@ -45,7 +45,10 @@ compare_versions() {
 
   # Split into parts and compare numerically
   local IFS=.
-  local i v1parts=($v1) v2parts=($v2)
+  local i
+  local -a v1parts v2parts
+  read -ra v1parts <<<"$v1"
+  read -ra v2parts <<<"$v2"
   # Fill empty parts with 0
   for ((i = ${#v1parts[@]}; i < ${#v2parts[@]}; i++)); do
     v1parts[i]=0

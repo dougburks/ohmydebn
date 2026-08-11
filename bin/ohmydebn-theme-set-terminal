@@ -25,8 +25,10 @@ else
   if grep -q '^\[window\]' "$ALACRITTY_CONFIG" 2>/dev/null; then
     sed -i "/^\[window\]/a\\decorations_theme_variant = \"$THEME_VARIANT\"" "$ALACRITTY_CONFIG"
   else
-    echo "" >>"$ALACRITTY_CONFIG"
-    echo "[window]" >>"$ALACRITTY_CONFIG"
-    echo "decorations_theme_variant = \"$THEME_VARIANT\"" >>"$ALACRITTY_CONFIG"
+    {
+      echo ""
+      echo "[window]"
+      echo "decorations_theme_variant = \"$THEME_VARIANT\""
+    } >>"$ALACRITTY_CONFIG"
   fi
 fi

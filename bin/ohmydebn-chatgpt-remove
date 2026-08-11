@@ -2,18 +2,18 @@
 
 set -euo pipefail
 
-if ! dpkg -s "powershell" >/dev/null 2>&1; then
+if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   echo
-  echo "PowerShell is not currently installed."
+  echo "ChatGPT is not currently installed."
 else
   if [ $# -eq 0 ]; then
     echo
-    echo "Continuing will remove PowerShell and its repo."
+    echo "Continuing will remove ChatGPT and its repo."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y purge powershell packages-microsoft-prod
+  sudo /usr/bin/apt -y purge chatgpt
   sudo /usr/bin/apt -y autoremove
 fi

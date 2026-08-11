@@ -10,15 +10,17 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
   echo "https://code.visualstudio.com"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
 
   ARCH=$(uname -m)
   TEMP=$(mktemp)
+  echo "Downloading Visual Studio Code..."
   if [ "$ARCH" == "x86_64" ]; then
-    curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP
+    curl -fSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
   elif [ "$ARCH" == "aarch64" ]; then
-    curl -fsSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64" -o $TEMP && sudo dpkg -i $TEMP && rm -f $TEMP
+    curl -fSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
   else
     echo "x86_64 and aarch64 are the only supported architectures!"
+    exit 1
   fi
 fi

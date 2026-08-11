@@ -4,4 +4,4 @@
 
 /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Please review output above for any additional information"
 /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Press Enter to close this window"
-read input
+read -r

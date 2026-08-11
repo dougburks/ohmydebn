@@ -3,12 +3,12 @@
 echo
 if [ ! -f ~/.local/state/ohmydebn ]; then
   # For first installation, use text effects
-  PROCESSOR=$1
+  read -ra PROCESSOR <<<"$1"
 else
   # For updates, don't use text effects
-  PROCESSOR=cat
+  PROCESSOR=(cat)
 fi
-cat <<EOF | $PROCESSOR
+cat <<EOF | "${PROCESSOR[@]}"
 ####################################################################
 $2
 ####################################################################

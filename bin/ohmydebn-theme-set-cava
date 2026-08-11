@@ -107,17 +107,13 @@ update_cava_theme() {
     
     # Get theme colors
     local background
-    local accent
-    local foreground
     local color6
     local color5
     local color4
     local color1
-    
+
     background=$(get_theme_color "background" "#1e1e2e")
-    accent=$(get_theme_color "accent" "#89b4fa")
-    foreground=$(get_theme_color "foreground" "#cdd6f4")
-    
+
     # Get additional colors for gradient (color6/cyan and color5/magenta for variety)
     color6=$(get_theme_color "color6" "#94e2d5")
     color5=$(get_theme_color "color5" "#f5c2e7")

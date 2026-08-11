@@ -113,8 +113,7 @@ cat $(which ohmydebn-theme-set)
 ```
 ~/.config/cinnamon/
 ├── panels/                 # Panel configurations
-│   ├── panel1/            # Bottom panel settings
-│   └── panel2/            # Top panel settings (if enabled)
+│   └── panel1/            # Top panel settings (OhMyDebn's default, single panel)
 ├── applets/               # Applet configurations
 ├── desklets/              # Desklet configurations
 ├── extensions/            # Extension configurations

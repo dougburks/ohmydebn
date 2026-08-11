@@ -30,4 +30,4 @@ if ! git clone "$REPO_URL" "$THEME_PATH"; then
 fi
 
 # Apply the new theme with ohmydebn-theme-set
-/usr/share/ohmydebn/bin/ohmydebn-theme-set $THEME_NAME
+/usr/share/ohmydebn/bin/ohmydebn-theme-set "$THEME_NAME"

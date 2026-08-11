@@ -8,7 +8,7 @@ PID=$!
 # Sleeping for 0.2s works on some systems but other systems need 0.4s
 /usr/bin/sleep 0.4
 
-WIN_ID=$(/usr/bin/xdotool search --pid "$PID" | tail -n 1)
+WIN_ID=$(/usr/bin/xdotool search --pid "$PID" | tail -n 1) || true
 if [ -n "$WIN_ID" ]; then
   /usr/bin/xdotool windowactivate "$WIN_ID" || true
 fi

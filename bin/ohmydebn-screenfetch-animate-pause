@@ -2,4 +2,4 @@
 
 /usr/share/ohmydebn/bin/ohmydebn-screenfetch-animate
 
-read input
+read -r

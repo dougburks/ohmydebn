@@ -2,4 +2,4 @@
 
 /usr/share/ohmydebn/bin/ohmydebn-screenfetch
 
-read input
+read -r

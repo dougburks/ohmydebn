@@ -6,11 +6,13 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
   echo
   echo "Brave Browser is not currently installed."
 else
-  echo
-  echo "Continuing will remove Brave Browser and its repo."
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  if [ $# -eq 0 ]; then
+    echo
+    echo "Continuing will remove Brave Browser and its repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
   if ! dpkg -s "brave-origin" >/dev/null 2>&1; then
     sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
     sudo rm -f /etc/apt/sources.list.d/brave-browser-release.sources

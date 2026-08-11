@@ -22,7 +22,8 @@ elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
 
   BG=$(grep -E "^\s*(.*\.)?background\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
   FG=$(grep -E "^\s*(.*\.)?foreground\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
-  CURSOR=$(grep -E "^\s*(.*\.)?cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|' || echo "$FG")
+  CURSOR=$(grep -E "^\s*(.*\.)?cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
+  CURSOR=${CURSOR:-$FG}
 
   BLUE=$(grep -E "^\s*(.*\.)?(normal\.)?blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
   ACCENT="${BLUE:-$FG}"

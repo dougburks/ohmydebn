@@ -10,8 +10,8 @@ if [ -f /etc/os-release ]; then
   debian)
     [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
-  kali)
-    [ "$VERSION_ID" = "2026.3" ] && DISTRO_OK=true
+  linuxmint)
+    [ "$DEBIAN_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
   esac
 fi
@@ -21,7 +21,7 @@ if [ "$DISTRO_OK" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7 and Kali Linux 2026.3.
+OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -90,8 +90,7 @@ EOF
 
   # Check to see if we have an APT configuration
   if [ -f /etc/apt/sources.list.d/debian.sources ] ||
-    [ -f /etc/apt/sources.list.d/proxmox.sources ] ||
-    [ -f /etc/apt/sources.list.d/kali.sources ]; then
+    [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that

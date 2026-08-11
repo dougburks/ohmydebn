@@ -87,7 +87,7 @@ fi
 mkdir -p $ROFI_DIR
 ROFI_CONFIG=$ROFI_DIR/config.rasi
 if [ -f $ROFI_CONFIG ]; then
-  mv $ROFI_CONFIG $ROFI_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+  mv "$ROFI_CONFIG" "$ROFI_CONFIG-backup-$(date +%Y%m%d-%H%M%S)"
 fi
 cat <<EOF >$ROFI_CONFIG
 @theme "$ROFI_THEME"

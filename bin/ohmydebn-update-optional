@@ -1,5 +1,0 @@
-#!/bin/bash
-
-set -euo pipefail
-
-/usr/share/ohmydebn/bin/ohmydebn-opencode-update

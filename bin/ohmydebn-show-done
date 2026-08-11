@@ -2,4 +2,4 @@
 
 echo
 echo "Press Enter to continue."
-read input
+read -r

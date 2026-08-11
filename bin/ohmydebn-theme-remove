@@ -17,7 +17,6 @@ else
 fi
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
-CURRENT_DIR="$HOME/.config/ohmydebn/current"
 
 # Ensure a theme was set
 if [ -z "$THEME_NAME" ]; then

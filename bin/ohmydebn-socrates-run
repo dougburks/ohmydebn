@@ -3,7 +3,7 @@
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:35f2da77f371a09c28b4dfd23efb5fbcff54a3ba555b35ec9170b7a5aabec9fb"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:5513a90b11df7dfed7579a46fa206f5f94eb238ecaf91157b2e50b26e6838837"
 
 if [[ -n "$1" ]]; then
   IMAGE="$IMAGE_REPO:$1"
@@ -36,4 +36,4 @@ echo
 /usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup
 echo
 echo "Press Enter to close this window."
-read input
+read -r

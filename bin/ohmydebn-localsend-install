@@ -12,7 +12,7 @@ if ! dpkg -s "localsend" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
 
-  read input
+  read -r
 fi
 
 # Install package and its dependencies

@@ -7,5 +7,5 @@ if ! dpkg -s "brave-origin" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "brave-origin" >/dev/null 2>&1; then
-  /usr/bin/brave-origin
+  /usr/bin/brave-origin --skip-origin-startup-dialog
 fi

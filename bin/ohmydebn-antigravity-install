@@ -10,7 +10,7 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
   echo "https://antigravity.google"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
   sudo mkdir -p /etc/apt/keyrings
 
   curl -fsSL https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg |

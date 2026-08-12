@@ -11,11 +11,11 @@ this may take a few minutes.
 Press Enter to continue or Ctrl-C to cancel.
 EOF
 
-read input
+read -r
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 
-curl -s $URL | grep github.com | cut -d\" -f2 | while read REPO_URL; do
+curl -s $URL | grep github.com | cut -d\" -f2 | while read -r REPO_URL; do
   THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//')
   THEME_PATH="$THEMES_DIR/$THEME_NAME"
 

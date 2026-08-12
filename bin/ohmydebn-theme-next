@@ -4,7 +4,7 @@ THEMES_DIR="$HOME/.config/ohmydebn/themes/"
 OHMYDEBN_THEMES_DIR="/usr/share/ohmydebn-themes/"
 CURRENT_THEME_LINK="$HOME/.config/ohmydebn/current/theme"
 
-THEMES=($( { find "$THEMES_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null; find "$OHMYDEBN_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; } | sort))
+mapfile -t THEMES < <({ find "$THEMES_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null; find "$OHMYDEBN_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; } | sort)
 TOTAL=${#THEMES[@]}
 
 if [[ "$TOTAL" -eq 0 ]]; then
@@ -23,7 +23,7 @@ fi
 # Find current theme index
 INDEX=0
 for i in "${!THEMES[@]}"; do
-  THEMES[$i]=$(realpath "${THEMES[$i]}")
+  THEMES[i]=$(realpath "${THEMES[$i]}")
 
   if [[ "${THEMES[$i]}" == "$CURRENT_THEME" ]]; then
     INDEX=$i
@@ -36,5 +36,5 @@ NEXT_INDEX=$(((INDEX + 1) % TOTAL))
 NEW_THEME=${THEMES[$NEXT_INDEX]}
 NEW_THEME_NAME=$(basename "$NEW_THEME")
 
-/usr/share/ohmydebn/bin/ohmydebn-theme-set $NEW_THEME_NAME
+/usr/share/ohmydebn/bin/ohmydebn-theme-set "$NEW_THEME_NAME"
 notify-send "Theme changed to $NEW_THEME_NAME" -t 2000

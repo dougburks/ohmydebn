@@ -34,7 +34,7 @@ if [[ -f $COLORS_FILE ]]; then
     filename=$(basename "$tpl" .tpl)
     output_path="$NEXT_THEME_DIR/$filename"
 
-    # Don't overwrite configs already exists in the output directory (copied from theme specific folder)
+    # Don't overwrite configs that already exist in the output directory (copied from theme-specific folder)
     if [[ ! -f $output_path ]]; then
       sed -f "$sed_script" "$tpl" >"$output_path"
     fi

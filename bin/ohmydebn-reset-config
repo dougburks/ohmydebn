@@ -6,14 +6,14 @@ echo "WARNING!"
 echo "Continuing will back up config files and reset them to OhMyDebn defaults."
 echo
 echo "Press Enter to continue or Ctrl-c to cancel."
-read input
+read -r
 
 # Backup existing config files
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 for i in ~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim ~/.config/rofi ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc; do
   if [ -e $i ]; then
     echo "Renaming $i to $i-backup-$TIMESTAMP"
-    mv $i $i-backup-$TIMESTAMP
+    mv "$i" "$i-backup-$TIMESTAMP"
   fi
 done
 

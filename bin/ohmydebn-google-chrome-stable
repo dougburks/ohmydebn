@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# If not installed, then offer to install it
+if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable-install
+fi
+
+# If installed, run it
+if dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
+  /usr/bin/google-chrome-stable
+fi

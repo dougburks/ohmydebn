@@ -12,8 +12,7 @@ if [ "$#" -eq 0 ]; then
   done < <(find "$DESKTOP_DIR" -name '*.desktop' -print0)
 
   if ((${#WEB_APPS[@]})); then
-    IFS=$'\n' SORTED_WEB_APPS=($(sort <<<"${WEB_APPS[*]}"))
-    unset IFS
+    mapfile -t SORTED_WEB_APPS < <(sort <<<"${WEB_APPS[*]}")
     APP_NAMES_STRING=$(gum choose --no-limit --header "Select web app to remove..." --selected-prefix="✗ " "${SORTED_WEB_APPS[@]}")
     # Convert newline-separated string to array
     APP_NAMES=()
@@ -35,6 +34,10 @@ if [[ ${#APP_NAMES[@]} -eq 0 ]]; then
 fi
 
 for APP_NAME in "${APP_NAMES[@]}"; do
+  if [[ "$APP_NAME" == */* ]]; then
+    echo "Skipping '$APP_NAME': app name must not contain '/'."
+    continue
+  fi
   rm -f "$DESKTOP_DIR/$APP_NAME.desktop"
   rm -f "$ICON_DIR/$APP_NAME.png"
   echo "Removed $APP_NAME"

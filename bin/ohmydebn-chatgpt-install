@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
+  echo
+  echo "ChatGPT is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+
+  ARCH=$(uname -m)
+  TEMP=$(mktemp)
+  echo "Downloading ChatGPT (this is a large download and may take a few minutes)..."
+  if [ "$ARCH" == "x86_64" ]; then
+    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
+  elif [ "$ARCH" == "aarch64" ]; then
+    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_arm64.deb" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
+  else
+    echo "x86_64 and aarch64 are the only supported architectures!"
+    exit 1
+  fi
+fi

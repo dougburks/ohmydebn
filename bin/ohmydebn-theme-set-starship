@@ -12,7 +12,7 @@ if [ ! -f $STARSHIP_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
   STARSHIP_CONFIG=~/.config/starship.toml
   if [ -f $STARSHIP_CONFIG ]; then
-    mv $STARSHIP_CONFIG $STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+    mv "$STARSHIP_CONFIG" "$STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)"
   fi
   cp /usr/share/ohmydebn/config/starship.toml $STARSHIP_CONFIG
   mkdir -p ~/.local/state/ohmydebn-config

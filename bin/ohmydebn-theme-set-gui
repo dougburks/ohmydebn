@@ -3,7 +3,7 @@
 OHMYDEBN_BIN=/usr/share/ohmydebn/bin/
 CURRENT_THEME=$($OHMYDEBN_BIN/ohmydebn-theme-current)
 INDEX=$($OHMYDEBN_BIN/ohmydebn-theme-list | grep -nxF "$CURRENT_THEME" | cut -d: -f1)
-let INDEX--
+(( INDEX-- ))
 DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
 WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 350)
 SELECTION=$( (
@@ -13,7 +13,7 @@ SELECTION=$( (
   echo "Install Theme from URL"
   echo "Install All Omarchy Extra Themes"
   echo "Remove Theme"
-) | /usr/bin/rofi -dpi $DPI -theme-str "window {width: $WIDTH;}" \
+) | /usr/bin/rofi -dpi "$DPI" -theme-str "window {width: $WIDTH;}" \
   -i -p "Select a theme" -dmenu -selected-row $INDEX)
 
 if [ "$SELECTION" == "Select an Installed Theme" ]; then
@@ -23,9 +23,9 @@ elif [ "$SELECTION" == "Next Background in Current Theme" ]; then
 elif [ "$SELECTION" == "Build New Theme with Aether" ]; then
   /usr/share/aether/aether
 elif [ "$SELECTION" == "Install Theme from URL" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install\"; $OHMYDEBN_BIN/ohmydebn-show-done"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; $OHMYDEBN_BIN/ohmydebn-theme-install; $OHMYDEBN_BIN/ohmydebn-show-done"
 elif [ "$SELECTION" == "Install All Omarchy Extra Themes" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-install-all\"; $OHMYDEBN_BIN/ohmydebn-show-done"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; $OHMYDEBN_BIN/ohmydebn-theme-install-all; $OHMYDEBN_BIN/ohmydebn-show-done"
 elif [ "$SELECTION" == "Remove Theme" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; eval \"$OHMYDEBN_BIN/ohmydebn-theme-remove\"; $OHMYDEBN_BIN/ohmydebn-show-done"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$OHMYDEBN_BIN/ohmydebn-show-logo; $OHMYDEBN_BIN/ohmydebn-theme-remove; $OHMYDEBN_BIN/ohmydebn-show-done"
 fi

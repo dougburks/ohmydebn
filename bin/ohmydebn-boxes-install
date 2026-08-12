@@ -16,7 +16,7 @@ if ! dpkg -s "gnome-boxes" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
 
-  read input
+  read -r
 
   # Install gnome-boxes packages
   sudo /usr/bin/apt update

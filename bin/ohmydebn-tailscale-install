@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "tailscale" >/dev/null 2>&1; then
+  echo
+  echo "Tailscale is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://pkgs.tailscale.com/"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+  sudo mkdir -p --mode=0755 /usr/share/keyrings
+
+  curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg |
+    sudo /usr/bin/tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+
+  curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list |
+    sudo /usr/bin/tee /etc/apt/sources.list.d/tailscale.list
+
+  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install tailscale
+  sudo /usr/bin/tailscale set --operator="$USER"
+fi

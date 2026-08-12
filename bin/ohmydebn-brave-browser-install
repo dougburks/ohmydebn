@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
+  echo
+  echo "Brave Browser is not currently installed."
+  echo
+  echo "Continuing will install it from:"
+  echo "https://brave-browser-apt-release.s3.brave.com"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+  sudo mkdir -p /usr/share/keyrings
+  sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+  sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install brave-browser
+  mkdir -p ~/.config/BraveSoftware
+  cp -av /usr/share/ohmydebn/config/BraveSoftware/Brave-Browser ~/.config/BraveSoftware/
+fi

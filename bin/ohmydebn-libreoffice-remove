@@ -6,11 +6,13 @@ if ! dpkg -s "libreoffice-common" >/dev/null 2>&1; then
   echo
   echo "LibreOffice is not currently installed."
 else
-  echo
-  echo "Continuing will remove LibreOffice."
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  if [ $# -eq 0 ]; then
+    echo
+    echo "Continuing will remove LibreOffice."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
   sudo /usr/bin/apt -y purge "libreoffice-*"
   sudo /usr/bin/apt -y autoremove
 fi

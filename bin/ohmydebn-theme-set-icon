@@ -44,7 +44,7 @@ matte-black | retropc | ristretto)
   ;;
 *)
   # For any other theme, check to see if it specifies an icon theme
-  # If so, then use the that icon theme to select a corresponding mint icon theme
+  # If so, then use that icon theme to select a corresponding mint icon theme
   if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
     ORIG_ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ORIG_ICON_THEME in

@@ -3,7 +3,20 @@
 set -e
 
 # Check what Linux distro we're running on
-if ! grep -q "CODENAME=trixie" /etc/os-release; then
+DISTRO_OK=false
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  case "$ID" in
+  debian)
+    [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
+    ;;
+  linuxmint)
+    [ "$DEBIAN_CODENAME" = "trixie" ] && DISTRO_OK=true
+    ;;
+  esac
+fi
+
+if [ "$DISTRO_OK" = false ]; then
   clear
   cat <<EOF
 WARNING!
@@ -76,7 +89,8 @@ EOF
   sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
   # Check to see if we have an APT configuration
-  if [ -f /etc/apt/sources.list.d/debian.sources ] || [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
+  if [ -f /etc/apt/sources.list.d/debian.sources ] ||
+    [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that

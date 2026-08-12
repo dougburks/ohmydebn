@@ -15,15 +15,15 @@ if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
   echo "Continuing will install it from the standard Debian repos."
   echo
   echo "Press Enter to install it or Ctrl-C to cancel."
-  read input
+  read -r
 
   # Install virtualization packages
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
 
   # Add user account to the libvirt and kvm groups
-  sudo adduser $USER libvirt
-  sudo adduser $USER kvm
+  sudo adduser "$USER" libvirt
+  sudo adduser "$USER" kvm
 
   # Restart cinnamon desktop to make user account changes take effect
   setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &

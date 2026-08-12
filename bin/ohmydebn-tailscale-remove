@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "tailscale" >/dev/null 2>&1; then
+  echo
+  echo "Tailscale is not currently installed."
+else
+  if [ $# -eq 0 ]; then
+    echo
+    echo "Continuing will remove Tailscale and its repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo rm -f /usr/share/keyrings/tailscale-archive-keyring.gpg
+  sudo rm -f /etc/apt/sources.list.d/tailscale.list
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge tailscale
+  sudo /usr/bin/apt -y autoremove
+fi

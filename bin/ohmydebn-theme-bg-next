@@ -64,5 +64,5 @@ else
 
   # cinnamon doesn't automatically update when the symlink changes
   # so we have to force cinnamon to use the symlink destination
-  gsettings set org.cinnamon.desktop.background picture-uri "file://$(readlink -f $HOME/.config/ohmydebn/current/background)"
+  gsettings set org.cinnamon.desktop.background picture-uri "file://$(readlink -f "$HOME"/.config/ohmydebn/current/background)"
 fi

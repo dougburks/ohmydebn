@@ -10,7 +10,7 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   echo "https://pkg.helium.computer"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  read -r
   sudo mkdir -p /usr/share/keyrings
   curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg
   echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list

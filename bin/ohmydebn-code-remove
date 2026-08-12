@@ -6,11 +6,13 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
   echo
   echo "Visual Studio Code is not currently installed."
 else
-  echo
-  echo "Continuing will remove Visual Studio Code and its repo."
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read input
+  if [ $# -eq 0 ]; then
+    echo
+    echo "Continuing will remove Visual Studio Code and its repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
   sudo rm -f /usr/share/keyrings/microsoft.gpg
   sudo rm -f /etc/apt/sources.list.d/vscode.sources
   sudo /usr/bin/apt update

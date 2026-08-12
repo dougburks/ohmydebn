@@ -66,7 +66,7 @@ for entry in "${REMOVE[@]}"; do
     if [[ "$cstatus" == *"Up"* ]] || [[ "$cstatus" == *"running"* ]]; then
       RUNNING_CONTAINERS+=("$cname|$cid|$cstatus|$img_id")
       # Track which images have running containers
-      if [[ ! " ${RUNNING_IMAGE_IDS[*]} " =~ " $img_id " ]]; then
+      if [[ ! " ${RUNNING_IMAGE_IDS[*]} " == *" $img_id "* ]]; then
         RUNNING_IMAGE_IDS+=("$img_id")
       fi
     else
@@ -132,15 +132,15 @@ if [[ ${#STOPPED_CONTAINERS[@]} -gt 0 ]]; then
   for c in "${STOPPED_CONTAINERS[@]}"; do
     cid=$(awk -F'|' '{print $2}' <<< "$c")
     cname=$(awk -F'|' '{print $1}' <<< "$c")
-    output=$(podman rm "$cid" 2>&1) && {
+    if output=$(podman rm "$cid" 2>&1); then
       echo "  removed container $cname ($cid)"
-    } || {
+    else
       if [[ "$output" == *"no such container"* ]] || [[ "$output" == *"container not known"* ]]; then
         echo "  already removed container $cname ($cid)"
       else
         echo "  failed to remove container $cname ($cid): $output"
       fi
-    }
+    fi
   done
 fi
 
@@ -153,14 +153,14 @@ if [[ ${#REMOVE[@]} -gt 0 ]]; then
     img_name=$(awk -F'|' '{print $3}' <<< "$entry")
 
     # Check if this image has running containers
-    if [[ " ${RUNNING_IMAGE_IDS[*]} " =~ " $img_id " ]]; then
+    if [[ " ${RUNNING_IMAGE_IDS[*]} " == *" $img_id "* ]]; then
       echo "  skipped $img_name ($img_id) - still in use by running container(s)"
       continue
     fi
 
-    output=$(podman rmi "$img_id" 2>&1) && {
+    if output=$(podman rmi "$img_id" 2>&1); then
       echo "  removed $img_name ($img_id)"
-    } || {
+    else
       if [[ "$output" == *"image not known"* ]] || [[ "$output" == *"no image"* ]]; then
         echo "  already removed $img_name ($img_id)"
       elif [[ "$output" == *"image is in use by a container"* ]]; then
@@ -180,7 +180,7 @@ if [[ ${#REMOVE[@]} -gt 0 ]]; then
       else
         echo "  failed to remove $img_name ($img_id): $output"
       fi
-    }
+    fi
   done
 fi
 

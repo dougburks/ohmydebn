@@ -12,7 +12,7 @@ if ! dpkg -s "touchegg" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
 
-  read input
+  read -r
 fi
 
 # Install touchegg and dependency

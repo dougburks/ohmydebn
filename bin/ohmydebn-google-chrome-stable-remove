@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
+  echo
+  echo "Google Chrome is not currently installed."
+else
+  if [ $# -eq 0 ]; then
+    echo
+    echo "Continuing will remove Google Chrome."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+  sudo rm -f /usr/share/keyrings/google-chrome.gpg
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge google-chrome-stable
+  sudo /usr/bin/apt -y autoremove
+fi

@@ -7,6 +7,6 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "claude-code" >/dev/null 2>&1; then
-  mkdir -p ~/claude-sessions && cd $(mktemp -d ~/claude-sessions/session-XXXXXX)
+  mkdir -p ~/claude-sessions && cd "$(mktemp -d ~/claude-sessions/session-XXXXXX)"
   /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/bin/claude
 fi

@@ -14,11 +14,11 @@ This current window will automatically minimize.
 Press Enter to continue or Ctrl-C to cancel.
 EOF
 
-read input
+read -r
 
 /usr/bin/xdotool getactivewindow windowminimize
 
-cd /usr/share/ohmydebn-themes/
+cd /usr/share/ohmydebn-themes/ || exit
 for i in *; do
   /usr/share/ohmydebn/bin/ohmydebn-theme-set "$i"
   sleep 3s

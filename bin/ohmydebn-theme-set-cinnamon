@@ -83,7 +83,6 @@ process_thumbnails() {
   local IM_ORIG_ORANGE="${ORIG_ORANGE#\#}"
   local IM_ORIG_LIGHT="${ORIG_LIGHT#\#}"
   local IM_NEW_BG="${BACKGROUND#\#}"
-  local IM_NEW_FG="${FOREGROUND#\#}"
   local IM_NEW_ACCENT="${ACCENT#\#}"
 
   # Process each thumbnail.png file
@@ -145,6 +144,11 @@ adjust_color() {
   printf "#%02x%02x%02x" "$r" "$g" "$b"
 }
 
+# Escape a string for safe use as the replacement side of `sed s/.../.../`
+sed_escape_replacement() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
 # Generate color variations based on theme mode
 if [[ "$IS_LIGHT_MODE" == "true" ]]; then
   # Light theme variations
@@ -153,14 +157,12 @@ if [[ "$IS_LIGHT_MODE" == "true" ]]; then
   BG_SECONDARY=$(adjust_color "$BACKGROUND" -8)
 
   # For light themes, we need dark text
-  FG_RGBA="rgba(29, 32, 33, 0.87)"
   FG_RGBA_70="rgba(29, 32, 33, 0.6)"
   FG_RGBA_50="rgba(29, 32, 33, 0.38)"
   FG_RGBA_32="rgba(29, 32, 33, 0.3)"
   FG_RGBA_04="rgba(29, 32, 33, 0.04)"
   FG_RGBA_08="rgba(29, 32, 33, 0.08)"
   FG_RGBA_12="rgba(29, 32, 33, 0.12)"
-  FG_HEX="#0d0907"
 
   # Original template colors for light theme
   ORIG_BG="#fbf1c7"
@@ -195,14 +197,12 @@ else
   FG_G=$((16#${FG_HEX_PURE:2:2}))
   FG_B=$((16#${FG_HEX_PURE:4:2}))
 
-  FG_RGBA="$FOREGROUND"
   FG_RGBA_70="rgba($FG_R, $FG_G, $FG_B, 0.7)"
   FG_RGBA_50="rgba($FG_R, $FG_G, $FG_B, 0.5)"
   FG_RGBA_32="rgba($FG_R, $FG_G, $FG_B, 0.32)"
   FG_RGBA_04="rgba($FG_R, $FG_G, $FG_B, 0.04)"
   FG_RGBA_08="rgba($FG_R, $FG_G, $FG_B, 0.08)"
   FG_RGBA_12="rgba($FG_R, $FG_G, $FG_B, 0.12)"
-  FG_HEX="$FOREGROUND"
 
   # Original template colors for dark theme
   ORIG_BG="#0f0e0e"
@@ -228,49 +228,68 @@ else
   NEW_PANEL_BG="rgba($BG_R, $BG_G, $BG_B, 0.75)"
 fi
 
+# Pre-escape values used as sed replacement text once (not per-file), since
+# they may originate from a theme's colors.toml and must not be interpreted
+# as sed replacement metacharacters (&, \, /).
+ESC_BACKGROUND=$(sed_escape_replacement "$BACKGROUND")
+ESC_FOREGROUND=$(sed_escape_replacement "$FOREGROUND")
+ESC_ACCENT=$(sed_escape_replacement "$ACCENT")
+ESC_BG_LIGHTER=$(sed_escape_replacement "$BG_LIGHTER")
+ESC_BG_SECONDARY=$(sed_escape_replacement "$BG_SECONDARY")
+ESC_FG_RGBA_70=$(sed_escape_replacement "$FG_RGBA_70")
+ESC_FG_RGBA_50=$(sed_escape_replacement "$FG_RGBA_50")
+ESC_FG_RGBA_32=$(sed_escape_replacement "$FG_RGBA_32")
+ESC_FG_RGBA_04=$(sed_escape_replacement "$FG_RGBA_04")
+ESC_FG_RGBA_08=$(sed_escape_replacement "$FG_RGBA_08")
+ESC_FG_RGBA_12=$(sed_escape_replacement "$FG_RGBA_12")
+ESC_NEW_PANEL_BG=$(sed_escape_replacement "$NEW_PANEL_BG")
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+  ESC_BG_DARKER=$(sed_escape_replacement "$BG_DARKER")
+fi
+
 # Function to replace colors in a file
 replace_colors() {
   local file="$1"
 
   if [[ "$IS_LIGHT_MODE" == "true" ]]; then
     # Light theme replacements
-    sed -i "s/$ORIG_BG/$BACKGROUND/g" "$file"
-    sed -i "s/$ORIG_BG_LIGHTER/$BG_LIGHTER/g" "$file"
-    sed -i "s/$ORIG_BG_LIGHTER2/$BG_DARKER/g" "$file"
-    sed -i "s/$ORIG_FG/$FOREGROUND/g" "$file"
-    sed -i "s/$ORIG_ACCENT/$ACCENT/g" "$file"
+    sed -i "s/$ORIG_BG/$ESC_BACKGROUND/g" "$file"
+    sed -i "s/$ORIG_BG_LIGHTER/$ESC_BG_LIGHTER/g" "$file"
+    sed -i "s/$ORIG_BG_LIGHTER2/$ESC_BG_DARKER/g" "$file"
+    sed -i "s/$ORIG_FG/$ESC_FOREGROUND/g" "$file"
+    sed -i "s/$ORIG_ACCENT/$ESC_ACCENT/g" "$file"
 
     # Replace rgba variants
-    sed -i "s/$ORIG_FG_70/$FG_RGBA_70/g" "$file"
-    sed -i "s/$ORIG_FG_50/$FG_RGBA_50/g" "$file"
-    sed -i "s/$ORIG_FG_32/$FG_RGBA_32/g" "$file"
-    sed -i "s/$ORIG_FG_04/$FG_RGBA_04/g" "$file"
-    sed -i "s/$ORIG_FG_08/$FG_RGBA_08/g" "$file"
-    sed -i "s/$ORIG_FG_12/$FG_RGBA_12/g" "$file"
+    sed -i "s/$ORIG_FG_70/$ESC_FG_RGBA_70/g" "$file"
+    sed -i "s/$ORIG_FG_50/$ESC_FG_RGBA_50/g" "$file"
+    sed -i "s/$ORIG_FG_32/$ESC_FG_RGBA_32/g" "$file"
+    sed -i "s/$ORIG_FG_04/$ESC_FG_RGBA_04/g" "$file"
+    sed -i "s/$ORIG_FG_08/$ESC_FG_RGBA_08/g" "$file"
+    sed -i "s/$ORIG_FG_12/$ESC_FG_RGBA_12/g" "$file"
 
     # Replace panel background
-    sed -i "s/$ORIG_PANEL_BG/$NEW_PANEL_BG/g" "$file"
+    sed -i "s/$ORIG_PANEL_BG/$ESC_NEW_PANEL_BG/g" "$file"
   else
     # Dark theme replacements
-    sed -i "s/$ORIG_BG/$BACKGROUND/g" "$file"
-    sed -i "s/$ORIG_FG/$FOREGROUND/g" "$file"
-    sed -i "s/$ORIG_ACCENT/$ACCENT/g" "$file"
+    sed -i "s/$ORIG_BG/$ESC_BACKGROUND/g" "$file"
+    sed -i "s/$ORIG_FG/$ESC_FOREGROUND/g" "$file"
+    sed -i "s/$ORIG_ACCENT/$ESC_ACCENT/g" "$file"
 
     # Replace rgba variants
-    sed -i "s/$ORIG_FG_70/$FG_RGBA_70/g" "$file"
-    sed -i "s/$ORIG_FG_50/$FG_RGBA_50/g" "$file"
-    sed -i "s/$ORIG_FG_32/$FG_RGBA_32/g" "$file"
-    sed -i "s/$ORIG_FG_04/$FG_RGBA_04/g" "$file"
-    sed -i "s/$ORIG_FG_08/$FG_RGBA_08/g" "$file"
-    sed -i "s/$ORIG_FG_12/$FG_RGBA_12/g" "$file"
+    sed -i "s/$ORIG_FG_70/$ESC_FG_RGBA_70/g" "$file"
+    sed -i "s/$ORIG_FG_50/$ESC_FG_RGBA_50/g" "$file"
+    sed -i "s/$ORIG_FG_32/$ESC_FG_RGBA_32/g" "$file"
+    sed -i "s/$ORIG_FG_04/$ESC_FG_RGBA_04/g" "$file"
+    sed -i "s/$ORIG_FG_08/$ESC_FG_RGBA_08/g" "$file"
+    sed -i "s/$ORIG_FG_12/$ESC_FG_RGBA_12/g" "$file"
 
     # Replace secondary background colors with variations of main background
-    sed -i "s/$ORIG_VIEW_BG/$BG_LIGHTER/g" "$file"
-    sed -i "s/$ORIG_SECONDARY_BG/$BG_SECONDARY/g" "$file"
-    sed -i "s/$ORIG_SECONDARY_BG2/$BACKGROUND/g" "$file"
+    sed -i "s/$ORIG_VIEW_BG/$ESC_BG_LIGHTER/g" "$file"
+    sed -i "s/$ORIG_SECONDARY_BG/$ESC_BG_SECONDARY/g" "$file"
+    sed -i "s/$ORIG_SECONDARY_BG2/$ESC_BACKGROUND/g" "$file"
 
     # Replace panel background
-    sed -i "s/$ORIG_PANEL_BG/$NEW_PANEL_BG/g" "$file"
+    sed -i "s/$ORIG_PANEL_BG/$ESC_NEW_PANEL_BG/g" "$file"
   fi
 }
 

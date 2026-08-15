@@ -1,9 +1,20 @@
 #!/bin/bash
 
+# Tolerate the old 2-arg calling convention (processor, text) as well as
+# the current 1-arg form (text): an apt upgrade can replace this file
+# mid-update while an old, not-yet-upgraded caller script is still running,
+# so a straight $1-only read would print the old processor argument ("cat")
+# instead of the real message if that old/new mismatch happens.
+if [[ $# -ge 2 ]]; then
+  TEXT="$2"
+else
+  TEXT="$1"
+fi
+
 echo
 cat <<EOF
 ####################################################################
-$1
+$TEXT
 ####################################################################
 EOF
 echo

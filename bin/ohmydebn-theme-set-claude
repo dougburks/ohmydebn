@@ -1,0 +1,169 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-claude: Generate a Claude Code custom theme from colors.toml and activate it
+# Usage: ohmydebn-theme-set-claude <theme-name> <colors-source> <is-light-mode>
+#
+
+set -e
+
+if [[ $# -lt 3 ]]; then
+  echo "Usage: ohmydebn-theme-set-claude <theme-name> <colors-source> <is-light-mode>" >&2
+  echo "  colors-source: path to a normalized colors.toml (background/foreground/accent/color0-15)" >&2
+  echo "  is-light-mode: 'true' or 'false'" >&2
+  exit 1
+fi
+
+THEME_NAME="$1"
+COLORS_SOURCE="$2"
+IS_LIGHT_MODE="$3"
+SKIP_FLAG="$HOME/.local/state/ohmydebn/toggles/skip-claude-theme-changes"
+
+if [[ -f "$SKIP_FLAG" ]]; then
+  exit 0
+fi
+
+# Nothing to theme without color information
+if [[ -z "$COLORS_SOURCE" || ! -f "$COLORS_SOURCE" ]]; then
+  exit 0
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ohmydebn-theme-set-claude: jq is required, skipping Claude Code theme" >&2
+  exit 0
+fi
+
+CLAUDE_THEMES_DIR="$HOME/.claude/themes"
+CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+SLUG="ohmydebn-${THEME_NAME}"
+THEME_FILE="$CLAUDE_THEMES_DIR/${SLUG}.json"
+
+parse_color() {
+  grep -E "^\s*$1\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
+}
+
+BACKGROUND=$(parse_color background)
+FOREGROUND=$(parse_color foreground)
+ACCENT=$(parse_color accent)
+SELECTION_BACKGROUND=$(parse_color selection_background)
+SELECTION_BACKGROUND=${SELECTION_BACKGROUND:-$ACCENT}
+
+if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
+  echo "ohmydebn-theme-set-claude: missing background/foreground/accent in $COLORS_SOURCE, skipping" >&2
+  exit 0
+fi
+
+for i in $(seq 0 15); do
+  val=$(parse_color "color$i")
+  declare "COLOR$i=${val:-$FOREGROUND}"
+done
+
+# Mix two hex colors: pct is the weight (0-100) given to color A, remainder to color B
+mix_hex() {
+  local a="${1#\#}" b="${2#\#}" pct="$3"
+  local ar=$((16#${a:0:2})) ag=$((16#${a:2:2})) ab=$((16#${a:4:2}))
+  local br=$((16#${b:0:2})) bg=$((16#${b:2:2})) bb=$((16#${b:4:2}))
+  local r=$((((ar * pct) + (br * (100 - pct))) / 100))
+  local g=$((((ag * pct) + (bg * (100 - pct))) / 100))
+  local b_=$((((ab * pct) + (bb * (100 - pct))) / 100))
+  printf "#%02x%02x%02x" "$r" "$g" "$b_"
+}
+
+DIFF_ADDED=$(mix_hex "$COLOR2" "$BACKGROUND" 25)
+DIFF_REMOVED=$(mix_hex "$COLOR1" "$BACKGROUND" 25)
+DIFF_ADDED_DIMMED=$(mix_hex "$COLOR2" "$BACKGROUND" 12)
+DIFF_REMOVED_DIMMED=$(mix_hex "$COLOR1" "$BACKGROUND" 12)
+USER_MESSAGE_BG=$(mix_hex "$ACCENT" "$BACKGROUND" 15)
+USER_MESSAGE_BG_HOVER=$(mix_hex "$ACCENT" "$BACKGROUND" 25)
+BASH_MESSAGE_BG=$(mix_hex "$COLOR3" "$BACKGROUND" 15)
+MEMORY_BG=$(mix_hex "$COLOR5" "$BACKGROUND" 15)
+
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+  BASE="light"
+else
+  BASE="dark"
+fi
+
+mkdir -p "$CLAUDE_THEMES_DIR"
+
+jq -n \
+  --arg name "OhMyDebn ($THEME_NAME)" \
+  --arg base "$BASE" \
+  --arg claude "$ACCENT" \
+  --arg text "$FOREGROUND" \
+  --arg inactive "$COLOR8" \
+  --arg subtle "$COLOR8" \
+  --arg suggestion "$ACCENT" \
+  --arg permission "$ACCENT" \
+  --arg remember "$ACCENT" \
+  --arg success "$COLOR2" \
+  --arg error "$COLOR1" \
+  --arg warning "$COLOR3" \
+  --arg merged "$COLOR5" \
+  --arg promptBorder "$COLOR8" \
+  --arg planMode "$ACCENT" \
+  --arg autoAccept "$COLOR2" \
+  --arg bashBorder "$COLOR3" \
+  --arg ide "$ACCENT" \
+  --arg fastMode "$ACCENT" \
+  --arg diffAdded "$DIFF_ADDED" \
+  --arg diffRemoved "$DIFF_REMOVED" \
+  --arg diffAddedDimmed "$DIFF_ADDED_DIMMED" \
+  --arg diffRemovedDimmed "$DIFF_REMOVED_DIMMED" \
+  --arg diffAddedWord "$COLOR2" \
+  --arg diffRemovedWord "$COLOR1" \
+  --arg userMessageBackground "$USER_MESSAGE_BG" \
+  --arg userMessageBackgroundHover "$USER_MESSAGE_BG_HOVER" \
+  --arg bashMessageBackgroundColor "$BASH_MESSAGE_BG" \
+  --arg memoryBackgroundColor "$MEMORY_BG" \
+  --arg selectionBg "$SELECTION_BACKGROUND" \
+  --arg rate_limit_fill "$ACCENT" \
+  --arg rate_limit_empty "$COLOR8" \
+  --arg briefLabelYou "$COLOR4" \
+  --arg briefLabelClaude "$ACCENT" \
+  '{
+    name: $name,
+    base: $base,
+    overrides: {
+      claude: $claude,
+      text: $text,
+      inactive: $inactive,
+      subtle: $subtle,
+      suggestion: $suggestion,
+      permission: $permission,
+      remember: $remember,
+      success: $success,
+      error: $error,
+      warning: $warning,
+      merged: $merged,
+      promptBorder: $promptBorder,
+      planMode: $planMode,
+      autoAccept: $autoAccept,
+      bashBorder: $bashBorder,
+      ide: $ide,
+      fastMode: $fastMode,
+      diffAdded: $diffAdded,
+      diffRemoved: $diffRemoved,
+      diffAddedDimmed: $diffAddedDimmed,
+      diffRemovedDimmed: $diffRemovedDimmed,
+      diffAddedWord: $diffAddedWord,
+      diffRemovedWord: $diffRemovedWord,
+      userMessageBackground: $userMessageBackground,
+      userMessageBackgroundHover: $userMessageBackgroundHover,
+      bashMessageBackgroundColor: $bashMessageBackgroundColor,
+      memoryBackgroundColor: $memoryBackgroundColor,
+      selectionBg: $selectionBg,
+      rate_limit_fill: $rate_limit_fill,
+      rate_limit_empty: $rate_limit_empty,
+      briefLabelYou: $briefLabelYou,
+      briefLabelClaude: $briefLabelClaude
+    }
+  }' >"$THEME_FILE"
+
+# Activate the generated theme, preserving all other settings
+mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
+if [[ ! -f "$CLAUDE_SETTINGS" ]]; then
+  echo '{}' >"$CLAUDE_SETTINGS"
+fi
+
+TMP_SETTINGS=$(mktemp)
+jq --arg theme "custom:${SLUG}" '.theme = $theme' "$CLAUDE_SETTINGS" >"$TMP_SETTINGS" && mv "$TMP_SETTINGS" "$CLAUDE_SETTINGS"

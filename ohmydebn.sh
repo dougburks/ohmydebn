@@ -2,7 +2,7 @@
 
 # If packages haven't been installed yet, then install them
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  ~/.local/share/ohmydebn/install.sh --no-uninstall
+  ~/.local/share/ohmydebn/install.sh
   exit
 fi
 

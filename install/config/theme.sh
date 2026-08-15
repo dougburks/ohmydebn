@@ -27,3 +27,28 @@ if [ ! -f $OMARCHY_THEME_SYMLINK_STATE ]; then
   ln -s /usr/share/ohmydebn-themes ~/.local/share/omarchy/themes
   touch $OMARCHY_THEME_SYMLINK_STATE
 fi
+
+# Create URL handler for Aether theme builder handler
+OMARCHY_THEME_URL_HANDLER_STATE=~/.local/state/ohmydebn-config/omarchy-theme-url-handler-20260814
+if [ ! -f $OMARCHY_THEME_URL_HANDLER_STATE ]; then
+
+  # Allow Aether's activation wait to read OhMyDebn's real theme.name/background
+  mkdir -p ~/.local/state/omarchy
+  ln -s ~/.config/ohmydebn/current ~/.local/state/omarchy/current
+
+  # Aether requires shell.qml to handle URLs
+  mkdir -p ~/.local/share/omarchy/shell
+  cat <<EOF >~/.local/share/omarchy/shell/shell.qml
+// Omarchy compatibility marker for Aether.
+// OhMyDebn provides the omarchy-theme-set CLI and maps ~/.config/omarchy to
+// ~/.config/ohmydebn, but ships no Quickshell UI. Aether's --handle-url
+// installer requires <omarchy>/shell/shell.qml to exist before it will
+// render themes into the Omarchy themes dir and run omarchy-theme-set.
+// This placeholder satisfies that existence check; OhMyDebn has no shell
+// component to load this file.
+import QtQuick
+Item { }
+EOF
+
+  touch $OMARCHY_THEME_URL_HANDLER_STATE
+fi

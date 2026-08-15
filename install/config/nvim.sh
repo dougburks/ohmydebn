@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "neovim" >/dev/null 2>&1; then
+  exit 0
+fi
+
 NVIM_CONFIG_DIR=~/.config/nvim
 if [ ! -d $NVIM_CONFIG_DIR ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring neovim with lazyvim"

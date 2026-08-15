@@ -2,6 +2,20 @@
 
 set -e
 
+# Parse command line arguments
+POWER_USER=false
+for arg in "$@"; do
+  case $arg in
+  --power-user)
+    POWER_USER=true
+    shift
+    ;;
+  *)
+    # Unknown option
+    ;;
+  esac
+done
+
 # Check what Linux distro we're running on
 DISTRO_OK=false
 if [ -f /etc/os-release ]; then
@@ -47,20 +61,6 @@ EOF
   read input
 fi
 
-# Parse command line arguments
-NO_UNINSTALL=false
-for arg in "$@"; do
-  case $arg in
-  --no-uninstall)
-    NO_UNINSTALL=true
-    shift
-    ;;
-  *)
-    # Unknown option
-    ;;
-  esac
-done
-
 # Only show welcome message on new installations
 if [ ! -f ~/.local/state/ohmydebn ]; then
   clear
@@ -77,7 +77,6 @@ Stars bow to its charm.
 WARNING!
 
 - OhMyDebn is intended for a clean new installation.
-- OhMyDebn will remove apps like FireFox, Thunderbird, LibreOffice, and others (unless you use the --no-uninstall option).
 - OhMyDebn will make changes to your APT configuration.
 - If it breaks your system, you get to keep both pieces!
 
@@ -145,6 +144,25 @@ if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
   sudo /usr/bin/apt update
   sudo /usr/bin/apt install -y ohmydebn
+fi
+
+# --power-user removes the optional apps that ship on the base Debian 13
+# Cinnamon ISO (Firefox, LibreOffice, etc.) and installs a curated set of
+# power-user extras, before the finalization phase below runs its one big
+# `apt full-upgrade` - so removed packages never get needlessly upgraded
+# first, and the newly-installed extras get swept into that same upgrade
+# pass instead of needing a separate one later. A failure in any one of
+# these (e.g. a network hiccup) is non-fatal and shouldn't block the rest
+# of the install.
+if [ "$POWER_USER" = true ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --skip-prompt ||
+    echo "Warning: ohmydebn-pkg-remove-all-optional failed, continuing." >&2
+
+  for SCRIPT in ohmydebn-boxes-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
+    ohmydebn-opencode-install ohmydebn-podman-install; do
+    "/usr/share/ohmydebn/bin/$SCRIPT" --skip-prompt ||
+      echo "Warning: $SCRIPT failed, continuing." >&2
+  done
 fi
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "rofi" >/dev/null 2>&1; then
+  exit 0
+fi
+
 mkdir -p ~/.config
 ROFI_CONFIG=~/.config/rofi
 

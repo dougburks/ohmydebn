@@ -60,6 +60,14 @@ mkdir -p "$NEXT_THEME_PATH"
 # Copy static configs
 find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
 
+# Resolve theme colors now (handles legacy colors.toml, Omarchy 4+ semantic
+# colors.toml, and alacritty.toml-derived themes) so templates below and
+# every downstream theming script see the same, normalized set of keys.
+COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors "$THEME_PATH")
+if [[ -n "$COLORS_SOURCE" && "$COLORS_SOURCE" != "$NEXT_THEME_PATH/colors.toml" ]]; then
+  cp "$COLORS_SOURCE" "$NEXT_THEME_PATH/colors.toml"
+fi
+
 # Generate dynamic configs
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-templates
 
@@ -70,11 +78,18 @@ mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
 # Store theme name for reference
 echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
 
-# Determine light or dark mode
+# Determine light or dark mode. Omarchy 4+ themes signal this with a `mode`
+# key in colors.toml; older themes use a light.mode marker file instead.
 IS_LIGHT_MODE="false"
-if [ -f "$HOME/.config/ohmydebn/current/theme/light.mode" ]; then
-  gsettings set org.x.apps.portal color-scheme "prefer-light"
+CURRENT_COLORS_TOML="$HOME/.config/ohmydebn/current/theme/colors.toml"
+if [[ -f "$CURRENT_COLORS_TOML" ]] && grep -qE '^\s*mode\s*=\s*"light"' "$CURRENT_COLORS_TOML"; then
   IS_LIGHT_MODE="true"
+elif [ -f "$HOME/.config/ohmydebn/current/theme/light.mode" ]; then
+  IS_LIGHT_MODE="true"
+fi
+
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
+  gsettings set org.x.apps.portal color-scheme "prefer-light"
 else
   gsettings set org.x.apps.portal color-scheme "prefer-dark"
 fi
@@ -86,21 +101,21 @@ else
   /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
 fi
 
-# If colors.toml does not exist, then dynamically generate it using alacritty.toml
-COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors "$THEME_PATH")
-
 # Use COLORS_SOURCE to update cinnamon and gtk themes
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-cinnamon "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
 # Use COLORS_SOURCE to update rofi theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-rofi "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
+# Use COLORS_SOURCE to update the Claude Code theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-claude "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
 # If COLORS_SOURCE was dynamically generated, delete it
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"
 
 # Set all remaining themes
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-icon
-/usr/share/ohmydebn/bin/ohmydebn-theme-set-terminal
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-terminal "$IS_LIGHT_MODE"
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-btop
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-gedit
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-starship

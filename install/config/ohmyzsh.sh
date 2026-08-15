@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "zsh" >/dev/null 2>&1; then
+  exit 0
+fi
+
 OHMYZSH_DIR=~/.oh-my-zsh
 if [ ! -d $OHMYZSH_DIR ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Installing Oh My Zsh framework for Zsh"

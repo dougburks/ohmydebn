@@ -4,6 +4,11 @@
 # Usage: ohmydebn-theme-install <git-repo-url>
 
 if [ -z "$1" ]; then
+  if ! command -v gum >/dev/null 2>&1; then
+    echo "Usage: ohmydebn-theme-install <git-repo-url>" >&2
+    exit 1
+  fi
+
   echo -e "\e[32mSee https://learn.omacom.io/2/the-omarchy-manual/90/extra-themes\n\e[0m"
   REPO_URL=$(gum input --placeholder="Git repo URL for theme" --header="")
 else

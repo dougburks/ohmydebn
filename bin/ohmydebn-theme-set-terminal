@@ -1,7 +1,9 @@
 #!/bin/bash
 #
 # ohmydebn-theme-set-terminal: Set terminal-related theme configurations
-# Usage: ohmydebn-theme-set-terminal
+# Usage: ohmydebn-theme-set-terminal [is-light-mode]
+#   is-light-mode: 'true' or 'false' (optional; re-detected from the current
+#   theme if omitted, e.g. legacy light.mode marker file)
 #
 
 set -e
@@ -11,8 +13,18 @@ mkdir -p $ALACRITTY_CONFIG_DIR
 ALACRITTY_CONFIG=$ALACRITTY_CONFIG_DIR/alacritty.toml
 touch $ALACRITTY_CONFIG
 
-# Determine light or dark mode
-if [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
+# Determine light or dark mode. Prefer the caller-supplied value (which
+# already accounts for Omarchy 4+ themes' `mode` key in colors.toml); fall
+# back to the legacy light.mode marker file for standalone invocations.
+if [[ -n "${1:-}" ]]; then
+  IS_LIGHT_MODE="$1"
+elif [ -f ~/.config/ohmydebn/current/theme/light.mode ]; then
+  IS_LIGHT_MODE="true"
+else
+  IS_LIGHT_MODE="false"
+fi
+
+if [[ "$IS_LIGHT_MODE" == "true" ]]; then
   THEME_VARIANT="Light"
 else
   THEME_VARIANT="Dark"

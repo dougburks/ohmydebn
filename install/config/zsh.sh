@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "zsh" >/dev/null 2>&1; then
+  exit 0
+fi
+
 ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116
 if [ ! -f $ZSHRC_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring Zsh"

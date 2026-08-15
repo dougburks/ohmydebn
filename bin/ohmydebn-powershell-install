@@ -14,7 +14,7 @@ if ! dpkg -s "powershell" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   TMPDIR=$(mktemp -d)
   curl -fsSL -o "$TMPDIR/packages-microsoft-prod.deb" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
-  sudo dpkg -i "$TMPDIR/packages-microsoft-prod.deb"
+  sudo /usr/bin/dpkg -i "$TMPDIR/packages-microsoft-prod.deb"
   rm -rf "$TMPDIR"
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install powershell

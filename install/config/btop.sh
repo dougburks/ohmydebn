@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "btop" >/dev/null 2>&1; then
+  exit 0
+fi
+
 OHMYDEBN_STATE=~/.local/state/ohmydebn-config
 mkdir -p $OHMYDEBN_STATE
 

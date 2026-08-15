@@ -24,7 +24,7 @@ fi
 # Set autoupdate to false
 OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
 OPENCODE_CONFIG_BACKUP="$HOME/.config/opencode/opencode.json.before.disabling.autoupdate"
-if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ]; then
+if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ] && command -v jq >/dev/null 2>&1; then
   cp "$OPENCODE_CONFIG" "$OPENCODE_CONFIG_BACKUP"
   jq '.autoupdate = false' "$OPENCODE_CONFIG" >"${OPENCODE_CONFIG}.tmp" && mv "${OPENCODE_CONFIG}.tmp" "$OPENCODE_CONFIG"
 fi

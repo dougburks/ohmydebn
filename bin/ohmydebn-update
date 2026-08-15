@@ -37,4 +37,4 @@ if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install ohmydebn
 fi
 
-bash $DIR/install.sh --no-uninstall
+bash $DIR/install.sh

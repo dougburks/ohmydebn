@@ -15,7 +15,84 @@ fi
 THEME_PATH="$1"
 
 if [[ -f "$THEME_PATH/colors.toml" ]]; then
-  echo "$THEME_PATH/colors.toml"
+  if grep -qE '^\s*color0\s*=' "$THEME_PATH/colors.toml"; then
+    # Legacy format (Omarchy <= 3): already has color0-color15 ANSI keys
+    echo "$THEME_PATH/colors.toml"
+  else
+    # Omarchy 4+ "semantic" format: named colors (red, blue, ...) plus
+    # background/foreground shades instead of colorN. Derive the legacy
+    # ANSI color0-15/cursor/selection aliases that ohmydebn's templates
+    # and theming scripts expect, on top of the original semantic keys.
+    TEMP_COLORS_TOML=$(mktemp)
+    SEMANTIC_TOML="$THEME_PATH/colors.toml"
+
+    get_color() {
+      grep -E "^\s*$1\s*=" "$SEMANTIC_TOML" | head -1 | sed -E 's/.*=\s*"([^"]*)".*/\1/'
+    }
+
+    ACCENT=$(get_color accent)
+    BACKGROUND=$(get_color background)
+    FOREGROUND=$(get_color foreground)
+    BRIGHT_FOREGROUND=$(get_color bright_foreground)
+    BRIGHT_FOREGROUND=${BRIGHT_FOREGROUND:-$FOREGROUND}
+    DARK_FOREGROUND=$(get_color dark_foreground)
+    DARK_FOREGROUND=${DARK_FOREGROUND:-$FOREGROUND}
+    MUTED=$(get_color muted)
+    MUTED=${MUTED:-$DARK_FOREGROUND}
+    SELECTION=$(get_color selection)
+    SELECTION=${SELECTION:-$MUTED}
+
+    RED=$(get_color red)
+    GREEN=$(get_color green)
+    YELLOW=$(get_color yellow)
+    BLUE=$(get_color blue)
+    MAGENTA=$(get_color magenta)
+    CYAN=$(get_color cyan)
+
+    BRIGHT_RED=$(get_color bright_red); BRIGHT_RED=${BRIGHT_RED:-$RED}
+    BRIGHT_GREEN=$(get_color bright_green); BRIGHT_GREEN=${BRIGHT_GREEN:-$GREEN}
+    BRIGHT_YELLOW=$(get_color bright_yellow); BRIGHT_YELLOW=${BRIGHT_YELLOW:-$YELLOW}
+    BRIGHT_BLUE=$(get_color bright_blue); BRIGHT_BLUE=${BRIGHT_BLUE:-$BLUE}
+    BRIGHT_MAGENTA=$(get_color bright_magenta); BRIGHT_MAGENTA=${BRIGHT_MAGENTA:-$MAGENTA}
+    BRIGHT_CYAN=$(get_color bright_cyan); BRIGHT_CYAN=${BRIGHT_CYAN:-$CYAN}
+
+    ACCENT=${ACCENT:-$BLUE}
+
+    # Preserve all original semantic keys (e.g. `mode`, `orange`, `brown`)
+    # then append the derived legacy aliases.
+    cat "$SEMANTIC_TOML" >"$TEMP_COLORS_TOML"
+    cat >>"$TEMP_COLORS_TOML" <<EOF
+
+cursor = "$BRIGHT_FOREGROUND"
+selection_foreground = "$BRIGHT_FOREGROUND"
+selection_background = "$SELECTION"
+
+color0 = "$BACKGROUND"
+color1 = "$RED"
+color2 = "$GREEN"
+color3 = "$YELLOW"
+color4 = "$BLUE"
+color5 = "$MAGENTA"
+color6 = "$CYAN"
+color7 = "$FOREGROUND"
+color8 = "$MUTED"
+color9 = "$BRIGHT_RED"
+color10 = "$BRIGHT_GREEN"
+color11 = "$BRIGHT_YELLOW"
+color12 = "$BRIGHT_BLUE"
+color13 = "$BRIGHT_MAGENTA"
+color14 = "$BRIGHT_CYAN"
+color15 = "$BRIGHT_FOREGROUND"
+EOF
+
+    # `accent` is required to already be present in most semantic themes, but
+    # fall back to blue if it was somehow missing.
+    if ! grep -qE '^\s*accent\s*=' "$SEMANTIC_TOML"; then
+      echo "accent = \"$ACCENT\"" >>"$TEMP_COLORS_TOML"
+    fi
+
+    echo "$TEMP_COLORS_TOML"
+  fi
 elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
   TEMP_COLORS_TOML=$(mktemp)
   ALACRITTY_TOML="$THEME_PATH/alacritty.toml"

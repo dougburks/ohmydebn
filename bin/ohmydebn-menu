@@ -202,7 +202,7 @@ show_install_browser_menu() {
   *Chromium*) install "Chromium" "chromium" ;;
   *Firefox*) install "Firefox" "firefox-esr" ;;
   *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
-  *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium ;;
+  *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium-bin ;;
   *) show_main_menu ;;
   esac
 }

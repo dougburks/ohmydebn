@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "bat" >/dev/null 2>&1; then
+  exit 0
+fi
+
 BAT_BIN=/usr/local/bin/bat
 if [ ! -e $BAT_BIN ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Creating symbolic link for bat"

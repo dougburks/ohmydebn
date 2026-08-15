@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if ! dpkg -s "alacritty" >/dev/null 2>&1; then
+  exit 0
+fi
+
 ALACRITTY_DIR=~/.config/alacritty
 ALACRITTY_CONFIG=$ALACRITTY_DIR/alacritty.toml
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)

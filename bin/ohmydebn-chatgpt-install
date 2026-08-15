@@ -16,9 +16,9 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   TEMP=$(mktemp)
   echo "Downloading ChatGPT (this is a large download and may take a few minutes)..."
   if [ "$ARCH" == "x86_64" ]; then
-    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
+    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
   elif [ "$ARCH" == "aarch64" ]; then
-    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_arm64.deb" -o "$TEMP" && sudo dpkg -i "$TEMP" && rm -f "$TEMP"
+    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_arm64.deb" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
   else
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1

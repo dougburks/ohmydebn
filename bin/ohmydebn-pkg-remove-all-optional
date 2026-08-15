@@ -9,6 +9,12 @@ if [ "${1:-}" != "--skip-prompt" ]; then
   read -r
 fi
 
+# Batch every purge into a single `apt purge` call instead of one per
+# package/pattern - each individual `apt purge` pays dpkg's trigger-
+# processing cost (mandb, icon caches, desktop/mime databases) on its own,
+# and with Firefox/LibreOffice/etc. from the base Debian 13 Cinnamon ISO
+# usually installed, that cost was being paid dozens of times over.
+TO_PURGE=()
 for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox duplicity emacs "firefox*" gnome-boxes \
   gnome-calculator gnome-chess gnome-games gnumeric goldendict-ng hexchat hoichess \
   "libreoffice*" localsend ohmydebn-opencode-cli pidgin podman rclone remmina tcpdump thunderbird "transmission*" \
@@ -16,9 +22,20 @@ for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox dupl
   # dpkg -l (unlike dpkg -s) supports glob patterns like "firefox*", so it
   # works for both exact package names and the wildcard entries below.
   if dpkg -l "$PACKAGE" 2>/dev/null | grep -q '^ii'; then
-    sudo /usr/bin/apt -y purge "$PACKAGE"
+    TO_PURGE+=("$PACKAGE")
   fi
 done
+
+if [[ ${#TO_PURGE[@]} -gt 0 ]] && ! sudo /usr/bin/apt -y purge "${TO_PURGE[@]}"; then
+  # Something in the batch failed (e.g. a conflict between two packages);
+  # fall back to purging one at a time so a single bad interaction doesn't
+  # block the rest of the batch.
+  for PACKAGE in "${TO_PURGE[@]}"; do
+    if dpkg -l "$PACKAGE" 2>/dev/null | grep -q '^ii'; then
+      sudo /usr/bin/apt -y purge "$PACKAGE" || echo "ohmydebn: failed to purge '$PACKAGE', skipping." >&2
+    fi
+  done
+fi
 
 sudo /usr/bin/apt -y autoremove
 

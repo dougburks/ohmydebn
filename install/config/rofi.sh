@@ -14,7 +14,7 @@ if [ ! -f $ROFI_STATE ]; then
 
   # If we have the old config, then rename it so we can add the new config
   if [ -d $ROFI_CONFIG ]; then
-    mv $ROFI_CONFIG $ROFI_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+    mv "$ROFI_CONFIG" "$ROFI_CONFIG-backup-$(date +%Y%m%d-%H%M%S)"
   fi
 
   cp -av /usr/share/ohmydebn/config/rofi ~/.config/

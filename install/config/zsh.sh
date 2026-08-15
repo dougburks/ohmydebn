@@ -9,7 +9,7 @@ if [ ! -f $ZSHRC_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Zsh"
   ZSHRC=~/.zshrc
   if [ -f $ZSHRC ]; then
-    mv $ZSHRC $ZSHRC-backup-$(date +%Y%m%d-%H%M%S)
+    mv "$ZSHRC" "$ZSHRC-backup-$(date +%Y%m%d-%H%M%S)"
   fi
   mkdir -p ~/.config
   cp -av /usr/share/ohmydebn/config/.zshrc $ZSHRC

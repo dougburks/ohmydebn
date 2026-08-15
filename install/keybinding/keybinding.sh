@@ -12,20 +12,20 @@ if [ ! -f $KEYBINDING_STATE ]; then
 
   function keybinding-cinnamon() {
     local CMD
-    echo $4
+    echo "$4"
     CMD="gsettings set org.cinnamon.desktop.keybindings.$1 $2 \"$3\""
-    eval $CMD
+    eval "$CMD"
   }
 
   function keybinding-custom() {
     local GSETTINGS1 GSETTINGS2 GSETTINGS3
-    echo $5
+    echo "$5"
     GSETTINGS1="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ name \"$2\""
     GSETTINGS2="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ command \"$3\""
     GSETTINGS3="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ binding \"$4\""
-    eval $GSETTINGS1
-    eval $GSETTINGS2
-    eval $GSETTINGS3
+    eval "$GSETTINGS1"
+    eval "$GSETTINGS2"
+    eval "$GSETTINGS3"
   }
 
   # To create new custom keybindings, first specify how many custom keybindings we're going to load
@@ -40,12 +40,14 @@ if [ ! -f $KEYBINDING_STATE ]; then
       CUSTOM_LIST+="]\""
     fi
   done
-  eval $CUSTOM_LIST
+  eval "$CUSTOM_LIST"
 
   # Update all keybindings and sort the output for display
   (
-    source $KEYBINDING_CINNAMON
-    source $KEYBINDING_CUSTOM
+    # shellcheck source=keybinding-cinnamon.txt
+    source "$KEYBINDING_CINNAMON"
+    # shellcheck source=keybinding-custom.txt
+    source "$KEYBINDING_CUSTOM"
   ) | grep -v "Removing" | sort
 
   # Apply keybindings

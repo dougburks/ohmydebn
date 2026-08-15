@@ -15,7 +15,7 @@ if [ ! -f $BAT_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring bat"
   BAT_CONFIG=~/.config/bat
   if [ -d $BAT_CONFIG ]; then
-    mv $BAT_CONFIG $BAT_CONFIG-backup-$(date +%Y%m%d-%H%M%S)
+    mv "$BAT_CONFIG" "$BAT_CONFIG-backup-$(date +%Y%m%d-%H%M%S)"
   fi
   mkdir -p ~/.config
   cp -av /usr/share/ohmydebn/config/bat ~/.config/

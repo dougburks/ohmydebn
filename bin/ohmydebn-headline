@@ -1,16 +1,9 @@
 #!/bin/bash
 
 echo
-if [ ! -f ~/.local/state/ohmydebn ]; then
-  # For first installation, use text effects
-  read -ra PROCESSOR <<<"$1"
-else
-  # For updates, don't use text effects
-  PROCESSOR=(cat)
-fi
-cat <<EOF | "${PROCESSOR[@]}"
+cat <<EOF
 ####################################################################
-$2
+$1
 ####################################################################
 EOF
 echo

@@ -15,7 +15,7 @@ NEEDS_INITRAMFS_UPDATE=false
 
 DISABLE_ALGIF=/etc/modprobe.d/disable-algif-aead.conf
 if [ ! -f $DISABLE_ALGIF ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Hardening against algif_aead in-place-decrypt bugs (e.g. Copy Fail)"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Hardening against algif_aead in-place-decrypt bugs (e.g. Copy Fail)"
   echo "install algif_aead /bin/false" | sudo tee $DISABLE_ALGIF
   sudo rmmod algif_aead 2>/dev/null || true
   NEEDS_INITRAMFS_UPDATE=true
@@ -23,7 +23,7 @@ fi
 
 DISABLE_DIRTYFRAG=/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf
 if [ ! -f $DISABLE_DIRTYFRAG ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Hardening against esp4/esp6/rxrpc in-place-decrypt bugs (e.g. Dirty Frag)"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Hardening against esp4/esp6/rxrpc in-place-decrypt bugs (e.g. Dirty Frag)"
   echo "install esp4 /bin/false" | sudo tee $DISABLE_DIRTYFRAG
   echo "install esp6 /bin/false" | sudo tee -a $DISABLE_DIRTYFRAG
   echo "install rxrpc /bin/false" | sudo tee -a $DISABLE_DIRTYFRAG

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-/usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Enabling screen magnifier"
+/usr/share/ohmydebn/bin/ohmydebn-headline "Enabling screen magnifier"
 
 gsettings set org.cinnamon.desktop.a11y.applications screen-magnifier-enabled true
 gsettings set org.cinnamon.desktop.a11y.magnifier mouse-tracking 'push'

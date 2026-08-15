@@ -9,7 +9,7 @@ set -e
 # Update starship prompt
 STARSHIP_STATE=~/.local/state/ohmydebn-config/starship-20251109
 if [ ! -f $STARSHIP_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring starship prompt"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring starship prompt"
   STARSHIP_CONFIG=~/.config/starship.toml
   if [ -f $STARSHIP_CONFIG ]; then
     mv "$STARSHIP_CONFIG" "$STARSHIP_CONFIG-backup-$(date +%Y%m%d-%H%M%S)"

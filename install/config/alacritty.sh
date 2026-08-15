@@ -10,7 +10,7 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 # Update old config
 if grep -q "alacritty/catppuccin-mocha.toml" $ALACRITTY_CONFIG >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Removing old alacritty config"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Removing old alacritty config"
   mv $ALACRITTY_DIR $ALACRITTY_DIR-backup-$TIMESTAMP
 fi
 
@@ -22,13 +22,13 @@ fi
 
 # If config doesn't exist, then create it
 if [ ! -d $ALACRITTY_DIR ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring alacritty terminal emulator"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring alacritty terminal emulator"
   mkdir -p ~/.config
   cp -av /usr/share/ohmydebn/config/alacritty ~/.config/
 fi
 
 # If this is the initial installation, then set alacritty as default terminal emulator
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring alacritty as default terminal emulator"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring alacritty as default terminal emulator"
   gsettings set org.cinnamon.desktop.default-applications.terminal exec "'alacritty'"
 fi

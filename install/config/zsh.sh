@@ -6,7 +6,7 @@ fi
 
 ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116
 if [ ! -f $ZSHRC_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring Zsh"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Zsh"
   ZSHRC=~/.zshrc
   if [ -f $ZSHRC ]; then
     mv $ZSHRC $ZSHRC-backup-$(date +%Y%m%d-%H%M%S)
@@ -19,7 +19,7 @@ fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
   if ! grep "/usr/share/ohmydebn/bin" $FILE >/dev/null 2>&1; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating PATH in $FILE"
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
     cat <<'EOF' >>$FILE
 
 # Update PATH to include OhMyDebn binaries

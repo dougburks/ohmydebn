@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Adjusting desktop sounds"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Adjusting desktop sounds"
   /usr/bin/gsettings set org.cinnamon.desktop.sound volume-sound-enabled false
   /usr/bin/gsettings set org.cinnamon.sounds close-enabled false
   /usr/bin/gsettings set org.cinnamon.sounds login-enabled false

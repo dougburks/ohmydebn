@@ -5,7 +5,7 @@ if ! dpkg -s "cava" >/dev/null 2>&1; then
 fi
 
 if [ ! -d ~/.config/cava ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring cava"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring cava"
   mkdir -p ~/.config
   cp -av /usr/share/ohmydebn/config/cava ~/.config/
   echo

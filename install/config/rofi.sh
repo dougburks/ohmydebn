@@ -10,7 +10,7 @@ ROFI_CONFIG=~/.config/rofi
 ROFI_STATE=~/.local/state/ohmydebn-config/rofi-20251014
 if [ ! -f $ROFI_STATE ]; then
 
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring rofi"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring rofi"
 
   # If we have the old config, then rename it so we can add the new config
   if [ -d $ROFI_CONFIG ]; then

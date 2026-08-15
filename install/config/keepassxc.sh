@@ -5,7 +5,7 @@ if ! dpkg -s "keepassxc" >/dev/null 2>&1; then
 fi
 
 if [ ! -d ~/.config/keepassxc ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Configuring keepassxc"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring keepassxc"
   mkdir -p ~/.config
   cp -av /usr/share/ohmydebn/config/keepassxc ~/.config/
   echo

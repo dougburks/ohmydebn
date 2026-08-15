@@ -8,7 +8,7 @@ mkdir -p ~/.config/ohmydebn/themes
 
 # Make sure default theme is set
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Setting default theme"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Setting default theme"
   mkdir -p ~/.config/ohmydebn/current
   /usr/share/ohmydebn/bin/ohmydebn-theme-set --background 3 Ohmydebn
 fi

@@ -14,3 +14,7 @@ source $OHMYDEBN_INSTALL/packaging/dbus.sh
 source $OHMYDEBN_INSTALL/packaging/spice-vdagent.sh
 
 source $OHMYDEBN_INSTALL/packaging/dependencies.sh
+
+# power-user.sh must run after dependencies.sh above (see the comment in
+# that file for why).
+source $OHMYDEBN_INSTALL/packaging/power-user.sh

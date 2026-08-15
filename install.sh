@@ -146,24 +146,13 @@ if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
   sudo /usr/bin/apt install -y ohmydebn
 fi
 
-# --power-user removes the optional apps that ship on the base Debian 13
-# Cinnamon ISO (Firefox, LibreOffice, etc.) and installs a curated set of
-# power-user extras, before the finalization phase below runs its one big
-# `apt full-upgrade` - so removed packages never get needlessly upgraded
-# first, and the newly-installed extras get swept into that same upgrade
-# pass instead of needing a separate one later. A failure in any one of
-# these (e.g. a network hiccup) is non-fatal and shouldn't block the rest
-# of the install.
-if [ "$POWER_USER" = true ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --skip-prompt ||
-    echo "Warning: ohmydebn-pkg-remove-all-optional failed, continuing." >&2
-
-  for SCRIPT in ohmydebn-boxes-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
-    ohmydebn-opencode-install ohmydebn-podman-install; do
-    "/usr/share/ohmydebn/bin/$SCRIPT" --skip-prompt ||
-      echo "Warning: $SCRIPT failed, continuing." >&2
-  done
-fi
+# Exported so install/packaging/power-user.sh (sourced later, from
+# ohmydebn.sh below) can see it - the --power-user removal step has to run
+# after install/packaging/dependencies.sh installs its packages, not here,
+# since cinnamon-desktop-environment hard-depends on
+# "gnome-calculator | galculator" and purging gnome-calculator before
+# galculator exists would briefly leave that dependency unsatisfied.
+export POWER_USER
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"
 

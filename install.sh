@@ -141,7 +141,6 @@ if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
 fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
   sudo /usr/bin/apt update
   sudo /usr/bin/apt install -y ohmydebn
 fi

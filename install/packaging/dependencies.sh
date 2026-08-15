@@ -40,16 +40,13 @@ PACKAGES=(
   libadwaita-1-dev
   python-is-python3
   pipx
-  shellcheck
 
   # Media tools
   ffmpeg
   imagemagick
-  gimp
   gcolor3
   ristretto
   xournalpp
-  pdftk-java
   galculator
 
   # CLI tools
@@ -60,15 +57,11 @@ PACKAGES=(
   duf
   zoxide
   lazygit
-  traceroute
-  rsync
   zip
   yq
   jq
   vim
   wget
-  lshw
-  ethtool
   binutils
   gum
   grc
@@ -76,7 +69,6 @@ PACKAGES=(
   # Network & security
   ufw
   gufw
-  iperf3
   chrony
 
   # Shell

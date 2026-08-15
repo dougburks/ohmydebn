@@ -30,11 +30,25 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
+# Query every requested package's install status in one dpkg-query call
+# instead of one `dpkg -s` per package - each `dpkg -s` call costs ~20ms of
+# pure process-spawn overhead, so checking ~60 packages (which this script
+# does twice, once up front and once after installing) was costing multiple
+# seconds on every single ohmydebn-update run even when nothing had changed.
+declare -A INSTALLED_MAP
+query_installed() {
+  local pkg want flag status
+  INSTALLED_MAP=()
+  while read -r pkg want flag status; do
+    [[ "$want $flag $status" == "install ok installed" ]] && INSTALLED_MAP["$pkg"]=1
+  done < <(dpkg-query -W -f='${Package} ${Status}\n' "$@" 2>/dev/null)
+}
+
+query_installed "$@"
+
 TO_INSTALL=()
 for PACKAGE in "$@"; do
-  if ! dpkg -s "$PACKAGE" >/dev/null 2>&1; then
-    TO_INSTALL+=("$PACKAGE")
-  fi
+  [[ -n "${INSTALLED_MAP[$PACKAGE]:-}" ]] || TO_INSTALL+=("$PACKAGE")
 done
 
 if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
@@ -59,13 +73,15 @@ if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
       fi
     done
   fi
+
+  # Packages may have just been installed above, so the earlier query is
+  # stale - refresh it before deciding what to mark manual below.
+  query_installed "$@"
 fi
 
 INSTALLED=()
 for PACKAGE in "$@"; do
-  if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
-    INSTALLED+=("$PACKAGE")
-  fi
+  [[ -n "${INSTALLED_MAP[$PACKAGE]:-}" ]] && INSTALLED+=("$PACKAGE")
 done
 
 if [[ ${#INSTALLED[@]} -gt 0 ]]; then

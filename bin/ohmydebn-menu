@@ -171,8 +171,9 @@ show_install_vpn_menu() {
 }
 
 show_install_media_menu() {
-  case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay AirPlay receiver") in
+  case $(menu "Install" "♫  cliamp terminal music player\n🎨 GIMP image editor\n🛜︎ UxPlay AirPlay receiver") in
   *cliamp*) install "cliamp" "cliamp" ;;
+  *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
   *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;
   *) show_install_menu ;;
   esac

@@ -18,8 +18,22 @@ if [ "${POWER_USER:-false}" = true ]; then
     echo "Warning: ohmydebn-pkg-remove-all-optional failed, continuing." >&2
 
   for SCRIPT in ohmydebn-boxes-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
-    ohmydebn-opencode-install ohmydebn-podman-install; do
+    ohmydebn-gimp-install ohmydebn-opencode-install ohmydebn-podman-install; do
     "/usr/share/ohmydebn/bin/$SCRIPT" --skip-prompt ||
       echo "Warning: $SCRIPT failed, continuing." >&2
   done
+
+  # Preseed iperf3's debconf question (whether to start its server daemon
+  # automatically) so its postinst doesn't pop up an interactive prompt below.
+  echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
+
+  # keepassxc-minimal Conflicts with keepassxc-full (dependencies.sh's plain
+  # `keepassxc` pulls in keepassxc-full by default); installing it here
+  # makes apt swap the two automatically.
+  /usr/share/ohmydebn/bin/ohmydebn-pkg-install-optional keepassxc-minimal rclone openssh-server pdftk-java rsync \
+    ethtool traceroute lshw shellcheck iperf3 ||
+    echo "Warning: failed to install keepassxc-minimal/rclone/openssh-server/pdftk-java/rsync/ethtool/traceroute/lshw/shellcheck/iperf3, continuing." >&2
+
+  /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ||
+    echo "Warning: ohmydebn-magnifier-enable failed, continuing." >&2
 fi

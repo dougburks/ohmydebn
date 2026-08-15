@@ -4,7 +4,7 @@ STATE_DIR=~/.local/state/ohmydebn-config
 KEYBINDING_STATE=$STATE_DIR/keybinding-20260810
 
 if [ ! -f $KEYBINDING_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Updating hotkeys"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Updating hotkeys"
 
   KEYBINDING_DIR=/usr/share/ohmydebn/install/keybinding
   KEYBINDING_CINNAMON=$KEYBINDING_DIR/keybinding-cinnamon.txt
@@ -50,7 +50,7 @@ if [ ! -f $KEYBINDING_STATE ]; then
 
   # Apply keybindings
   if pgrep -x cinnamon >/dev/null; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Restarting desktop to apply hotkey configuration"
+    /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Restarting desktop to apply hotkey configuration"
     sleep 1s
     setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
     echo "You can see all hotkeys by pressing Super + K"

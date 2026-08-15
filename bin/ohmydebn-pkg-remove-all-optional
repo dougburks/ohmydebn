@@ -9,6 +9,20 @@ if [ "${1:-}" != "--skip-prompt" ]; then
   read -r
 fi
 
+# dpkg -l (unlike dpkg -s) supports glob patterns like "firefox*", so it
+# works for both exact package names and the wildcard entries below.
+# Output is captured into a variable rather than piped straight into
+# grep -q: packages with many matches (libreoffice's dozens of sub-packages
+# and locale variants) can make grep -q exit as soon as it finds a match;
+# under `set -o pipefail` that early exit sends dpkg a SIGPIPE before it's
+# finished writing, which pipefail then reports as the pipeline failing
+# even though grep did find what it was looking for.
+pkg_glob_installed() {
+  local dpkg_list
+  dpkg_list=$(dpkg -l "$1" 2>/dev/null || true)
+  grep -q '^ii' <<<"$dpkg_list"
+}
+
 # Batch every purge into a single `apt purge` call instead of one per
 # package/pattern - each individual `apt purge` pays dpkg's trigger-
 # processing cost (mandb, icon caches, desktop/mime databases) on its own,
@@ -19,9 +33,7 @@ for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox dupl
   gnome-calculator gnome-chess gnome-games gnumeric goldendict-ng hexchat hoichess \
   "libreoffice*" localsend ohmydebn-opencode-cli pidgin podman rclone remmina tcpdump thunderbird "transmission*" \
   tshark uxplay virt-manager wireshark x11vnc; do
-  # dpkg -l (unlike dpkg -s) supports glob patterns like "firefox*", so it
-  # works for both exact package names and the wildcard entries below.
-  if dpkg -l "$PACKAGE" 2>/dev/null | grep -q '^ii'; then
+  if pkg_glob_installed "$PACKAGE"; then
     TO_PURGE+=("$PACKAGE")
   fi
 done
@@ -31,7 +43,7 @@ if [[ ${#TO_PURGE[@]} -gt 0 ]] && ! sudo /usr/bin/apt -y purge "${TO_PURGE[@]}";
   # fall back to purging one at a time so a single bad interaction doesn't
   # block the rest of the batch.
   for PACKAGE in "${TO_PURGE[@]}"; do
-    if dpkg -l "$PACKAGE" 2>/dev/null | grep -q '^ii'; then
+    if pkg_glob_installed "$PACKAGE"; then
       sudo /usr/bin/apt -y purge "$PACKAGE" || echo "ohmydebn: failed to purge '$PACKAGE', skipping." >&2
     fi
   done

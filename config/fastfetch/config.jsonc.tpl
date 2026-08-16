@@ -1,7 +1,8 @@
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "display": {
-    "color": "{{ accent_ansi }}"
+    "color": "{{ accent_ansi }}",
+    "disableLinewrap": true
   },
   "modules": [
     "os",

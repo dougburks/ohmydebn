@@ -1,6 +1,10 @@
 #!/bin/bash
 
-NEXT_THEME_DIR="$HOME/.config/ohmydebn/current/next-theme"
+# Optional $1 lets a caller target an already-active theme dir instead of
+# next-theme, to backfill a template added in a later release for an
+# existing install (see install/config/theme.sh) - the { ! -f $output_path }
+# guard below means it only fills in what's actually missing.
+NEXT_THEME_DIR="${1:-$HOME/.config/ohmydebn/current/next-theme}"
 COLORS_FILE="$NEXT_THEME_DIR/colors.toml"
 
 # Convert hex color to decimal RGB (e.g., "#1e1e2e" -> "30,30,46")

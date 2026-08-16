@@ -191,7 +191,7 @@ Restart terminal applications by closing and reopening the window or using the a
 | App | Location |
 |-----|----------|
 | btop | `~/.config/btop/btop.conf` |
-| screenfetch | System command (no config) |
+| fastfetch | `~/.config/fastfetch/config.jsonc` |
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
 | git | `~/.config/git/config` |
@@ -356,7 +356,7 @@ Fonts are managed through Cinnamon Settings > Fonts, which provides options to:
 Additional tools available in OhMyDebn:
 - **OhMyDebn Logo**: `Ctrl + Shift + O` (display animated logo)
 - **OhMyDebn Demo**: `Ctrl + Alt + D` (animated logo showcase)
-- **System Summary**: GUI version of screenfetch via OhMyDebn menu or `Ctrl + Shift + S`
+- **System Summary**: GUI version of fastfetch via OhMyDebn menu or `Ctrl + Shift + S`
 - **System Monitoring**: btop performance monitor via `Super + T`
 - **Audio Visualization**: Cava via terminal or `Ctrl + Super + A`
 
@@ -429,12 +429,12 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Install all Omarchy extra themes" -> OhMyDebn Menu → Style → Theme → "Install All Omarchy Extra Themes"
 - "Reset all configurations to defaults" -> `ohmydebn-reset-config`
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
-- "Show system information" -> `Ctrl + Shift + S` (screenfetch)
+- "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Alt + Space`
 - "Launch AI assistant" -> `Super + A` (OpenCode CLI) or from Apps Menu
 - "Update OpenCode to latest version" -> `ohmydebn-update` (system update includes OpenCode)
 - "Open apps menu" -> `Super + Space` (Rofi)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`
-- "Show system summary" -> `Ctrl + Shift + S` (screenfetch GUI)
+- "Show system summary" -> `Ctrl + Shift + S` (fastfetch GUI)
 - "Monitor system performance" -> `Super + T` (btop)
 - "Visualize audio" -> `cava` in terminal or `Ctrl + Super + A`

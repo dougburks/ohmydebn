@@ -6,5 +6,10 @@ mkdir -p $FASTFETCH_CONFIG
 if [ -f ~/.config/ohmydebn/current/theme/config.jsonc ]; then
   ln -snf ~/.config/ohmydebn/current/theme/config.jsonc $FASTFETCH_CONFIG/config.jsonc
 else
-  rm -f $FASTFETCH_CONFIG/config.jsonc
+  # Older themes with no colors.toml never get a templated config.jsonc (same
+  # gap eza/vscode/etc have on these themes) - fall back to a static, unthemed
+  # default rather than losing the OhMyDebn Version/Theme/Website lines
+  # entirely. Accent color won't match the theme, but the identity lines will
+  # still show.
+  ln -snf /usr/share/ohmydebn/config/fastfetch/config-default.jsonc $FASTFETCH_CONFIG/config.jsonc
 fi

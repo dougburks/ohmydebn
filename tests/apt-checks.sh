@@ -33,7 +33,7 @@ source "$REPO_ROOT/tests/lib/extract-packages.sh"
 echo
 echo "-- package existence --"
 
-mapfile -t OHMYDEBN_OWNED < <(extract_fpm_hard_depends | grep -E '^(ohmydebn-|mint-|ttfx$|toilet$|toilet-fonts$|screenfetch$)')
+mapfile -t OHMYDEBN_OWNED < <(extract_fpm_hard_depends | grep -E '^(ohmydebn-|mint-|ttfx$|toilet$|toilet-fonts$)')
 
 check_packages_exist() {
   local label="$1"

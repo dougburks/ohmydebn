@@ -52,3 +52,25 @@ EOF
 
   touch $OMARCHY_THEME_URL_HANDLER_STATE
 fi
+
+# Backfill a themed fastfetch config for installs that already had a theme
+# active before ohmydebn-theme-set-fastfetch existed - the "default theme is
+# set" block above only runs ohmydebn-theme-set on a truly fresh install, so
+# an upgrader's current/theme/ was populated by an older
+# ohmydebn-theme-set-templates that never generated config.jsonc. Templating
+# directly into the already-active theme dir (rather than re-running the
+# full ohmydebn-theme-set) avoids side effects like cycling the background.
+# (Marker bumped once from -20260816: the active theme may have no
+# colors.toml at all - older static themes ship every app's config directly
+# instead of using the {{ }} templating pipeline - in which case
+# ohmydebn-theme-set-templates has nothing to generate. That's expected;
+# ohmydebn-theme-set-fastfetch itself now falls back to a static default
+# config in that case, rather than leaving fastfetch unconfigured.)
+FASTFETCH_CONFIG_BACKFILL_STATE=~/.local/state/ohmydebn-config/fastfetch-config-backfill-20260817
+if [ ! -f $FASTFETCH_CONFIG_BACKFILL_STATE ]; then
+  if [ -d ~/.config/ohmydebn/current/theme ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-templates ~/.config/ohmydebn/current/theme
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch
+  fi
+  touch $FASTFETCH_CONFIG_BACKFILL_STATE
+fi

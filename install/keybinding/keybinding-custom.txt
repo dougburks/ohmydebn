@@ -11,7 +11,7 @@ keybinding-custom 9 "Alacritty" "/usr/share/ohmydebn/bin/ohmydebn-terminal" "['<
 keybinding-custom 10 "Aether theme builder" "/usr/share/aether/aether" "['<Ctrl><Shift>A']" "Press Ctrl + Shift + A for Aether theme builder"
 keybinding-custom 11 "KeePassXC" "/usr/share/ohmydebn/bin/ohmydebn-keepass" "['<Ctrl><Shift>K']" "Press Ctrl + Shift + K for KeePassXC password manager"
 keybinding-custom 12 "OhMyDebn Logo" "/usr/share/ohmydebn/bin/ohmydebn-logo-gui" "['<Ctrl><Shift>O']" "Press Ctrl + Shift + O to show OhMyDebn logo"
-keybinding-custom 13 "screenfetch" "/usr/share/ohmydebn/bin/ohmydebn-screenfetch-gui" "['<Ctrl><Shift>S']" "Press Ctrl + Shift + S to show screenfetch system summary"
+keybinding-custom 13 "fastfetch" "/usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui" "['<Ctrl><Shift>S']" "Press Ctrl + Shift + S to show fastfetch system summary"
 keybinding-custom 14 "Theme selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-set-gui" "['<Ctrl><Super>T']" "Press Ctrl + Super + T to change theme"
 keybinding-custom 15 "Background selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next" "['<Ctrl><Super>B']" "Press Ctrl + Super + B to change to next background in the current theme"
 keybinding-custom 16 "Rofi window switcher" "/usr/share/ohmydebn/bin/ohmydebn-rofi-window-switcher" "['<Ctrl><Alt>Tab']" "Press Ctrl + Alt + Tab for an alt-tab switcher that shows more info"

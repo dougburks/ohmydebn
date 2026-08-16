@@ -289,7 +289,7 @@ go_to_menu() {
   *install*) show_install_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;
-  *about*) /usr/share/ohmydebn/bin/ohmydebn-screenfetch-gui ;;
+  *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui ;;
   *demo*) /usr/share/ohmydebn/bin/ohmydebn-demo-gui ;;
   *magnifier*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
   *system*) show_system_menu ;;

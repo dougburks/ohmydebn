@@ -12,11 +12,15 @@
 
 PACKAGES=(
   # Per-app packages, one each, matching install/config/<app>.sh
+  # (fastfetch is the exception - its theming lives entirely in
+  # config/fastfetch/*.tpl + ohmydebn-theme-set-fastfetch, no
+  # install/config/fastfetch.sh needed)
   alacritty
   bat
   btop
   cava
   chromium
+  fastfetch
   gedit
   keepassxc
   neovim

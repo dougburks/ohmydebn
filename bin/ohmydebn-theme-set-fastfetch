@@ -1,0 +1,10 @@
+#!/bin/bash
+
+FASTFETCH_CONFIG=~/.config/fastfetch
+mkdir -p $FASTFETCH_CONFIG
+
+if [ -f ~/.config/ohmydebn/current/theme/config.jsonc ]; then
+  ln -snf ~/.config/ohmydebn/current/theme/config.jsonc $FASTFETCH_CONFIG/config.jsonc
+else
+  rm -f $FASTFETCH_CONFIG/config.jsonc
+fi

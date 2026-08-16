@@ -24,13 +24,17 @@ if [[ -f $COLORS_FILE ]]; then
     if [[ $value =~ ^# ]]; then
       rgb=$(hex_to_rgb "$value")
       echo "s|{{ ${key}_rgb }}|${rgb}|g"
+      # {{ key_ansi }} -> ANSI truecolor SGR fragment (e.g. "38;2;122;162;247",
+      # comma becomes semicolons), for tools like fastfetch whose packaged
+      # version predates hex-color support in keyColor/display.color
+      echo "s|{{ ${key}_ansi }}|38;2;${rgb//,/;}|g"
     fi
   done <"$COLORS_FILE" >"$sed_script"
 
   shopt -s nullglob
 
   # Process templates
-  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl /usr/share/ohmydebn/config/btop/*.tpl; do
+  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl /usr/share/ohmydebn/config/btop/*.tpl /usr/share/ohmydebn/config/fastfetch/*.tpl; do
     filename=$(basename "$tpl" .tpl)
     output_path="$NEXT_THEME_DIR/$filename"
 

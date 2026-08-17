@@ -32,7 +32,7 @@
     {
       "type": "custom",
       "key": "OhMyDebn Website",
-      "format": "ohmydebn.org"
+      "format": "https://ohmydebn.org"
     },
     "break",
     "colors"

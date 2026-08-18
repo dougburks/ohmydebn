@@ -1,0 +1,240 @@
+#!/bin/bash
+#
+# ohmydebn-menu-tree: parses bin/ohmydebn-menu's own source at runtime,
+# powering bin/ohmydebn-menu-picker's two views: the 12 top-level categories
+# (menu_tree_categories) and, once the user starts typing, every leaf action
+# across all ~25 nested show_*_menu functions flattened into
+# "breadcrumb<TAB>target" rows (menu_tree_flatten). Sourced only (by
+# ohmydebn-menu-picker, by ohmydebn-menu itself for eval dispatch, and by
+# tests/consistency.sh) - no set -e/-u/-o pipefail here, since those would
+# leak into whichever caller sources this with its own, different flag
+# settings.
+
+_mt_block_end() {
+  local file="$1" start="$2" rel
+  rel=$(tail -n "+$start" "$file" | grep -n '^\s*esac' | head -1 | cut -d: -f1)
+  echo $((start + rel - 1))
+}
+
+_mt_menu_block_start() {
+  local file="$1" func="$2" fstart rel
+  fstart=$(grep -n "^${func}() {" "$file" | head -1 | cut -d: -f1) || return 1
+  rel=$(tail -n "+$fstart" "$file" | grep -n 'case \$(menu "' | head -1 | cut -d: -f1) || return 1
+  echo $((fstart + rel - 1))
+}
+
+# Splits a menu()'s "icon  Label\nicon  Label..." string into icon-stripped
+# labels, in order. Must pipe through `printf '%s\n'` (trailing newline), not
+# `printf '%s'` - a `while read` loop silently drops the last line otherwise
+# (confirmed: this is exactly how the Go menu's last item, "System", went
+# missing during development).
+_mt_item_labels() {
+  local raw
+  raw=$(sed -n "${2}p" "$1" | grep -oP 'menu "[^"]*" "\K[^"]*')
+  printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r item; do
+    grep -oP '^\S+\s+\K.*' <<<"$item"
+  done
+}
+
+# Extracts "keyword<TAB>target" per `*Keyword*) target ;;` arm between two
+# line numbers. The target regex intentionally uses a non-greedy `.*?` with
+# the trailing whitespace absorbed into the lookahead - the greedy version
+# (`.*` with the lookahead just `;;\s*$`) leaves a trailing space on every
+# captured target, which silently breaks the `^show_..._menu$` anchor used
+# elsewhere to decide "is this a submenu to recurse into" (confirmed: with
+# the greedy form, every arm looked like a leaf and nothing ever recursed).
+_mt_arms() {
+  sed -n "${2},${3}p" "$1" | grep -P '^\s*\*[^*]+\*\)' | while IFS= read -r line; do
+    local kw target
+    kw=$(grep -oP '^\s*\*\K[^*]+(?=\*\))' <<<"$line")
+    target=$(grep -oP '\*\)\s*\K.*?(?=\s*;;\s*$)' <<<"$line")
+    printf '%s\t%s\n' "$kw" "$target"
+  done
+}
+
+# Recurses into a show_*_menu function, emitting "breadcrumb<TAB>target" for
+# every leaf reachable under it. Item/arm order is not guaranteed to match
+# (e.g. show_learn_menu's Bash/Neovim items and arms are in swapped order),
+# so each item label is substring-matched against every arm's keyword rather
+# than paired positionally.
+#
+# Also emits one "PATH<TAB>func<TAB>breadcrumb" side-channel line per
+# invocation - breadcrumb here is already exactly "the path to reach func"
+# by construction, so this costs nothing extra to compute. menu_tree_paths()
+# below filters the cached output down to just these lines, giving
+# ohmydebn-menu's menu() a way to look up "what breadcrumb prefix does the
+# submenu I was called from live at" without a second walk. Emitted only
+# after start/end resolve - a broken/unparseable submenu should still hit
+# the WARN below, not also claim a bogus reachable breadcrumb.
+_mt_walk() {
+  local file="$1" func="$2" breadcrumb="$3"
+  local start end
+  start=$(_mt_menu_block_start "$file" "$func") || { echo "WARN: no block for $func" >&2; return; }
+  end=$(_mt_block_end "$file" "$start")
+  printf 'PATH\t%s\t%s\n' "$func" "$breadcrumb"
+  local labels=() arms=()
+  mapfile -t labels < <(_mt_item_labels "$file" "$start")
+  mapfile -t arms < <(_mt_arms "$file" "$start" "$end")
+  local label
+  for label in "${labels[@]}"; do
+    local matched="" a kw target
+    for a in "${arms[@]}"; do
+      kw="${a%%$'\t'*}"
+      target="${a#*$'\t'}"
+      [[ "$label" == *"$kw"* ]] && { matched="$target"; break; }
+    done
+    [[ -z "$matched" ]] && { echo "WARN: no arm matches '$label' in $func" >&2; continue; }
+    local crumb="${breadcrumb:+$breadcrumb > }$label"
+    if [[ "$matched" =~ ^show_[a-zA-Z0-9_]+_menu$ ]]; then
+      _mt_walk "$file" "$matched" "$crumb"
+    else
+      printf '%s\t%s\n' "$crumb" "$matched"
+    fi
+  done
+}
+
+# Does the actual work of flattening the whole tree reachable from the Go
+# menu into "breadcrumb<TAB>target" lines - called through the cached
+# menu_tree_flatten() wrapper below, which is the real entry point.
+# show_main_menu isn't a case block itself -
+# it builds a `local go_items="icon  Label\n..."` string (the single source
+# of truth for the picker's default view, passed to ohmydebn-menu-picker as
+# an argument) and hands it to go_to_menu() - so the Go items are pulled
+# directly off that line, then matched into go_to_menu()'s arms
+# specifically - that function has extra CLI-only arms (*theme*,
+# *screenshot*, *screenrecord*) with no corresponding Go-menu item text, so
+# the walk must start from the real Go item labels and match into
+# go_to_menu's arms, never enumerate its arms directly, or those phantom
+# entries leak into the flattened list as fake top-level rows.
+#
+# Honors a global MT_SKIP_LABELS array (exact-match against Go item labels)
+# for entries that shouldn't appear in the flattened list.
+_mt_flatten_uncached() {
+  local file="$1" goline raw
+  goline=$(grep -n '^\s*local go_items="' "$file" | head -1 | cut -d: -f1)
+  raw=$(sed -n "${goline}p" "$file" | grep -oP 'local go_items="\K[^"]*')
+  local labels=()
+  mapfile -t labels < <(printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r i; do grep -oP '^\S+\s+\K.*' <<<"$i"; done)
+
+  local gstart gend arms=()
+  gstart=$(grep -nF 'case "${1,,}" in' "$file" | head -1 | cut -d: -f1)
+  gend=$(_mt_block_end "$file" "$gstart")
+  mapfile -t arms < <(_mt_arms "$file" "$gstart" "$gend")
+
+  local label
+  for label in "${labels[@]}"; do
+    local skip=0 s
+    for s in "${MT_SKIP_LABELS[@]:-}"; do
+      [[ "$label" == "$s" ]] && { skip=1; break; }
+    done
+    [[ $skip -eq 1 ]] && continue
+
+    local lower matched="" a kw target
+    lower=$(tr '[:upper:]' '[:lower:]' <<<"$label")
+    for a in "${arms[@]}"; do
+      kw="${a%%$'\t'*}"
+      target="${a#*$'\t'}"
+      [[ "$lower" == *"$kw"* ]] && { matched="$target"; break; }
+    done
+    [[ -z "$matched" ]] && { echo "WARN: Go item '$label' matches no go_to_menu arm" >&2; continue; }
+
+    if [[ "$matched" =~ ^show_[a-zA-Z0-9_]+_menu$ ]]; then
+      _mt_walk "$file" "$matched" "$label"
+    else
+      printf '%s\t%s\n' "$label" "$matched"
+    fi
+  done
+}
+
+# menu_tree_flatten() walks ~25 nested functions, and each label/arm it
+# extracts costs a real subprocess fork (grep/sed) - measured at ~2 seconds
+# end to end on this machine, which is exactly the startup delay
+# ohmydebn-menu-picker was visibly paying on every single launch, not just
+# the first. Since ohmydebn-menu's source only changes on an edit or a
+# package upgrade, caching the result and invalidating by mtime turns every
+# launch after the first back into an near-instant cache read, without
+# touching the (already well-tested) extraction logic itself.
+#
+# The cache file name is derived from the source path itself, not shared
+# across paths by mtime alone - this project calls this against both the
+# repo checkout (tests) and the installed
+# /usr/share/ohmydebn/bin/ohmydebn-menu (real use), and those are two
+# different files that can each independently be newer or older than a
+# single shared cache entry would assume.
+#
+# Returns the full interleaved stream - both "breadcrumb<TAB>target" leaf
+# lines and "PATH<TAB>func<TAB>breadcrumb" lines from _mt_walk - so both
+# menu_tree_flatten() and menu_tree_paths() below can each filter down to
+# just what they need from one cached walk instead of paying for two.
+_mt_cached_raw() {
+  local file="$1"
+
+  # ohmydebn-package-build generates this fresh at package-build time, from
+  # the exact ohmydebn-menu about to be shipped in the same .deb - trusted
+  # unconditionally (no mtime check) for the one well-known real-install
+  # path, so even the very first launch after install is fast, not just
+  # subsequent ones. End users aren't expected to edit ohmydebn-menu; if
+  # you're doing that for local development on a real install, delete this
+  # file to fall back to the normal on-the-fly per-user cache below. The
+  # repo-checkout path used by tests never matches this, so it's untouched
+  # by this shortcut.
+  local shipped_cache="/usr/share/ohmydebn/cache/menu-tree-flatten.tsv"
+  if [[ "$file" == "/usr/share/ohmydebn/bin/ohmydebn-menu" && -f "$shipped_cache" ]]; then
+    cat "$shipped_cache"
+    return
+  fi
+
+  local cache_key
+  cache_key=$(echo -n "$file" | cksum | cut -d' ' -f1)
+  local cache_dir="$HOME/.local/state/ohmydebn-config"
+  local cache_file="$cache_dir/menu-tree-flatten-cache-$cache_key.tsv"
+
+  # Invalid if missing, if the source changed, or if this library's own
+  # extraction logic changed (BASH_SOURCE[0] here is ohmydebn-menu-tree's
+  # own path, regardless of who called this).
+  if [[ -f "$cache_file" && "$cache_file" -nt "$file" && "$cache_file" -nt "${BASH_SOURCE[0]}" ]]; then
+    cat "$cache_file"
+    return
+  fi
+
+  mkdir -p "$cache_dir"
+  local tmp
+  tmp=$(mktemp "$cache_file.XXXXXX")
+  _mt_flatten_uncached "$file" >"$tmp"
+  mv "$tmp" "$cache_file"
+  cat "$cache_file"
+}
+
+# Public: every reachable leaf as "breadcrumb<TAB>target" - unchanged
+# contract from before PATH lines existed, since this just filters them out.
+menu_tree_flatten() {
+  _mt_cached_raw "$1" | grep -v $'^PATH\t'
+}
+
+# Public: "func<TAB>breadcrumb" for every show_*_menu function reachable
+# from the Go menu - the breadcrumb prefix at which that function lives.
+# Confirmed by hand-tracing every case-arm target in ohmydebn-menu that the
+# reachable menu tree is a strict tree (no function is reachable via two
+# different parent paths), so this mapping is unambiguous - one row per
+# func. tests/consistency.sh guards that assumption against regression.
+menu_tree_paths() {
+  _mt_cached_raw "$1" | grep $'^PATH\t' | cut -f2,3
+}
+
+# Emits "icon<TAB>label" for each of the 12 real Go-menu items, in order.
+# ohmydebn-menu-picker itself receives this data directly as an argument
+# from show_main_menu (see menu_tree_flatten's comment above) rather than
+# calling this function - this exists so tests/consistency.sh can validate
+# the category list independently, using the same Go-line extraction
+# menu_tree_flatten() uses, but keeping the icon instead of stripping it.
+menu_tree_categories() {
+  local file="$1" goline raw
+  goline=$(grep -n '^\s*local go_items="' "$file" | head -1 | cut -d: -f1)
+  raw=$(sed -n "${goline}p" "$file" | grep -oP 'local go_items="\K[^"]*')
+  printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r item; do
+    local icon label
+    icon=$(grep -oP '^\S+' <<<"$item")
+    label=$(grep -oP '^\S+\s+\K.*' <<<"$item")
+    printf '%s\t%s\n' "$icon" "$label"
+  done
+}

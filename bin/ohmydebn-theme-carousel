@@ -1,0 +1,464 @@
+#!/usr/bin/python3
+#
+# ohmydebn-theme-carousel: full-screen, Omarchy-style theme browser -
+# launched directly by Ctrl+Super+T and from ohmydebn-menu's Style > Theme.
+# Aether keeps its own job (building/editing themes) - reachable here via
+# the B/C/R single-key shortcuts (Browse more themes, Create new theme
+# using Aether, Remove theme), all three also clickable directly in
+# self.shortcuts_label (see on_shortcuts_link_activated()). R only shows up
+# at all when the currently-displayed theme is removable (see
+# is_theme_removable() - ohmydebn-theme-remove itself is hardcoded to only
+# ever touch ~/.config/ohmydebn/themes/, never the ~20 bundled system
+# ones, so this mirrors that same real scope) and, unlike the other two,
+# skips spawning a terminal entirely - removal is just a fast directory
+# delete, no confirmation prompt even in the original script, so it runs
+# directly against whichever theme you're already looking at.
+#
+# Left/Right (or Up/Down) instantly swap the background, centered preview
+# card, and theme name - pure image loads, zero subprocess calls, so
+# cycling never lags. The real ohmydebn-theme-set only runs once, on Enter
+# - confirmed by direct timing that a full run costs ~0.8-1.2s (it shells
+# out to ~15 sub-scripts: Cinnamon theme, wallpaper, terminal, btop, gedit,
+# starship, vscode, etc.), which is fine as a one-time "commit" cost but
+# would feel laggy if paid on every arrow tap. Escape cancels without ever
+# having applied anything, since nothing touches real system state while
+# browsing.
+#
+# Browse opens bjarneo.github.io/omarchy-themes (a visual, searchable
+# theme gallery) and closes this carousel rather than leaving it open -
+# picking a theme there triggers a registered aether:// URI handler
+# (confirmed real: see ~/.local/share/applications/
+# aether-protocol-handler.desktop -> `aether --import-blueprint %u
+# --auto-apply`) that installs and applies it directly, no need to come
+# back here at all. An earlier version of this carousel had its own
+# inline URL-entry-and-clone flow for exactly this job; removed once the
+# gallery's own install path made it redundant, since browsing/previewing
+# themes visually there is strictly better than pasting a raw git URL
+# blind ever was.
+#
+# Each theme's preview.png (where present - about half the themes have
+# one; it's each theme's original upstream Omarchy/Hyprland promo mockup,
+# not an OhMyDebn/Cinnamon screenshot, so it's representative of the color
+# palette rather than literally accurate) is used for the centered card,
+# falling back to the theme's own first background image (confirmed every
+# theme has at least one) when no preview.png exists - see preview_image().
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
+
+import os
+import subprocess
+import sys
+
+OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
+USER_THEMES_DIR = os.path.expanduser("~/.config/ohmydebn/themes")
+SYSTEM_THEMES_DIR = "/usr/share/ohmydebn-themes"
+CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
+
+CARD_W, CARD_H = 900, 506
+SIDE_W, SIDE_H = 340, 191
+SIDE_OPACITY = 0.4
+
+# bjarneo.github.io/omarchy-themes is a visual, searchable gallery with its
+# own wallpaper previews - selecting a theme there triggers a registered
+# aether:// URI handler (confirmed real:
+# ~/.local/share/applications/aether-protocol-handler.desktop ->
+# `aether --import-blueprint %u --auto-apply`) that installs and applies it
+# directly, with no need to come back here at all. That's why Browse is a
+# plain "open it and get out of the way" action rather than anything like
+# the old inline-clone flow this replaced.
+BROWSE_THEMES_URL = "https://bjarneo.github.io/omarchy-themes/"
+
+# Fake, never-actually-opened URI schemes - purely so Create/Remove can
+# reuse the exact same GtkLabel <a href> click-detection Browse's real link
+# uses, in the same combined multi-line label, rather than needing separate
+# click-target widgets. on_shortcuts_link_activated() below intercepts
+# these before GTK ever tries to hand them to a real URI handler.
+CREATE_THEME_ACTION = "action:create-theme"
+REMOVE_THEME_ACTION = "action:remove-theme"
+
+def build_shortcuts_markup(removable):
+    """R only appears when the currently-displayed theme is removable -
+    see is_theme_removable(). Rebuilt on every render() (not a fixed
+    constant) since that depends on whichever theme you're currently
+    looking at, unlike Browse/Create which are always available."""
+    lines = [
+        f'<a href="{BROWSE_THEMES_URL}">B - Browse More Themes</a>',
+        f'<a href="{CREATE_THEME_ACTION}">C - Create new Theme using Aether</a>',
+    ]
+    if removable:
+        lines.append(f'<a href="{REMOVE_THEME_ACTION}">R - Remove Theme</a>')
+    return "\n".join(lines)
+
+
+def slug_to_display(slug):
+    return " ".join(word.capitalize() for word in slug.split("-"))
+
+
+def theme_dir(slug):
+    user_path = os.path.join(USER_THEMES_DIR, slug)
+    if os.path.isdir(user_path):
+        return user_path
+    return os.path.join(SYSTEM_THEMES_DIR, slug)
+
+
+def is_theme_removable(slug):
+    # ohmydebn-theme-remove itself is hardcoded to only ever look in
+    # ~/.config/ohmydebn/themes/ - it's structurally incapable of
+    # touching /usr/share/ohmydebn-themes (the ~20 bundled themes) no
+    # matter what name it's given. This mirrors that same real scope
+    # rather than inventing a new "is this really user-added" definition
+    # nothing currently tracks (individually cloned vs. bulk-installed via
+    # Install All both count the same way).
+    return os.path.isdir(os.path.join(USER_THEMES_DIR, slug))
+
+
+def list_theme_slugs():
+    slugs = set()
+    for base in (USER_THEMES_DIR, SYSTEM_THEMES_DIR):
+        if not os.path.isdir(base):
+            continue
+        for entry in os.listdir(base):
+            if os.path.isdir(os.path.join(base, entry)):
+                slugs.add(entry)
+    return sorted(slugs)
+
+
+def first_background(slug):
+    bg_dir = os.path.join(theme_dir(slug), "backgrounds")
+    try:
+        entries = sorted(os.listdir(bg_dir))
+    except OSError:
+        return None
+    for name in entries:
+        if name.lower().endswith((".png", ".jpg", ".jpeg")):
+            return os.path.join(bg_dir, name)
+    return None
+
+
+def preview_image(slug):
+    preview = os.path.join(theme_dir(slug), "preview.png")
+    if os.path.isfile(preview):
+        return preview
+    return first_background(slug)
+
+
+def current_theme_slug():
+    try:
+        with open(CURRENT_THEME_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def get_monitor_geometry():
+    # Same fix as ohmydebn-menu-picker: follow the pointer's monitor, not
+    # the primary one, matching rofi's own default (-5, "the monitor that
+    # shows the mouse pointer") on a multi-monitor setup.
+    display = Gdk.Display.get_default()
+    seat = display.get_default_seat()
+    _screen, x, y = seat.get_pointer().get_position()
+    monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor() or display.get_monitor(0)
+    return monitor.get_geometry()
+
+
+def load_cover_pixbuf(path, target_w, target_h):
+    """Scale-and-crop to fill target_w x target_h exactly, like CSS
+    background-size:cover - avoids distorting the image, unlike a plain
+    stretch-to-fit scale."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+    src_w, src_h = pixbuf.get_width(), pixbuf.get_height()
+    scale = max(target_w / src_w, target_h / src_h)
+    new_w, new_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
+    scaled = pixbuf.scale_simple(new_w, new_h, GdkPixbuf.InterpType.BILINEAR)
+    x = max(0, (new_w - target_w) // 2)
+    y = max(0, (new_h - target_h) // 2)
+    x = min(x, new_w - target_w)
+    y = min(y, new_h - target_h)
+    return scaled.new_subpixbuf(x, y, min(target_w, new_w), min(target_h, new_h))
+
+
+def load_contain_pixbuf(path, max_w, max_h):
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+    src_w, src_h = pixbuf.get_width(), pixbuf.get_height()
+    scale = min(max_w / src_w, max_h / src_h)
+    return pixbuf.scale_simple(max(1, round(src_w * scale)), max(1, round(src_h * scale)), GdkPixbuf.InterpType.BILINEAR)
+
+
+CSS = """
+#carousel-caption {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+#carousel-name {
+    color: #ffffff;
+    font-size: 30pt;
+    font-weight: bold;
+}
+#carousel-hint {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 11pt;
+}
+#carousel-card {
+    border: 3px solid rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 50px 10px rgba(130, 170, 255, 0.6);
+}
+#carousel-side {
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+"""
+
+
+class Carousel(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self._closing = False
+
+        self.slugs = list_theme_slugs()
+        current = current_theme_slug()
+        self.index = self.slugs.index(current) if current in self.slugs else 0
+
+        geo = get_monitor_geometry()
+        self.set_default_size(geo.width, geo.height)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS.encode("utf-8"))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self.overlay = Gtk.Overlay()
+        self.add(self.overlay)
+
+        self.bg_image = Gtk.Image()
+        self.overlay.add(self.bg_image)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
+        content.set_halign(Gtk.Align.CENTER)
+        content.set_valign(Gtk.Align.CENTER)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=28)
+        row.set_halign(Gtk.Align.CENTER)
+        self.left_image = Gtk.Image()
+        self.left_image.set_name("carousel-side")
+        self.left_image.set_opacity(SIDE_OPACITY)
+        self.card_image = Gtk.Image()
+        self.card_image.set_name("carousel-card")
+        self.right_image = Gtk.Image()
+        self.right_image.set_name("carousel-side")
+        self.right_image.set_opacity(SIDE_OPACITY)
+        row.pack_start(self.left_image, False, False, 0)
+        row.pack_start(self.card_image, False, False, 0)
+        row.pack_start(self.right_image, False, False, 0)
+        content.pack_start(row, False, False, 0)
+
+        # A solid scrim behind the text, not just a shadow - text-shadow
+        # alone read fine over the theme mockups' typically-dark desktop
+        # screenshots, but white text with only a soft shadow was hard to
+        # read on light theme wallpapers/previews (e.g. Snow, Milkmatcha
+        # Light). A backing panel guarantees contrast regardless of what's
+        # behind it, and matches the same pattern ohmydebn-theme-bg-carousel
+        # already uses for its own caption bar.
+        caption = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        caption.set_name("carousel-caption")
+        caption.set_halign(Gtk.Align.CENTER)
+        caption.set_border_width(14)
+
+        self.name_label = Gtk.Label()
+        self.name_label.set_name("carousel-name")
+        caption.pack_start(self.name_label, False, False, 0)
+
+        # Hidden in "browse" mode, shown for "entry"/"cloning" - kept in
+        self.hint_label = Gtk.Label(label="← → to browse   ·   Enter to apply   ·   Esc to cancel")
+        self.hint_label.set_name("carousel-hint")
+        caption.pack_start(self.hint_label, False, False, 0)
+
+        self.shortcuts_label = Gtk.Label()
+        self.shortcuts_label.set_justify(Gtk.Justification.CENTER)
+        self.shortcuts_label.set_name("carousel-hint")
+        self.shortcuts_label.connect("activate-link", self.on_shortcuts_link_activated)
+        caption.pack_start(self.shortcuts_label, False, False, 0)
+
+        content.pack_start(caption, False, False, 0)
+
+        self.overlay.add_overlay(content)
+        self.overlay.set_overlay_pass_through(content, True)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("show", lambda w: GLib.idle_add(self.render))
+
+    def move(self, delta):
+        self.index = (self.index + delta) % len(self.slugs)
+        self.render()
+
+    def render(self):
+        n = len(self.slugs)
+        if n == 0:
+            return GLib.SOURCE_REMOVE
+        slug = self.slugs[self.index]
+        geo = get_monitor_geometry()
+
+        bg_path = first_background(slug) or preview_image(slug)
+        if bg_path:
+            self.bg_image.set_from_pixbuf(load_cover_pixbuf(bg_path, geo.width, geo.height))
+
+        card_path = preview_image(slug)
+        if card_path:
+            self.card_image.set_from_pixbuf(load_contain_pixbuf(card_path, CARD_W, CARD_H))
+        else:
+            self.card_image.clear()
+
+        left_slug = self.slugs[(self.index - 1) % n]
+        right_slug = self.slugs[(self.index + 1) % n]
+        left_path = preview_image(left_slug)
+        right_path = preview_image(right_slug)
+        if left_path:
+            self.left_image.set_from_pixbuf(load_contain_pixbuf(left_path, SIDE_W, SIDE_H))
+        else:
+            self.left_image.clear()
+        if right_path:
+            self.right_image.set_from_pixbuf(load_contain_pixbuf(right_path, SIDE_W, SIDE_H))
+        else:
+            self.right_image.clear()
+
+        self.name_label.set_text(slug_to_display(slug))
+        self.shortcuts_label.set_markup(build_shortcuts_markup(is_theme_removable(slug)))
+        return GLib.SOURCE_REMOVE
+
+    def on_key_press(self, widget, event):
+        keyval = event.keyval
+        if keyval == Gdk.KEY_Escape:
+            self.finish(None)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.finish(self.slugs[self.index] if self.slugs else None)
+            return True
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_Up):
+            self.move(-1)
+            return True
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_Down):
+            self.move(1)
+            return True
+        # Single-key shortcuts for theme actions beyond browse/apply, so
+        # Ctrl+Super+T jumping straight here loses no functionality versus
+        # the old ohmydebn-theme-set-gui menu these replaced - shown in
+        # self.shortcuts_label above, where all three are also clickable
+        # (see on_shortcuts_link_activated()).
+        lower = Gdk.keyval_to_lower(keyval)
+        if lower == Gdk.KEY_b:
+            self.open_browse_themes()
+            return True
+        if lower == Gdk.KEY_c:
+            self.open_aether()
+            return True
+        if lower == Gdk.KEY_r and self.slugs and is_theme_removable(self.slugs[self.index]):
+            self.remove_current_theme()
+            return True
+        return False
+
+    def open_browse_themes(self):
+        # A real web URL, opened via GIO's own default-handler mechanism -
+        # confirmed by hand that this hand-off is genuinely asynchronous (a
+        # D-Bus round trip, not just "next main-loop iteration"), so this
+        # closes on its own short delay below rather than any of this
+        # method's callers closing immediately out from under it.
+        try:
+            Gtk.show_uri_on_window(self, BROWSE_THEMES_URL, Gdk.CURRENT_TIME)
+        except GLib.Error:
+            pass
+        GLib.timeout_add(400, lambda: self.finish(None))
+
+    def open_aether(self):
+        self.launch_and_close(["/usr/share/aether/aether"])
+
+    def remove_current_theme(self):
+        # No confirmation prompt - matches ohmydebn-theme-remove's own
+        # existing behavior (it doesn't have one either), and this is just
+        # a faster, no-terminal-needed path to the exact same action,
+        # targeted at whatever theme you're already looking at instead of
+        # picking again from a list.
+        if not self.slugs:
+            return
+        slug = self.slugs[self.index]
+        if not is_theme_removable(slug):
+            return
+        subprocess.run([f"{OHMYDEBN_BIN}/ohmydebn-theme-remove", slug], check=False)
+        self.slugs = list_theme_slugs()
+        self.index = min(self.index, len(self.slugs) - 1) if self.slugs else 0
+        self.render()
+
+    def on_shortcuts_link_activated(self, label, uri):
+        # Create/Remove use fake action: URIs purely so they can reuse the
+        # same <a href> click-detection the real Browse link uses, in the
+        # same combined multi-line label - intercepted here before GTK
+        # would otherwise try (and fail) to hand a fake scheme to a real
+        # URI handler. Returning True stops that from being attempted.
+        if uri == CREATE_THEME_ACTION:
+            self.open_aether()
+            return True
+        if uri == REMOVE_THEME_ACTION:
+            self.remove_current_theme()
+            return True
+        # A real URL (Browse) - let GTK's own default handler open it in
+        # the browser; open_browse_themes() isn't involved here since this
+        # is the click path, not the keyboard one, but both close the same
+        # deliberately-delayed way for the same reason.
+        GLib.timeout_add(400, lambda: self.finish(None))
+        return False
+
+    @staticmethod
+    def _terminal_wrapped(action_script):
+        # Matches ohmydebn-theme-set-gui's own terminal-wrapped commands
+        # exactly (show-logo, the action, show-done) so these shortcuts
+        # behave identically to picking the same action from that menu.
+        return [
+            f"{OHMYDEBN_BIN}/ohmydebn-terminal", "--class", "OhMyDebn", "-e", "bash", "-c",
+            f"{OHMYDEBN_BIN}/ohmydebn-show-logo; {action_script}; {OHMYDEBN_BIN}/ohmydebn-show-done",
+        ]
+
+    def launch_and_close(self, argv):
+        if self._closing:
+            return
+        self._closing = True
+        try:
+            subprocess.Popen(
+                argv,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            pass
+        Gtk.main_quit()
+
+    def finish(self, slug):
+        if self._closing:
+            return
+        self._closing = True
+        if slug is None:
+            Gtk.main_quit()
+            return
+        # Show feedback and force it to actually paint before the blocking
+        # apply call below - GLib.idle_add alone doesn't guarantee the
+        # redraw happens first, since idle_add just defers to the next
+        # main-loop iteration rather than starting a background thread.
+        self.name_label.set_text(f"Applying {slug_to_display(slug)}…")
+        self.hint_label.set_text("")
+        self.shortcuts_label.set_text("")
+        self.card_image.set_opacity(0.5)
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        subprocess.run([f"{OHMYDEBN_BIN}/ohmydebn-theme-set", slug], check=False)
+        Gtk.main_quit()
+
+
+if __name__ == "__main__":
+    win = Carousel()
+    win.show_all()
+    win.fullscreen()
+    Gtk.main()
+    sys.exit(0)

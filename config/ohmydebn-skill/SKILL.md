@@ -4,10 +4,10 @@ description: >
   REQUIRED for ANY changes to Linux desktop, window manager, or system config.
   Use when editing ~/.config/cinnamon/, ~/.config/nemo/, ~/.config/gtk-3.0/,
   ~/.config/gtk-4.0/, ~/.config/terminator/, ~/.config/gnome-terminal/,
-  ~/.config/mate-terminal/, ~/.config/xfce4-terminal/, ~/.config/rofi/,
+  ~/.config/mate-terminal/, ~/.config/xfce4-terminal/,
   or ~/.config/ohmydebn/. Triggers: Cinnamon desktop, applets, desklets, extensions,
   panels, keybindings, themes, wallpapers, fonts, window management, terminal config,
-  startup applications, notifications, power management, screensaver, rofi launcher,
+  startup applications, notifications, power management, screensaver, app launcher,
   or any ohmydebn-* commands.
 ---
 
@@ -22,14 +22,13 @@ Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stab
 - Editing ANY file in `~/.config/cinnamon/` (desklets, applets, extensions, panels, etc.)
 - Editing ANY file in `~/.config/nemo/`, `~/.config/gtk-3.0/`, `~/.config/gtk-4.0/`
 - Editing terminal configs (alacritty, terminator, gnome-terminal, mate-terminal, xfce4-terminal)
-- Editing ANY file in `~/.config/rofi/`
 - Editing ANY file in `~/.config/ohmydebn/`
 - Editing shell configuration files (`~/.zshrc`, `~/.config/zsh/`, etc.)
 - Window management, workspace behavior, panel configuration
 - Desktop effects, animations, themes, wallpapers, fonts, appearance changes
 - Any `ohmydebn-*` command (theme, pkg, reset-config, update, version)
 - Screenshots, screen recording, power management, screensaver, startup applications
-- Rofi launcher configuration and theming
+- App launcher / window switcher / theme picker configuration and theming
 
 **If you're about to edit a config file in ~/.config/ on this system, STOP and use this skill first.**
 
@@ -62,7 +61,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
 - **OpenCode AI**: CLI (`opencode-cli`, `Super + A`) + GUI versions, kept current via `ohmydebn-update`
-- **Apps Menu**: Rofi launcher, `Super + Space` or OhMyDebn Menu → Apps
+- **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + Space` or OhMyDebn Menu → Apps
 
 ## System Architecture
 
@@ -75,7 +74,7 @@ OhMyDebn is built on:
 | **Nemo** | File manager | `~/.config/nemo/` |
 | **Cinnamon Panel** | Taskbar/applets | `gsettings` (`org.cinnamon`), applet/desklet instance configs under `~/.config/cinnamon/spices/` |
 | **GTK3/GTK4** | Widget toolkit | `~/.config/gtk-3.0/`, `~/.config/gtk-4.0/` |
-| **Rofi** | App launcher | `~/.config/rofi/` |
+| **ohmydebn-menu-picker** | App launcher / menu search (GTK, not rofi) | `~/.config/ohmydebn/current/picker-colors` (theming only) |
 | **Alacritty** | Default terminal | `~/.config/alacritty/` |
 | **gTile** | Advanced window tiling | System Settings → Extensions |
 | **Cinnamon Screensaver** | Lock screen | `gsettings` (`org.cinnamon.desktop.screensaver`); trigger with `cinnamon-screensaver-command -l` |
@@ -195,7 +194,6 @@ Restart terminal applications by closing and reopening the window or using the a
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
 | git | `~/.config/git/config` |
-| rofi | `~/.config/rofi/` |
 | zsh | `~/.zshrc`, `~/.config/zsh/` |
 | oh my zsh | `~/.oh-my-zsh/` |
 | zoxide | `~/.config/zoxide/` |
@@ -213,15 +211,14 @@ For simple changes, edit files in `~/.config/`:
 
 ```bash
 # 1. Read current config
-cat ~/.config/rofi/config.rasi
+cat ~/.config/alacritty/alacritty.toml
 
 # 2. Backup before changes
-cp ~/.config/rofi/config.rasi ~/.config/rofi/config.rasi.bak.$(date +%s)
+cp ~/.config/alacritty/alacritty.toml ~/.config/alacritty/alacritty.toml.bak.$(date +%s)
 
 # 3. Make changes with Edit tool
 
 # 4. Apply changes
-# - Rofi: auto-reloads on config save
 # - Cinnamon: settings live in dconf (org.cinnamon schemas) — use `gsettings set`, auto-reloads, no flat file to edit
 # - Terminals: restart by closing and reopening window
 ```
@@ -433,7 +430,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Open OhMyDebn menu" -> `Super + Alt + Space`
 - "Launch AI assistant" -> `Super + A` (OpenCode CLI) or from Apps Menu
 - "Update OpenCode to latest version" -> `ohmydebn-update` (system update includes OpenCode)
-- "Open apps menu" -> `Super + Space` (Rofi)
+- "Open apps menu" -> `Super + Space` (GTK app launcher)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`
 - "Show system summary" -> `Ctrl + Shift + S` (fastfetch GUI)
 - "Monitor system performance" -> `Super + T` (btop)

@@ -9,8 +9,9 @@
 # drifting out of sync across the three places they're now split across,
 # a one-time state marker reused by two features, a config guard checking
 # a package name that doesn't match anything real, a menu case arm that
-# can never match its own menu, and two features silently fighting over
-# the same keybinding.
+# can never match its own menu, two features silently fighting over
+# the same keybinding, and the flattened Search menu silently losing sync
+# with the real nested menu tree it's generated from.
 
 set -uo pipefail
 
@@ -24,6 +25,7 @@ REMOVE_ALL_SH="$REPO_ROOT/bin/ohmydebn-pkg-remove-all-optional"
 BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
 
 source "$REPO_ROOT/tests/lib/extract-packages.sh"
+source "$REPO_ROOT/bin/ohmydebn-menu-tree"
 
 FAIL=0
 
@@ -214,6 +216,95 @@ while IFS= read -r combo; do
   FAIL=$((FAIL + 1))
 done < <(printf '%s\n' "${ALL_BINDINGS[@]}" | sort | uniq -d)
 echo "  checked ${#ALL_BINDINGS[@]} key-combo assignments"
+
+# -- check 10: ohmydebn-menu-picker's flattened search list stays in sync
+#              with the real nested menu tree it's generated from --
+#
+# menu_tree_flatten() (bin/ohmydebn-menu-tree) walks the same case-statement
+# structure check 8 above already validated arm-by-arm - that's a load-
+# bearing precondition here, not a coincidence: if check 8 is failing, this
+# check's pairing logic has nothing reliable to walk.
+
+echo
+echo "-- flattened menu-picker search list stays in sync with the real menu tree --"
+# shellcheck disable=SC2034 # read by menu_tree_flatten() in ohmydebn-menu-tree
+MT_SKIP_LABELS=(Apps)
+mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>/dev/null)
+if [[ ${#FLAT[@]} -eq 0 ]]; then
+  echo "  FAIL - menu_tree_flatten produced zero leaves"
+  FAIL=$((FAIL + 1))
+fi
+
+mapfile -t FLAT_DUPES < <(printf '%s\n' "${FLAT[@]}" | cut -f1 | sort | uniq -d)
+for dupe in "${FLAT_DUPES[@]}"; do
+  echo "  FAIL - breadcrumb '$dupe' is produced by more than one leaf"
+  FAIL=$((FAIL + 1))
+done
+
+mapfile -t ALL_MENU_FUNCS < <(grep -oP '^show_[a-zA-Z0-9_]+_menu(?=\(\) \{)' "$MENU_FILE")
+for func in "${ALL_MENU_FUNCS[@]}"; do
+  # show_main_menu has no case $(menu ...) block of its own - it builds the
+  # go_items string and hands off to menu() (which calls
+  # ohmydebn-menu-picker) instead.
+  [[ "$func" == "show_main_menu" ]] && continue
+  grep -qP "\)\s*${func}\s*;;" "$MENU_FILE" ||
+    { echo "  FAIL - $func is defined but no case arm targets it"; FAIL=$((FAIL + 1)); }
+done
+echo "  checked ${#FLAT[@]} flattened leaves"
+
+# ohmydebn-menu's menu() looks up its caller's breadcrumb prefix via
+# menu_tree_paths() by function name, assuming each show_*_menu is
+# reachable via exactly one path (confirmed true today by hand-tracing
+# every case-arm target, but nothing else enforces it) - a function
+# reachable two ways would make that lookup pick one arbitrarily and scope
+# search results by the wrong prefix.
+mapfile -t PATHS < <(menu_tree_paths "$MENU_FILE" 2>/dev/null)
+mapfile -t PATH_DUPES < <(printf '%s\n' "${PATHS[@]}" | cut -f1 | sort | uniq -d)
+for dupe in "${PATH_DUPES[@]}"; do
+  echo "  FAIL - $dupe is reachable via more than one breadcrumb path"
+  FAIL=$((FAIL + 1))
+done
+echo "  checked ${#PATHS[@]} func -> breadcrumb paths"
+
+# -- check 11: rofi is never invoked anywhere - a regression guard, not a
+#              consistency-of-something-else check, for the ohmydebn-menu-
+#              picker/-theme-carousel/-theme-bg-carousel work that replaced
+#              every real rofi call site this project had --
+
+echo
+echo "-- rofi is not invoked anywhere (regression guard) --"
+mapfile -t ROFI_HITS < <(grep -rlE '/usr/bin/rofi\b' "$REPO_ROOT/bin" "$REPO_ROOT/install" 2>/dev/null)
+for f in "${ROFI_HITS[@]}"; do
+  echo "  FAIL - ${f#"$REPO_ROOT"/} still invokes /usr/bin/rofi directly"
+  FAIL=$((FAIL + 1))
+done
+echo "  checked bin/ and install/ for direct rofi invocations"
+
+# -- check 12: the GTK pickers never manually scale their own window sizes
+#              - a regression guard for a real bug: ohmydebn-menu-picker
+#              used to pre-multiply its width by the monitor's Muffin scale
+#              factor (a leftover from rofi's DPI/theme-unit model) before
+#              handing it to Gtk.Window.set_default_size(), which already
+#              applies that same scale factor itself - confirmed by hand
+#              (identical set_default_size() calls produced a real 480x200
+#              X11 window at GDK_SCALE=1 and a real 960x400 one at
+#              GDK_SCALE=2, no other code involved). Pre-multiplying again
+#              would quadruple the window's on-screen area on a 2x
+#              display. ohmydebn-scale/ohmydebn-picker-width (the two
+#              scripts this used) are deleted entirely, but this guards
+#              against the same pattern creeping back in some other form
+#              (e.g. calling Muffin's DisplayConfig directly) too. --
+
+echo
+echo "-- GTK pickers don't manually pre-scale window sizes (regression guard) --"
+mapfile -t SCALE_HITS < <(grep -lE 'ohmydebn-scale|ohmydebn-picker-width|Muffin\.DisplayConfig' \
+  "$REPO_ROOT/bin/ohmydebn-menu-picker" "$REPO_ROOT/bin/ohmydebn-theme-carousel" \
+  "$REPO_ROOT/bin/ohmydebn-theme-bg-carousel" 2>/dev/null)
+for f in "${SCALE_HITS[@]}"; do
+  echo "  FAIL - ${f#"$REPO_ROOT"/} references a manual scale-query mechanism - GTK already scales set_default_size()/fullscreen() automatically"
+  FAIL=$((FAIL + 1))
+done
+echo "  checked the 3 GTK pickers for manual scale pre-multiplication"
 
 echo
 echo "$FAIL failure(s)"

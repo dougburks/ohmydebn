@@ -24,7 +24,6 @@ PACKAGES=(
   gedit
   keepassxc
   neovim
-  rofi
 
   # Cinnamon desktop + theming
   cinnamon-desktop-environment

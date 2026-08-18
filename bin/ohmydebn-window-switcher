@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Launches the GTK window switcher (ohmydebn-menu-picker --windows), which
+# replaced rofi's `-show window` here - hold Ctrl+Alt, tap Tab to cycle,
+# release to switch, same as before (see that script's own comment for how
+# it replicates rofi's -kb-row-down/-kb-accept-entry/-timeout-* bindings).
+# Referenced by the Ctrl+Alt+Tab keybinding. Renamed from
+# ohmydebn-rofi-window-switcher once nothing in the codebase called rofi
+# anywhere anymore.
+exec /usr/share/ohmydebn/bin/ohmydebn-menu-picker --windows

@@ -104,8 +104,8 @@ fi
 # Use COLORS_SOURCE to update cinnamon and gtk themes
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-cinnamon "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
-# Use COLORS_SOURCE to update rofi theme
-/usr/share/ohmydebn/bin/ohmydebn-theme-set-rofi "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+# Use COLORS_SOURCE to update the GTK pickers' own color file
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-picker "$COLORS_SOURCE"
 
 # Use COLORS_SOURCE to update the Claude Code theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-claude "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"

@@ -1,0 +1,750 @@
+#!/usr/bin/python3
+#
+# ohmydebn-menu-picker: GTK popup for ohmydebn-menu's top-level "Go" menu,
+# and (via --apps) the application launcher formerly provided by rofi's
+# `-show drun` in ohmydebn-app-launcher.
+#
+# Menu mode shows the 12 real categories by default; once the user types,
+# live-filters across every leaf action in the whole nested menu tree (rofi
+# can't do this itself - its dmenu/script modes only ever filter one static
+# list handed to them at launch, never re-query per keystroke). Prints the
+# chosen row's label to stdout on selection - a bare category label, or a
+# full "Category > Sub > Leaf" breadcrumb - and prints nothing on cancel,
+# exactly matching ohmydebn-menu's existing menu() contract so every
+# show_*_menu function's own case statement barely has to change (menu()
+# handles all of this - see its own comment in ohmydebn-menu). Categories
+# come as argv[1] - the current level's own items string, e.g.
+# show_main_menu's go_items for the top level or Install's own items for
+# that submenu; argv[2] is that same call's breadcrumb prefix in the tree
+# (empty at the top level, e.g. "Install" one level down) used to scope and
+# relabel search results. Leaves come from ohmydebn-menu-tree's
+# menu_tree_flatten(), which parses ohmydebn-menu's own source - this script
+# never duplicates that structure.
+#
+# Apps mode (argv[1] == "--apps") instead enumerates installed .desktop
+# entries itself and launches the chosen one directly - unlike menu mode, it
+# never prints to stdout, matching rofi's own drun behavior of doing the
+# launch itself rather than handing a result back to its caller.
+#
+# Windows mode (argv[1] == "--windows") replicates rofi's `-show window`
+# hold-Ctrl+Alt-tap-Tab-to-cycle-release-to-select gesture for
+# ohmydebn-window-switcher, rather than the type-to-search pattern the
+# other two modes use: Cinnamon's <Ctrl><Alt>Tab keybinding fires this
+# script once on the initial press, and from then on it's this process
+# (not Cinnamon) that must see every further Tab tap and the eventual
+# Ctrl/Alt release directly - see grab_keyboard() and
+# on_window_key_release() below for how.
+#
+# List mode (argv[1] == "--list", argv[2] == the items string) is a plain
+# static "icon  Label\nicon  Label..." list - same format load_categories()
+# already parses for the Go menu - typed to search itself rather than some
+# wider tree. Prints the chosen label to stdout like menu mode, used by
+# ohmydebn-theme-set-gui in place of rofi's -dmenu.
+#
+# Theming is read fresh on every launch from whatever
+# ohmydebn-theme-set-picker already generated
+# (~/.config/ohmydebn/current/picker-colors' bg0/bg1/bg3/fg0), so there's
+# no separate theme pipeline to keep in sync - if that generation ever
+# changes, this picks it up automatically.
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("Wnck", "3.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Wnck
+
+import configparser
+import os
+import re
+import shlex
+import subprocess
+import sys
+
+OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
+MENU_FILE = f"{OHMYDEBN_BIN}/ohmydebn-menu"
+MENU_TREE_LIB = f"{OHMYDEBN_BIN}/ohmydebn-menu-tree"
+
+DEFAULT_COLORS = {
+    "bg0": "rgba(20, 20, 24, 0.95)",
+    "bg1": "rgba(20, 20, 24, 1)",
+    "bg3": "rgba(90, 90, 220, 0.95)",
+    "fg0": "rgba(230, 230, 230, 1)",
+}
+
+
+def run_menu_tree(func_call):
+    """Source ohmydebn-menu-tree and evaluate func_call, returning stdout lines.
+    Warnings from a broken/edited ohmydebn-menu go to stderr and are ignored
+    here, same tolerance the bash side already has - an empty result just
+    means an empty menu, not a crash."""
+    script = f'source "{MENU_TREE_LIB}"; {func_call}'
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
+    return [line for line in result.stdout.split("\n") if line]
+
+
+def load_categories(go_items):
+    """go_items is ohmydebn-menu's own go_items string (icon  Label\\nicon
+    Label...), passed in as argv[1] by show_main_menu - the same real,
+    executed bash data menu_tree_flatten()/menu_tree_categories() parse for
+    the flattened search and for tests/consistency.sh, so there's only ever
+    one place this list is written down."""
+    rows = []
+    # bash never interprets the literal two-character "\n" inside this
+    # double-quoted string as a real newline - same conversion
+    # ohmydebn-menu-tree's _mt_item_labels() already does on the bash side.
+    for item in go_items.replace("\\n", "\n").split("\n"):
+        if not item:
+            continue
+        # Split on the first run of whitespace, not a literal two spaces -
+        # icons are followed by either one space (wide glyphs like the
+        # magnifying glass/music note/palette, which already read as full
+        # width) or two (narrow Nerd Font PUA icons), matching the same
+        # `\s+`-based split ohmydebn-menu-tree already uses on the bash
+        # side. A literal "  " here silently produced an empty label for
+        # every single-space item (e.g. "Cybersecurity"), which then never
+        # matched its own case arm and fell through to that menu's "back to
+        # parent" fallback instead - confirmed as the actual cause of a
+        # real report ("Install > Cybersecurity doesn't show its submenu").
+        # Keep the original separator (1 or 2 spaces) for display instead of
+        # hardcoding two - forcing two after a wide glyph like the
+        # magnifying glass left a visibly oversized gap before "Cybersecurity".
+        m = re.match(r"^(\S+)(\s+)(.*)$", item)
+        icon, sep, label = m.group(1), m.group(2), m.group(3).strip()
+        rows.append((f"{icon}{sep}{label}", label))
+    return rows
+
+
+def load_leaves(breadcrumb_prefix=""):
+    """breadcrumb_prefix is the calling submenu's own position in the tree
+    (e.g. "Install"), passed in as argv[2] by ohmydebn-menu's menu() - empty
+    for the top-level Go menu, meaning no filtering (today's behavior,
+    unchanged). When set, only that submenu's own descendants are
+    searchable, and the display label has the redundant prefix stripped
+    (e.g. "Media > GIMP image editor" instead of
+    "Install > Media > GIMP image editor" when already inside Install) -
+    but the returned *value* is always the full absolute breadcrumb, so
+    menu()'s own prefix-stripping logic on the bash side always has a
+    consistent absolute string to work with, no relative/absolute
+    reconstruction needed anywhere.
+
+    Apps launches a separate dynamic app picker, not a direct action -
+    excluding it here matches the UX call already made when this tree was
+    first flattened (see ohmydebn-menu's git history / the removed
+    show_flat_menu): every other row in a search result does something
+    directly, so Apps popping a second full-screen picker would stand out.
+    """
+    rows = []
+    match_prefix = f"{breadcrumb_prefix} > " if breadcrumb_prefix else ""
+    for line in run_menu_tree(f'MT_SKIP_LABELS=(Apps); menu_tree_flatten "{MENU_FILE}"'):
+        breadcrumb, _, _target = line.partition("\t")
+        if match_prefix:
+            if not breadcrumb.startswith(match_prefix):
+                continue
+            display = breadcrumb[len(match_prefix):]
+        else:
+            display = breadcrumb
+        rows.append((display, breadcrumb))
+    return rows
+
+
+_EXEC_FIELD_CODES = {"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", "%c", "%k", "%v", "%m"}
+
+
+def _with_icons(rows):
+    """Menu-mode rows come as (display, value) pairs; apps-mode rows are
+    (display, value, icon_pixbuf) so the same populate()/on_search_changed()
+    code can serve both without every menu-mode caller having to know
+    icons exist."""
+    return [(display, value, None) for display, value in rows]
+
+
+def _desktop_dirs():
+    dirs = [os.path.expanduser("~/.local/share/applications")]
+    data_dirs = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share")
+    for d in data_dirs.split(":"):
+        if d:
+            dirs.append(os.path.join(d, "applications"))
+    return dirs
+
+
+def _strip_exec_field_codes(exec_line):
+    tokens = shlex.split(exec_line)
+    return [tok.replace("%%", "%") for tok in tokens if tok not in _EXEC_FIELD_CODES]
+
+
+def _parse_desktop_file(path, current_desktop):
+    parser = configparser.ConfigParser(interpolation=None, strict=False)
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        return None
+    if "Desktop Entry" not in parser:
+        return None
+    section = parser["Desktop Entry"]
+    if section.get("Type", "Application") != "Application":
+        return None
+    if section.getboolean("NoDisplay", fallback=False) or section.getboolean("Hidden", fallback=False):
+        return None
+    only_show_in = set(filter(None, section.get("OnlyShowIn", "").split(";")))
+    not_show_in = set(filter(None, section.get("NotShowIn", "").split(";")))
+    if only_show_in and not (only_show_in & current_desktop):
+        return None
+    if not_show_in and (not_show_in & current_desktop):
+        return None
+
+    name = section.get("Name", "")
+    exec_line = section.get("Exec", "")
+    if not name or not exec_line:
+        return None
+    try:
+        exec_tokens = _strip_exec_field_codes(exec_line)
+    except ValueError:
+        return None
+    if not exec_tokens:
+        return None
+    if section.getboolean("Terminal", fallback=False):
+        exec_tokens = ["x-terminal-emulator", "-e"] + exec_tokens
+
+    return name, exec_tokens, section.get("Icon", "")
+
+
+def resolve_icon(icon_name, size=32):
+    # No Icon= key at all (e.g. texdoctk.desktop) still falls through to the
+    # generic icon below, rather than leaving that one row's rendering
+    # visibly different from every other app's.
+    if icon_name and os.path.isabs(icon_name) and os.path.exists(icon_name):
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file_at_size(icon_name, size, size)
+        except GLib.Error:
+            return None
+    name = icon_name
+    for ext in (".png", ".svg", ".xpm"):
+        if name.endswith(ext):
+            name = name[: -len(ext)]
+            break
+    theme = Gtk.IconTheme.get_default()
+    for candidate in (name, "application-x-executable"):
+        try:
+            return theme.load_icon(candidate, size, Gtk.IconLookupFlags.FORCE_SIZE)
+        except GLib.Error:
+            continue
+    return None
+
+
+APP_USAGE_FILE = os.path.expanduser("~/.local/state/ohmydebn-config/app-launch-counts.tsv")
+
+
+def load_app_usage():
+    counts = {}
+    try:
+        with open(APP_USAGE_FILE, encoding="utf-8") as f:
+            for line in f:
+                desktop_id, _, count = line.rstrip("\n").partition("\t")
+                if desktop_id and count.isdigit():
+                    counts[desktop_id] = int(count)
+    except OSError:
+        pass
+    return counts
+
+
+def record_app_usage(desktop_id):
+    if not desktop_id:
+        return
+    counts = load_app_usage()
+    counts[desktop_id] = counts.get(desktop_id, 0) + 1
+    # Same mktemp-then-replace pattern ohmydebn-menu-tree's cache write
+    # uses, so a picker killed mid-write never leaves a half-written file
+    # behind for the next launch to trip over.
+    try:
+        os.makedirs(os.path.dirname(APP_USAGE_FILE), exist_ok=True)
+        tmp = f"{APP_USAGE_FILE}.tmp{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            for did, count in counts.items():
+                f.write(f"{did}\t{count}\n")
+        os.replace(tmp, APP_USAGE_FILE)
+    except OSError:
+        pass
+
+
+def load_apps():
+    """Enumerates installed .desktop entries the way rofi's `-show drun`
+    did for ohmydebn-app-launcher - XDG_DATA_DIRS search order (user's
+    ~/.local/share first) doubles as override precedence: once a desktop-id
+    is seen, later duplicates of the same id from a lower-priority dir are
+    skipped, same as the spec's own override rule.
+
+    Frequently-launched apps bubble to the top, matching rofi drun's own
+    usage-based sorting - ties (including "never launched", the common
+    case for most entries) fall back to alphabetical."""
+    current_desktop = set(filter(None, os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")))
+    seen_ids = set()
+    parsed = []
+    for base in _desktop_dirs():
+        if not os.path.isdir(base):
+            continue
+        for root, _dirs, files in os.walk(base):
+            for fname in files:
+                if not fname.endswith(".desktop"):
+                    continue
+                path = os.path.join(root, fname)
+                desktop_id = os.path.relpath(path, base).replace(os.sep, "-")
+                if desktop_id in seen_ids:
+                    continue
+                seen_ids.add(desktop_id)
+                entry = _parse_desktop_file(path, current_desktop)
+                if entry is not None:
+                    name, exec_tokens, icon_name = entry
+                    parsed.append((name, exec_tokens, icon_name, desktop_id))
+
+    usage = load_app_usage()
+    parsed.sort(key=lambda e: (-usage.get(e[3], 0), e[0].lower()))
+    return [
+        (name, (exec_tokens, desktop_id), resolve_icon(icon_name))
+        for name, exec_tokens, icon_name, desktop_id in parsed
+    ]
+
+
+def get_monitor_geometry():
+    # None of these tools ever passed rofi an explicit -monitor, so they
+    # all rode on rofi's own default: "-5, the monitor that shows the
+    # mouse pointer" (confirmed in `man rofi`) - not the primary monitor.
+    # On a multi-monitor setup, always using the primary monitor here
+    # instead pinned every popup to the left screen regardless of which
+    # monitor the user was actually working on.
+    display = Gdk.Display.get_default()
+    seat = display.get_default_seat()
+    _screen, x, y = seat.get_pointer().get_position()
+    monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor() or display.get_monitor(0)
+    return monitor.get_geometry()
+
+
+def launch_app(exec_tokens):
+    try:
+        subprocess.Popen(
+            exec_tokens,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        pass
+
+
+_SWITCHABLE_WINDOW_TYPES = (Wnck.WindowType.NORMAL, Wnck.WindowType.DIALOG, Wnck.WindowType.UTILITY)
+
+
+def load_windows():
+    """Enumerates open windows the way rofi's `-show window` did for
+    ohmydebn-window-switcher - Wnck (already installed; Cinnamon
+    itself depends on it) gives window listing/activation/icons directly,
+    no wmctrl/xdotool parsing needed.
+
+    get_windows_stacked() is bottom-to-top; reversing it approximates a
+    most-recently-used order for free (raising a window moves it to the
+    top of the stack) without any persistent state - this script is a
+    fresh process on every Ctrl+Alt+Tab press, so there's no daemon around
+    to track real focus history across invocations. is_skip_tasklist()
+    also excludes this picker's own window itself, since
+    Picker.__init__ sets that hint before the window is ever mapped."""
+    screen = Wnck.Screen.get_default()
+    screen.force_update()
+    rows = []
+    for win in reversed(screen.get_windows_stacked()):
+        if win.is_skip_tasklist() or win.get_window_type() not in _SWITCHABLE_WINDOW_TYPES:
+            continue
+        icon = win.get_icon()
+        if icon is not None:
+            icon = icon.scale_simple(32, 32, GdkPixbuf.InterpType.BILINEAR)
+        rows.append((win.get_name(), win, icon))
+    return rows
+
+
+def activate_window(win):
+    try:
+        win.activate(Gtk.get_current_event_time())
+    except GLib.Error:
+        pass
+
+
+def hex_to_rgba(hex_value):
+    hex_value = hex_value.lstrip("#")
+    r = int(hex_value[0:2], 16)
+    g = int(hex_value[2:4], 16)
+    b = int(hex_value[4:6], 16)
+    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
+    return f"rgba({r}, {g}, {b}, {a:.3f})"
+
+
+def load_theme_colors():
+    """Reads the small plain key=value file ohmydebn-theme-set-picker
+    writes fresh on every theme change, so this picker always matches
+    whatever theme is active - no separate palette to keep in sync."""
+    colors = dict(DEFAULT_COLORS)
+    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                key, _, value = line.strip().partition("=")
+                if key and value:
+                    colors[key] = hex_to_rgba(value)
+    except OSError:
+        pass
+    return colors
+
+
+CSS_TEMPLATE = """
+#picker-window {{
+    background-color: {bg0};
+    border: 2px solid {bg3};
+}}
+#picker-entry, #picker-entry entry {{
+    background-color: {bg1};
+    color: {fg0};
+    border: 2px solid {bg3};
+    padding: 8px 16px;
+}}
+#picker-list {{
+    background-color: transparent;
+}}
+#picker-list row {{
+    padding: 8px 16px;
+    color: {fg0};
+}}
+#picker-list row:selected {{
+    background-color: {bg3};
+    color: {bg1};
+}}
+* {{
+    font-family: "CaskaydiaMono Nerd Font";
+    font-size: 12pt;
+}}
+"""
+
+
+class Picker(Gtk.Window):
+    def __init__(self, go_items="", breadcrumb_prefix="", mode="menu"):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_decorated(False)
+        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_keep_above(True)
+        self.set_name("picker-window")
+
+        self.mode = mode
+        if mode == "apps":
+            self.categories = self.leaves = load_apps()
+        elif mode == "windows":
+            self.categories = self.leaves = load_windows()
+        elif mode == "list":
+            # A plain static "icon  Label\nicon  Label..." list, same
+            # format/parser as the Go menu's own categories - used for
+            # ohmydebn-theme-set-gui's small fixed action list in place of
+            # rofi's -dmenu. Unlike menu mode, there's no wider tree to
+            # search descendants of, so leaves is just the same flat list
+            # again (matching how apps/windows mode search their own list).
+            self.categories = self.leaves = _with_icons(load_categories(go_items))
+        else:
+            self.categories = _with_icons(load_categories(go_items))
+            self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
+        self._closing = False
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        outer.set_border_width(12)
+        self.add(outer)
+
+        self.entry = Gtk.SearchEntry()
+        self.entry.set_name("picker-entry")
+        placeholder = {"apps": "Launch…", "windows": "Switch to…"}.get(mode, "Search")
+        self.entry.set_placeholder_text(placeholder)
+        self.entry.connect("search-changed", self.on_search_changed)
+        outer.pack_start(self.entry, False, False, 0)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        # Each row measures 35px tall in practice (confirmed by actually
+        # measuring get_allocated_height(), not estimated from CSS values).
+        # 11 categories need 385px - the previous fixed 360px cut off the
+        # last one (System), forcing a scrollbar on startup even though
+        # everything would otherwise fit. propagate_natural_height lets the
+        # scroller size itself to the real row count between these bounds:
+        # min covers all 11 categories with a little headroom; max used to
+        # be a fixed 630px (~18 rows, matching rofi's own
+        # `listview { lines: 18; }` convention), but that forced a
+        # scrollbar for lists that would have comfortably fit on screen
+        # (e.g. an open-windows list of a dozen or so) - basing it on the
+        # actual monitor height instead avoids the scrollbar whenever the
+        # list genuinely fits, while still capping (and necessarily still
+        # scrolling) a long one like the ~100-entry Apps list that could
+        # never fit regardless.
+        max_height = max(300, int(get_monitor_geometry().height * 0.7))
+        scroller.set_min_content_height(400)
+        scroller.set_max_content_height(max_height)
+        scroller.set_propagate_natural_height(True)
+        outer.pack_start(scroller, True, True, 0)
+
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_name("picker-list")
+        self.listbox.set_selection_mode(Gtk.SelectionMode.BROWSE)
+        self.listbox.set_can_focus(True)
+        self.listbox.connect("row-activated", self.on_row_activated)
+        scroller.add(self.listbox)
+
+        self.populate(self.categories)
+        if mode == "windows" and len(self.categories) > 1:
+            # Classic alt-tab convention: a single tap-and-release should
+            # land on the *previous* window, not the one already focused
+            # (which sorts first via the reversed-stacking approximation in
+            # load_windows()).
+            second_row = self.listbox.get_row_at_index(1)
+            if second_row:
+                self.listbox.select_row(second_row)
+
+        # The entry keeps real keyboard focus at all times - normal typing
+        # is handled entirely by GTK's own GtkEntry input (including IBus/
+        # input-method integration), never touched by this code. Only
+        # navigation keys are intercepted here and used to move the
+        # ListBox's selection manually. An earlier version of this did the
+        # opposite (focus on the ListBox, forwarding keystrokes into the
+        # entry via GtkSearchEntry.handle_event()) and that dropped
+        # characters under IBus in practice - confirmed by a real report of
+        # "cloud" not matching "Cloudflare Warp". Forwarded/synthetic events
+        # bypassing the actually-focused widget is exactly what input
+        # methods don't expect.
+        self.entry.connect("key-press-event", self.on_entry_key)
+        self.connect("key-release-event", self.on_window_key_release)
+        self.connect("focus-out-event", self.on_focus_out)
+
+        # Raw logical-pixel widths, unscaled - GTK already scales
+        # set_default_size() by the monitor's own scale factor
+        # automatically (confirmed by hand: identical set_default_size()
+        # calls produced a real 480x200 X11 window at GDK_SCALE=1 and a
+        # real 960x400 one at GDK_SCALE=2, with no extra code involved).
+        # An earlier version pre-multiplied by that same scale factor
+        # itself, via a small now-deleted scale-lookup helper script - a
+        # leftover from rofi's very different DPI/theme-unit model, which
+        # doesn't get GTK's automatic handling - doubling up like that
+        # would have quadrupled the window's on-screen area on a 2x
+        # display.
+        width_by_mode = {"apps": 500, "windows": 800, "list": 350}
+        self.set_default_size(width_by_mode.get(mode, 480), -1)
+
+        self.apply_theme()
+        self.connect("show", self.on_show)
+        if mode == "windows":
+            self.connect("map-event", self.on_map_grab_keyboard)
+            # The old rofi config for this tool also carried
+            # `-timeout-delay 1 -timeout-action kb-accept-entry`, which
+            # looked like a 1-second safety net for a missed
+            # modifier-release. Confirmed by checking `rofi -help` against
+            # the actual installed version (1.7.5) that neither flag is a
+            # real rofi option at all - it silently did nothing, so real
+            # usage of this tool has only ever relied on the release-based
+            # accept below, with no time limit. A literal 1-second version
+            # of that dead flag was tried here first and confirmed (by
+            # direct instrumentation) to cut real hold-and-tap sessions off
+            # mid-gesture, well before a human finishes cycling. Kept as a
+            # much longer, genuinely-defensive fallback instead - only
+            # meant to catch a truly stuck grab, not to fire in normal use.
+            GLib.timeout_add(30000, self.on_timeout_accept)
+
+    def apply_theme(self):
+        colors = load_theme_colors()
+        css = CSS_TEMPLATE.format(**colors).encode("utf-8")
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    def populate(self, rows):
+        for child in self.listbox.get_children():
+            self.listbox.remove(child)
+        for display, value, icon in rows:
+            row = Gtk.ListBoxRow()
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            if icon is not None:
+                box.pack_start(Gtk.Image.new_from_pixbuf(icon), False, False, 0)
+            box.pack_start(Gtk.Label(label=display, xalign=0), True, True, 0)
+            row.value = value
+            row.add(box)
+            self.listbox.add(row)
+        self.listbox.show_all()
+        first = self.listbox.get_row_at_index(0)
+        if first:
+            self.listbox.select_row(first)
+
+    def on_search_changed(self, entry):
+        text = entry.get_text().strip()
+        if not text:
+            self.populate(self.categories)
+            return
+        needle = text.lower()
+        # Apps/windows modes have no separate breadcrumb string to match
+        # against - the display name (an app's Name=, a window's title) is
+        # the only searchable text, unlike menu mode's value/breadcrumb.
+        if self.mode in ("apps", "windows"):
+            matches = [(d, v, i) for d, v, i in self.leaves if needle in d.lower()]
+        else:
+            matches = [(d, v, i) for d, v, i in self.leaves if needle in v.lower()]
+        self.populate(matches)
+
+    def on_row_activated(self, listbox, row):
+        self.finish(row.value)
+
+    def on_entry_key(self, widget, event):
+        keyval = event.keyval
+        if keyval == Gdk.KEY_Escape:
+            self.finish(None)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            row = self.listbox.get_selected_row()
+            if row is not None:
+                self.finish(row.value)
+            return True
+        if keyval in (
+            Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Home, Gdk.KEY_End,
+            Gdk.KEY_Page_Up, Gdk.KEY_Page_Down,
+        ):
+            self.move_selection(keyval)
+            return True
+        if self.mode == "windows" and keyval == Gdk.KEY_Tab:
+            # Matches rofi's `-kb-row-down "Ctrl-Alt-Tab,Ctrl-Alt-Down"` -
+            # each further Tab tap while Ctrl+Alt stays held cycles down.
+            # Otherwise GTK's own default binding would use Tab to move
+            # focus to the next widget instead.
+            self.move_selection(Gdk.KEY_Down)
+            return True
+        if self.mode == "windows" and keyval == Gdk.KEY_ISO_Left_Tab:
+            # X11 delivers Shift+Tab as this separate keyval, not Tab with
+            # a shift-modifier bit - matches rofi's own
+            # "Ctrl-Alt-ISO_Left_Tab" row-up binding.
+            self.move_selection(Gdk.KEY_Up)
+            return True
+        return False  # let the entry's own default handling process it
+
+    def on_window_key_release(self, widget, event):
+        if self.mode != "windows" or event.keyval not in (
+            Gdk.KEY_Control_L, Gdk.KEY_Control_R, Gdk.KEY_Alt_L, Gdk.KEY_Alt_R,
+        ):
+            return False
+        # The whole point of "!Ctrl-Alt-Tab" in the old rofi config: Tab
+        # itself is released after every single cycling tap while Ctrl+Alt
+        # stay down, so it's specifically releasing one of *these* two
+        # modifiers that ends the gesture and commits the highlighted row.
+        row = self.listbox.get_selected_row()
+        self.finish(row.value if row is not None else None)
+        return True
+
+    def on_timeout_accept(self):
+        if not self._closing:
+            row = self.listbox.get_selected_row()
+            self.finish(row.value if row is not None else None)
+        return GLib.SOURCE_REMOVE
+
+    def move_selection(self, keyval):
+        rows = self.listbox.get_children()
+        if not rows:
+            return
+        current = self.listbox.get_selected_row()
+        index = current.get_index() if current is not None else -1
+        last = len(rows) - 1
+        if keyval == Gdk.KEY_Down:
+            # Wrap top<->bottom, matching rofi's default behavior.
+            index = 0 if index == last else index + 1
+        elif keyval == Gdk.KEY_Up:
+            index = last if index <= 0 else index - 1
+        elif keyval == Gdk.KEY_Home:
+            index = 0
+        elif keyval == Gdk.KEY_End:
+            index = last
+        elif keyval == Gdk.KEY_Page_Down:
+            index = min(index + 8, last)
+        elif keyval == Gdk.KEY_Page_Up:
+            index = max(index - 8, 0)
+
+        new_row = self.listbox.get_row_at_index(index)
+        if new_row is None:
+            return
+        self.listbox.select_row(new_row)
+        # Momentarily grabbing the row's focus is what makes the
+        # surrounding ScrolledWindow auto-scroll it into view - GTK has no
+        # "scroll to this row" call independent of focus. Both grabs happen
+        # synchronously within this one handler, before the next redraw, so
+        # focus visibly stays on the entry and typing is never interrupted.
+        new_row.grab_focus()
+        self.entry.grab_focus()
+
+    def on_focus_out(self, widget, event):
+        # Clicking away closes the picker, matching rofi's default
+        # click-away-to-cancel behavior.
+        self.finish(None)
+        return False
+
+    def on_show(self, widget):
+        self.entry.grab_focus()
+        GLib.idle_add(self.position_window)
+
+    def on_map_grab_keyboard(self, widget, event):
+        # Without this, Cinnamon's own <Ctrl><Alt>Tab global keybinding -
+        # not this already-open window - would receive every further Tab
+        # tap while the modifiers stay held, spawning a fresh duplicate
+        # picker on each one instead of cycling this one. rofi grabs the
+        # keyboard for the same reason while any of its modes are open.
+        #
+        # Must happen on "map-event", not the earlier "show" signal (via
+        # idle_add) - confirmed by direct testing that grabbing that early
+        # returns GDK_GRAB_NOT_VIEWABLE and silently fails, since the X
+        # server hasn't actually mapped the window yet at that point. A
+        # failed grab is exactly what let Cinnamon's own shortcut keep
+        # firing on every tap instead of this window ever seeing them -
+        # each tap looked like a fresh, independent launch (always
+        # resetting to the same default selection) rather than a cycle.
+        seat = Gdk.Display.get_default().get_default_seat()
+        seat.grab(self.get_window(), Gdk.SeatCapabilities.KEYBOARD, False, None, None, None, None)
+        return False
+
+    def position_window(self):
+        geo = get_monitor_geometry()
+        win_width, win_height = self.get_size()
+        x = geo.x + (geo.width - win_width) // 2
+        y = geo.y + int(geo.height * 0.25) - 176
+        self.move(x, max(y, geo.y))
+        return GLib.SOURCE_REMOVE
+
+    def finish(self, value):
+        if self._closing:
+            return
+        self._closing = True
+        if self.mode == "windows":
+            Gdk.Display.get_default().get_default_seat().ungrab()
+        if value:
+            if self.mode == "apps":
+                exec_tokens, desktop_id = value
+                launch_app(exec_tokens)
+                record_app_usage(desktop_id)
+            elif self.mode == "windows":
+                activate_window(value)
+            else:
+                print(value)
+        Gtk.main_quit()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--apps":
+        win = Picker(mode="apps")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--windows":
+        win = Picker(mode="windows")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--list":
+        list_items_arg = sys.argv[2] if len(sys.argv) > 2 else ""
+        win = Picker(list_items_arg, mode="list")
+    else:
+        go_items_arg = sys.argv[1] if len(sys.argv) > 1 else ""
+        breadcrumb_prefix_arg = sys.argv[2] if len(sys.argv) > 2 else ""
+        win = Picker(go_items_arg, breadcrumb_prefix_arg)
+    win.show_all()
+    Gtk.main()
+    sys.exit(0)

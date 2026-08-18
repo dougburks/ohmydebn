@@ -480,6 +480,80 @@ check_eq(
 check_eq("click Browse: doesn't also call launch_and_close", fake.launch_calls, [])
 
 print()
+print("=== remove_current_theme (real method, not the _FakeCarousel stub) ===")
+
+
+class _RemoveHarness:
+    """Exercises the real Carousel.remove_current_theme() logic - slug
+    selection, the is_theme_removable guard, the list refresh, index
+    clamping, and the render() call - against real USER_THEMES_DIR
+    fixtures. Everything above this point only ever calls the stubbed
+    remove_current_theme() on _FakeCarousel, so none of it actually
+    exercises this method's own body."""
+
+    def __init__(self, slugs, index):
+        self.slugs = slugs
+        self.index = index
+        self.render_calls = 0
+
+    def render(self):
+        self.render_calls += 1
+
+
+fixture4 = tempfile.mkdtemp(prefix="ohmydebn-test-")
+original_user_themes_dir = tc.USER_THEMES_DIR
+original_subprocess_run = tc.subprocess.run
+removed_argv = []
+
+
+def _fake_theme_remove_run(argv, check=False):
+    removed_argv.append(argv)
+    shutil.rmtree(os.path.join(fixture4, argv[-1]), ignore_errors=True)
+
+
+try:
+    tc.USER_THEMES_DIR = fixture4
+    tc.subprocess.run = _fake_theme_remove_run
+    for slug in ("alpha", "beta", "gamma"):
+        os.makedirs(os.path.join(fixture4, slug))
+
+    harness = _RemoveHarness(["alpha", "beta", "gamma"], 1)  # pointing at "beta"
+    tc.Carousel.remove_current_theme(harness)
+    check_eq(
+        "remove_current_theme: invokes ohmydebn-theme-remove with the selected slug",
+        removed_argv, [[f"{tc.OHMYDEBN_BIN}/ohmydebn-theme-remove", "beta"]],
+    )
+    check("remove_current_theme: the removed theme's directory is actually gone", not os.path.isdir(os.path.join(fixture4, "beta")))
+    check_eq("remove_current_theme: refreshes self.slugs from disk afterward", harness.slugs, ["alpha", "gamma"])
+    check_eq("remove_current_theme: index stays pointed at a valid theme after the removal", harness.index, 1)
+    check_eq("remove_current_theme: re-renders after removing", harness.render_calls, 1)
+
+    removed_argv.clear()
+    harness2 = _RemoveHarness(["alpha", "gamma"], 1)  # pointing at "gamma", the last one
+    tc.Carousel.remove_current_theme(harness2)
+    check_eq("remove_current_theme: removing the last item clamps the index down, not out of range", harness2.index, 0)
+    check_eq("remove_current_theme: slugs list reflects the removal", harness2.slugs, ["alpha"])
+
+    # Safety guard: even called directly (bypassing on_key_press's own
+    # is_theme_removable check), remove_current_theme() must never touch a
+    # non-removable (system) theme - the real belt-and-suspenders check,
+    # not the dispatch-level one already covered above.
+    removed_argv.clear()
+    harness3 = _RemoveHarness(["system-theme", "alpha"], 0)  # "system-theme" has no dir under fixture4
+    tc.Carousel.remove_current_theme(harness3)
+    check_eq("remove_current_theme: does nothing when the selected slug isn't removable", removed_argv, [])
+    check_eq("remove_current_theme: slugs list is untouched on the safety-guard path", harness3.slugs, ["system-theme", "alpha"])
+    check_eq("remove_current_theme: no render() call on the safety-guard path", harness3.render_calls, 0)
+
+    harness4 = _RemoveHarness([], 0)
+    tc.Carousel.remove_current_theme(harness4)
+    check_eq("remove_current_theme: no-op when there are no themes at all", removed_argv, [])
+finally:
+    tc.USER_THEMES_DIR = original_user_themes_dir
+    tc.subprocess.run = original_subprocess_run
+    shutil.rmtree(fixture4)
+
+print()
 print("=== ohmydebn-theme-bg-carousel (pure logic) ===")
 bc = load("ohmydebn-theme-bg-carousel")
 

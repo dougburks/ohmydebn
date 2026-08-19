@@ -29,7 +29,10 @@ if [ ! -f $DISABLE_DIRTYFRAG ]; then
   echo "install rxrpc /bin/false" | sudo tee -a $DISABLE_DIRTYFRAG
   # The exploit leaves contaminated data cached, so drop_caches is part of
   # the recommended mitigation sequence alongside blacklisting and rmmod.
-  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
+  # Best-effort like the rmmod calls below - not writable in some restricted
+  # kernel namespaces (e.g. unprivileged containers), and failing here
+  # shouldn't abort the rest of the install under the caller's `set -e`.
+  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null || true
   sudo rmmod esp4 esp6 rxrpc 2>/dev/null || true
   NEEDS_INITRAMFS_UPDATE=true
 fi

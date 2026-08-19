@@ -21,6 +21,16 @@ fi
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')
+
+# Reject names that could escape THEMES_DIR (same check as ohmydebn-theme-remove) -
+# basename() passes "..", "." and embedded "/" segments through unchanged, so a
+# crafted REPO_URL (e.g. one ending in "/..") would otherwise point THEME_PATH
+# at an ancestor of THEMES_DIR and the rm -rf below would delete it.
+if [[ -z "$THEME_NAME" || "$THEME_NAME" == *"/"* || "$THEME_NAME" == "." || "$THEME_NAME" == ".." ]]; then
+  echo "Error: invalid theme name derived from '$REPO_URL'." >&2
+  exit 1
+fi
+
 THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
 # Remove existing theme if present

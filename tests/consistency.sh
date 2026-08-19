@@ -63,12 +63,12 @@ echo "  checked $CHECKED files"
 
 # -- check 3: every script invoked with --skip-prompt actually supports it --
 #
-# power-user.sh is currently the only automation that relies on
-# --skip-prompt. If a future file adds more of these calls, extend the
-# extraction below to match.
+# power-user.sh and ohmydebn-pkg-remove-all-optional are currently the only
+# automation that relies on --skip-prompt. If a future file adds more of
+# these calls, extend the extraction below to match.
 
 echo
-echo "-- --skip-prompt consistency (install/packaging/power-user.sh) --"
+echo "-- --skip-prompt consistency (install/packaging/power-user.sh, bin/ohmydebn-pkg-remove-all-optional) --"
 SKIP_PROMPT_NAMES=()
 mapfile -t LOOP_NAMES < <(sed -n '/^  for SCRIPT in/,/; do/{p; /; do/q}' "$POWER_USER_SH" |
   sed '1s/^  for SCRIPT in //; s/; do$//; s/\\$//' | tr -s ' \t' '\n' | grep -v '^\s*$')
@@ -76,6 +76,15 @@ SKIP_PROMPT_NAMES+=("${LOOP_NAMES[@]}")
 if grep -q 'ohmydebn-pkg-remove-all-optional --skip-prompt' "$POWER_USER_SH"; then
   SKIP_PROMPT_NAMES+=("ohmydebn-pkg-remove-all-optional")
 fi
+# ohmydebn-pkg-remove-all-optional's own second `for PACKAGE in` loop (the
+# first is the plain apt-purge glob list) re-invokes each app's dedicated
+# ohmydebn-<package>-remove script with --skip-prompt, since the user
+# already confirmed once at this script's own top-level prompt.
+mapfile -t REMOVE_ALL_PACKAGES < <(awk '/^for PACKAGE in/{n++} n==2{print; if (/; do$/) exit}' "$REMOVE_ALL_SH" |
+  sed '1s/^for PACKAGE in //; s/; do$//; s/\\$//' | tr -s ' \t' '\n' | grep -v '^\s*$')
+for pkg in "${REMOVE_ALL_PACKAGES[@]}"; do
+  SKIP_PROMPT_NAMES+=("ohmydebn-${pkg}-remove")
+done
 CHECKED=0
 for name in "${SKIP_PROMPT_NAMES[@]}"; do
   CHECKED=$((CHECKED + 1))
@@ -268,8 +277,8 @@ echo "  checked ${#PATHS[@]} func -> breadcrumb paths"
 
 # -- check 11: rofi is never invoked anywhere - a regression guard, not a
 #              consistency-of-something-else check, for the ohmydebn-menu-
-#              picker/-theme-carousel/-theme-bg-carousel work that replaced
-#              every real rofi call site this project had --
+#              picker/-theme-carousel work that replaced every real rofi
+#              call site this project had --
 
 echo
 echo "-- rofi is not invoked anywhere (regression guard) --"
@@ -298,13 +307,12 @@ echo "  checked bin/ and install/ for direct rofi invocations"
 echo
 echo "-- GTK pickers don't manually pre-scale window sizes (regression guard) --"
 mapfile -t SCALE_HITS < <(grep -lE 'ohmydebn-scale|ohmydebn-picker-width|Muffin\.DisplayConfig' \
-  "$REPO_ROOT/bin/ohmydebn-menu-picker" "$REPO_ROOT/bin/ohmydebn-theme-carousel" \
-  "$REPO_ROOT/bin/ohmydebn-theme-bg-carousel" 2>/dev/null)
+  "$REPO_ROOT/bin/ohmydebn-menu-picker" "$REPO_ROOT/bin/ohmydebn-theme-carousel" 2>/dev/null)
 for f in "${SCALE_HITS[@]}"; do
   echo "  FAIL - ${f#"$REPO_ROOT"/} references a manual scale-query mechanism - GTK already scales set_default_size()/fullscreen() automatically"
   FAIL=$((FAIL + 1))
 done
-echo "  checked the 3 GTK pickers for manual scale pre-multiplication"
+echo "  checked the 2 GTK pickers for manual scale pre-multiplication"
 
 echo
 echo "$FAIL failure(s)"

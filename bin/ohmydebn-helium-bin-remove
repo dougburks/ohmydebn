@@ -6,7 +6,7 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   echo
   echo "Helium browser is not currently installed."
 else
-  if [ $# -eq 0 ]; then
+  if [ "${1:-}" != "--skip-prompt" ]; then
     echo
     echo "Continuing will remove Helium browser and its repo."
     echo

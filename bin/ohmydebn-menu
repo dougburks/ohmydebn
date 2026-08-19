@@ -157,14 +157,6 @@ show_learn_menu() {
   esac
 }
 
-show_style_menu() {
-  case $(menu "Style" "󰸌  Theme\n  Background") in
-  *Theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
-  *Background*) /usr/share/ohmydebn/bin/ohmydebn-theme-bg-carousel ;;
-  *) show_main_menu ;;
-  esac
-}
-
 show_capture_menu() {
   case $(menu "Capture" "  Screenshot\n  Screenrecord\n󰃉  Color") in
   *Screenshot*) show_screenshot_menu ;;
@@ -373,7 +365,7 @@ go_to_menu() {
   case "${1,,}" in
   *apps*) /usr/share/ohmydebn/bin/ohmydebn-app-launcher ;;
   *learn*) show_learn_menu ;;
-  *style*) show_style_menu ;;
+  *style*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *capture*) show_capture_menu ;;
   *screenshot*) show_screenshot_menu ;;

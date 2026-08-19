@@ -56,6 +56,6 @@ sudo /usr/bin/apt -y autoremove
 for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudflare-warp code \
   google-chrome-stable helium-bin powershell simplescreenrecorder tailscale; do
   if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
-    "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --auto
+    "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt
   fi
 done

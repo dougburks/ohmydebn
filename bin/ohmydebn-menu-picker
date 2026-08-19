@@ -35,12 +35,6 @@
 # Ctrl/Alt release directly - see grab_keyboard() and
 # on_window_key_release() below for how.
 #
-# List mode (argv[1] == "--list", argv[2] == the items string) is a plain
-# static "icon  Label\nicon  Label..." list - same format load_categories()
-# already parses for the Go menu - typed to search itself rather than some
-# wider tree. Prints the chosen label to stdout like menu mode, used by
-# ohmydebn-theme-set-gui in place of rofi's -dmenu.
-#
 # Theming is read fresh on every launch from whatever
 # ohmydebn-theme-set-picker already generated
 # (~/.config/ohmydebn/current/picker-colors' bg0/bg1/bg3/fg0), so there's
@@ -439,14 +433,6 @@ class Picker(Gtk.Window):
             self.categories = self.leaves = load_apps()
         elif mode == "windows":
             self.categories = self.leaves = load_windows()
-        elif mode == "list":
-            # A plain static "icon  Label\nicon  Label..." list, same
-            # format/parser as the Go menu's own categories - used for
-            # ohmydebn-theme-set-gui's small fixed action list in place of
-            # rofi's -dmenu. Unlike menu mode, there's no wider tree to
-            # search descendants of, so leaves is just the same flat list
-            # again (matching how apps/windows mode search their own list).
-            self.categories = self.leaves = _with_icons(load_categories(go_items))
         else:
             self.categories = _with_icons(load_categories(go_items))
             self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
@@ -529,7 +515,7 @@ class Picker(Gtk.Window):
         # doesn't get GTK's automatic handling - doubling up like that
         # would have quadrupled the window's on-screen area on a 2x
         # display.
-        width_by_mode = {"apps": 500, "windows": 800, "list": 350}
+        width_by_mode = {"apps": 500, "windows": 800}
         self.set_default_size(width_by_mode.get(mode, 480), -1)
 
         self.apply_theme()
@@ -738,9 +724,6 @@ if __name__ == "__main__":
         win = Picker(mode="apps")
     elif len(sys.argv) > 1 and sys.argv[1] == "--windows":
         win = Picker(mode="windows")
-    elif len(sys.argv) > 1 and sys.argv[1] == "--list":
-        list_items_arg = sys.argv[2] if len(sys.argv) > 2 else ""
-        win = Picker(list_items_arg, mode="list")
     else:
         go_items_arg = sys.argv[1] if len(sys.argv) > 1 else ""
         breadcrumb_prefix_arg = sys.argv[2] if len(sys.argv) > 2 else ""

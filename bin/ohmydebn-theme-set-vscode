@@ -27,13 +27,36 @@ if /usr/share/ohmydebn/bin/ohmydebn-cmd-present "$EDITOR_CMD" && [[ ! -f "$SKIP_
 
     # Create a `workbench.colorTheme` entry in settings.
     if ! grep -q '"workbench.colorTheme"' "$SETTINGS_PATH"; then
-      # Insert `"workbench.colorTheme": "",` immediately after the first `{`
-      # Use sed's first-match range (0,/{/) to only replace the first `{`
-      sed -i --follow-symlinks -E '0,/\{/{s/\{/{\ "workbench.colorTheme": "",/}' "$SETTINGS_PATH"
+      # Insert `"workbench.colorTheme": ""` immediately after the first `{`.
+      # Use sed's first-match range (0,/{/) to only replace the first `{`.
+      # Only append a trailing comma if the object already has other content -
+      # an empty object (e.g. the `{\n}\n` stub created above, or a genuinely
+      # empty pre-existing settings.json) would otherwise end up as
+      # `{ "workbench.colorTheme": "", }`, which is invalid JSON.
+      if [[ "$(tr -d '[:space:]' <"$SETTINGS_PATH")" == '{}' ]]; then
+        sed -i --follow-symlinks -E '0,/\{/{s/\{/{\ "workbench.colorTheme": ""/}' "$SETTINGS_PATH"
+      else
+        sed -i --follow-symlinks -E '0,/\{/{s/\{/{\ "workbench.colorTheme": "",/}' "$SETTINGS_PATH"
+      fi
     fi
 
-    # Update theme (escape theme_name so a literal / or & can't break the sed substitution)
-    theme_name_escaped=$(printf '%s' "$theme_name" | sed -e 's/[\/&]/\\&/g')
+    # Update theme. theme_name comes straight from the theme's own
+    # vscode.json, so it must be escaped for two different contexts before
+    # being spliced into the sed replacement below: first as JSON string
+    # content (a literal " would otherwise terminate the JSON string early
+    # and let a crafted theme inject arbitrary extra settings.json keys; a
+    # literal newline would terminate the single-line sed script early and
+    # let the rest be parsed as a separate sed command), then re-escaped so
+    # those JSON escapes survive GNU sed's own backslash processing of the
+    # replacement text (which collapses \\ -> \) alongside the existing
+    # \/ and \& escapes for sed's own special replacement chars.
+    theme_name_escaped="$theme_name"
+    theme_name_escaped="${theme_name_escaped//\\/\\\\}"
+    theme_name_escaped="${theme_name_escaped//\"/\\\"}"
+    theme_name_escaped="${theme_name_escaped//$'\n'/\\n}"
+    theme_name_escaped="${theme_name_escaped//\\/\\\\}"
+    theme_name_escaped="${theme_name_escaped//&/\\&}"
+    theme_name_escaped="${theme_name_escaped//\//\\/}"
     sed -i --follow-symlinks -E \
       "s/(\"workbench.colorTheme\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$theme_name_escaped\2/" \
       "$SETTINGS_PATH"

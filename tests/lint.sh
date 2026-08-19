@@ -4,10 +4,10 @@
 # actual syntax errors) plus `shellcheck` where available (catches real bug
 # classes we've hit before in this repo: unquoted glob expansion, SC2086,
 # etc), and `python3 -m py_compile` on every Python script (ohmydebn-menu-
-# picker/-theme-carousel/-theme-bg-carousel/-scale - none of these have a
-# shebang the shell-script loop below would ever match, so without this
-# second pass a syntax error in one of them would ship completely
-# unnoticed by this suite). No infrastructure needed beyond the tools
+# picker/-theme-carousel - neither has a shebang the shell-script loop
+# below would ever match, so without this second pass a syntax error in
+# either of them would ship completely unnoticed by this suite). No
+# infrastructure needed beyond the tools
 # themselves - confirmed these scripts' module-level code runs fine with no
 # real X display, so this needs no Xvfb either.
 

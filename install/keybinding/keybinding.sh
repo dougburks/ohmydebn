@@ -30,7 +30,11 @@ if [ ! -f $KEYBINDING_STATE ]; then
 
   # To create new custom keybindings, first specify how many custom keybindings we're going to load
   CUSTOM_KEYBINDING_TOTAL=$(cat $KEYBINDING_CUSTOM | wc -l)
-  let CUSTOM_KEYBINDING_TOTAL--
+  # Not `let CUSTOM_KEYBINDING_TOTAL--` - `let`/`((...))` exit non-zero when
+  # the resulting expression value is 0, which would abort the whole install
+  # under the caller's `set -e` if the custom-keybindings count were ever 0.
+  # Plain arithmetic assignment doesn't have that pitfall.
+  CUSTOM_KEYBINDING_TOTAL=$((CUSTOM_KEYBINDING_TOTAL - 1))
   CUSTOM_LIST="gsettings set org.cinnamon.desktop.keybindings custom-list \"["
   for i in $(seq 0 $CUSTOM_KEYBINDING_TOTAL); do
     CUSTOM_LIST+="'custom-$i'"

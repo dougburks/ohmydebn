@@ -25,7 +25,9 @@ mapfile -d '' -t BACKGROUNDS < <(
 TOTAL=${#BACKGROUNDS[@]}
 
 if [[ $TOTAL -eq 0 ]]; then
-  notify-send "No background was found for theme" -t 2000
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "No background was found for theme" -t 2000
+  fi
 else
   # Get current background from symlink
   if [[ -L "$CURRENT_BACKGROUND_LINK" ]]; then

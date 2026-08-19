@@ -22,6 +22,6 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   TEMP=$(mktemp)
   echo "Downloading Google Chrome..."
   curl -fSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o "$TEMP"
-  sudo dpkg -i "$TEMP"
+  sudo /usr/bin/dpkg -i "$TEMP"
   rm -f "$TEMP"
 fi

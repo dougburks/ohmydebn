@@ -17,6 +17,6 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   toilet -f mono12 "OhMyDebn" | /usr/bin/ttfx rain
   echo
 
-  /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Configuring base OS"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring base OS"
 
 fi

@@ -1,6 +1,11 @@
 #!/bin/bash
 
 if [ "$#" -ne 4 ]; then
+  if ! command -v gum >/dev/null 2>&1; then
+    echo "Usage: ohmydebn-tui-install <name> <exec-command> <window-style> <icon-url>" >&2
+    exit 1
+  fi
+
   echo -e "\e[32mLet's create a TUI shortcut you can start with the app launcher.\n\e[0m"
   APP_NAME=$(gum input --prompt "Name> " --placeholder "My TUI")
   APP_EXEC=$(gum input --prompt "Launch Command> " --placeholder "lazydocker or bash -c 'dust; read -n 1 -s'")

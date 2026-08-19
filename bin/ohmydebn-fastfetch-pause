@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# fastfetch composites its logo and info panel with relative cursor-movement
+# escape codes, not padded text, so resizing the window mid-render leaves the
+# terminal's own reflow fighting those fixed column offsets - the info panel
+# visibly tears. Re-clearing and re-running on every size change is the fix
+# (same technique Omarchy's own about-screen script uses for this).
+
+SIZE=$(stty size)
+clear
+/usr/share/ohmydebn/bin/ohmydebn-fastfetch
+
+while :; do
+  read -t 0.5 -n 1 -s && break
+  CURRENT_SIZE=$(stty size)
+  if [[ "$CURRENT_SIZE" != "$SIZE" ]]; then
+    SIZE="$CURRENT_SIZE"
+    clear
+    /usr/share/ohmydebn/bin/ohmydebn-fastfetch
+  fi
+done

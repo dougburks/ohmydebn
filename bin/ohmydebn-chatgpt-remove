@@ -6,7 +6,7 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   echo
   echo "ChatGPT is not currently installed."
 else
-  if [ $# -eq 0 ]; then
+  if [ "${1:-}" != "--skip-prompt" ]; then
     echo
     echo "Continuing will remove ChatGPT and its repo."
     echo

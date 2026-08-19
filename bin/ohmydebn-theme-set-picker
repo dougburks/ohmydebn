@@ -1,0 +1,44 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-picker: writes the GTK pickers' own small color file
+# (~/.config/ohmydebn/current/picker-colors) from the current theme's
+# resolved colors, so their CSS always matches whatever theme is active -
+# no separate palette to keep in sync.
+#
+# Replaces ohmydebn-theme-set-rofi, which generated a rofi .rasi theme
+# file the pickers used to read *through* even after nothing invoked rofi
+# itself anymore. This writes the pickers' own plain key=value file
+# directly instead - the last real dependency on rofi's theming format.
+#
+# bg0/bg1/bg3/fg0 are the only keys the pickers actually read (see
+# DEFAULT_COLORS in ohmydebn-menu-picker) - the old rofi version also
+# computed bg2/fg1/fg2/fg3 with light/dark-mode-dependent formulas, but
+# none of those ever reached anything real, so this only computes what's
+# actually used, and drops the now-pointless <is-light-mode> argument
+# ohmydebn-theme-set-rofi took (confirmed by inspection: its bg0/bg1/bg3/
+# fg0 formulas were identical in both branches - only the unused keys
+# differed by mode).
+# Usage: ohmydebn-theme-set-picker <colors-source>
+
+set -e
+
+COLORS_SOURCE="${1:-}"
+PICKER_COLORS_FILE=~/.config/ohmydebn/current/picker-colors
+
+mkdir -p ~/.config/ohmydebn/current
+
+if [[ -z "$COLORS_SOURCE" || ! -f "$COLORS_SOURCE" ]]; then
+  rm -f "$PICKER_COLORS_FILE"
+  exit 0
+fi
+
+BG=$(grep -E "^\s*background\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+FG=$(grep -E "^\s*foreground\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+ACCENT=$(grep -E "^\s*accent\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+
+cat >"$PICKER_COLORS_FILE" <<EOF
+bg0=${BG}F2
+bg1=${BG}
+bg3=${ACCENT}F2
+fg0=${FG}
+EOF

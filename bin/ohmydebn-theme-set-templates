@@ -1,12 +1,28 @@
 #!/bin/bash
 
-NEXT_THEME_DIR="$HOME/.config/ohmydebn/current/next-theme"
+# Optional $1 lets a caller target an already-active theme dir instead of
+# next-theme, to backfill a template added in a later release for an
+# existing install (see install/config/theme.sh) - the { ! -f $output_path }
+# guard below means it only fills in what's actually missing.
+NEXT_THEME_DIR="${1:-$HOME/.config/ohmydebn/current/next-theme}"
 COLORS_FILE="$NEXT_THEME_DIR/colors.toml"
 
 # Convert hex color to decimal RGB (e.g., "#1e1e2e" -> "30,30,46")
 hex_to_rgb() {
   local hex="${1#\#}"
   printf "%d,%d,%d" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+# Escape backslashes and the sed delimiter (|) so theme-supplied colors.toml
+# keys/values can never break out of the s|...|...|g commands built below.
+# Without this, a value like "X|g;e touch /tmp/pwned #" closes the
+# substitution early and appends a GNU sed `e` (execute) command, letting a
+# malicious theme run arbitrary shell code the moment it's applied.
+sed_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//|/\\|}"
+  printf '%s' "$s"
 }
 
 # Only generate dynamic templates for themes with a colors.toml definition
@@ -19,18 +35,25 @@ if [[ -f $COLORS_FILE ]]; then
     value="${value#*[\"\']}"
     value="${value%%[\"\']*}" # extract value between quotes (ignores inline comments)
 
-    printf 's|{{ %s }}|%s|g\n' "$key" "$value"            # {{ key }} -> value
-    printf 's|{{ %s_strip }}|%s|g\n' "$key" "${value#\#}" # {{ key_strip }} -> value without leading #
+    key_esc=$(sed_escape "$key")
+    value_esc=$(sed_escape "$value")
+
+    printf 's|{{ %s }}|%s|g\n' "$key_esc" "$value_esc"            # {{ key }} -> value
+    printf 's|{{ %s_strip }}|%s|g\n' "$key_esc" "${value_esc#\#}" # {{ key_strip }} -> value without leading #
     if [[ $value =~ ^# ]]; then
       rgb=$(hex_to_rgb "$value")
-      echo "s|{{ ${key}_rgb }}|${rgb}|g"
+      echo "s|{{ ${key_esc}_rgb }}|${rgb}|g"
+      # {{ key_ansi }} -> ANSI truecolor SGR fragment (e.g. "38;2;122;162;247",
+      # comma becomes semicolons), for tools like fastfetch whose packaged
+      # version predates hex-color support in keyColor/display.color
+      echo "s|{{ ${key_esc}_ansi }}|38;2;${rgb//,/;}|g"
     fi
   done <"$COLORS_FILE" >"$sed_script"
 
   shopt -s nullglob
 
   # Process templates
-  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl /usr/share/ohmydebn/config/btop/*.tpl; do
+  for tpl in /usr/share/ohmydebn/config/alacritty/*.tpl /usr/share/ohmydebn/config/btop/*.tpl /usr/share/ohmydebn/config/fastfetch/*.tpl; do
     filename=$(basename "$tpl" .tpl)
     output_path="$NEXT_THEME_DIR/$filename"
 

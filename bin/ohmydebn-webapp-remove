@@ -12,6 +12,11 @@ if [ "$#" -eq 0 ]; then
   done < <(find "$DESKTOP_DIR" -name '*.desktop' -print0)
 
   if ((${#WEB_APPS[@]})); then
+    if ! command -v gum >/dev/null 2>&1; then
+      echo "Usage: ohmydebn-webapp-remove <app-name> [app-name...]" >&2
+      exit 1
+    fi
+
     mapfile -t SORTED_WEB_APPS < <(sort <<<"${WEB_APPS[*]}")
     APP_NAMES_STRING=$(gum choose --no-limit --header "Select web app to remove..." --selected-prefix="✗ " "${SORTED_WEB_APPS[@]}")
     # Convert newline-separated string to array

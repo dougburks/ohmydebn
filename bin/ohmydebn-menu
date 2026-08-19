@@ -4,12 +4,32 @@ set -euo pipefail
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"
 
+source /usr/share/ohmydebn/bin/ohmydebn-menu-tree
+
 # Set to true when going directly to a submenu, so we can exit directly
 DIRECT_ACCESS=false
+
+# Segments queued up by menu() when a search inside one submenu resolves to
+# a descendant reached through further submenus - see menu()'s comment. A
+# FILE, not a shell variable: every show_*_menu calls menu() inside
+# `case $(menu ...) in`, a command substitution subshell, and a subshell's
+# changes to a shell variable (even a global, non-local one) never
+# propagate back out once it exits - confirmed empirically (a trivial
+# `QUEUE=(x); f() { QUEUE=(y); }; $(f); echo "${QUEUE[*]}"` still prints
+# the pre-call value). A real file is the only state that actually
+# survives across that boundary. One queued segment per line; cleaned up
+# on exit since it's specific to this single invocation of ohmydebn-menu.
+MENU_JUMP_QUEUE_FILE=$(mktemp)
+trap 'rm -f "$MENU_JUMP_QUEUE_FILE"' EXIT
 
 back_to() {
   local parent_menu="$1"
 
+  # Must never call menu() itself, directly or indirectly - menu() finds
+  # its caller via ${FUNCNAME[1]}, and back_to() calling "$parent_menu" as
+  # a plain function call (confirmed, not eval, not through a subshell)
+  # is exactly what keeps that name correct. A wrapper between a
+  # show_*_menu function and its own menu() call would break that lookup.
   if [[ "$DIRECT_ACCESS" == "true" ]]; then
     exit 0
   elif [[ -n "$parent_menu" ]]; then
@@ -19,27 +39,87 @@ back_to() {
   fi
 }
 
+# menu() is the one place that resolves a search into a descendant several
+# levels down, so every show_*_menu function's own case statement (matching
+# a label from this call's return value against a target - see
+# show_learn_menu below for the plainest example) never has to change - it
+# only ever receives a bare, same-level label back, whether that came from
+# a direct pick or from unwinding a queued multi-hop search.
+#
+# If the queue file is non-empty, a previous call already resolved a
+# search and queued the remaining path segments - pop the next line and
+# return it immediately, with no picker shown at all. That's what makes a
+# multi-level jump feel instant: each intermediate show_*_menu's own
+# unmodified case arm fires as a completely normal function call (not
+# inside a subshell), so the real target only ever actually runs once
+# everything has unwound naturally back to the deepest level.
+#
+# (Note: eval'ing the target directly here and exit-ing was the first
+# design and it's broken - confirmed empirically. Every show_*_menu calls
+# menu() inside `case $(menu ...) in`, a command substitution subshell;
+# `exit` inside menu() only kills that subshell, so the calling case
+# statement's `*) ...` fallback arm still fires afterward, popping an
+# unwanted extra menu on top of whatever the eval'd command already did.)
+#
+# Otherwise, look up the calling function's breadcrumb prefix (empty if
+# not found, e.g. show_main_menu - which is the "top of tree, no
+# filtering" case) and show the picker scoped to it. A result containing
+# " > " is always the full absolute breadcrumb of a searched descendant
+# (ohmydebn-menu-picker's contract) - strip the prefix, split on " > ",
+# return the first segment now and queue the rest. A plain result (no
+# " > ") is an ordinary same-level pick, returned unchanged exactly like
+# before this feature existed.
 menu() {
+  # prompt ($1) is accepted but unused - kept so all 21 existing
+  # `menu "Title" "items"` call sites don't need editing, even though
+  # ohmydebn-menu-picker doesn't currently show a title anywhere (no
+  # titlebar; the window is undecorated).
+  # shellcheck disable=SC2034
   local prompt="$1"
   local options="$2"
-  local extra="${3:-}"
-  local preselect="${4:-}"
 
-  read -r -a args <<<"$extra"
-
-  if [[ -n "$preselect" ]]; then
-    local index
-    index=$(printf '%b\n' "$options" | grep -nxF "$preselect" | cut -d: -f1)
-    if [[ -n "$index" ]]; then
-      args+=("-a" "$index")
-    fi
+  if [[ -s "$MENU_JUMP_QUEUE_FILE" ]]; then
+    local head rest_file
+    head=$(head -n1 "$MENU_JUMP_QUEUE_FILE")
+    rest_file=$(mktemp)
+    tail -n +2 "$MENU_JUMP_QUEUE_FILE" >"$rest_file"
+    mv "$rest_file" "$MENU_JUMP_QUEUE_FILE"
+    printf '%s\n' "$head"
+    return
   fi
 
-  local DPI WIDTH
-  DPI=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-dpi)
-  WIDTH=$(/usr/share/ohmydebn/bin/ohmydebn-rofi-width 410)
-  printf '%b\n' "$options" | /usr/bin/rofi -dpi "$DPI" -theme-str "window {width: $WIDTH;}" \
-    -dmenu -i -p "$prompt…" "${args[@]}"
+  local caller="${FUNCNAME[1]:-}"
+  local breadcrumb_prefix=""
+  if [[ -n "$caller" ]]; then
+    breadcrumb_prefix=$(menu_tree_paths "${BASH_SOURCE[0]}" | awk -F'\t' -v f="$caller" '$1==f{print $2; exit}')
+  fi
+
+  local result
+  result=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+
+  if [[ "$result" == *" > "* ]]; then
+    # A searched descendant. ohmydebn-menu-picker always returns the full
+    # absolute breadcrumb, so strip this call's own prefix off the front
+    # when there is one (a nested submenu); at the top level
+    # breadcrumb_prefix is empty and the whole result is already the
+    # remainder to walk.
+    local remainder="$result"
+    if [[ -n "$breadcrumb_prefix" ]]; then
+      remainder="${result#"$breadcrumb_prefix"" > "}"
+    fi
+    local first="${remainder%%" > "*}"
+    local rest="${remainder#*" > "}"
+    if [[ "$rest" != "$remainder" ]]; then
+      # More than one segment left after "first" - one per line, so each
+      # further menu() call (queue already empty at this point, checked
+      # above) pops exactly one on its next call.
+      printf '%s\n' "${rest//" > "/$'\n'}" >"$MENU_JUMP_QUEUE_FILE"
+    fi
+    printf '%s\n' "$first"
+    return
+  fi
+
+  printf '%s\n' "$result"
 }
 
 terminal() {
@@ -77,14 +157,6 @@ show_learn_menu() {
   esac
 }
 
-show_style_menu() {
-  case $(menu "Style" "󰸌  Theme\n  Background") in
-  *Theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-set-gui ;;
-  *Background*) /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next ;;
-  *) show_main_menu ;;
-  esac
-}
-
 show_capture_menu() {
   case $(menu "Capture" "  Screenshot\n  Screenrecord\n󰃉  Color") in
   *Screenshot*) show_screenshot_menu ;;
@@ -112,7 +184,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n↔  VPN") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n  Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -142,7 +214,7 @@ show_install_office_menu() {
 }
 
 show_install_cybersecurity_menu() {
-  case $(menu "Install" "🔍︎ SO-CRATES\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
+  case $(menu "Install" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark") in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;
   *tshark*) install "tshark" "tshark" ;;
@@ -163,7 +235,7 @@ show_install_utility_menu() {
 }
 
 show_install_vpn_menu() {
-  case $(menu "Install" "↔  Cloudflare Warp\n↔  Tailscale") in
+  case $(menu "Install" "󰖂  Cloudflare Warp\n󰖂  Tailscale") in
   *Cloudflare*) /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp ;;
   *Tailscale*) /usr/share/ohmydebn/bin/ohmydebn-tailscale ;;
   *) show_install_menu ;;
@@ -171,8 +243,9 @@ show_install_vpn_menu() {
 }
 
 show_install_media_menu() {
-  case $(menu "Install" "♫  cliamp terminal music player\n🛜︎ UxPlay AirPlay receiver") in
+  case $(menu "Install" "  cliamp terminal music player\n  GIMP image editor\n  UxPlay AirPlay receiver") in
   *cliamp*) install "cliamp" "cliamp" ;;
+  *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
   *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;
   *) show_install_menu ;;
   esac
@@ -202,7 +275,7 @@ show_install_browser_menu() {
   *Chromium*) install "Chromium" "chromium" ;;
   *Firefox*) install "Firefox" "firefox-esr" ;;
   *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
-  *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium ;;
+  *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium-bin ;;
   *) show_main_menu ;;
   esac
 }
@@ -273,22 +346,34 @@ show_system_menu() {
 }
 
 show_main_menu() {
-  go_to_menu "$(menu "Go" "󰀻  Apps\n󰧑  Learn\n  Capture\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n󰍉  Screen Magnifier\n  System")"
+  # go_items is the single source of truth for both the picker's default
+  # (empty-query) view and menu_tree_flatten/-categories' recursive walk
+  # (bin/ohmydebn-menu-tree) - it's real, executed bash (passed as an
+  # argument below), not a comment, so it can't silently drift out of
+  # sync the way dead/unused data could.
+  local go_items="󰀻  Apps\n󰧑  Learn\n  Capture\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n󰍉  Screen Magnifier\n  System"
+  go_to_menu "$(menu "Go" "$go_items")"
 }
 
+# Dispatches a bare category label - used both for show_main_menu's own
+# picker result above, and directly for the DIRECT_ACCESS CLI-arg path at
+# the bottom of this script (e.g. `ohmydebn-menu install` from a
+# keybinding). menu() now resolves every searched-descendant breadcrumb
+# itself before anything gets here, so this never receives one anymore -
+# every "${1,,}" case arm here only ever needs to match a same-level label.
 go_to_menu() {
   case "${1,,}" in
-  *apps*) /usr/share/ohmydebn/bin/ohmydebn-rofi-apps ;;
+  *apps*) /usr/share/ohmydebn/bin/ohmydebn-app-launcher ;;
   *learn*) show_learn_menu ;;
-  *style*) show_style_menu ;;
-  *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-set-gui ;;
+  *style*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
+  *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *capture*) show_capture_menu ;;
   *screenshot*) show_screenshot_menu ;;
   *screenrecord*) show_screenrecord_menu ;;
   *install*) show_install_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;
-  *about*) /usr/share/ohmydebn/bin/ohmydebn-screenfetch-gui ;;
+  *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui ;;
   *demo*) /usr/share/ohmydebn/bin/ohmydebn-demo-gui ;;
   *magnifier*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
   *system*) show_system_menu ;;

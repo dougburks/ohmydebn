@@ -1,7 +1,0 @@
-#!/bin/bash
-
-OHMYDEBN_VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
-OHMYDEBN_THEME=$(/usr/share/ohmydebn/bin/ohmydebn-theme-current)
-CINNAMON_VERSION=$(/usr/bin/cinnamon --version)
-/usr/bin/screenfetch -d "-de;-gtk;-wmtheme" \
-  -C "Desktop Environment=$CINNAMON_VERSION,OhMyDebn Version=$OHMYDEBN_VERSION,OhMyDebn Theme=$OHMYDEBN_THEME,OhMyDebn Website=https://ohmydebn.org"

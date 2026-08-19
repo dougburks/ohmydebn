@@ -2,15 +2,22 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 if ! dpkg -s "claude-code" >/dev/null 2>&1; then
-  echo
-  echo "Claude Code is not currently installed."
-  echo
-  echo "Continuing will install it from:"
-  echo "https://downloads.claude.ai"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Claude Code is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://downloads.claude.ai"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
   sudo mkdir -p /usr/share/keyrings
   sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |

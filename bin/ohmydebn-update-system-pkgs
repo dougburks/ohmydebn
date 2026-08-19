@@ -1,3 +1,9 @@
 #!/bin/bash
 
-sudo /usr/bin/apt update && sudo /usr/bin/apt -y full-upgrade
+# --no-install-recommends: a routine full-upgrade can touch an already-
+# installed package that merely Recommends something ohmydebn deliberately
+# doesn't install by default (or that --power-user just purged, e.g.
+# cinnamon-desktop-environment recommending LibreOffice) - without this
+# flag, apt's default Install-Recommends=true would silently reinstall it
+# right back in as part of resolving that package's upgrade.
+sudo /usr/bin/apt update && sudo /usr/bin/apt -y --no-install-recommends full-upgrade

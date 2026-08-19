@@ -6,7 +6,7 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
   echo
   echo "Brave Browser is not currently installed."
 else
-  if [ $# -eq 0 ]; then
+  if [ "${1:-}" != "--skip-prompt" ]; then
     echo
     echo "Continuing will remove Brave Browser and its repo."
     echo

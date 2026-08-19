@@ -1,6 +1,11 @@
 #!/bin/bash
 
 if [ "$#" -ne 3 ]; then
+  if ! command -v gum >/dev/null 2>&1; then
+    echo "Usage: ohmydebn-webapp-install <name> <url> <icon-url>" >&2
+    exit 1
+  fi
+
   echo -e "\e[32mLet's create a new web app you can start with the app launcher.\n\e[0m"
   APP_NAME=$(gum input --prompt "Name> " --placeholder "My favorite web app")
   APP_URL=$(gum input --prompt "URL> " --placeholder "https://example.com")

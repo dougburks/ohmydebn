@@ -2,10 +2,10 @@
 
 if [ -f ~/.local/state/ohmydebn ]; then
   VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
-  /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "OhMyDebn update complete - version: $VERSION"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "OhMyDebn update complete - version: $VERSION"
 else
   echo
-  /usr/share/ohmydebn/bin/ohmydebn-headline "/usr/bin/ttfx rain" "Installation complete!"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Installation complete!"
   echo
   toilet -f mono12 "Welcome" | /usr/bin/ttfx rain
   toilet -f mono12 "   to" | /usr/bin/ttfx rain

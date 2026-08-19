@@ -1,16 +1,20 @@
 #!/bin/bash
 
-echo
-if [ ! -f ~/.local/state/ohmydebn ]; then
-  # For first installation, use text effects
-  read -ra PROCESSOR <<<"$1"
+# Tolerate the old 2-arg calling convention (processor, text) as well as
+# the current 1-arg form (text): an apt upgrade can replace this file
+# mid-update while an old, not-yet-upgraded caller script is still running,
+# so a straight $1-only read would print the old processor argument ("cat")
+# instead of the real message if that old/new mismatch happens.
+if [[ $# -ge 2 ]]; then
+  TEXT="$2"
 else
-  # For updates, don't use text effects
-  PROCESSOR=(cat)
+  TEXT="$1"
 fi
-cat <<EOF | "${PROCESSOR[@]}"
+
+echo
+cat <<EOF
 ####################################################################
-$2
+$TEXT
 ####################################################################
 EOF
 echo

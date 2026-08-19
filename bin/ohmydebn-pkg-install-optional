@@ -1,0 +1,91 @@
+#!/bin/bash
+#
+# ohmydebn-pkg-install-optional: Install one or more packages that are not
+# already present, in a single batched `apt install` (a big fresh install can
+# call this ~15 times across ~60 packages; batching avoids paying dpkg's
+# trigger-processing cost - mandb, icon caches, desktop/mime databases - once
+# per package instead of once per batch). Availability is checked with
+# `apt-cache show` first so one unknown/renamed package can't take the whole
+# batch down; if the batch install itself fails anyway (e.g. a conflict
+# between two packages), falls back to installing one at a time so a single
+# bad interaction doesn't block the rest. Always ends by marking every
+# successfully-installed package "manual", so a future `apt autoremove`
+# elsewhere (e.g. ohmydebn-brave-browser-remove) doesn't sweep one away just
+# because it's no longer in ohmydebn's own Depends: list.
+#
+# Installs use --no-install-recommends: these packages used to be plain
+# `Depends:` entries on the ohmydebn .deb itself, never named directly on an
+# apt command line, so apt never pulled their Recommends (apt only
+# auto-installs Recommends of packages explicitly named in the install
+# command, not those pulled in transitively). Naming them directly here
+# would otherwise newly pull in each one's full Recommends tree - e.g.
+# cinnamon-desktop-environment alone recommends ~60 packages including all
+# of LibreOffice, Pidgin, Rhythmbox, and other apps ohmydebn deliberately
+# treats as optional.
+# Usage: ohmydebn-pkg-install-optional <package> [package...]
+#
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: ohmydebn-pkg-install-optional <package> [package...]" >&2
+  exit 1
+fi
+
+# Query every requested package's install status in one dpkg-query call
+# instead of one `dpkg -s` per package - each `dpkg -s` call costs ~20ms of
+# pure process-spawn overhead, so checking ~60 packages (which this script
+# does twice, once up front and once after installing) was costing multiple
+# seconds on every single ohmydebn-update run even when nothing had changed.
+declare -A INSTALLED_MAP
+query_installed() {
+  local pkg want flag status
+  INSTALLED_MAP=()
+  while read -r pkg want flag status; do
+    [[ "$want $flag $status" == "install ok installed" ]] && INSTALLED_MAP["$pkg"]=1
+  done < <(dpkg-query -W -f='${Package} ${Status}\n' "$@" 2>/dev/null)
+}
+
+query_installed "$@"
+
+TO_INSTALL=()
+for PACKAGE in "$@"; do
+  [[ -n "${INSTALLED_MAP[$PACKAGE]:-}" ]] || TO_INSTALL+=("$PACKAGE")
+done
+
+if [[ ${#TO_INSTALL[@]} -gt 0 ]]; then
+  AVAILABLE=()
+  for PACKAGE in "${TO_INSTALL[@]}"; do
+    if apt-cache show "$PACKAGE" >/dev/null 2>&1; then
+      AVAILABLE+=("$PACKAGE")
+    else
+      echo "ohmydebn: '$PACKAGE' is not available on this system, skipping." >&2
+    fi
+  done
+
+  if [[ ${#AVAILABLE[@]} -gt 0 ]] && ! sudo /usr/bin/apt -y --no-install-recommends install "${AVAILABLE[@]}"; then
+    # Something in the batch failed (e.g. a conflict between two packages);
+    # fall back to installing one at a time so a single bad interaction
+    # doesn't block the rest of the batch.
+    for PACKAGE in "${AVAILABLE[@]}"; do
+      if ! dpkg -s "$PACKAGE" >/dev/null 2>&1; then
+        if ! sudo /usr/bin/apt -y --no-install-recommends install "$PACKAGE"; then
+          echo "ohmydebn: failed to install '$PACKAGE', skipping." >&2
+        fi
+      fi
+    done
+  fi
+
+  # Packages may have just been installed above, so the earlier query is
+  # stale - refresh it before deciding what to mark manual below.
+  query_installed "$@"
+fi
+
+INSTALLED=()
+for PACKAGE in "$@"; do
+  [[ -n "${INSTALLED_MAP[$PACKAGE]:-}" ]] && INSTALLED+=("$PACKAGE")
+done
+
+if [[ ${#INSTALLED[@]} -gt 0 ]]; then
+  sudo /usr/bin/apt-mark manual "${INSTALLED[@]}" >/dev/null
+fi
+
+exit 0

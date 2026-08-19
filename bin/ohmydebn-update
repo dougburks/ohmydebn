@@ -10,7 +10,7 @@ fi
 
 VERSION=$($DIR/bin/ohmydebn-version)
 
-$DIR/bin/ohmydebn-headline "cat" "OhMyDebn Update - current OhMyDebn version: $VERSION"
+$DIR/bin/ohmydebn-headline "OhMyDebn Update - current OhMyDebn version: $VERSION"
 
 cat <<EOF
 Continuing will check for any updates for the
@@ -33,8 +33,8 @@ sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
 # Update the ohmydebn package first to get the latest code
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  $DIR/bin/ohmydebn-headline "cat" "Checking for an updated ohmydebn package"
+  $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install ohmydebn
 fi
 
-bash $DIR/install.sh --no-uninstall
+bash $DIR/install.sh

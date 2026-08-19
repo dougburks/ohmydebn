@@ -43,28 +43,18 @@ compare_versions() {
     return 1
   fi
 
-  # Split into parts and compare numerically
-  local IFS=.
-  local i
-  local -a v1parts v2parts
-  read -ra v1parts <<<"$v1"
-  read -ra v2parts <<<"$v2"
-  # Fill empty parts with 0
-  for ((i = ${#v1parts[@]}; i < ${#v2parts[@]}; i++)); do
-    v1parts[i]=0
-  done
-  for ((i = ${#v2parts[@]}; i < ${#v1parts[@]}; i++)); do
-    v2parts[i]=0
-  done
-
-  for ((i = 0; i < ${#v1parts[@]}; i++)); do
-    if [[ ${v1parts[i]} -lt ${v2parts[i]} ]]; then
-      return 0
-    elif [[ ${v1parts[i]} -gt ${v2parts[i]} ]]; then
-      return 2
-    fi
-  done
-  return 1 # Should not reach here if versions are not equal
+  # Version-sort rather than comparing dot-split parts numerically - a
+  # release tag with a non-numeric segment (e.g. a pre-release like
+  # "4.3.0-rc1") would make `-lt`/`-gt` error out ("integer expression
+  # expected") and silently fall through instead of comparing correctly.
+  # sort -V handles that shape of string without erroring.
+  local highest
+  highest=$(printf '%s\n%s\n' "$v1" "$v2" | sort -V | tail -n1)
+  if [[ "$highest" == "$v2" ]]; then
+    return 0 # v1 < v2
+  else
+    return 2 # v1 > v2
+  fi
 }
 
 main() {

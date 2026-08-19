@@ -1,0 +1,1338 @@
+#!/usr/bin/python3
+#
+# ohmydebn-theme-carousel: full-screen, Omarchy-style theme AND background
+# browser - launched by Ctrl+Super+T, Ctrl+Super+B (both bound to this same
+# script - see install/keybinding/keybinding-custom.txt), and ohmydebn-menu's
+# Style entry directly. Used to be two separate scripts/hotkeys/menu entries
+# (this one for themes only, ohmydebn-theme-bg-carousel for backgrounds
+# within the current theme only); folded into one after this version proved
+# out a D-pad that handles both without the old bg-carousel's separate
+# "applies live on every keypress" model - here, nothing touches the live
+# desktop until Enter, for backgrounds exactly the same way it always worked
+# for themes.
+#
+# Left/Right browse themes. Up/Down browse *backgrounds within the current
+# theme*, whenever it has more than one. The main card always shows the
+# actual background that's currently selected (so what's previewed and what
+# Enter applies never disagree), with small dimmed thumbnails above/below it
+# for the previous/next background - the same left/right-neighbor idea used
+# for adjacent themes, just rotated 90 degrees. The choice is passed to the
+# real ohmydebn-theme-set via its existing `--background N` flag, once, on
+# Enter, alongside the theme itself - a single atomic apply either way.
+#
+# Aether keeps its own job (building/editing themes) - reachable here via
+# the B/C/R single-key shortcuts (Browse more themes, Create new theme using
+# Aether, Remove theme), all three also clickable directly in the caption
+# panel. R only shows up (as a red chip, since it's destructive) when the
+# currently-displayed theme is removable (see is_theme_removable() -
+# ohmydebn-theme-remove itself is hardcoded to only ever touch
+# ~/.config/ohmydebn/themes/, never the ~20 bundled system ones, so this
+# mirrors that same real scope), and is itself a two-step confirm (first
+# press/click arms it, second confirms - see _arm_remove()) rather than
+# removing on a single keypress.
+#
+# Browse opens bjarneo.github.io/omarchy-themes (a visual, searchable theme
+# gallery) and closes this carousel rather than leaving it open - picking a
+# theme there triggers a registered aether:// URI handler (confirmed real:
+# see ~/.local/share/applications/aether-protocol-handler.desktop ->
+# `aether --import-blueprint %u --auto-apply`) that installs and applies it
+# directly, no need to come back here at all.
+#
+# Each theme's preview.png (where present - about half the themes have one;
+# it's each theme's original upstream Omarchy/Hyprland promo mockup, not an
+# OhMyDebn/Cinnamon screenshot, so it's representative of the color palette
+# rather than literally accurate) is used for the centered card when a
+# specific background hasn't been picked via Up/Down yet, falling back to
+# the theme's own first background image (confirmed every theme has at
+# least one) when no preview.png exists - see preview_image().
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
+
+import os
+import subprocess
+import sys
+import threading
+import tomllib
+import warnings
+
+OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
+USER_THEMES_DIR = os.path.expanduser("~/.config/ohmydebn/themes")
+SYSTEM_THEMES_DIR = "/usr/share/ohmydebn-themes"
+CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
+CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/background")
+
+CARD_W, CARD_H = 900, 506
+SIDE_W, SIDE_H = 340, 191
+SIDE_OPACITY = 0.4
+BG_THUMB_W, BG_THUMB_H = 320, 90
+
+# Everything above is sized for a full-size desktop monitor. On a MacBook's
+# HiDPI/Retina "looks like" resolution (e.g. 1280x800 or 1512x982 logical
+# pixels), that fixed 1646x1105 footprint doesn't fit - GTK won't shrink a
+# toplevel below the combined minimum size of its fixed-size children, so
+# the real window ends up bigger than the monitor and the WM cuts off
+# whatever doesn't fit (confirmed as a real report: the whole scrim
+# panel wasn't visible on a Retina MacBook). Carousel.__init__ scales
+# CARD_W/CARD_H/SIDE_W/SIDE_H/BG_THUMB_W/BG_THUMB_H down (never up) to fit
+# the actual monitor before building any widgets, using these two
+# constants as the divisor - the natural (min==nat) size of `row` and of
+# `caption` (the scrim panel) at the sizes above, measured by hand via a
+# real Gtk.OffscreenWindow render, same technique already used elsewhere
+# in this file. `caption`'s own size comes entirely from text/button
+# padding, not from these six constants, so it doesn't shrink with them -
+# it's carried as a fixed vertical budget instead of getting scaled itself.
+DESIGN_ROW_W, DESIGN_ROW_H = 1646, 716
+DESIGN_CAPTION_H = 365
+STACK_SPACING = 24
+CAROUSEL_H_MARGIN = 60
+CAROUSEL_V_MARGIN = 40
+
+REMOVE_LABEL_DEFAULT = "Remove Theme"
+REMOVE_LABEL_ARMED = "Confirm Remove?"
+REMOVE_ARM_TIMEOUT_MS = 4000
+
+BROWSE_THEMES_URL = "https://bjarneo.github.io/omarchy-themes/"
+
+CREATE_THEME_ACTION = "action:create-theme"
+
+def build_shortcuts_markup():
+    # Name first, shortcut letter last - matches Cancel/Apply/Remove's own
+    # "action, then shortcut" ordering elsewhere in the panel now, rather
+    # than the letter-first convention these two used to share only with
+    # each other.
+    return "\n".join([
+        f'<a href="{BROWSE_THEMES_URL}">Browse More Themes - B</a>',
+        f'<a href="{CREATE_THEME_ACTION}">Create new Theme using Aether - C</a>',
+    ])
+
+
+def slug_to_display(slug):
+    return " ".join(word.capitalize() for word in slug.split("-"))
+
+
+def theme_dir(slug):
+    user_path = os.path.join(USER_THEMES_DIR, slug)
+    if os.path.isdir(user_path):
+        return user_path
+    return os.path.join(SYSTEM_THEMES_DIR, slug)
+
+
+def is_theme_removable(slug):
+    return os.path.isdir(os.path.join(USER_THEMES_DIR, slug))
+
+
+def list_theme_slugs():
+    slugs = set()
+    for base in (USER_THEMES_DIR, SYSTEM_THEMES_DIR):
+        if not os.path.isdir(base):
+            continue
+        for entry in os.listdir(base):
+            if os.path.isdir(os.path.join(base, entry)):
+                slugs.add(entry)
+    return sorted(slugs)
+
+
+def first_background(slug):
+    bg_dir = os.path.join(theme_dir(slug), "backgrounds")
+    try:
+        entries = sorted(os.listdir(bg_dir))
+    except OSError:
+        return None
+    for name in entries:
+        if name.lower().endswith((".png", ".jpg", ".jpeg")):
+            return os.path.join(bg_dir, name)
+    return None
+
+
+def preview_image(slug):
+    preview = os.path.join(theme_dir(slug), "preview.png")
+    if os.path.isfile(preview):
+        return preview
+    return first_background(slug)
+
+
+DEFAULT_ACCENT = "#ffffff"
+ACCENT_LUMINANCE_FLOOR = 0.35
+
+
+def _hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _relative_luminance(rgb):
+    r, g, b = (c / 255 for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _ensure_visible(hex_color):
+    """Blends a too-dark accent color toward white in fixed steps until it
+    clears ACCENT_LUMINANCE_FLOOR, so an unusually dark accent (a custom
+    user theme we don't control, say) still shows up against the
+    carousel's dark backdrop instead of nearly disappearing. Every accent
+    currently shipped with ohmydebn already clears this floor - confirmed
+    by hand - so this only ever engages for themes we've never seen."""
+    r, g, b = _hex_to_rgb(hex_color)
+    for _ in range(20):
+        if _relative_luminance((r, g, b)) >= ACCENT_LUMINANCE_FLOOR or (r, g, b) == (255, 255, 255):
+            break
+        r, g, b = min(255, r + 20), min(255, g + 20), min(255, b + 20)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _rgba(hex_color, alpha):
+    r, g, b = _hex_to_rgb(hex_color)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def theme_accent_color(slug):
+    """Reads slug's own accent color straight from its colors.toml -
+    independent of whether this theme is actually the live/applied one,
+    unlike ohmydebn-menu-picker's load_theme_colors() (which only ever
+    knows whatever was last applied, via
+    ~/.config/ohmydebn/current/picker-colors - never written to until
+    Enter, see this script's own header comment). That's what lets the
+    carousel's chrome recolor itself live while browsing, the same way
+    the preview images already do, without applying anything for real.
+    Falls back to DEFAULT_ACCENT (today's plain white) for a theme with
+    no colors.toml or no accent key there - not a regression, just no
+    theming available for that one theme. Deliberately doesn't replicate
+    ohmydebn-theme-set-colors' full legacy-format/alacritty.toml fallback
+    cascade - every theme actually shipped here already has a semantic
+    colors.toml with a real accent key (confirmed by hand), so that
+    cascade would be dead code for anything but a hand-rolled custom
+    theme, and even then the plain-white fallback below still degrades
+    gracefully rather than crashing."""
+    path = os.path.join(theme_dir(slug), "colors.toml")
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return DEFAULT_ACCENT
+    accent = data.get("accent")
+    if not isinstance(accent, str):
+        return DEFAULT_ACCENT
+    accent = accent.strip()
+    if len(accent) != 7 or accent[0] != "#":
+        return DEFAULT_ACCENT
+    try:
+        _hex_to_rgb(accent)
+    except ValueError:
+        return DEFAULT_ACCENT
+    return _ensure_visible(accent)
+
+
+def list_backgrounds_for_theme(slug):
+    """Every raw background file for `slug`, from the same two directories
+    and same sort order ohmydebn-theme-bg-next itself uses (user overrides
+    at ~/.config/ohmydebn/backgrounds/<slug>/, then the theme's own
+    backgrounds/ dir - no extension filter, unlike first_background() above,
+    since bg-next doesn't filter either). Index N here is therefore the
+    same file `ohmydebn-theme-set --background N` would pick, so what's
+    previewed and what gets applied on Enter always stay in sync."""
+    user_dir = os.path.expanduser(f"~/.config/ohmydebn/backgrounds/{slug}")
+    theme_bg_dir = os.path.join(theme_dir(slug), "backgrounds")
+    paths = []
+    for base in (user_dir, theme_bg_dir):
+        if not os.path.isdir(base):
+            continue
+        for name in os.listdir(base):
+            full = os.path.join(base, name)
+            if os.path.isfile(full):
+                paths.append(full)
+    return sorted(paths)
+
+
+def current_theme_slug():
+    try:
+        with open(CURRENT_THEME_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def current_background_path():
+    try:
+        return os.readlink(CURRENT_BACKGROUND_LINK)
+    except OSError:
+        return None
+
+
+def get_monitor_geometry():
+    display = Gdk.Display.get_default()
+    seat = display.get_default_seat()
+    _screen, x, y = seat.get_pointer().get_position()
+    monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor() or display.get_monitor(0)
+    return monitor.get_geometry()
+
+
+def load_cover_pixbuf(path, target_w, target_h):
+    """Scale-and-crop to fill target_w x target_h exactly, like CSS
+    background-size:cover - avoids distorting the image, unlike a plain
+    stretch-to-fit scale."""
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
+    src_w, src_h = pixbuf.get_width(), pixbuf.get_height()
+    scale = max(target_w / src_w, target_h / src_h)
+    new_w, new_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
+    scaled = pixbuf.scale_simple(new_w, new_h, GdkPixbuf.InterpType.BILINEAR)
+    x = max(0, (new_w - target_w) // 2)
+    y = max(0, (new_h - target_h) // 2)
+    x = min(x, new_w - target_w)
+    y = min(y, new_h - target_h)
+    return scaled.new_subpixbuf(x, y, min(target_w, new_w), min(target_h, new_h))
+
+
+CSS = """
+#carousel-caption {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+#carousel-name {
+    color: #ffffff;
+    font-size: 30pt;
+    font-weight: bold;
+}
+#carousel-hint {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 11pt;
+}
+#carousel-card {
+    border: 3px solid rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 50px 10px rgba(130, 170, 255, 0.6);
+}
+#carousel-side {
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.carousel-nav-btn {
+    background-image: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: none;
+    box-shadow: none;
+    border-radius: 20px;
+    padding: 6px 18px;
+}
+.carousel-nav-btn:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+.carousel-nav-glyph {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 15pt;
+}
+.carousel-nav-text {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 11pt;
+}
+.carousel-nav-btn:disabled {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+.carousel-nav-btn:disabled .carousel-nav-glyph,
+.carousel-nav-btn:disabled .carousel-nav-text {
+    color: rgba(255, 255, 255, 0.25);
+}
+.carousel-action {
+    padding: 8px 22px;
+    border-radius: 6px;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+.carousel-action-text {
+    font-size: 12pt;
+    color: #ffffff;
+}
+.carousel-action-shortcut {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.6);
+}
+.carousel-action-apply {
+    background-color: rgba(120, 170, 255, 0.85);
+}
+.carousel-action-apply:hover {
+    background-color: rgba(140, 185, 255, 0.95);
+}
+.carousel-action-cancel {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+.carousel-action-cancel:hover {
+    background-color: rgba(255, 255, 255, 0.24);
+}
+.carousel-action-remove {
+    background-color: rgba(200, 60, 60, 0.85);
+}
+.carousel-action-remove:hover {
+    background-color: rgba(220, 75, 75, 0.95);
+}
+.carousel-action-remove-armed,
+.carousel-action-remove-armed:hover {
+    background-color: rgba(255, 30, 30, 0.95);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+.carousel-action-remove:disabled {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+.carousel-action-remove:disabled .carousel-action-text,
+.carousel-action-remove:disabled .carousel-action-shortcut {
+    color: rgba(255, 255, 255, 0.2);
+}
+"""
+
+
+def make_fixed_thumb_frame(w, h, css_name="carousel-side", opacity=SIDE_OPACITY):
+    """Wraps a Gtk.Image in a fixed w x h frame with the border/dimming on
+    the frame rather than the image itself, and gives the (now borderless)
+    image inside its own matching size_request too - both halves of one
+    fix, needed together. A CSS border only counts toward a widget's
+    *natural* size, which only wins over a plain set_size_request once
+    real content pushes natural size past it - true both when a thumbnail
+    goes empty (Gtk.Image.clear(), natural drops to 0, size_request's
+    minimum wins, no border added - too *small*) and when a cover-fitted
+    (load_cover_pixbuf) image happens to use its full target height with
+    no padding needed (content + border then *exceeds* the minimum and
+    wins instead, growing the frame). Giving the inner image the same
+    fixed size_request as the frame keeps its contribution to the frame's
+    own size negotiation constant either way, so the border addition on
+    top of that is constant too - confirmed by hand while chasing this
+    exact bug through the main card, the background-neighbor thumbnails,
+    and the left/right theme-neighbor thumbnails, all three of which had
+    it independently. Every caller loads its image with load_cover_pixbuf
+    (crop-to-fill, exact target size every time) rather than a letterboxed
+    fit specifically so this fixed frame size always matches the actual
+    photo - a letterboxed image's real size varies with its own aspect
+    ratio, which needs a different (and considerably more complicated)
+    fix; this carousel doesn't letterbox anything any more, on the theory
+    that the real desktop background gets cropped to fill the screen
+    either way (Cinnamon's default "zoom" picture-options - confirmed via
+    ohmydebn-theme-bg-next's own gsettings call, no picture-options
+    override anywhere in this repo), so a smaller preview that shows the
+    full, uncropped frame was never actually representative of what
+    Enter's about to do, on top of visibly changing size theme to theme
+    depending on each image's own aspect ratio - jarring, confirmed by
+    hand, for no accuracy benefit in return."""
+    frame = Gtk.Box()
+    frame.set_name(css_name)
+    frame.set_size_request(w, h)
+    frame.set_halign(Gtk.Align.CENTER)
+    frame.set_valign(Gtk.Align.CENTER)
+    frame.set_opacity(opacity)
+    image = Gtk.Image()
+    image.set_size_request(w, h)
+    image.set_halign(Gtk.Align.CENTER)
+    image.set_valign(Gtk.Align.CENTER)
+    frame.pack_start(image, True, True, 0)
+    return frame, image
+
+
+def make_nav_button(pieces, halign, button_classes=("carousel-nav-btn",)):
+    """A button that fits its own description inside itself, rather than a
+    bare glyph/label with a separate (non-clickable, easy to mis-order
+    relative to what it's actually labeling) text caption beside it.
+    `pieces` is an ordered list of (text, css_class) tuples - e.g.
+    [("<-", glyph_class), ("Previous theme", text_class)] for the D-pad's
+    left button, the glyph sandwiched in the middle for up/down
+    ("Previous", glyph, "background") so those read more like a real
+    D-pad label than "arrow, then description", or [("Apply", text_class),
+    ("Enter", shortcut_class)] for the Apply/Cancel buttons, folding the
+    keyboard-shortcut hint into the button instead of a separate caption
+    line elsewhere in the panel. Disabling the returned button
+    (set_sensitive(False)) dims every piece together as one unit, both via
+    GTK's normal insensitive-state cascade to child widgets and via the
+    explicit .carousel-nav-btn:disabled rule in CSS for a clearer effect
+    against this dark backdrop (Apply/Cancel don't currently rely on that
+    rule since they're never disabled, but nothing stops them from using
+    it later - button_classes is what actually distinguishes the D-pad's
+    pill look from Apply/Cancel's own colored-pill styling).
+
+    Left/right and up/down each get forced to match their own pair's
+    widest via a SizeGroup (see __init__) - not all four together, since
+    that stretched left/right to match up/down's wider content, and with
+    two of those side-by-side sharing one row they visually filled almost
+    the whole panel. Within a button, a Gtk.Box's non-expanding children
+    pack flush against its *start* edge by default rather than centering -
+    confirmed by hand with real (offscreen, so nothing ever touched the
+    actual display) GTK layout allocation, not guessed. `halign` controls
+    where the leftover space goes: START keeps content (and, for
+    glyph-first buttons, the arrow itself) at the left where you'd look
+    for it, END flips it to the right so a trailing arrow lands at the
+    edge it's pointing toward instead of stranded mid-button, and CENTER
+    is for the up/down buttons here, where the content itself is
+    symmetric (word, arrow, word) and there's no "pointing edge" to hug.
+
+    Returns (button, labels) - labels in the same order as `pieces`, so a
+    caller building a symmetric word/arrow/word button can pull out the
+    two flanking words afterward and force them to equal width (see the
+    up/down construction in __init__), which is what actually centers the
+    arrow exactly rather than just centering the group as a whole - two
+    words of different natural width would otherwise leave the arrow
+    off-center by however much those widths differ, group-centering or
+    not."""
+    button = Gtk.Button()
+    button.set_relief(Gtk.ReliefStyle.NONE)
+    button.set_can_focus(False)
+    ctx = button.get_style_context()
+    for cls in button_classes:
+        ctx.add_class(cls)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    box.set_halign(halign)
+    labels = []
+    for text, css_class in pieces:
+        label = Gtk.Label(label=text)
+        label.get_style_context().add_class(css_class)
+        box.pack_start(label, False, False, 0)
+        labels.append(label)
+    button.add(box)
+    return button, labels
+
+
+class Carousel(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self._closing = False
+
+        self.slugs = list_theme_slugs()
+        current = current_theme_slug()
+        self.index = self.slugs.index(current) if current in self.slugs else 0
+
+        self.backgrounds = []
+        self.bg_index = 0
+        self._load_backgrounds()
+
+        # Decoding a full-resolution wallpaper (some of these are 6000x4000,
+        # ~24MP) and rescaling it costs 100-400ms measured by hand - by far
+        # the dominant cost of a render(), regardless of how small the
+        # on-screen target ends up being (GdkPixbuf always decodes to native
+        # resolution first). A cache hit, by contrast, costs nanoseconds.
+        # Scoped to this process's lifetime (one carousel session) rather
+        # than time- or size-bounded - simplest thing that works, and this
+        # window is only ever open for seconds at a time.
+        self._pixbuf_cache = {}
+        # Lets render() skip re-decoding widgets that provably didn't
+        # change - e.g. Up/Down (background-only) navigation never touches
+        # the full-screen backdrop or the adjacent-theme thumbnails, so
+        # redoing those every keypress was pure waste.
+        self._last_bg_path = None
+        self._last_theme_index = None
+        # Bumped on every render(); a background prefetch thread checks
+        # this before/after its (slow) decode step and abandons the rest
+        # of its work if it's fallen behind - see _schedule_prefetch().
+        self._prefetch_gen = 0
+
+        geo = get_monitor_geometry()
+        self.set_default_size(geo.width, geo.height)
+
+        # Shrink (never grow) the card/thumbnail sizes to whatever fits this
+        # monitor - see the comment on DESIGN_ROW_W above for why this is
+        # needed at all. `caption` is carried as a fixed budget (it doesn't
+        # scale with these), `row` is the part that does.
+        available_w = geo.width - CAROUSEL_H_MARGIN
+        available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
+        scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
+        self.card_w, self.card_h = round(CARD_W * scale), round(CARD_H * scale)
+        self.side_w, self.side_h = round(SIDE_W * scale), round(SIDE_H * scale)
+        self.bg_thumb_w, self.bg_thumb_h = round(BG_THUMB_W * scale), round(BG_THUMB_H * scale)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS.encode("utf-8"))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        # Recolors #carousel-card/#carousel-side to whichever theme is
+        # currently centered - see theme_accent_color() and render()'s
+        # theme_changed block below. A separate provider (rather than
+        # editing CSS's own strings) reloaded on demand, at USER priority
+        # so it always wins over the plain-white defaults above regardless
+        # of add order - PRIORITY_APPLICATION vs PRIORITY_APPLICATION would
+        # otherwise depend on registration order, which is fragile.
+        self._accent_provider = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), self._accent_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER
+        )
+        self._accent_cache = {}
+
+        self.overlay = Gtk.Overlay()
+        self.add(self.overlay)
+
+        self.bg_image = Gtk.Image()
+        self.overlay.add(self.bg_image)
+
+        # halign/valign on a direct Gtk.Overlay child are silently ignored
+        # by GTK (confirmed by hand with a minimal, non-reparented
+        # reproduction, and even a do_get_child_position() vfunc override
+        # didn't help - a real PyGObject binding limitation, not something
+        # fixable from here) - every overlay child just renders at its own
+        # natural size, pinned to the overlay's top-left corner. The
+        # workaround: give content (this overlay's only real child besides
+        # bg_image) hexpand/vexpand so it fills the *entire* overlay, then
+        # rely on normal (non-overlay) child alignment inside it, which
+        # works correctly everywhere else in this file - `stack` below
+        # (row + caption, centered as one block) is what actually
+        # positions everything within content's now-full-size space.
+        #
+        # content itself must NOT also get halign/valign=CENTER - that
+        # explicitly means "ignore the extra space hexpand/vexpand asked
+        # for, shrink-wrap to natural size and center that instead",
+        # which silently defeats the expand entirely (confirmed by hand:
+        # with CENTER set, content stayed shrink-wrapped to its child's
+        # own size and never filled the overlay at all). Leaving content
+        # at the default FILL alignment is what lets it actually fill the
+        # overlay.
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content.set_hexpand(True)
+        content.set_vexpand(True)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=28)
+        # Explicit False, not left to auto-compute: a Box's own hexpand/
+        # vexpand defaults to inheriting from its descendants when never
+        # explicitly set, and something nested under row (D-pad buttons,
+        # thumbnail frames, etc.) apparently does request expand somewhere
+        # - confirmed by hand, row silently stretched to content's entire
+        # allocation instead of staying at its own natural size otherwise,
+        # the exact same FILL-beats-CENTER contradiction as content vs.
+        # the overlay above, just one level deeper and via inheritance
+        # rather than an explicit setting this time.
+        row.set_hexpand(False)
+        row.set_vexpand(False)
+        row.set_halign(Gtk.Align.CENTER)
+        row.set_valign(Gtk.Align.CENTER)
+        # Fixed-size frame, not a raw Gtk.Image - every image in this panel
+        # is loaded with load_cover_pixbuf (crop-to-fill, exact target size
+        # every time - see make_fixed_thumb_frame()'s own docstring for
+        # why this carousel doesn't letterbox anything), so this fixed
+        # size always matches what's actually drawn; it's not doing any
+        # remaining size-negotiation work of its own by being here.
+        left_frame, self.left_image = make_fixed_thumb_frame(self.side_w, self.side_h)
+
+        # The card itself plus its new above/below background-neighbor
+        # thumbnails, stacked vertically - same idea as left_image/
+        # right_image below, just rotated 90 degrees for the background
+        # sub-carousel instead of the theme carousel.
+        card_stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        card_stack.set_halign(Gtk.Align.CENTER)
+
+        # Gtk.Image.clear() (used for themes with only one background, see
+        # render()) drops the widget's natural size to zero rather than
+        # leaving it at its last real size, so card_stack (and everything
+        # below it, including the caption/scrim panel) shrank by up to
+        # 184px - confirmed by hand - every time browsing landed on a
+        # single-background theme. See make_fixed_thumb_frame().
+        bg_above_frame, self.bg_above_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
+        card_frame, self.card_image = make_fixed_thumb_frame(self.card_w, self.card_h, "carousel-card", opacity=1.0)
+        bg_below_frame, self.bg_below_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
+
+        card_stack.pack_start(bg_above_frame, False, False, 0)
+        card_stack.pack_start(card_frame, False, False, 0)
+        card_stack.pack_start(bg_below_frame, False, False, 0)
+
+        right_frame, self.right_image = make_fixed_thumb_frame(self.side_w, self.side_h)
+
+        row.pack_start(left_frame, False, False, 0)
+        row.pack_start(card_stack, False, False, 0)
+        row.pack_start(right_frame, False, False, 0)
+        # expand=True so row's own pack_start "cell" actually includes the
+        # extra vertical space content has now that it fills the overlay -
+        # a child's own valign only has anything to act on if its cell
+        # contains slack in the first place. fill=False so row doesn't
+        # stretch to consume that slack itself (which it did with fill=
+        # True - unlike a widget with its own size_request, row has none,
+        # nothing stops a fill from just growing it to match), leaving
+        # row's own valign=CENTER above to center it within the cell
+        # instead - confirmed by hand, this exact combination is what it
+        # took after (True, True) and (False, False) both failed for
+        # different reasons.
+        # row and caption used to be two independently-positioned overlay
+        # children - row centered alone, caption anchored to the bottom -
+        # specifically because their heights used to vary by theme (card
+        # sizing, background/theme-neighbor thumbnails, the R-line), and
+        # combining them into one centered block meant any of those
+        # changes pulled the *entire* block, including the card, up or
+        # down to keep it centered. All of those sources are now fixed
+        # (every one of row's and caption's own heights is a hard
+        # constant regardless of theme - confirmed by hand across all 24
+        # themes), which removes the reason they needed to be independent
+        # - and independence had its own real cost: with no shared layout
+        # coordinating them, nothing stopped row's background-neighbor
+        # thumbnail from extending down far enough to overlap caption's
+        # now-fixed position on themes with multiple backgrounds. `stack`
+        # recombines them into one sequentially-laid-out, jointly-centered
+        # block instead, the same shape the very original design used -
+        # stacked with real spacing between them, so they structurally
+        # cannot overlap, and stable-by-construction now that nothing
+        # under either one still varies.
+        stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
+        stack.set_hexpand(False)
+        stack.set_vexpand(False)
+        stack.set_halign(Gtk.Align.CENTER)
+        stack.set_valign(Gtk.Align.CENTER)
+        stack.pack_start(row, False, False, 0)
+        content.pack_start(stack, True, False, 0)
+
+        caption = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        caption.set_name("carousel-caption")
+        caption.set_halign(Gtk.Align.CENTER)
+        caption.set_border_width(14)
+
+        self.name_label = Gtk.Label()
+        self.name_label.set_name("carousel-name")
+        caption.pack_start(self.name_label, False, False, 0)
+
+        # Arrows live here in the scrim panel rather than out at the edges
+        # next to the thumbnails they move - two reasons: the panel's dark
+        # background (like the caption text above) guarantees contrast on
+        # any theme, light or dark, where arrows sitting directly on the
+        # raw backdrop image were unreadable on light ones; and keeping
+        # every clickable control in one tight, central spot means going
+        # from "clicked right three times" to "actually I want to go back"
+        # is a few pixels of mouse travel instead of crossing most of the
+        # screen (which pinning them to the panel's own outer edges would
+        # have reintroduced). Arranged as a compact D-pad - up above, down
+        # below, left/right flanking the gap between them - rather than a
+        # single row, since that maps each control's position to the actual
+        # direction it moves. Each is a single pill button with its own
+        # glyph and description built in (make_nav_button) rather than a
+        # bare arrow next to a separate, non-clickable label - that
+        # earlier version put both arrows adjacent in the row's middle
+        # with the (differently-sized) labels flanking them on the outside,
+        # which put the left arrow in a visually odd spot relative to its
+        # own label and left an off-center gap for the up/down pair above/
+        # below it to align over. One pill per direction sidesteps both:
+        # no separate pieces to keep in sync or mis-order, and a bigger,
+        # more forgiving click target since the label is part of the hit
+        # area now instead of just sitting next to it.
+        GLYPH, TEXT = "carousel-nav-glyph", "carousel-nav-text"
+        self.left_arrow_btn, _ = make_nav_button(
+            [("◀", GLYPH), ("Previous theme", TEXT)], halign=Gtk.Align.START
+        )
+        self.left_arrow_btn.connect("clicked", lambda b: self.move(-1))
+        self.right_arrow_btn, _ = make_nav_button(
+            [("Next theme", TEXT), ("▶", GLYPH)], halign=Gtk.Align.END
+        )
+        self.right_arrow_btn.connect("clicked", lambda b: self.move(1))
+        # Up/down sandwich the glyph between two words instead of leading
+        # with it - "Previous [UP-arrow] background" reads more like a
+        # real D-pad label - and get centered rather than edge-aligned
+        # since that word/arrow/word content is already symmetric, with no
+        # single "pointing edge" the way a leading/trailing arrow has.
+        self.up_arrow_btn, up_pieces = make_nav_button(
+            [("Previous", TEXT), ("▲", GLYPH), ("background", TEXT)], halign=Gtk.Align.CENTER
+        )
+        self.up_arrow_btn.connect("clicked", lambda b: self.move_background(-1))
+        self.down_arrow_btn, down_pieces = make_nav_button(
+            [("Next", TEXT), ("▼", GLYPH), ("background", TEXT)], halign=Gtk.Align.CENTER
+        )
+        self.down_arrow_btn.connect("clicked", lambda b: self.move_background(1))
+
+        # "Previous"/"Next" and "background" are different natural widths,
+        # so centering the word/arrow/word group as a whole (above) isn't
+        # enough on its own to put the arrow at the exact middle - the
+        # wider flanking word would still pull it off-center. Forcing both
+        # flanking words (across both buttons, so up and down also match
+        # each other) to the same width via a SizeGroup makes the two
+        # halves either side of each arrow genuinely equal. Each word is
+        # then aligned toward the arrow within its own now-equal-width
+        # half (right-justified on the left, left-justified on the right)
+        # rather than centered in its half, so both words sit snug against
+        # the arrow instead of floating in the middle of empty space.
+        side_word_group = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
+        for label in (up_pieces[0], down_pieces[0]):  # left half: hug the right edge (toward the arrow)
+            label.set_xalign(1.0)
+            side_word_group.add_widget(label)
+        for label in (up_pieces[2], down_pieces[2]):  # right half: hug the left edge (toward the arrow)
+            label.set_xalign(0.0)
+            side_word_group.add_widget(label)
+
+        # A GtkBox stretches its children to fill its own cross-axis size by
+        # default (here, width, since dpad is VERTICAL) unless a child's
+        # own halign says otherwise - without set_halign(CENTER) below,
+        # up_arrow_btn/down_arrow_btn would silently stretch to match
+        # dpad's width (set by the left/right row), which is exactly why
+        # "Previous background"/"Next background" were spanning the whole
+        # panel instead of staying pill-sized.
+        self.up_arrow_btn.set_halign(Gtk.Align.CENTER)
+        self.down_arrow_btn.set_halign(Gtk.Align.CENTER)
+
+        # Two separate SizeGroups rather than one shared across all four -
+        # left/right sit side-by-side sharing dpad_middle's row, while
+        # up/down each get a whole row to themselves. A single group
+        # forcing all four to match the widest (up/down, since their
+        # word/arrow/word content needs more room) stretched left/right
+        # to that same width too, and with two of those side-by-side in
+        # one row they visually filled almost the entire panel width even
+        # though each individual pill measured the same as a lone up/down
+        # one - confirmed by rendering an actual (offscreen) pixbuf and
+        # looking at it, not just trusting allocation numbers, which were
+        # equal in both layouts and didn't explain the visual difference
+        # on their own. Grouping left/right only with each other lets them
+        # size to their own (smaller) natural content instead.
+        theme_btn_size_group = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
+        theme_btn_size_group.add_widget(self.left_arrow_btn)
+        theme_btn_size_group.add_widget(self.right_arrow_btn)
+        bg_btn_size_group = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.HORIZONTAL)
+        bg_btn_size_group.add_widget(self.up_arrow_btn)
+        bg_btn_size_group.add_widget(self.down_arrow_btn)
+
+        dpad = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        dpad.set_halign(Gtk.Align.CENTER)
+        dpad.pack_start(self.up_arrow_btn, False, False, 0)
+        dpad_middle = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        dpad_middle.set_halign(Gtk.Align.CENTER)
+        dpad_middle.pack_start(self.left_arrow_btn, False, False, 0)
+        dpad_middle.pack_start(self.right_arrow_btn, False, False, 0)
+        dpad.pack_start(dpad_middle, False, False, 0)
+        dpad.pack_start(self.down_arrow_btn, False, False, 0)
+        caption.pack_start(dpad, False, False, 0)
+
+        # Keyboard shortcut folded into the button itself (same idea as the
+        # D-pad's word/arrow/word buttons) rather than a separate "Enter to
+        # apply / Esc to cancel" caption line elsewhere in the panel - one
+        # less thing to keep positioned near what it's actually describing.
+        ACTION_TEXT, ACTION_SHORTCUT = "carousel-action-text", "carousel-action-shortcut"
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        actions.set_halign(Gtk.Align.CENTER)
+        self.cancel_btn, _ = make_nav_button(
+            [("Cancel", ACTION_TEXT), ("Esc", ACTION_SHORTCUT)],
+            halign=Gtk.Align.CENTER,
+            button_classes=("carousel-action", "carousel-action-cancel"),
+        )
+        self.cancel_btn.connect("clicked", lambda b: self.finish(None))
+        self.apply_btn, _ = make_nav_button(
+            [("Apply", ACTION_TEXT), ("Enter", ACTION_SHORTCUT)],
+            halign=Gtk.Align.CENTER,
+            button_classes=("carousel-action", "carousel-action-apply"),
+        )
+        self.apply_btn.connect("clicked", lambda b: self.finish(self.slugs[self.index] if self.slugs else None))
+        actions.pack_start(self.cancel_btn, False, False, 0)
+        actions.pack_start(self.apply_btn, False, False, 0)
+        caption.pack_start(actions, False, False, 8)
+
+        # Its own row, separate from Cancel/Apply rather than sharing
+        # theirs, despite being styled the same red "chip" way - a single
+        # press only *arms* it (see _arm_remove()/_on_remove_clicked()
+        # below), it doesn't remove anything yet, but the row is still kept
+        # apart from Cancel/Apply since those are the two buttons this
+        # panel's actually-frequent workflow (browse, Apply, browse,
+        # Apply) clicks over and over. A real gap between the delete
+        # button and the two most-clicked buttons in the panel matters
+        # more here than visual grouping would - a red chip further away
+        # is still an obvious "this is destructive" signal, without the
+        # misclick risk of sitting right next to Apply. Always built the
+        # same, real button - just disabled (see render()) rather than
+        # conditionally hidden - so its reserved space never depends on
+        # whichever theme is showing.
+        self._remove_armed = False
+        self._remove_armed_slug = None
+        self._remove_arm_timeout_id = None
+        self.remove_btn, self._remove_labels = make_nav_button(
+            [(REMOVE_LABEL_DEFAULT, ACTION_TEXT), ("R", ACTION_SHORTCUT)],
+            halign=Gtk.Align.CENTER,
+            button_classes=("carousel-action", "carousel-action-remove"),
+        )
+        # Cancel/Apply avoid the usual "Box child fills the cross-axis by
+        # default" trap because they sit inside `actions`, which has its
+        # own explicit set_halign(CENTER) - remove_btn has no such wrapper
+        # (it's packed directly into caption), so it needs the same
+        # explicit override itself, or it stretches to caption's full
+        # width instead of staying a compact chip like everything else -
+        # confirmed by hand, a full-width red bar rather than a button.
+        self.remove_btn.set_halign(Gtk.Align.CENTER)
+        self.remove_btn.connect("clicked", lambda b: self._on_remove_clicked())
+        caption.pack_start(self.remove_btn, False, False, 0)
+
+        # Browse/Create sit below Remove (and below Apply/Cancel) since
+        # both exit the carousel outright (opening a browser / launching
+        # Aether) rather than doing anything within it - keeping that
+        # group below the panel's actual "finish browsing"/"remove this
+        # theme" actions reads as more of a deliberate opt-in step down
+        # and away from the main flow, rather than sitting in-line above.
+        self.shortcuts_label = Gtk.Label()
+        self.shortcuts_label.set_justify(Gtk.Justification.CENTER)
+        self.shortcuts_label.set_name("carousel-hint")
+        # Set once here, not in render() - build_shortcuts_markup() takes
+        # no arguments and always returns the same string.
+        self.shortcuts_label.set_markup(build_shortcuts_markup())
+        self.shortcuts_label.connect("activate-link", self.on_shortcuts_link_activated)
+        caption.pack_start(self.shortcuts_label, False, False, 0)
+
+        stack.pack_start(caption, False, False, 0)
+        self.overlay.add_overlay(content)
+        self.overlay.set_overlay_pass_through(content, True)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("show", lambda w: GLib.idle_add(self.render))
+
+    def move(self, delta):
+        if not self.slugs:
+            return
+        self.index = (self.index + delta) % len(self.slugs)
+        self._load_backgrounds()
+        self.render()
+
+    def move_background(self, delta):
+        n = len(self.backgrounds)
+        if n <= 1:
+            return
+        self.bg_index = (self.bg_index + delta) % n
+        self.render()
+
+    def _load_backgrounds(self):
+        """Recompute the background list for whichever theme is now
+        selected, and reset which one is previewed - seeded from the live
+        symlink when this happens to be the theme that's actually currently
+        applied, the same idea self.index above uses to seed from
+        current_theme_slug()."""
+        if not self.slugs:
+            self.backgrounds = []
+            self.bg_index = 0
+            return
+        slug = self.slugs[self.index]
+        self.backgrounds = list_backgrounds_for_theme(slug)
+        self.bg_index = 0
+        if slug == current_theme_slug():
+            live = current_background_path()
+            if live:
+                # Match by filename, not full path - confirmed by hand
+                # against the real ~/.config/ohmydebn/current/background
+                # symlink: it points into
+                # ~/.config/ohmydebn/current/theme/backgrounds/, which
+                # ohmydebn-theme-set populates with `cp -r` (a real copy,
+                # not a symlink) from theme_dir(slug) - a different path
+                # string than self.backgrounds (built from theme_dir(slug)
+                # directly) for every background except user overrides,
+                # which do already live at the same path on both sides.
+                # An exact-path comparison here silently matched nothing
+                # for any non-override background, leaving bg_index stuck
+                # at 0 on open even when a different background was
+                # actually live - so pressing Enter with no navigation at
+                # all would silently revert the desktop to background #1.
+                live_name = os.path.basename(live)
+                for i, path in enumerate(self.backgrounds):
+                    if os.path.basename(path) == live_name:
+                        self.bg_index = i
+                        break
+
+    def _cover_pixbuf(self, path, w, h):
+        key = ("cover", path, w, h)
+        if key not in self._pixbuf_cache:
+            self._pixbuf_cache[key] = self._decode_pixbuf(load_cover_pixbuf, path, w, h)
+        return self._pixbuf_cache[key]
+
+    @staticmethod
+    def _decode_pixbuf(loader, path, w, h):
+        """list_backgrounds_for_theme() doesn't filter by extension (see
+        its own docstring - it has to match ohmydebn-theme-bg-next's own
+        unfiltered enumeration so index N means the same file on both
+        sides), so a non-image file sitting in a backgrounds/ directory
+        (.gitkeep, Thumbs.db, a stray text file) can genuinely reach here.
+        GdkPixbuf raises on an unrecognized format; every render() call
+        site already passes its result straight to set_from_pixbuf(),
+        which accepts None the same as clear() (confirmed by hand) - so
+        catching here and caching the None (via the key-presence check in
+        the callers above, not .get()'s indistinguishable-from-missing
+        None) means a single broken file quietly shows as an empty image
+        exactly once, not a crash, and never re-attempts the same failing
+        decode on every subsequent keypress."""
+        try:
+            return loader(path, w, h)
+        except Exception:
+            return None
+
+    def _apply_accent(self, slug):
+        """Recolors the card/side borders and the card's glow to slug's own
+        accent color - called once per theme_changed, not every render(),
+        since the accent only depends on which theme is centered, not
+        which background within it. Cached per slug for the same reason
+        the pixbuf cache exists: browsing back and forth over the same
+        handful of themes is the common case, and re-parsing the same tiny
+        colors.toml on every revisit is pure waste."""
+        if slug not in self._accent_cache:
+            self._accent_cache[slug] = theme_accent_color(slug)
+        accent = self._accent_cache[slug]
+        css = (
+            "#carousel-card {\n"
+            f"    border-color: {_rgba(accent, 0.92)};\n"
+            f"    box-shadow: 0 0 50px 10px {_rgba(accent, 0.6)};\n"
+            "}\n"
+            "#carousel-side {\n"
+            f"    border-color: {_rgba(accent, 0.25)};\n"
+            "}\n"
+        )
+        self._accent_provider.load_from_data(css.encode("utf-8"))
+        # Reloading a CssProvider's content in place doesn't retroactively
+        # re-cascade already-realized widgets on its own - confirmed by
+        # hand, the border silently kept its old color otherwise, with no
+        # error and no amount of queue_draw()/extra main-loop iterations
+        # fixing it. reset_widgets() is the one call that actually forces
+        # every affected widget (#carousel-card plus every #carousel-side
+        # thumbnail at once, unlike a per-widget invalidate()) to re-read
+        # this provider.
+        Gtk.StyleContext.reset_widgets(Gdk.Screen.get_default())
+
+    def render(self):
+        n = len(self.slugs)
+        if n == 0:
+            return GLib.SOURCE_REMOVE
+        slug = self.slugs[self.index]
+        geo = get_monitor_geometry()
+
+        # Up/Down (background-only) navigation never changes self.index, so
+        # the adjacent-theme thumbnails below are guaranteed identical to
+        # what's already on screen - skip redecoding those rather than
+        # paying their cost on every keypress. The full-screen backdrop
+        # isn't included in that skip: it tracks self.bg_index the same way
+        # the card does (below), so Up/Down legitimately changes it too -
+        # otherwise the small card would say "you picked background 3"
+        # while the immersive full-screen preview behind it kept showing
+        # background 1. The bg_path-changed check just below still avoids
+        # redundant redecodes on renders where it genuinely didn't change.
+        theme_changed = self.index != self._last_theme_index
+
+        bg_path = self.backgrounds[self.bg_index] if self.backgrounds else (first_background(slug) or preview_image(slug))
+        if bg_path and bg_path != self._last_bg_path:
+            self.bg_image.set_from_pixbuf(self._cover_pixbuf(bg_path, geo.width, geo.height))
+            self._last_bg_path = bg_path
+
+        # Main card: the specific background actually selected, so what's
+        # previewed and what --background N applies on Enter never
+        # disagree. Falls back to the theme's curated preview only if it
+        # somehow has no raw background files of its own (shouldn't
+        # normally happen - see preview_image()). Cover (crop-to-fill),
+        # not contain/letterbox - see make_fixed_thumb_frame()'s docstring
+        # for why: the real desktop background gets cropped to fill the
+        # screen either way, and a fixed-size cover fit is what keeps this
+        # card from visibly changing size theme to theme.
+        card_path = self.backgrounds[self.bg_index] if self.backgrounds else preview_image(slug)
+        if card_path:
+            self.card_image.set_from_pixbuf(self._cover_pixbuf(card_path, self.card_w, self.card_h))
+        else:
+            self.card_image.clear()
+
+        if theme_changed:
+            self._apply_accent(slug)
+            left_slug = self.slugs[(self.index - 1) % n]
+            right_slug = self.slugs[(self.index + 1) % n]
+            left_path = preview_image(left_slug)
+            right_path = preview_image(right_slug)
+            if left_path:
+                self.left_image.set_from_pixbuf(self._cover_pixbuf(left_path, self.side_w, self.side_h))
+            else:
+                self.left_image.clear()
+            if right_path:
+                self.right_image.set_from_pixbuf(self._cover_pixbuf(right_path, self.side_w, self.side_h))
+            else:
+                self.right_image.clear()
+            self._last_theme_index = self.index
+
+        # Background sub-carousel: only populated (and only reachable via
+        # Up/Down - see move_background()) when this theme actually has
+        # more than one background to choose between.
+        bg_n = len(self.backgrounds)
+        if bg_n > 1:
+            above_path = self.backgrounds[(self.bg_index - 1) % bg_n]
+            below_path = self.backgrounds[(self.bg_index + 1) % bg_n]
+            self.bg_above_image.set_from_pixbuf(self._cover_pixbuf(above_path, self.bg_thumb_w, self.bg_thumb_h))
+            self.bg_below_image.set_from_pixbuf(self._cover_pixbuf(below_path, self.bg_thumb_w, self.bg_thumb_h))
+        else:
+            self.bg_above_image.clear()
+            self.bg_below_image.clear()
+
+        # Grey out (rather than hide) arrows with nothing to move to -
+        # hiding them would change card_stack's/row's allocated size and
+        # reintroduce the exact layout-shift card_outer above was added to
+        # prevent. Each pill's glyph and label dim together automatically
+        # (GTK's insensitive-state cascade to child widgets, reinforced by
+        # the explicit .carousel-nav-btn:disabled rule in CSS) since
+        # they're one button now rather than two separately-tracked pieces.
+        self.left_arrow_btn.set_sensitive(n > 1)
+        self.right_arrow_btn.set_sensitive(n > 1)
+        self.up_arrow_btn.set_sensitive(bg_n > 1)
+        self.down_arrow_btn.set_sensitive(bg_n > 1)
+
+        self.name_label.set_text(slug_to_display(slug))
+        # A real button now, not a label with fake-vs-real markup - the
+        # .carousel-action-remove:disabled CSS rule dims it the same way
+        # the D-pad's own :disabled rule already does, so set_sensitive()
+        # alone is enough (no separate set_opacity() needed here).
+        self.remove_btn.set_sensitive(is_theme_removable(slug))
+        # Single source of truth for clearing a stale "Confirm Remove?" -
+        # runs on every render() (not just theme_changed) so it catches
+        # every path that can land self.index on a different slug than
+        # whichever one got armed, not just move(), without having to
+        # remember to call _disarm_remove() at each one individually.
+        if self._remove_armed and self._remove_armed_slug != slug:
+            self._disarm_remove()
+        self._schedule_prefetch(geo)
+        return GLib.SOURCE_REMOVE
+
+    def _schedule_prefetch(self, geo):
+        """Decode the assets for the most likely next moves - one step in
+        each direction, on both the theme axis and the background axis -
+        on a background thread, so they're already cached by the time (if)
+        the user actually navigates there. Doesn't reach two steps away;
+        the payoff per added complexity drops off fast past the immediate
+        neighbors.
+
+        Only plain-value snapshots are captured here on the main thread -
+        the closure below never touches self.slugs/self.index/etc, since
+        those can keep changing on the main thread while this thread is
+        still running. GdkPixbuf decoding itself doesn't touch Gdk/Gtk (no
+        display connection needed to decode a file), so it's safe off the
+        main thread - only the geometry lookup that produced `geo` wasn't,
+        which is why render() already did that part before calling here.
+        """
+        self._prefetch_gen += 1
+        generation = self._prefetch_gen
+        slugs = list(self.slugs)
+        n = len(slugs)
+        index = self.index
+        backgrounds = list(self.backgrounds)
+        bg_index = self.bg_index
+        geo_w, geo_h = geo.width, geo.height
+        card_w, card_h = self.card_w, self.card_h
+
+        def work():
+            targets = []
+            if n > 1:
+                for neighbor_index in ((index - 1) % n, (index + 1) % n):
+                    neighbor_slug = slugs[neighbor_index]
+                    neighbor_backgrounds = list_backgrounds_for_theme(neighbor_slug)
+                    # Same source-of-truth as render()'s bg_path/card_path -
+                    # backgrounds[0] (the index _load_backgrounds() resets
+                    # to on a theme change), not first_background(), so a
+                    # prefetched path always matches what render() actually
+                    # requests once you get there instead of silently
+                    # missing the cache.
+                    neighbor_bg_path = neighbor_backgrounds[0] if neighbor_backgrounds else (
+                        first_background(neighbor_slug) or preview_image(neighbor_slug)
+                    )
+                    if neighbor_bg_path:
+                        targets.append((neighbor_bg_path, card_w, card_h))
+                        targets.append((neighbor_bg_path, geo_w, geo_h))
+            bg_n = len(backgrounds)
+            if bg_n > 1:
+                for neighbor_bg in ((bg_index - 1) % bg_n, (bg_index + 1) % bg_n):
+                    targets.append((backgrounds[neighbor_bg], card_w, card_h))
+                    targets.append((backgrounds[neighbor_bg], geo_w, geo_h))
+
+            for path, w, h in targets:
+                if generation != self._prefetch_gen:
+                    return  # superseded by a newer navigation - abandon the rest
+                key = ("cover", path, w, h)
+                if key in self._pixbuf_cache:
+                    continue
+                try:
+                    pixbuf = load_cover_pixbuf(path, w, h)
+                except Exception:
+                    # Best-effort warmup only - a decode failure here just
+                    # means we didn't get to skip it later; render() will
+                    # hit the same failure path (and same fallback/clear())
+                    # itself when it actually needs this image.
+                    continue
+                if generation == self._prefetch_gen:
+                    self._pixbuf_cache[key] = pixbuf
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_key_press(self, widget, event):
+        keyval = event.keyval
+        if keyval == Gdk.KEY_Escape:
+            # A pending "Confirm Remove?" is exactly the kind of thing Esc
+            # ought to be able to back out of on its own, without having to
+            # close the whole carousel to do it - swallow just the arming,
+            # the same way a second Esc would still be free to cancel
+            # browsing outright afterward.
+            if self._remove_armed:
+                self._disarm_remove()
+                return True
+            self.finish(None)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            self.finish(self.slugs[self.index] if self.slugs else None)
+            return True
+        if keyval == Gdk.KEY_Left:
+            self.move(-1)
+            return True
+        if keyval == Gdk.KEY_Right:
+            self.move(1)
+            return True
+        if keyval == Gdk.KEY_Up:
+            self.move_background(-1)
+            return True
+        if keyval == Gdk.KEY_Down:
+            self.move_background(1)
+            return True
+        lower = Gdk.keyval_to_lower(keyval)
+        if lower == Gdk.KEY_b:
+            self.open_browse_themes()
+            return True
+        if lower == Gdk.KEY_c:
+            self.open_aether()
+            return True
+        if lower == Gdk.KEY_r and self.slugs and is_theme_removable(self.slugs[self.index]):
+            self._on_remove_clicked()
+            return True
+        return False
+
+    def open_browse_themes(self):
+        try:
+            Gtk.show_uri_on_window(self, BROWSE_THEMES_URL, Gdk.CURRENT_TIME)
+        except GLib.Error:
+            pass
+        GLib.timeout_add(400, lambda: self.finish(None))
+
+    def open_aether(self):
+        self.launch_and_close(["/usr/share/aether/aether"])
+
+    def _arm_remove(self, slug):
+        """First R press/click for a removable theme: relabels the button
+        to a "Confirm Remove?" state rather than removing anything yet -
+        see _on_remove_clicked() for the second press that actually
+        confirms. Tracks *which* slug was armed (not just a bare bool) so
+        render()'s theme_changed check below can tell a stale arm (armed
+        for a theme the user has since browsed away from) apart from a
+        still-current one and disarm it - arming while looking at Matte
+        Black must never end up deleting Tokyo Night just because R was
+        pressed again after browsing elsewhere. REMOVE_ARM_TIMEOUT_MS is a
+        second safety net on top of that: an armed prompt nobody responds
+        to reverts on its own rather than staying "hot" indefinitely."""
+        self._remove_armed = True
+        self._remove_armed_slug = slug
+        self._remove_labels[0].set_text(REMOVE_LABEL_ARMED)
+        self.remove_btn.get_style_context().add_class("carousel-action-remove-armed")
+        self._resize_after_relabel()
+        if self._remove_arm_timeout_id is not None:
+            GLib.source_remove(self._remove_arm_timeout_id)
+        self._remove_arm_timeout_id = GLib.timeout_add(REMOVE_ARM_TIMEOUT_MS, self._on_remove_arm_timeout)
+
+    def _disarm_remove(self):
+        if self._remove_arm_timeout_id is not None:
+            GLib.source_remove(self._remove_arm_timeout_id)
+            self._remove_arm_timeout_id = None
+        if not self._remove_armed:
+            return
+        self._remove_armed = False
+        self._remove_armed_slug = None
+        self._remove_labels[0].set_text(REMOVE_LABEL_DEFAULT)
+        self.remove_btn.get_style_context().remove_class("carousel-action-remove-armed")
+        self._resize_after_relabel()
+
+    def _resize_after_relabel(self):
+        """"Confirm Remove?" is wider than "Remove Theme", but this
+        window's own size never changes (it's pinned to the monitor's
+        geometry) when the label swaps - and a plain queue_resize() alone
+        was confirmed by hand to not be enough to grow remove_btn back to
+        fit the new text: the button silently stayed at its old (narrower)
+        width with the new label clipped inside it, the same class of bug
+        the border-hugging fix on the main card ran into before it moved
+        to a fixed-size cover fit instead (see make_fixed_thumb_frame()).
+        resize_children() is deprecated but, again, the only thing that
+        reliably forces GTK to re-lay-out the whole window's subtree
+        immediately."""
+        self.remove_btn.queue_resize()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.resize_children()
+
+    def _on_remove_arm_timeout(self):
+        # The timeout's own source is what's currently firing - clear the
+        # id first so _disarm_remove() doesn't try to GLib.source_remove()
+        # a source in the middle of running its own callback.
+        self._remove_arm_timeout_id = None
+        self._disarm_remove()
+        return GLib.SOURCE_REMOVE
+
+    def _on_remove_clicked(self):
+        """R (key or click) while a removable theme is centered: arms on
+        the first press, confirms (actually removes) on the second - see
+        _arm_remove()'s docstring for why armed state is tied to a
+        specific slug rather than a bare bool."""
+        if not self.slugs:
+            return
+        slug = self.slugs[self.index]
+        if not is_theme_removable(slug):
+            return
+        if self._remove_armed and self._remove_armed_slug == slug:
+            self._disarm_remove()
+            self.remove_current_theme()
+        else:
+            self._arm_remove(slug)
+
+    def remove_current_theme(self):
+        if not self.slugs:
+            return
+        slug = self.slugs[self.index]
+        if not is_theme_removable(slug):
+            return
+        subprocess.run([f"{OHMYDEBN_BIN}/ohmydebn-theme-remove", slug], check=False)
+        self.slugs = list_theme_slugs()
+        self.index = min(self.index, len(self.slugs) - 1) if self.slugs else 0
+        self._load_backgrounds()
+        # self.index may land on the same number it already was even though
+        # the slug list (and therefore what that number points at) just
+        # changed - force render()'s theme_changed check to treat this as a
+        # real change rather than skipping the now-stale left/right thumbs.
+        self._last_theme_index = None
+        self.render()
+
+    def on_shortcuts_link_activated(self, label, uri):
+        if uri == CREATE_THEME_ACTION:
+            self.open_aether()
+            return True
+        GLib.timeout_add(400, lambda: self.finish(None))
+        return False
+
+    def launch_and_close(self, argv):
+        if self._closing:
+            return
+        self._closing = True
+        try:
+            subprocess.Popen(
+                argv,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            pass
+        Gtk.main_quit()
+
+    def finish(self, slug):
+        if self._closing:
+            return
+        self._closing = True
+        if slug is None:
+            Gtk.main_quit()
+            return
+        self.name_label.set_text(f"Applying {slug_to_display(slug)}…")
+        self.shortcuts_label.set_text("")
+        self.card_image.set_opacity(0.5)
+        for button in (
+            self.left_arrow_btn, self.right_arrow_btn,
+            self.up_arrow_btn, self.down_arrow_btn,
+            self.apply_btn, self.cancel_btn, self.remove_btn,
+        ):
+            button.set_sensitive(False)
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+        # --background N is the real ohmydebn-theme-set's existing flag
+        # (see ohmydebn-theme-bg-next) - passing the index the user actually
+        # landed on via Up/Down keeps this a single atomic apply, same as
+        # the theme choice itself, rather than a second live-editing step.
+        cmd = [f"{OHMYDEBN_BIN}/ohmydebn-theme-set"]
+        if self.backgrounds:
+            cmd += ["--background", str(self.bg_index + 1)]
+        cmd.append(slug)
+        subprocess.run(cmd, check=False)
+        Gtk.main_quit()
+
+
+if __name__ == "__main__":
+    win = Carousel()
+    win.show_all()
+    win.fullscreen()
+    Gtk.main()
+    sys.exit(0)

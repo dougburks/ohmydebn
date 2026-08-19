@@ -6,7 +6,7 @@ if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
   echo
   echo "simplescreenrecorder is not currently installed."
 else
-  if [ $# -eq 0 ]; then
+  if [ "${1:-}" != "--skip-prompt" ]; then
     echo
     echo "Continuing will remove simplescreenrecorder."
     echo

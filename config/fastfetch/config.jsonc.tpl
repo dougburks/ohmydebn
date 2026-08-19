@@ -1,0 +1,41 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "display": {
+    "color": "{{ accent_ansi }}",
+    "disableLinewrap": true
+  },
+  "modules": [
+    "os",
+    "host",
+    "kernel",
+    "uptime",
+    "packages",
+    "shell",
+    "de",
+    "wm",
+    "terminal",
+    "terminalfont",
+    "cpu",
+    "gpu",
+    "memory",
+    "disk",
+    "break",
+    {
+      "type": "command",
+      "key": "OhMyDebn Version",
+      "text": "/usr/share/ohmydebn/bin/ohmydebn-version"
+    },
+    {
+      "type": "command",
+      "key": "OhMyDebn Theme",
+      "text": "/usr/share/ohmydebn/bin/ohmydebn-theme-current"
+    },
+    {
+      "type": "custom",
+      "key": "OhMyDebn Website",
+      "format": "https://ohmydebn.org"
+    },
+    "break",
+    "colors"
+  ]
+}

@@ -6,7 +6,7 @@ Continuing will iterate through all installed themes and take a screenshot of ea
 Please arrange all windows as you like. For example:
 - upper left - terminal running lt
 - upper right - file manager
-- lower left - screenfetch
+- lower left - fastfetch
 - lower right - btop
 
 This current window will automatically minimize.

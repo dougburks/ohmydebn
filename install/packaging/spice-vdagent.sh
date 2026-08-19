@@ -3,7 +3,7 @@
 SPICE_VDAGENT_STATE=~/.local/state/ohmydebn-config/spice-vdagent-20260803
 if [ ! -f $SPICE_VDAGENT_STATE ]; then
 
-  /usr/share/ohmydebn/bin/ohmydebn-headline "cat" "Making sure that the correct version of spice-vdagent is installed"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Making sure that the correct version of spice-vdagent is installed"
 
   # Debian Forky includes a newer version of spice-vdagent.
   # This newer version has a regression where it won't resize the screen properly.

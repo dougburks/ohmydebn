@@ -2,6 +2,20 @@
 
 set -e
 
+# Parse command line arguments
+POWER_USER=false
+for arg in "$@"; do
+  case $arg in
+  --power-user)
+    POWER_USER=true
+    shift
+    ;;
+  *)
+    # Unknown option
+    ;;
+  esac
+done
+
 # Check what Linux distro we're running on
 DISTRO_OK=false
 if [ -f /etc/os-release ]; then
@@ -47,20 +61,6 @@ EOF
   read input
 fi
 
-# Parse command line arguments
-NO_UNINSTALL=false
-for arg in "$@"; do
-  case $arg in
-  --no-uninstall)
-    NO_UNINSTALL=true
-    shift
-    ;;
-  *)
-    # Unknown option
-    ;;
-  esac
-done
-
 # Only show welcome message on new installations
 if [ ! -f ~/.local/state/ohmydebn ]; then
   clear
@@ -77,7 +77,6 @@ Stars bow to its charm.
 WARNING!
 
 - OhMyDebn is intended for a clean new installation.
-- OhMyDebn will remove apps like FireFox, Thunderbird, LibreOffice, and others (unless you use the --no-uninstall option).
 - OhMyDebn will make changes to your APT configuration.
 - If it breaks your system, you get to keep both pieces!
 
@@ -142,10 +141,17 @@ if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
 fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  echo "iperf3 iperf3/start_daemon boolean false" | sudo debconf-set-selections
   sudo /usr/bin/apt update
   sudo /usr/bin/apt install -y ohmydebn
 fi
+
+# Exported so install/packaging/power-user.sh (sourced later, from
+# ohmydebn.sh below) can see it - the --power-user removal step has to run
+# after install/packaging/dependencies.sh installs its packages, not here,
+# since cinnamon-desktop-environment hard-depends on
+# "gnome-calculator | galculator" and purging gnome-calculator before
+# galculator exists would briefly leave that dependency unsatisfied.
+export POWER_USER
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"
 

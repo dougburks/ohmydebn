@@ -314,6 +314,70 @@ for f in "${SCALE_HITS[@]}"; do
 done
 echo "  checked the 2 GTK pickers for manual scale pre-multiplication"
 
+# -- check 13: every menu-item icon glyph resolves natively in CaskaydiaMono
+#              Nerd Font, not some fallback font - a regression guard for a
+#              real bug: several rows (Cybersecurity, cliamp, GIMP, UxPlay)
+#              used a plain Unicode emoji with a text-presentation variation
+#              selector (e.g. the magnifying glass), which that font doesn't
+#              actually contain. Pango silently substituted a taller system
+#              font (Symbola/Unifont) for just that row, inflating its
+#              height above every sibling row in the same list - confirmed
+#              via `fc-match`, fixed by swapping in real Nerd Font PUA
+#              glyphs that already resolve in-font like every other icon.
+
+echo
+echo "-- menu-item icons resolve in CaskaydiaMono Nerd Font (no font-fallback regression) --"
+if ! command -v fc-match >/dev/null 2>&1; then
+  echo "  SKIP - fc-match not installed"
+else
+  ICON_RESULT=$(python3 - "$MENU_FILE" <<'PYEOF'
+import re
+import subprocess
+import sys
+
+menu_file = sys.argv[1]
+with open(menu_file, encoding="utf-8") as f:
+    src = f.read()
+
+# The two shapes items strings are written in this file: inline in a
+# `case $(menu "Title" "items") in` call, or built up in a local var first
+# (today, only show_main_menu's go_items) and referenced as "$go_items".
+items_strings = re.findall(r'case \$\(menu "[^"]*" "([^"]*)"\) in', src)
+m = re.search(r'local go_items="([^"]*)"', src)
+if m:
+    items_strings.append(m.group(1))
+
+icons = set()
+for items in items_strings:
+    for line in items.split("\\n"):
+        if not line:
+            continue
+        icon_match = re.match(r"^(\S+)\s", line)
+        if icon_match:
+            icons.add(icon_match.group(1))
+
+fail = 0
+for icon in sorted(icons):
+    charset = ",".join(f"{ord(c):x}" for c in icon)
+    result = subprocess.run(
+        ["fc-match", f"CaskaydiaMono Nerd Font:charset={charset}"],
+        capture_output=True, text=True, check=False,
+    )
+    if 'CaskaydiaMono Nerd Font' not in result.stdout:
+        fail += 1
+        codepoints = "/".join(f"U+{ord(c):04X}" for c in icon)
+        print(f"  FAIL - icon '{icon}' ({codepoints}) isn't in CaskaydiaMono Nerd "
+              f"Font, falls back to: {result.stdout.strip()}")
+
+print(f"  checked {len(icons)} unique icon glyphs")
+sys.exit(1 if fail else 0)
+PYEOF
+)
+  echo "$ICON_RESULT"
+  ICON_FAILS=$(grep -c '^  FAIL' <<<"$ICON_RESULT" || true)
+  FAIL=$((FAIL + ICON_FAILS))
+fi
+
 echo
 echo "$FAIL failure(s)"
 [[ $FAIL -eq 0 ]]

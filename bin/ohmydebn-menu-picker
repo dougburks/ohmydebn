@@ -398,6 +398,7 @@ CSS_TEMPLATE = """
     background-color: {bg1};
     color: {fg0};
     border: 2px solid {bg3};
+    border-radius: 0;
     padding: 8px 16px;
 }}
 #picker-list {{

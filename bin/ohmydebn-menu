@@ -184,7 +184,7 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n🔍︎ Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN") in
+  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n  Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN") in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
   *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
@@ -214,7 +214,7 @@ show_install_office_menu() {
 }
 
 show_install_cybersecurity_menu() {
-  case $(menu "Install" "🔍︎ SO-CRATES\n🔍︎ tcpdump\n🔍︎ tshark\n🔍︎ wireshark") in
+  case $(menu "Install" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark") in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;
   *tshark*) install "tshark" "tshark" ;;
@@ -243,7 +243,7 @@ show_install_vpn_menu() {
 }
 
 show_install_media_menu() {
-  case $(menu "Install" "🎵︎ cliamp terminal music player\n🎨︎ GIMP image editor\n🛜︎ UxPlay AirPlay receiver") in
+  case $(menu "Install" "  cliamp terminal music player\n  GIMP image editor\n  UxPlay AirPlay receiver") in
   *cliamp*) install "cliamp" "cliamp" ;;
   *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
   *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;

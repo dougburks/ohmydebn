@@ -47,7 +47,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Wnck", "3.0")
-from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Wnck
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango, Wnck
 
 import configparser
 import os
@@ -555,7 +555,20 @@ class Picker(Gtk.Window):
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             if icon is not None:
                 box.pack_start(Gtk.Image.new_from_pixbuf(icon), False, False, 0)
-            box.pack_start(Gtk.Label(label=display, xalign=0), True, True, 0)
+            row_label = Gtk.Label(label=display, xalign=0)
+            # A search result's display text is a full breadcrumb (e.g.
+            # "Install > Virtualization > Virtual Machine Manager
+            # (Advanced)") with no length limit, but this window's width is
+            # fixed - without ellipsizing, a long one just silently runs
+            # past the edge of the window with no visual indication
+            # anything's missing (confirmed by hand: text same length
+            # either way, just invisible past the cutoff). set_line_wrap
+            # isn't a fix here - GtkListBoxRow doesn't reflow other rows to
+            # accommodate the height that would take, only the label's own
+            # single-line height, so it just clips vertically instead of
+            # horizontally.
+            row_label.set_ellipsize(Pango.EllipsizeMode.END)
+            box.pack_start(row_label, True, True, 0)
             row.value = value
             row.add(box)
             self.listbox.add(row)

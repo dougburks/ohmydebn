@@ -71,6 +71,27 @@ SIDE_W, SIDE_H = 340, 191
 SIDE_OPACITY = 0.4
 BG_THUMB_W, BG_THUMB_H = 320, 90
 
+# Everything above is sized for a full-size desktop monitor. On a MacBook's
+# HiDPI/Retina "looks like" resolution (e.g. 1280x800 or 1512x982 logical
+# pixels), that fixed 1646x1105 footprint doesn't fit - GTK won't shrink a
+# toplevel below the combined minimum size of its fixed-size children, so
+# the real window ends up bigger than the monitor and the WM cuts off
+# whatever doesn't fit (confirmed as a real report: the whole scrim
+# panel wasn't visible on a Retina MacBook). Carousel.__init__ scales
+# CARD_W/CARD_H/SIDE_W/SIDE_H/BG_THUMB_W/BG_THUMB_H down (never up) to fit
+# the actual monitor before building any widgets, using these two
+# constants as the divisor - the natural (min==nat) size of `row` and of
+# `caption` (the scrim panel) at the sizes above, measured by hand via a
+# real Gtk.OffscreenWindow render, same technique already used elsewhere
+# in this file. `caption`'s own size comes entirely from text/button
+# padding, not from these six constants, so it doesn't shrink with them -
+# it's carried as a fixed vertical budget instead of getting scaled itself.
+DESIGN_ROW_W, DESIGN_ROW_H = 1646, 716
+DESIGN_CAPTION_H = 365
+STACK_SPACING = 24
+CAROUSEL_H_MARGIN = 60
+CAROUSEL_V_MARGIN = 40
+
 REMOVE_LABEL_DEFAULT = "Remove Theme"
 REMOVE_LABEL_ARMED = "Confirm Remove?"
 REMOVE_ARM_TIMEOUT_MS = 4000
@@ -505,6 +526,17 @@ class Carousel(Gtk.Window):
         geo = get_monitor_geometry()
         self.set_default_size(geo.width, geo.height)
 
+        # Shrink (never grow) the card/thumbnail sizes to whatever fits this
+        # monitor - see the comment on DESIGN_ROW_W above for why this is
+        # needed at all. `caption` is carried as a fixed budget (it doesn't
+        # scale with these), `row` is the part that does.
+        available_w = geo.width - CAROUSEL_H_MARGIN
+        available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
+        scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
+        self.card_w, self.card_h = round(CARD_W * scale), round(CARD_H * scale)
+        self.side_w, self.side_h = round(SIDE_W * scale), round(SIDE_H * scale)
+        self.bg_thumb_w, self.bg_thumb_h = round(BG_THUMB_W * scale), round(BG_THUMB_H * scale)
+
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS.encode("utf-8"))
         Gtk.StyleContext.add_provider_for_screen(
@@ -575,7 +607,7 @@ class Carousel(Gtk.Window):
         # why this carousel doesn't letterbox anything), so this fixed
         # size always matches what's actually drawn; it's not doing any
         # remaining size-negotiation work of its own by being here.
-        left_frame, self.left_image = make_fixed_thumb_frame(SIDE_W, SIDE_H)
+        left_frame, self.left_image = make_fixed_thumb_frame(self.side_w, self.side_h)
 
         # The card itself plus its new above/below background-neighbor
         # thumbnails, stacked vertically - same idea as left_image/
@@ -590,15 +622,15 @@ class Carousel(Gtk.Window):
         # below it, including the caption/scrim panel) shrank by up to
         # 184px - confirmed by hand - every time browsing landed on a
         # single-background theme. See make_fixed_thumb_frame().
-        bg_above_frame, self.bg_above_image = make_fixed_thumb_frame(BG_THUMB_W, BG_THUMB_H)
-        card_frame, self.card_image = make_fixed_thumb_frame(CARD_W, CARD_H, "carousel-card", opacity=1.0)
-        bg_below_frame, self.bg_below_image = make_fixed_thumb_frame(BG_THUMB_W, BG_THUMB_H)
+        bg_above_frame, self.bg_above_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
+        card_frame, self.card_image = make_fixed_thumb_frame(self.card_w, self.card_h, "carousel-card", opacity=1.0)
+        bg_below_frame, self.bg_below_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
 
         card_stack.pack_start(bg_above_frame, False, False, 0)
         card_stack.pack_start(card_frame, False, False, 0)
         card_stack.pack_start(bg_below_frame, False, False, 0)
 
-        right_frame, self.right_image = make_fixed_thumb_frame(SIDE_W, SIDE_H)
+        right_frame, self.right_image = make_fixed_thumb_frame(self.side_w, self.side_h)
 
         row.pack_start(left_frame, False, False, 0)
         row.pack_start(card_stack, False, False, 0)
@@ -976,7 +1008,7 @@ class Carousel(Gtk.Window):
         # card from visibly changing size theme to theme.
         card_path = self.backgrounds[self.bg_index] if self.backgrounds else preview_image(slug)
         if card_path:
-            self.card_image.set_from_pixbuf(self._cover_pixbuf(card_path, CARD_W, CARD_H))
+            self.card_image.set_from_pixbuf(self._cover_pixbuf(card_path, self.card_w, self.card_h))
         else:
             self.card_image.clear()
 
@@ -987,11 +1019,11 @@ class Carousel(Gtk.Window):
             left_path = preview_image(left_slug)
             right_path = preview_image(right_slug)
             if left_path:
-                self.left_image.set_from_pixbuf(self._cover_pixbuf(left_path, SIDE_W, SIDE_H))
+                self.left_image.set_from_pixbuf(self._cover_pixbuf(left_path, self.side_w, self.side_h))
             else:
                 self.left_image.clear()
             if right_path:
-                self.right_image.set_from_pixbuf(self._cover_pixbuf(right_path, SIDE_W, SIDE_H))
+                self.right_image.set_from_pixbuf(self._cover_pixbuf(right_path, self.side_w, self.side_h))
             else:
                 self.right_image.clear()
             self._last_theme_index = self.index
@@ -1003,8 +1035,8 @@ class Carousel(Gtk.Window):
         if bg_n > 1:
             above_path = self.backgrounds[(self.bg_index - 1) % bg_n]
             below_path = self.backgrounds[(self.bg_index + 1) % bg_n]
-            self.bg_above_image.set_from_pixbuf(self._cover_pixbuf(above_path, BG_THUMB_W, BG_THUMB_H))
-            self.bg_below_image.set_from_pixbuf(self._cover_pixbuf(below_path, BG_THUMB_W, BG_THUMB_H))
+            self.bg_above_image.set_from_pixbuf(self._cover_pixbuf(above_path, self.bg_thumb_w, self.bg_thumb_h))
+            self.bg_below_image.set_from_pixbuf(self._cover_pixbuf(below_path, self.bg_thumb_w, self.bg_thumb_h))
         else:
             self.bg_above_image.clear()
             self.bg_below_image.clear()
@@ -1061,6 +1093,7 @@ class Carousel(Gtk.Window):
         backgrounds = list(self.backgrounds)
         bg_index = self.bg_index
         geo_w, geo_h = geo.width, geo.height
+        card_w, card_h = self.card_w, self.card_h
 
         def work():
             targets = []
@@ -1078,12 +1111,12 @@ class Carousel(Gtk.Window):
                         first_background(neighbor_slug) or preview_image(neighbor_slug)
                     )
                     if neighbor_bg_path:
-                        targets.append((neighbor_bg_path, CARD_W, CARD_H))
+                        targets.append((neighbor_bg_path, card_w, card_h))
                         targets.append((neighbor_bg_path, geo_w, geo_h))
             bg_n = len(backgrounds)
             if bg_n > 1:
                 for neighbor_bg in ((bg_index - 1) % bg_n, (bg_index + 1) % bg_n):
-                    targets.append((backgrounds[neighbor_bg], CARD_W, CARD_H))
+                    targets.append((backgrounds[neighbor_bg], card_w, card_h))
                     targets.append((backgrounds[neighbor_bg], geo_w, geo_h))
 
             for path, w, h in targets:

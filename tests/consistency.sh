@@ -378,6 +378,34 @@ PYEOF
   FAIL=$((FAIL + ICON_FAILS))
 fi
 
+# -- check 14: ohmydebn-menu-picker's row labels stay ellipsized - a
+#              regression guard for a real bug: a search result's display
+#              text is a full breadcrumb (e.g. "Install > Virtualization >
+#              Virtual Machine Manager (Advanced)") with no length limit,
+#              but the picker window's width is fixed - without Pango
+#              ellipsizing, a long one just silently ran past the edge of
+#              the window with no visual indication anything was missing
+#              (confirmed by hand: same text, same length, just invisible
+#              past the cutoff). Can't test the actual rendered behavior
+#              here - this whole suite deliberately runs the same with or
+#              without a real display (see test-python-pickers.py's
+#              top-of-file comment), and even a bare Gtk.Label() hard-
+#              crashes without one (confirmed by hand: "Gtk-ERROR: Can't
+#              create a GtkStyleContext without a display connection") -
+#              so this only guards the fix itself against silently
+#              regressing out of the source, the same reasoning as check
+#              12 above.
+
+echo
+echo "-- ohmydebn-menu-picker row labels stay ellipsized (regression guard) --"
+PICKER_FILE="$REPO_ROOT/bin/ohmydebn-menu-picker"
+if ! grep -q 'set_ellipsize(Pango.EllipsizeMode.END)' "$PICKER_FILE"; then
+  echo "  FAIL - populate()'s row label no longer ellipsizes - a long search-result breadcrumb will silently run past the window's fixed width again with no visual indication anything's missing"
+  FAIL=$((FAIL + 1))
+else
+  echo "  ellipsize is set on the row label"
+fi
+
 echo
 echo "$FAIL failure(s)"
 [[ $FAIL -eq 0 ]]

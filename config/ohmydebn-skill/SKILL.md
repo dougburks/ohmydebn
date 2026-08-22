@@ -61,7 +61,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
 - **OpenCode AI**: CLI (`opencode-cli`, `Super + A`) + GUI versions, kept current via `ohmydebn-update`
-- **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + Space` or OhMyDebn Menu → Apps
+- **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps
 
 ## System Architecture
 
@@ -427,10 +427,10 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Reset all configurations to defaults" -> `ohmydebn-reset-config`
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
-- "Open OhMyDebn menu" -> `Super + Alt + Space`
+- "Open OhMyDebn menu" -> `Super + Space`
 - "Launch AI assistant" -> `Super + A` (OpenCode CLI) or from Apps Menu
 - "Update OpenCode to latest version" -> `ohmydebn-update` (system update includes OpenCode)
-- "Open apps menu" -> `Super + Space` (GTK app launcher)
+- "Open apps menu" -> `Super + R` (GTK app launcher)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`
 - "Show system summary" -> `Ctrl + Shift + S` (fastfetch GUI)
 - "Monitor system performance" -> `Super + T` (btop)

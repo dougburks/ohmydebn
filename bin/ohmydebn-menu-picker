@@ -143,6 +143,19 @@ def load_leaves(breadcrumb_prefix=""):
     return rows
 
 
+def find_submenu_labels(labels, leaf_displays):
+    """Which of this level's category labels lead to a further submenu (and
+    so get a right-edge ">" marker), derived from data the picker already
+    loaded - menu_tree_flatten only ever emits leaves, so an intermediate
+    node's name appears solely as a breadcrumb *prefix* of its descendants
+    (e.g. "Browser > Brave Origin (minimal)" under Install), never as its
+    own row. The trailing " > " in the check is what makes this prefix-safe:
+    a plain startswith(label) would false-match "Media" against the leaf
+    "Media Player > ...". "Apps" needs no special-casing - it's already
+    excluded from leaves via MT_SKIP_LABELS, so it can never qualify."""
+    return {label for label in labels if any(d.startswith(f"{label} > ") for d in leaf_displays)}
+
+
 _EXEC_FIELD_CODES = {"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", "%c", "%k", "%v", "%m"}
 
 
@@ -262,7 +275,7 @@ def record_app_usage(desktop_id):
         pass
 
 
-def load_apps():
+def load_apps_metadata():
     """Enumerates installed .desktop entries the way rofi's `-show drun`
     did for ohmydebn-app-launcher - XDG_DATA_DIRS search order (user's
     ~/.local/share first) doubles as override precedence: once a desktop-id
@@ -271,7 +284,17 @@ def load_apps():
 
     Frequently-launched apps bubble to the top, matching rofi drun's own
     usage-based sorting - ties (including "never launched", the common
-    case for most entries) fall back to alphabetical."""
+    case for most entries) fall back to alphabetical.
+
+    Deliberately stops short of resolving icons (see resolve_icon()) -
+    confirmed by hand that on a system with a few hundred .desktop entries,
+    the per-entry Gtk.IconTheme lookups there (not this parsing) are what
+    stretched the launcher's time-to-first-frame to multiple seconds, since
+    every entry used to get resolved here before Picker.__init__ ever
+    called show_all(). Splitting parsing (this function, fast) from icon
+    resolution (done afterward, once the window is already showing - see
+    Picker._resolve_app_icons) is what fixes that without changing the
+    eventual result."""
     current_desktop = set(filter(None, os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")))
     seen_ids = set()
     parsed = []
@@ -294,8 +317,20 @@ def load_apps():
 
     usage = load_app_usage()
     parsed.sort(key=lambda e: (-usage.get(e[3], 0), e[0].lower()))
+    return parsed
+
+
+def apps_rows(parsed, icons=None):
+    """Builds populate()-ready rows from load_apps_metadata()'s output.
+    icons (desktop_id -> pixbuf) is None on the first, icon-less pass
+    (see Picker.__init__) and filled in on the second pass once
+    _resolve_app_icons() has run - a plain dict.get() on an empty/partial
+    dict already returns None for anything not resolved yet, which
+    populate() already treats as "no icon for this row", so no separate
+    icon-less code path is needed here."""
+    icons = icons or {}
     return [
-        (name, (exec_tokens, desktop_id), resolve_icon(icon_name))
+        (name, (exec_tokens, desktop_id), icons.get(desktop_id))
         for name, exec_tokens, icon_name, desktop_id in parsed
     ]
 
@@ -431,12 +466,30 @@ class Picker(Gtk.Window):
 
         self.mode = mode
         if mode == "apps":
-            self.categories = self.leaves = load_apps()
+            self._apps_parsed = load_apps_metadata()
+            self.categories = self.leaves = apps_rows(self._apps_parsed)
         elif mode == "windows":
             self.categories = self.leaves = load_windows()
         else:
             self.categories = _with_icons(load_categories(go_items))
             self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
+        # Only menu mode has submenus to mark. apps/windows values aren't
+        # even hashable (apps' value is (exec_tokens_list, desktop_id), a
+        # tuple containing a list) - the populate() membership check below
+        # is guarded on self.mode == "menu" specifically because `in` on a
+        # set has to hash its operand before it can find out the set is
+        # empty, so an unguarded check crashes with "unhashable type:
+        # list" in apps mode rather than just failing to match (confirmed
+        # live: it crashed Picker(mode="apps") - i.e. the whole app
+        # launcher - before this guard existed).
+        self.submenu_labels = (
+            find_submenu_labels(
+                [value for _display, value, _icon in self.categories],
+                [display for display, _value, _icon in self.leaves],
+            )
+            if mode == "menu"
+            else set()
+        )
         self._closing = False
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -537,6 +590,14 @@ class Picker(Gtk.Window):
             # much longer, genuinely-defensive fallback instead - only
             # meant to catch a truly stuck grab, not to fire in normal use.
             GLib.timeout_add(30000, self.on_timeout_accept)
+        elif mode == "apps":
+            # G_PRIORITY_DEFAULT_IDLE (idle_add's own default) runs after
+            # GTK's higher-priority redraw idle source, so this fires only
+            # once the window has actually been drawn on screen - the whole
+            # point being that resolving icons (the slow part - see
+            # load_apps_metadata()'s comment) no longer happens before the
+            # user ever sees the launcher appear.
+            GLib.idle_add(self._resolve_app_icons)
 
     def apply_theme(self):
         colors = load_theme_colors()
@@ -569,6 +630,16 @@ class Picker(Gtk.Window):
             # horizontally.
             row_label.set_ellipsize(Pango.EllipsizeMode.END)
             box.pack_start(row_label, True, True, 0)
+            # Submenu rows get a right-edge ">" affordance. pack_end plus
+            # the expanding, end-ellipsizing main label above keeps the
+            # arrow pinned to the window's right edge no matter how long
+            # the label is. Display-only: row.value stays the bare label,
+            # so the string printed back to ohmydebn-menu (and every case
+            # arm matching on it) is exactly what it was before markers
+            # existed. Search results are all leaves, so they never carry
+            # one.
+            if self.mode == "menu" and value in self.submenu_labels:
+                box.pack_end(Gtk.Label(label=">", xalign=1), False, False, 0)
             row.value = value
             row.add(box)
             self.listbox.add(row)
@@ -591,6 +662,27 @@ class Picker(Gtk.Window):
         else:
             matches = [(d, v, i) for d, v, i in self.leaves if needle in v.lower()]
         self.populate(matches)
+
+    def _resolve_app_icons(self):
+        """The deferred second half of apps-mode loading (see
+        load_apps_metadata()'s comment) - runs once, after the window is
+        already showing. Re-populate() reselects row 0 by default, which
+        would yank the selection back to the top out from under anyone who
+        already arrow-keyed away during the icon-loading pause; restoring
+        the previously-selected value here (falling through to row 0 only
+        if it's gone, e.g. filtered out by a search typed in the meantime)
+        avoids that."""
+        icons = {desktop_id: resolve_icon(icon_name) for _name, _exec_tokens, icon_name, desktop_id in self._apps_parsed}
+        self.categories = self.leaves = apps_rows(self._apps_parsed, icons)
+        selected = self.listbox.get_selected_row()
+        selected_value = selected.value if selected is not None else None
+        self.on_search_changed(self.entry)
+        if selected_value is not None:
+            for row in self.listbox.get_children():
+                if row.value == selected_value:
+                    self.listbox.select_row(row)
+                    break
+        return GLib.SOURCE_REMOVE
 
     def on_row_activated(self, listbox, row):
         self.finish(row.value)

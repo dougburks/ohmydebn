@@ -27,6 +27,9 @@ if [ -f /etc/os-release ]; then
   linuxmint)
     [ "$DEBIAN_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
+  kali)
+    [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
+    ;;
   esac
 fi
 
@@ -35,7 +38,7 @@ if [ "$DISTRO_OK" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7.
+OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7 and Kali Linux (Rolling).
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -88,8 +91,13 @@ EOF
   sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
   # Check to see if we have an APT configuration
-  if [ -f /etc/apt/sources.list.d/debian.sources ] ||
-    [ -f /etc/apt/sources.list.d/proxmox.sources ]; then
+  DEBIANSOURCES=/etc/apt/sources.list.d/debian.sources
+  PROXMOXSOURCES=/etc/apt/sources.list.d/proxmox.sources
+  MINTSOURCES=/etc/apt/sources.list.d/official-package-repositories.list
+  if [ -f $DEBIANSOURCES ] ||
+    [ -f $PROXMOXSOURCES ] ||
+    [ -f $MINTSOURCES ] ||
+    [ "$ID" = "kali" ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that
@@ -100,11 +108,12 @@ EOF
         echo "Renaming $SOURCESLIST to $SOURCESLIST.orig"
         sudo mv $SOURCESLIST $SOURCESLIST.orig
       fi
-      DEBIANSOURCES=/etc/apt/sources.list.d/debian.sources
-      MINTSOURCES=/etc/apt/sources.list.d/official-package-repositories.list
-      if [ ! -f $DEBIANSOURCES ] && [ ! -f $MINTSOURCES ]; then
-        echo "Creating $DEBIANSOURCES and adding the following:"
-        cat <<EOF | sudo tee -a $DEBIANSOURCES
+      # Reaching this point already guarantees $DEBIANSOURCES and
+      # $MINTSOURCES don't exist (the outer if above checks both, plus
+      # $PROXMOXSOURCES and Kali, before ever entering this else branch),
+      # so no need to re-check either here.
+      echo "Creating $DEBIANSOURCES and adding the following:"
+      cat <<EOF | sudo tee -a $DEBIANSOURCES
 Types: deb
 URIs: https://deb.debian.org/debian
 Suites: trixie trixie-updates
@@ -117,7 +126,6 @@ Suites: trixie-security
 Components: main non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 EOF
-      fi
     fi
   fi
 

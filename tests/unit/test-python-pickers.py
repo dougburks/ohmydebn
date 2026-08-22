@@ -71,6 +71,52 @@ rows = mp.load_categories("  Capture\\n  Style")
 check_eq("literal backslash-n splits into rows: count", len(rows), 2)
 check_eq("literal backslash-n splits into rows: second label", rows[1][1], "Style")
 
+# find_submenu_labels: a category leads to a submenu iff some leaf display
+# uses it as a breadcrumb prefix (flatten only emits leaves, so "Capture"
+# appearing as "Capture > ..." means Capture recursed; appearing exactly
+# means it's a leaf itself).
+check_eq(
+    "find_submenu_labels: label with child leaves is marked",
+    mp.find_submenu_labels(["Capture"], ["Capture > Screenshot > Region", "Capture > Color"]),
+    {"Capture"},
+)
+check_eq(
+    "find_submenu_labels: leaf-only label is not marked",
+    mp.find_submenu_labels(["Style"], ["Style"]),
+    set(),
+)
+check_eq(
+    "find_submenu_labels: plain-prefix leaf does not false-match",
+    mp.find_submenu_labels(["Media"], ["Media Player > x"]),
+    set(),
+)
+check_eq(
+    "find_submenu_labels: nested level marks only the recursing label",
+    mp.find_submenu_labels(["Browser", "Package"], ["Browser > Brave Origin (minimal)", "Package"]),
+    {"Browser"},
+)
+
+# Regression test: populate()'s submenu-marker check (`self.mode == "menu"
+# and value in self.submenu_labels`) crashed the entire app launcher
+# (Super+R -> Picker(mode="apps")) before the `self.mode == "menu"` guard
+# existed. apps mode's value is (exec_tokens, desktop_id) - see
+# load_apps() - where exec_tokens is a list, making the whole tuple
+# unhashable; `x in a_set` hashes x before it even looks at the set's
+# contents, so the bare membership check raised TypeError even against
+# Picker's own empty submenu_labels (set() for every non-menu mode - see
+# Picker.__init__) rather than just failing to match. Exercises the exact
+# guarded expression from populate() directly rather than constructing a
+# real Picker - this suite is deliberately display-free (see the header
+# comment); the live crash itself (and this fix resolving it) was also
+# confirmed by hand running `python3 bin/ohmydebn-menu-picker --apps`
+# under a real X display.
+apps_value = (["x-terminal-emulator", "-e", "htop"], "htop.desktop")
+try:
+    guarded_result = "apps" == "menu" and apps_value in set()
+    check("populate() submenu-marker guard: apps-mode value does not crash", True)
+except TypeError:
+    check("populate() submenu-marker guard: apps-mode value does not crash", False)
+
 check_eq("_strip_exec_field_codes: strips %u", mp._strip_exec_field_codes("firefox %u"), ["firefox"])
 check_eq(
     "_strip_exec_field_codes: strips multiple field codes",
@@ -206,6 +252,22 @@ tc = load("ohmydebn-theme-carousel")
 check_eq("slug_to_display: simple hyphenated slug", tc.slug_to_display("retro-82"), "Retro 82")
 check_eq("slug_to_display: multi-word slug", tc.slug_to_display("all-hallows-eve"), "All Hallows Eve")
 check_eq("slug_to_display: single word", tc.slug_to_display("nord"), "Nord")
+
+# filter_slugs: the S-search matcher - case-insensitive substring against
+# BOTH the raw slug and its display form, so "tokyo night" (space) and
+# "tokyo-night" (hyphen) both hit the same theme.
+SLUGS = ["matte-black", "pitch-black", "tokyo-night", "nord"]
+check_eq("filter_slugs: plain substring", tc.filter_slugs("tok", SLUGS), ["tokyo-night"])
+check_eq("filter_slugs: case-insensitive", tc.filter_slugs("TOKYO", SLUGS), ["tokyo-night"])
+check_eq("filter_slugs: spaced query matches the display form", tc.filter_slugs("tokyo night", SLUGS), ["tokyo-night"])
+check_eq("filter_slugs: hyphenated query matches the raw slug", tc.filter_slugs("tokyo-night", SLUGS), ["tokyo-night"])
+check_eq("filter_slugs: empty needle matches everything", tc.filter_slugs("", SLUGS), SLUGS)
+check_eq("filter_slugs: no match", tc.filter_slugs("zzz", SLUGS), [])
+check_eq(
+    "filter_slugs: multiple matches keep list order (the search jump takes the first)",
+    tc.filter_slugs("black", SLUGS),
+    ["matte-black", "pitch-black"],
+)
 
 fixture = tempfile.mkdtemp(prefix="ohmydebn-test-")
 try:
@@ -363,15 +425,23 @@ check_eq(
 # via set_sensitive()/CSS rather than conditionally-present markup - see
 # make_nav_button()), not part of this markup string at all any more, so
 # there's no more True/False "is it removable" variant to test here -
-# build_shortcuts_markup() always returns the same two-line B/C markup.
+# build_shortcuts_markup() always returns the same three-line S/B/C markup.
 shortcuts_markup = tc.build_shortcuts_markup()
 check(
     "build_shortcuts_markup: name comes before the shortcut letter (matches Cancel/Apply/Remove's ordering)",
-    "Browse More Themes - B" in shortcuts_markup and "Create new Theme using Aether - C" in shortcuts_markup,
+    "Search Themes - S" in shortcuts_markup
+    and "Browse More Themes - B" in shortcuts_markup
+    and "Create new Theme using Aether - C" in shortcuts_markup,
 )
 check(
     "build_shortcuts_markup: links each action to the right href",
-    tc.BROWSE_THEMES_URL in shortcuts_markup and tc.CREATE_THEME_ACTION in shortcuts_markup,
+    tc.SEARCH_THEMES_ACTION in shortcuts_markup
+    and tc.BROWSE_THEMES_URL in shortcuts_markup
+    and tc.CREATE_THEME_ACTION in shortcuts_markup,
+)
+check(
+    "build_shortcuts_markup: Search (stays in-carousel) is listed above Browse/Create (both exit)",
+    shortcuts_markup.index("Search") < shortcuts_markup.index("Browse") < shortcuts_markup.index("Create"),
 )
 check(
     "build_shortcuts_markup: Remove is not part of this markup at all (it's its own button - see REMOVE_THEME_MARKUP's absence)",
@@ -534,12 +604,25 @@ finally:
     shutil.rmtree(fixture5)
 
 
+class _RecordingProvider(tc.Gtk.CssProvider):
+    """Captures every CSS payload _apply_accent() generates, so tests can
+    assert on the rules themselves, not just the cache."""
+
+    def __init__(self):
+        super().__init__()
+        self.payloads = []
+
+    def load_from_data(self, data):
+        self.payloads.append(data.decode("utf-8"))
+        super().load_from_data(data)
+
+
 class _AccentHarness:
     """Exercises the real Carousel._apply_accent() - just the CSS provider
     and cache dict it touches, no full Carousel/window needed."""
 
     def __init__(self):
-        self._accent_provider = tc.Gtk.CssProvider()
+        self._accent_provider = _RecordingProvider()
         self._accent_cache = {}
 
 
@@ -556,6 +639,13 @@ try:
     check_eq(
         "_apply_accent: caches the resolved accent color for the slug it was called with",
         harness._accent_cache.get("accented"), "#e68e0d",
+    )
+    # e68e0d is rgb(230, 142, 13) - the scrim panel joins the accent
+    # system (card/side/search borders were already there).
+    accent_css = harness._accent_provider.payloads[0]
+    check(
+        "_apply_accent: caption panel border is recolored with the accent",
+        "#carousel-caption" in accent_css and "rgba(230, 142, 13, 0.92)" in accent_css,
     )
 
     # Second call for the same slug must not re-read colors.toml - delete
@@ -595,6 +685,46 @@ class _FakeStyleContext:
         self.classes.discard(name)
 
 
+class _FakeSearchEntry:
+    """The two pieces of Gtk.SearchEntry the real search methods touch:
+    text storage (get_text/set_text - set_text deliberately does NOT
+    re-emit search-changed the way GTK does; tests that want the signal
+    call on_search_changed explicitly, mirroring the real sequence) and
+    grab_focus()."""
+
+    def __init__(self):
+        self.text = ""
+        self.focus_calls = 0
+        self.visible = False
+
+    def get_text(self):
+        return self.text
+
+    def set_text(self, text):
+        self.text = text
+
+    def show(self):
+        # Real open_search() shows the entry explicitly - plain show() on
+        # the bar alone left the entry invisible in the live GTK run (see
+        # open_search's own comment), so the fake tracks it separately
+        # rather than letting the bar's visibility speak for it.
+        self.visible = True
+
+    def grab_focus(self):
+        self.focus_calls += 1
+
+
+class _FakeSearchBar:
+    def __init__(self):
+        self.visible = False
+
+    def show(self):
+        self.visible = True
+
+    def hide(self):
+        self.visible = False
+
+
 class _FakeRemoveButton:
     def __init__(self):
         self._ctx = _FakeStyleContext()
@@ -632,12 +762,31 @@ class _FakeCarousel(tc.Carousel):
         self._remove_arm_timeout_id = None
         self._remove_labels = [_FakeLabel()]
         self.remove_btn = _FakeRemoveButton()
+        self._search_open = False
+        self.search_entry = _FakeSearchEntry()
+        self.search_bar = _FakeSearchBar()
+
+    def set_focus(self, widget):
+        # Stubbed - the real Gtk.Window.set_focus() needs the genuinely
+        # initialized Gtk.Window underneath that this bare stub doesn't
+        # have (same uninitialized-GObject crash as resize_children
+        # below). close_search() calls this to hand keyboard focus back
+        # from the hidden entry to the window; nothing to assert on here,
+        # it just must not crash.
+        pass
 
     def finish(self, slug):
         self.finish_calls.append(slug)
 
     def move(self, delta):
         self.move_calls.append(delta)
+        # Apply the move for real (with the real method's wrap-around),
+        # not just record it - a search jump followed by Enter must apply
+        # the theme the search LANDED on, which only happens if index
+        # actually tracks. Every existing assertion here only checks
+        # move_calls' contents, never index-after-move, so this changes
+        # nothing for them.
+        self.index = (self.index + delta) % len(self.slugs)
 
     def move_background(self, delta):
         self.move_background_calls.append(delta)
@@ -818,6 +967,143 @@ check_eq("on_key_press: A/U triggered nothing", fake.launch_calls + [fake.open_b
 fake = _FakeCarousel()
 handled = press(fake, tc.Gdk.KEY_x)
 check_eq("on_key_press: an unbound key is left unhandled (returns False)", handled, False)
+
+# S-search: the box floats over the carousel and each keystroke jumps the
+# carousel itself to the first match - no results list anywhere. Real
+# open_search()/close_search()/on_search_changed()/on_search_key() all run
+# here against the fakes above; only the actual GTK widgets are stubbed.
+fake = _FakeCarousel()
+handled = press(fake, tc.Gdk.KEY_s)
+check_eq("on_key_press: s reports itself handled", handled, True)
+check("on_key_press: s opens the search box", fake._search_open and fake.search_bar.visible)
+check("on_key_press: s shows the entry itself, not just the bar", fake.search_entry.visible)
+check_eq("on_key_press: s focuses the entry", fake.search_entry.focus_calls, 1)
+check_eq("on_key_press: s neither moves nor applies/cancels", fake.move_calls + fake.finish_calls, [])
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_S)
+check_eq("on_key_press: S is case-insensitive (same handler as s)", fake.search_entry.focus_calls, 1)
+
+# THE key-routing invariant while the box is open: the window-level
+# handler must go completely inert. GTK3 delivers key-press-event to the
+# toplevel window's handlers BEFORE the focused entry ever sees the key,
+# so without the _search_open guard, typing "c" into the box launched
+# Aether before the character could be inserted - the exact bug this
+# regression-tests (confirmed live). Returning False is what lets the
+# window's default handler forward the keystroke to the entry as text.
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)  # opens the box
+for kv in (tc.Gdk.KEY_b, tc.Gdk.KEY_c, tc.Gdk.KEY_r, tc.Gdk.KEY_s):
+    handled = press(fake, kv)
+    check_eq(
+        f"on_key_press: {tc.Gdk.keyval_name(kv)} while searching is forwarded, not intercepted",
+        handled, False,
+    )
+check_eq(
+    "on_key_press: letters typed while searching trigger no actions at all",
+    fake.launch_calls + fake.finish_calls + fake.move_calls + [fake.open_browse_calls + fake.remove_current_theme_calls],
+    [0],
+)
+check("on_key_press: searching letters don't reopen/toggle the box", fake._search_open)
+# Escape/Enter while searching are the entry handler's job, not the
+# window's - the window must forward them too (Escape closes just the box
+# via on_search_key, never the whole carousel).
+for kv in (tc.Gdk.KEY_Escape, tc.Gdk.KEY_Return):
+    check_eq(
+        f"on_key_press: window forwards {tc.Gdk.keyval_name(kv)} to the entry while searching",
+        press(fake, kv), False,
+    )
+
+# Closing the box releases the guard - the same letters are hotkeys again.
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+tc.Carousel.close_search(fake)
+handled = press(fake, tc.Gdk.KEY_c)
+check_eq("on_key_press: c is a live Aether hotkey again after the box closes", fake.launch_calls, [["/usr/share/aether/aether"]])
+check_eq("on_key_press: post-close c reports itself handled", handled, True)
+
+# Opening search while a remove-confirm is armed disarms it - an armed
+# "Confirm Remove?" left hot under the search box is exactly the stale-arm
+# scenario _arm_remove() guards against.
+_real_is_theme_removable2 = tc.is_theme_removable
+try:
+    tc.is_theme_removable = lambda slug: True
+    fake = _FakeCarousel()
+    press(fake, tc.Gdk.KEY_r)
+    check("search: pre-condition - remove is armed before s", fake._remove_armed)
+    press(fake, tc.Gdk.KEY_s)
+    check_eq("on_key_press: s disarms a pending remove-confirm", fake._remove_armed, False)
+    check("on_key_press: s disarm restores the default remove label", fake._remove_labels[0].text == tc.REMOVE_LABEL_DEFAULT)
+finally:
+    tc.is_theme_removable = _real_is_theme_removable2
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+fake.search_entry.set_text("alpha")
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+check_eq("on_search_changed: typing jumps by move(delta) toward the first match", fake.move_calls, [-1])
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+fake.search_entry.set_text("BETA")
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+check_eq("on_search_changed: matching is case-insensitive", fake.move_calls, [0])
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+fake.search_entry.set_text("zzz")
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+check_eq("on_search_changed: no match stays put", fake.move_calls, [])
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+tc.Carousel.on_search_changed(fake, fake.search_entry)  # text still ""
+check_eq("on_search_changed: empty needle stays put (no jump to alphabetical first)", fake.move_calls, [])
+
+# close_search() clears the entry text - the _search_open guard must drop
+# FIRST, or that clearing would emit an empty-needle search-changed and
+# jump the carousel just because the user dismissed the box. Fake's
+# set_text doesn't emit the signal itself, so this drives the same
+# sequence by hand: close, then the (guarded) changed signal.
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+fake.search_entry.set_text("alpha")
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+tc.Carousel.close_search(fake)
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+check_eq("close_search: clearing the text afterward can't jump the carousel", fake.move_calls, [-1])
+check("close_search: box hidden and marked closed", not fake._search_open and not fake.search_bar.visible)
+check_eq("close_search: entry text cleared for next time", fake.search_entry.get_text(), "")
+check_eq("close_search: nothing applied or cancelled", fake.finish_calls, [])
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+handled = tc.Carousel.on_search_key(fake, None, _FakeEvent(tc.Gdk.KEY_Escape))
+check_eq("on_search_key: Escape reports itself handled", handled, True)
+check("on_search_key: Escape closes only the search box (carousel stays up)", not fake._search_open and fake.finish_calls == [])
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+fake.search_entry.set_text("alpha")
+tc.Carousel.on_search_changed(fake, fake.search_entry)
+fake.move_calls.clear()  # the jump itself isn't what this asserts
+handled = tc.Carousel.on_search_key(fake, None, _FakeEvent(tc.Gdk.KEY_Return))
+check_eq("on_search_key: Enter applies the search-landed theme directly", fake.finish_calls, ["alpha"])
+check_eq("on_search_key: Enter reports itself handled", handled, True)
+
+fake = _FakeCarousel()
+press(fake, tc.Gdk.KEY_s)
+handled = tc.Carousel.on_search_key(fake, None, _FakeEvent(tc.Gdk.KEY_j))
+check_eq("on_search_key: ordinary keys fall through to the entry's own text handling", handled, False)
+check_eq("on_search_key: fall-through keys trigger nothing", fake.move_calls + fake.finish_calls, [])
+
+# Click routing for the caption's Search link - same fake action: URI
+# pattern Create uses (see the comment above on_shortcuts_link_activated's
+# Create/Browse tests below).
+fake = _FakeCarousel()
+handled = tc.Carousel.on_shortcuts_link_activated(fake, None, tc.SEARCH_THEMES_ACTION)
+check("click Search: opens the search box", fake._search_open and fake.search_bar.visible)
+check_eq("click Search: returns True (fully handled, no real URI open attempted)", handled, True)
+check_eq("click Search: doesn't also close or apply anything", fake.finish_calls, [])
 
 # Click routing for Create/Browse via on_shortcuts_link_activated() instead
 # of on_key_press() - Create uses a fake action: URI (not a real web

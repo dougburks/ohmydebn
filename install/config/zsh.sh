@@ -50,3 +50,19 @@ export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 EOF
   touch $COLOR_MAN_STATE
 fi
+
+PI_ALIAS_STATE=~/.local/state/ohmydebn-config/pi-alias
+if [ ! -f $PI_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Pi CLI coding agent, run in the current terminal
+alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'
+EOF
+  touch $PI_ALIAS_STATE
+fi
+
+OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias
+if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
+  sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc
+  touch $OPENCODE_CLI_ALIAS_STATE
+fi

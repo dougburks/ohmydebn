@@ -85,6 +85,14 @@ mapfile -t REMOVE_ALL_PACKAGES < <(awk '/^for PACKAGE in/{n++} n==2{print; if (/
 for pkg in "${REMOVE_ALL_PACKAGES[@]}"; do
   SKIP_PROMPT_NAMES+=("ohmydebn-${pkg}-remove")
 done
+# Pi sits just outside that loop (its dpkg package name,
+# ohmydebn-pi-coding-agent, isn't the same string as its remove script's
+# ohmydebn-pi-remove, unlike every other entry the loop above handles) -
+# same explicit-grep exception already used above for
+# ohmydebn-pkg-remove-all-optional's own --skip-prompt invocation.
+if grep -q 'ohmydebn-pi-remove --skip-prompt' "$REMOVE_ALL_SH"; then
+  SKIP_PROMPT_NAMES+=("ohmydebn-pi-remove")
+fi
 CHECKED=0
 for name in "${SKIP_PROMPT_NAMES[@]}"; do
   CHECKED=$((CHECKED + 1))

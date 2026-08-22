@@ -11,7 +11,14 @@
 # desktop until Enter, for backgrounds exactly the same way it always worked
 # for themes.
 #
-# Left/Right browse themes. Up/Down browse *backgrounds within the current
+# Left/Right browse themes, with several rings of neighbor thumbnails
+# flanking the main card (offset +-1, +-2, +-3 - see RING_SPECS) each
+# smaller/dimmer than the last, so more of the available themes are
+# visible at once, not just the immediate neighbor either side. An outer
+# ring hides itself rather than showing confusing duplicates/crossovers
+# on installs with too few themes for it to mean anything (see the
+# per-ring guard in render()'s theme_changed block). Up/Down browse
+# *backgrounds within the current
 # theme*, whenever it has more than one. The main card always shows the
 # actual background that's currently selected (so what's previewed and what
 # Enter applies never disagree), with small dimmed thumbnails above/below it
@@ -23,7 +30,9 @@
 # Aether keeps its own job (building/editing themes) - reachable here via
 # the B/C/R single-key shortcuts (Browse more themes, Create new theme using
 # Aether, Remove theme), all three also clickable directly in the caption
-# panel. R only shows up (as a red chip, since it's destructive) when the
+# panel. S floats a bare search box instead of a results list - each
+# keystroke jumps the carousel itself to the first matching theme, so the
+# normal full-size preview IS the search feedback (see open_search()). R only shows up (as a red chip, since it's destructive) when the
 # currently-displayed theme is removable (see is_theme_removable() -
 # ohmydebn-theme-remove itself is hardcoded to only ever touch
 # ~/.config/ohmydebn/themes/, never the ~20 bundled system ones, so this
@@ -68,7 +77,34 @@ CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/backgro
 
 CARD_W, CARD_H = 900, 506
 SIDE_W, SIDE_H = 340, 191
-SIDE_OPACITY = 0.4
+# Full opacity, same as the main card - hierarchy comes entirely from
+# size (each ring below is smaller than the last) plus the main card's
+# own thicker border and accent glow, not from dimming the neighbors -
+# a dimmed thumbnail reads as "hard to make out", not "less important",
+# especially two rings out at THIRD_SIDE_W/H's small footprint.
+SIDE_OPACITY = 1.0
+# Neighbor rings further out than SIDE_W/H's own +-1 ring - each one
+# smaller than the last (same ~1.78 aspect ratio throughout, so
+# load_cover_pixbuf's crop-to-fill doesn't cut noticeably more off one
+# ring's source image than another). RING_SPECS below (built from these
+# plus the +-1 ring itself) is what actually drives how many rings get
+# built - see __init__ and render()'s theme_changed block, both of which
+# loop over it rather than naming each ring individually, so adding or
+# removing a ring is just editing this list.
+FAR_SIDE_W, FAR_SIDE_H = 220, 124
+FAR_SIDE_OPACITY = 1.0
+THIRD_SIDE_W, THIRD_SIDE_H = 144, 81
+THIRD_SIDE_OPACITY = 1.0
+# Ring 0 = the +-1 ring (SIDE_W/H), closest to the card; each later entry
+# is one slug further out. A ring at index i is only ever shown once
+# there are more than 2*(i+1) themes total - see the guard in render()'s
+# theme_changed block for why.
+RING_SPECS = [
+    (SIDE_W, SIDE_H, SIDE_OPACITY),
+    (FAR_SIDE_W, FAR_SIDE_H, FAR_SIDE_OPACITY),
+    (THIRD_SIDE_W, THIRD_SIDE_H, THIRD_SIDE_OPACITY),
+]
+SIDE_GROUP_SPACING = 16
 BG_THUMB_W, BG_THUMB_H = 320, 90
 
 # Everything above is sized for a full-size desktop monitor. On a MacBook's
@@ -86,7 +122,7 @@ BG_THUMB_W, BG_THUMB_H = 320, 90
 # in this file. `caption`'s own size comes entirely from text/button
 # padding, not from these six constants, so it doesn't shrink with them -
 # it's carried as a fixed vertical budget instead of getting scaled itself.
-DESIGN_ROW_W, DESIGN_ROW_H = 1646, 716
+DESIGN_ROW_W, DESIGN_ROW_H = 2446, 716
 DESIGN_CAPTION_H = 365
 STACK_SPACING = 24
 CAROUSEL_H_MARGIN = 60
@@ -99,13 +135,19 @@ REMOVE_ARM_TIMEOUT_MS = 4000
 BROWSE_THEMES_URL = "https://bjarneo.github.io/omarchy-themes/"
 
 CREATE_THEME_ACTION = "action:create-theme"
+SEARCH_THEMES_ACTION = "action:search-themes"
 
 def build_shortcuts_markup():
     # Name first, shortcut letter last - matches Cancel/Apply/Remove's own
     # "action, then shortcut" ordering elsewhere in the panel now, rather
     # than the letter-first convention these two used to share only with
     # each other.
+    # Search comes first - unlike Browse/Create it stays inside the
+    # carousel rather than exiting it, so it reads as part of the main
+    # browsing flow rather than the opt-in step down and away from it (see
+    # the caption-panel ordering comment in __init__).
     return "\n".join([
+        f'<a href="{SEARCH_THEMES_ACTION}">Search Themes - S</a>',
         f'<a href="{BROWSE_THEMES_URL}">Browse More Themes - B</a>',
         f'<a href="{CREATE_THEME_ACTION}">Create new Theme using Aether - C</a>',
     ])
@@ -113,6 +155,18 @@ def build_shortcuts_markup():
 
 def slug_to_display(slug):
     return " ".join(word.capitalize() for word in slug.split("-"))
+
+
+def filter_slugs(needle, slugs):
+    """Case-insensitive substring match against BOTH the raw slug
+    ("tokyo-night") and its display form ("Tokyo Night") - a user typing
+    into the search box can't be expected to know which one they're
+    matching, and "tokyo night" (with a space) only hits the display form
+    while "tokyo-night" only hits the slug. An empty needle matches
+    everything; callers decide whether jumping on empty makes sense
+    (on_search_changed doesn't - it stays put instead)."""
+    n = needle.lower()
+    return [s for s in slugs if n in s.lower() or n in slug_to_display(s).lower()]
 
 
 def theme_dir(slug):
@@ -154,6 +208,22 @@ def preview_image(slug):
     if os.path.isfile(preview):
         return preview
     return first_background(slug)
+
+
+def neighbor_preview(slug):
+    """The opposite priority from preview_image() above: prefers slug's own
+    actual wallpaper, only falling back to its curated preview.png (each
+    theme's original upstream Omarchy/Hyprland promo mockup - not an
+    OhMyDebn/Cinnamon screenshot, see preview_image()'s own docstring) for
+    a theme with no raw background files of its own. Used for every
+    neighbor-ring thumbnail (see render()) so what they show matches what
+    landing on that theme would actually put on screen, the same way the
+    main card already prioritizes self.backgrounds over preview_image()
+    once a background list exists - showing the Omarchy mockup in four
+    separate always-visible thumbnails per move() (the near AND far ring)
+    made that mismatch far more noticeable than the one very-occasional
+    fallback the main card's own logic already tolerated."""
+    return first_background(slug) or preview_image(slug)
 
 
 DEFAULT_ACCENT = "#ffffff"
@@ -289,7 +359,30 @@ def load_cover_pixbuf(path, target_w, target_h):
 
 CSS = """
 #carousel-caption {
-    background-color: rgba(0, 0, 0, 0.55);
+    /* Fully opaque, not translucent - a partial scrim (0.55 here,
+       previously) still let a bright/busy background show through enough
+       to fight the white text for attention, confirmed by hand on
+       several light themes (White's panel read as a weak mid-gray with
+       barely-visible D-pad pill boundaries; Lumon's own light backdrop
+       text visibly ghosted through right behind the "Previous
+       background" label). Solid removes that dependency on the
+       background entirely, at the cost of the previous "peek of the
+       desktop through the panel" look. */
+    background-color: rgba(0, 0, 0, 1.0);
+    /* Pre-first-render fallback only - the real border color is the
+       centered theme's accent, from _apply_accent()'s generated rule
+       (same pattern as #carousel-search). */
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    /* Padding lives HERE, not in set_border_width(): measured live,
+       GtkContainer's border-width property does nothing at all to this
+       box's layout under GTK 3.24's CSS gadgets (caption allocation was
+       byte-identical at border-width 14/18/22/26 - the old set_border_width
+       call was dead code all along, only ever looking right because the
+       panel used to be borderless). CSS padding genuinely grows the
+       content box: extra horizontal room keeps the D-pad pills off the
+       accent border, extra bottom room keeps the Browse/Create link off
+       it. */
+    padding: 16px 24px 18px 24px;
 }
 #carousel-name {
     color: #ffffff;
@@ -300,12 +393,58 @@ CSS = """
     color: rgba(255, 255, 255, 0.75);
     font-size: 11pt;
 }
+#carousel-search {
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    /* Square corners and an accent-colored border, matching the main
+       card's look. The color comes from _apply_accent()'s generated rule
+       (this static one is just the pre-first-render fallback). The radius
+       must be explicitly zeroed - merely omitting border-radius here
+       leaves the GTK theme's own `entry` rule (radius 12px on this
+       system) in effect, since nothing outranks it; confirmed by dumping
+       the computed style live. */
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 0;
+    /* The focused entry's blue ring is NOT its border - it's the GTK
+       theme's own focus outline/box-shadow (Adwaita/Mint-Y draw focused
+       entries with the *system* selected color, which is why the ring
+       stayed blue even while _apply_accent() had already made the real
+       border-color track the theme - confirmed by dumping the computed
+       style: border green, ring still blue). Kill both so the accent
+       border is the only frame the box has. */
+    outline: none;
+    box-shadow: none;
+    padding: 10px 16px;
+    font-size: 14pt;
+}
 #carousel-card {
     border: 3px solid rgba(255, 255, 255, 0.92);
     box-shadow: 0 0 50px 10px rgba(130, 170, 255, 0.6);
 }
 #carousel-side {
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    /* 2px/0.8 alpha, not the main card's 3px/0.92 - still visibly a
+       notch below the card so hierarchy holds, but a 1px/0.25 border
+       (previously) was easy to lose entirely against a busy backdrop
+       now that SIDE_OPACITY/FAR_SIDE_OPACITY/THIRD_SIDE_OPACITY no
+       longer dim the thumbnails themselves - the border was the only
+       remaining edge cue distinguishing a thumbnail from the raw
+       background behind it. */
+    border: 2px solid rgba(255, 255, 255, 0.8);
+}
+.carousel-thumb-btn {
+    /* Every side/background-neighbor thumbnail is a real GtkButton now
+       (see make_clickable_thumb_frame()), purely so it's clickable - this
+       zeroes all of GtkButton's own default chrome so it still reads as
+       the same plain framed thumbnail as before, not a button-shaped
+       control sitting around it. The actual hover cue lives on the
+       wrapped #carousel-side frame itself (border brightens - see
+       _apply_accent()'s own ":hover" rule), which GtkButton already
+       lights up on hover on its own, no separate wiring needed here. */
+    background-image: none;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
 }
 .carousel-nav-btn {
     background-image: none;
@@ -426,6 +565,30 @@ def make_fixed_thumb_frame(w, h, css_name="carousel-side", opacity=SIDE_OPACITY)
     return frame, image
 
 
+def make_clickable_thumb_frame(w, h, on_click, css_name="carousel-side", opacity=SIDE_OPACITY):
+    """Same visible frame as make_fixed_thumb_frame(), wrapped in a button so
+    clicking a side-ring or above/below background thumbnail jumps straight
+    to it - a much bigger, more discoverable target than the D-pad alone,
+    especially for the further-out rings that show where several themes
+    away would land. can_focus(False), same as every other carousel button
+    (see make_nav_button) - a click here must never steal keyboard focus
+    away from the window's own arrow-key handling in on_key_press.
+    .carousel-thumb-btn zeroes every bit of GtkButton's own chrome
+    (background/border/box-shadow/padding) in CSS, so nothing changes
+    visually until hovered - GtkButton already cascades its own prelight
+    state down to this un-styled child frame, which is what lights up
+    #carousel-side's border on hover (see CSS) as the only click-target
+    affordance, no separate hover wiring needed here."""
+    frame, image = make_fixed_thumb_frame(w, h, css_name, opacity)
+    button = Gtk.Button()
+    button.set_relief(Gtk.ReliefStyle.NONE)
+    button.set_can_focus(False)
+    button.get_style_context().add_class("carousel-thumb-btn")
+    button.add(frame)
+    button.connect("clicked", on_click)
+    return button, image
+
+
 def make_nav_button(pieces, halign, button_classes=("carousel-nav-btn",)):
     """A button that fits its own description inside itself, rather than a
     bare glyph/label with a separate (non-clickable, easy to mis-order
@@ -534,7 +697,12 @@ class Carousel(Gtk.Window):
         available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
         scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
         self.card_w, self.card_h = round(CARD_W * scale), round(CARD_H * scale)
-        self.side_w, self.side_h = round(SIDE_W * scale), round(SIDE_H * scale)
+        # One (w, h) pair per RING_SPECS entry, same order (index 0 = the
+        # +-1 ring closest to the card) - render()'s theme_changed block
+        # indexes this the same way it indexes self.left_images/
+        # right_images below, so ring i's frame size and its populated
+        # pixbuf size always agree.
+        self.ring_dims = [(round(w * scale), round(h * scale)) for w, h, _ in RING_SPECS]
         self.bg_thumb_w, self.bg_thumb_h = round(BG_THUMB_W * scale), round(BG_THUMB_H * scale)
 
         provider = Gtk.CssProvider()
@@ -543,8 +711,9 @@ class Carousel(Gtk.Window):
             Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        # Recolors #carousel-card/#carousel-side to whichever theme is
-        # currently centered - see theme_accent_color() and render()'s
+        # Recolors #carousel-card/#carousel-side/#carousel-search/
+        # #carousel-caption to whichever theme is currently centered - see
+        # theme_accent_color() and render()'s
         # theme_changed block below. A separate provider (rather than
         # editing CSS's own strings) reloaded on demand, at USER priority
         # so it always wins over the plain-white defaults above regardless
@@ -607,7 +776,44 @@ class Carousel(Gtk.Window):
         # why this carousel doesn't letterbox anything), so this fixed
         # size always matches what's actually drawn; it's not doing any
         # remaining size-negotiation work of its own by being here.
-        left_frame, self.left_image = make_fixed_thumb_frame(self.side_w, self.side_h)
+        #
+        # One frame pair per RING_SPECS entry (index 0 = the +-1 ring
+        # closest to the card), each pair built and populated identically
+        # - see render()'s theme_changed block, which loops over the same
+        # list the same way. self.left_images[i]/self.right_images[i] are
+        # populated there exactly like the old single left_image/
+        # right_image pair was, just one slug further out per ring.
+        self.left_images = []
+        self.right_images = []
+        left_frames = []
+        right_frames = []
+        for i, (_, _, opacity) in enumerate(RING_SPECS):
+            w, h = self.ring_dims[i]
+            offset = i + 1
+            # Ring 0 is the +-1 neighbor, ring 1 is +-2, etc. (see
+            # RING_SPECS) - offset=i+1 lets a click jump straight to
+            # whichever theme this specific ring is currently showing, the
+            # same distance move()'s own %-wraparound would reach with
+            # that many Left/Right presses. `o=offset` binds each lambda's
+            # own value at creation time rather than the loop variable -
+            # without it every ring's button would share whatever offset
+            # the loop last landed on (a real closure-over-loop-variable
+            # bug, not hypothetical - every make_nav_button click handler
+            # elsewhere in this file gets away without this trick only
+            # because none of them are built inside a loop).
+            lf, li = make_clickable_thumb_frame(w, h, lambda b, o=offset: self.move(-o), opacity=opacity)
+            rf, ri = make_clickable_thumb_frame(w, h, lambda b, o=offset: self.move(o), opacity=opacity)
+            left_frames.append(lf)
+            right_frames.append(rf)
+            self.left_images.append(li)
+            self.right_images.append(ri)
+        # lf/rf ARE the clickable buttons now (make_clickable_thumb_frame's
+        # first return value) - kept under their own names so render() can
+        # grey out (set_sensitive(False)) whichever rings don't have a
+        # genuinely distinct theme to jump to, the same way the D-pad
+        # arrows already do for n <= 1 - see the "reachable" comment there.
+        self.left_ring_btns = left_frames
+        self.right_ring_btns = right_frames
 
         # The card itself plus its new above/below background-neighbor
         # thumbnails, stacked vertically - same idea as left_image/
@@ -622,19 +828,42 @@ class Carousel(Gtk.Window):
         # below it, including the caption/scrim panel) shrank by up to
         # 184px - confirmed by hand - every time browsing landed on a
         # single-background theme. See make_fixed_thumb_frame().
-        bg_above_frame, self.bg_above_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
+        bg_above_frame, self.bg_above_image = make_clickable_thumb_frame(
+            self.bg_thumb_w, self.bg_thumb_h, lambda b: self.move_background(-1)
+        )
         card_frame, self.card_image = make_fixed_thumb_frame(self.card_w, self.card_h, "carousel-card", opacity=1.0)
-        bg_below_frame, self.bg_below_image = make_fixed_thumb_frame(self.bg_thumb_w, self.bg_thumb_h)
+        bg_below_frame, self.bg_below_image = make_clickable_thumb_frame(
+            self.bg_thumb_w, self.bg_thumb_h, lambda b: self.move_background(1)
+        )
+        # bg_above_frame/bg_below_frame ARE the clickable buttons - kept
+        # under their own names too, same reason as left_ring_btns/
+        # right_ring_btns above: render() greys them out when there's only
+        # one (or zero) backgrounds to jump to, matching the up/down D-pad
+        # arrows' own set_sensitive(bg_n > 1).
+        self.bg_above_btn = bg_above_frame
+        self.bg_below_btn = bg_below_frame
 
         card_stack.pack_start(bg_above_frame, False, False, 0)
         card_stack.pack_start(card_frame, False, False, 0)
         card_stack.pack_start(bg_below_frame, False, False, 0)
 
-        right_frame, self.right_image = make_fixed_thumb_frame(self.side_w, self.side_h)
+        # Each side's frames packed nearest-to-card first, so the tighter
+        # SIDE_GROUP_SPACING gaps read as "one cluster of neighbors"
+        # flanking the card rather than independently-spaced thumbnails -
+        # left_frames is stored ring-0-first (nearest), so the left group
+        # (which grows away from the card to the left) packs it in
+        # reverse; the right group packs it as-is, since it already grows
+        # away from the card to the right.
+        left_group = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SIDE_GROUP_SPACING)
+        for lf in reversed(left_frames):
+            left_group.pack_start(lf, False, False, 0)
+        right_group = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SIDE_GROUP_SPACING)
+        for rf in right_frames:
+            right_group.pack_start(rf, False, False, 0)
 
-        row.pack_start(left_frame, False, False, 0)
+        row.pack_start(left_group, False, False, 0)
         row.pack_start(card_stack, False, False, 0)
-        row.pack_start(right_frame, False, False, 0)
+        row.pack_start(right_group, False, False, 0)
         # expand=True so row's own pack_start "cell" actually includes the
         # extra vertical space content has now that it fills the overlay -
         # a child's own valign only has anything to act on if its cell
@@ -676,18 +905,21 @@ class Carousel(Gtk.Window):
         caption = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         caption.set_name("carousel-caption")
         caption.set_halign(Gtk.Align.CENTER)
-        caption.set_border_width(14)
+        # No set_border_width() here - see the padding comment in CSS above:
+        # the container border-width property measures as a complete no-op
+        # on this box under GTK 3.24, so the panel's inner padding is CSS.
 
         self.name_label = Gtk.Label()
         self.name_label.set_name("carousel-name")
         caption.pack_start(self.name_label, False, False, 0)
 
         # Arrows live here in the scrim panel rather than out at the edges
-        # next to the thumbnails they move - two reasons: the panel's dark
-        # background (like the caption text above) guarantees contrast on
-        # any theme, light or dark, where arrows sitting directly on the
-        # raw backdrop image were unreadable on light ones; and keeping
-        # every clickable control in one tight, central spot means going
+        # next to the thumbnails they move - two reasons: the panel's
+        # solid dark background (like the caption text above) guarantees
+        # contrast on any theme, light or dark, where arrows sitting
+        # directly on the raw backdrop image were unreadable on light
+        # ones; and keeping every clickable control in one tight, central
+        # spot means going
         # from "clicked right three times" to "actually I want to go back"
         # is a few pixels of mouse travel instead of crossing most of the
         # screen (which pinning them to the panel's own outer edges would
@@ -863,8 +1095,73 @@ class Carousel(Gtk.Window):
         self.overlay.add_overlay(content)
         self.overlay.set_overlay_pass_through(content, True)
 
+        # The S-search box, floated at the top-center of the window until
+        # dismissed. A direct overlay child's own halign/valign are silently
+        # ignored (see the long comment above content's construction for the
+        # hand-confirmed PyGObject limitation), so the entry sits inside a
+        # hexpanding wrapper box and real alignment happens in there - same
+        # workaround content itself uses. NOT set_overlay_pass_through'd
+        # the way content is: the entry must stay clickable/focusable.
+        # Hidden until S is pressed - no_show_all keeps __main__'s
+        # win.show_all() from revealing it on startup.
+        self._search_open = False
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_name("carousel-search")
+        self.search_entry.set_placeholder_text("Search themes…")
+        self.search_entry.set_size_request(420, -1)
+        self.search_entry.set_halign(Gtk.Align.CENTER)
+        # valign=START, not the default FILL: overlay children whose own
+        # alignment is ignored (the PyGObject limitation content's comment
+        # above documents) get allocated the FULL overlay height, not just
+        # their natural height - confirmed live, the entry came out
+        # 420x1350 instead of 420x~40. FILL would stretch the entry across
+        # all of that; START keeps it at natural height, pinned to the top
+        # (bar's margin_top provides the offset from the screen edge).
+        self.search_entry.set_valign(Gtk.Align.START)
+        self.search_entry.connect("search-changed", self.on_search_changed)
+        # The window's on_key_press returns False for EVERYTHING while the
+        # box is open (see its guard's comment for why - the window sees
+        # keystrokes before the focused widget does, not after), so all
+        # text input reaches the entry here purely via the window's
+        # default forwarding. Escape/Enter are handled at the entry level
+        # by on_search_key below - everything else is ordinary typing.
+        self.search_entry.connect("key-press-event", self.on_search_key)
+        search_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        search_bar.set_hexpand(True)
+        search_bar.set_margin_top(24)
+        # expand=True + fill=False: the cell gets the wrapper's slack, the
+        # entry keeps its requested 420px, and its halign=CENTER centers it
+        # within the cell.
+        search_bar.pack_start(self.search_entry, True, False, 0)
+        search_bar.set_no_show_all(True)
+        search_bar.hide()
+        self.search_bar = search_bar
+        self.overlay.add_overlay(search_bar)
+
         self.connect("key-press-event", self.on_key_press)
         self.connect("show", lambda w: GLib.idle_add(self.render))
+        self.connect("map-event", self.on_map_present)
+
+    def on_map_present(self, widget, event):
+        """Some window managers only reassign keyboard focus to a
+        newly-mapped window on an actual pointer-crossing (EnterNotify)
+        event. This window opens fullscreen on whichever monitor already
+        has the pointer (see get_monitor_geometry()), so it maps directly
+        *under* an already-stationary mouse rather than the mouse moving
+        into it - no crossing event ever fires, so a WM that focuses purely
+        on that event leaves keyboard focus on whatever was focused before,
+        even though this window is the only thing visible. Matches a real
+        report: the carousel displayed but ignored every keypress until
+        clicked, which is exactly what forces an explicit focus change.
+        present() asks the WM for focus directly (_NET_ACTIVE_WINDOW),
+        without depending on that crossing event at all. Must run on
+        "map-event", not the earlier "show" signal - same ordering
+        constraint already confirmed for ohmydebn-menu-picker's own
+        map-event keyboard grab (see its on_map_grab_keyboard comment): the
+        X server hasn't necessarily finished mapping the window yet at
+        "show" time."""
+        self.present()
+        return False
 
     def move(self, delta):
         if not self.slugs:
@@ -922,6 +1219,55 @@ class Carousel(Gtk.Window):
             self._pixbuf_cache[key] = self._decode_pixbuf(load_cover_pixbuf, path, w, h)
         return self._pixbuf_cache[key]
 
+    def _set_ring_image(self, image, target_slug, w, h, want_index, synchronous):
+        """Populates one neighbor-ring thumbnail. `synchronous` decodes
+        (and caches) right here, on the spot, exactly like every render()
+        image already does elsewhere in this file - used for ring 0 (the
+        +-1 ring) so its latency is unchanged from before rings 2/3
+        existed. A non-synchronous ring only decodes inline on a cache
+        hit (already paid for, effectively free); on a genuine miss it
+        clears (rather than blocking) and finishes the decode on a
+        background thread, applying the result via GLib.idle_add once
+        ready - the same off-main-thread decode _schedule_prefetch()
+        already relies on elsewhere in this file, just triggered by the
+        current render() instead of speculatively ahead of one.
+        want_index (self.index at the moment this render() started) guards
+        the delayed apply: if the carousel has moved to a different theme
+        by the time the decode finishes, the result is cached (still
+        useful later) but not applied, so a slow decode for a theme
+        that's no longer showing can never clobber whatever's on screen
+        by then."""
+        path = neighbor_preview(target_slug) if target_slug is not None else None
+        if path is None:
+            image.clear()
+            return
+        key = ("cover", path, w, h)
+        if synchronous or key in self._pixbuf_cache:
+            pixbuf = self._cover_pixbuf(path, w, h)
+            if pixbuf:
+                image.set_from_pixbuf(pixbuf)
+            else:
+                image.clear()
+            return
+
+        image.clear()
+
+        def work():
+            pixbuf = self._decode_pixbuf(load_cover_pixbuf, path, w, h)
+
+            def apply():
+                self._pixbuf_cache[key] = pixbuf
+                if self.index == want_index:
+                    if pixbuf:
+                        image.set_from_pixbuf(pixbuf)
+                    else:
+                        image.clear()
+                return GLib.SOURCE_REMOVE
+
+            GLib.idle_add(apply)
+
+        threading.Thread(target=work, daemon=True).start()
+
     @staticmethod
     def _decode_pixbuf(loader, path, w, h):
         """list_backgrounds_for_theme() doesn't filter by extension (see
@@ -943,8 +1289,9 @@ class Carousel(Gtk.Window):
             return None
 
     def _apply_accent(self, slug):
-        """Recolors the card/side borders and the card's glow to slug's own
-        accent color - called once per theme_changed, not every render(),
+        """Recolors the card/side/search-box/caption-panel borders and the
+        card's glow to slug's own accent color - called once per
+        theme_changed, not every render(),
         since the accent only depends on which theme is centered, not
         which background within it. Cached per slug for the same reason
         the pixbuf cache exists: browsing back and forth over the same
@@ -959,7 +1306,38 @@ class Carousel(Gtk.Window):
             f"    box-shadow: 0 0 50px 10px {_rgba(accent, 0.6)};\n"
             "}\n"
             "#carousel-side {\n"
-            f"    border-color: {_rgba(accent, 0.25)};\n"
+            f"    border-color: {_rgba(accent, 0.8)};\n"
+            "}\n"
+            # A plain static ":hover" rule (in the CSS constant above)
+            # would never actually show - this same provider's bare
+            # "#carousel-side" rule right above already outranks it via
+            # priority alone (see the :not(:disabled) comment below), so
+            # the only way to get a real hover effect on these now-clickable
+            # thumbnails (see make_clickable_thumb_frame()) is to generate
+            # it here too, at the same PRIORITY_USER tier - full opacity
+            # against the normal state's 0.8 is enough of a "lit up" cue on
+            # its own, no separate brightening math needed.
+            "#carousel-side:hover {\n"
+            f"    border-color: {_rgba(accent, 1.0)};\n"
+            "}\n"
+            "#carousel-search {\n"
+            f"    border-color: {_rgba(accent, 0.92)};\n"
+            "}\n"
+            "#carousel-caption {\n"
+            f"    border-color: {_rgba(accent, 0.92)};\n"
+            "}\n"
+            # :not(:disabled), not a bare .carousel-nav-glyph rule - this
+            # provider outranks the static CSS block by priority alone
+            # (PRIORITY_USER beats PRIORITY_APPLICATION regardless of
+            # selector specificity), so an unscoped rule here would win
+            # even for a disabled D-pad button and paint its glyph in
+            # full accent color instead of the dimmed
+            # .carousel-nav-btn:disabled .carousel-nav-glyph rule that
+            # rule's meant to show - scoping to the enabled state leaves
+            # that disabled rule as the only match once a button really
+            # is disabled.
+            ".carousel-nav-btn:not(:disabled) .carousel-nav-glyph {\n"
+            f"    color: {_rgba(accent, 0.9)};\n"
             "}\n"
         )
         self._accent_provider.load_from_data(css.encode("utf-8"))
@@ -1014,18 +1392,45 @@ class Carousel(Gtk.Window):
 
         if theme_changed:
             self._apply_accent(slug)
-            left_slug = self.slugs[(self.index - 1) % n]
-            right_slug = self.slugs[(self.index + 1) % n]
-            left_path = preview_image(left_slug)
-            right_path = preview_image(right_slug)
-            if left_path:
-                self.left_image.set_from_pixbuf(self._cover_pixbuf(left_path, self.side_w, self.side_h))
-            else:
-                self.left_image.clear()
-            if right_path:
-                self.right_image.set_from_pixbuf(self._cover_pixbuf(right_path, self.side_w, self.side_h))
-            else:
-                self.right_image.clear()
+            # One iteration per RING_SPECS entry (offset = i+1: ring 0 is
+            # the +-1 ring right next to the card, ring 1 is +-2, and so
+            # on). A ring only shows once there are more than 2*offset
+            # themes total - below that, its +offset/-offset slugs either
+            # cross over and duplicate a *closer* ring's own slugs (shown
+            # on the opposite side, which reads as confusing rather than
+            # merely redundant) or, one step further out still, collapse
+            # into the same single slug on both of the ring's own sides.
+            # Neither is wrong exactly, but both look like a bug, so a
+            # ring that can't be populated with genuinely distinct
+            # neighbors just stays blank instead - every install with a
+            # realistic number of themes clears every ring's threshold
+            # easily and never hits this at all.
+            # Ring 0 (the +-1 ring) decodes synchronously, same as always -
+            # every ring beyond it is allowed to decode off the main thread
+            # instead (see _set_ring_image) so a cache-miss there (another
+            # full-resolution wallpaper decode - this repo ships originals
+            # up to ~36MP, 100-150ms apiece measured by hand) can't stall
+            # keyboard input the way blocking on up to six of those per
+            # keypress did before this split.
+            want_index = self.index
+            for i, (w, h) in enumerate(self.ring_dims):
+                offset = i + 1
+                reachable = n > 2 * offset
+                if reachable:
+                    left_slug = self.slugs[(self.index - offset) % n]
+                    right_slug = self.slugs[(self.index + offset) % n]
+                else:
+                    left_slug = right_slug = None
+                self._set_ring_image(self.left_images[i], left_slug, w, h, want_index, synchronous=(i == 0))
+                self._set_ring_image(self.right_images[i], right_slug, w, h, want_index, synchronous=(i == 0))
+                # A blank ring (see the "stays blank" comment above) would
+                # otherwise still be a live, clickable-but-invisible button -
+                # greyed out the same way the D-pad arrows are for n <= 1
+                # below, rather than leaving an empty hit target with no
+                # visual sign anything's there to click.
+                self.left_ring_btns[i].set_sensitive(reachable)
+                self.right_ring_btns[i].set_sensitive(reachable)
+
             self._last_theme_index = self.index
 
         # Background sub-carousel: only populated (and only reachable via
@@ -1040,6 +1445,8 @@ class Carousel(Gtk.Window):
         else:
             self.bg_above_image.clear()
             self.bg_below_image.clear()
+        self.bg_above_btn.set_sensitive(bg_n > 1)
+        self.bg_below_btn.set_sensitive(bg_n > 1)
 
         # Grey out (rather than hide) arrows with nothing to move to -
         # hiding them would change card_stack's/row's allocated size and
@@ -1140,6 +1547,21 @@ class Carousel(Gtk.Window):
 
     def on_key_press(self, widget, event):
         keyval = event.keyval
+        if self._search_open:
+            # While the search box is up, NOTHING here may fire. GTK3
+            # delivers key-press-event to the toplevel window's connected
+            # handlers BEFORE the window's default handler forwards the
+            # key to the focused widget - the exact opposite of "the entry
+            # consumes its own keystrokes first" - so without this guard,
+            # typing "c" into the search box launched Aether before the
+            # entry could insert the character (confirmed live). Returning
+            # False lets the default handler forward the key to the entry,
+            # whose own key-press-event (on_search_key) handles Escape/
+            # Enter; every other key becomes ordinary text input. This
+            # must sit above even the Escape arm below - a window-level
+            # Escape while searching should close just the box (the entry
+            # handler's job), not the whole carousel.
+            return False
         if keyval == Gdk.KEY_Escape:
             # A pending "Confirm Remove?" is exactly the kind of thing Esc
             # ought to be able to back out of on its own, without having to
@@ -1175,6 +1597,86 @@ class Carousel(Gtk.Window):
             return True
         if lower == Gdk.KEY_r and self.slugs and is_theme_removable(self.slugs[self.index]):
             self._on_remove_clicked()
+            return True
+        if lower == Gdk.KEY_s:
+            self.open_search()
+            return True
+        return False
+
+    def open_search(self):
+        """S (or the caption's Search link) floats a bare search entry at
+        the top of the window. There's deliberately no results list - each
+        keystroke jumps the carousel itself to the first matching theme
+        (see on_search_changed), so the normal full-size preview IS the
+        feedback. Nothing applies until Enter, same as arrow-key browsing:
+        jumping only re-renders. A pending remove-confirm is disarmed on
+        open - an armed "Confirm Remove?" left hot under the search box is
+        exactly the stale-arm scenario _arm_remove()'s own comment guards
+        against."""
+        if not self.slugs:
+            return
+        self._disarm_remove()
+        self._search_open = True
+        # Both widgets need an explicit show() - neither bulk variant works
+        # here (both confirmed live): container show() does NOT recurse, so
+        # bar.show() alone left the entry invisible (a visible-but-empty
+        # bar, focus grabbed by an invisible entry - exactly the "S does
+        # nothing" symptom); and bar.show_all() is a complete no-op because
+        # the bar itself carries no_show_all=True (that flag suppresses
+        # show_all even when called directly on the widget, including its
+        # whole subtree).
+        self.search_bar.show()
+        self.search_entry.show()
+        self.search_entry.grab_focus()
+
+    def close_search(self):
+        # _search_open drops BEFORE set_text("") - clearing the entry
+        # emits search-changed, and without the flag that empty needle
+        # would match every slug and jump the carousel to the first theme
+        # alphabetically just because the user dismissed the box.
+        self._search_open = False
+        self.search_entry.set_text("")
+        self.search_bar.hide()
+        # Focus belonged to the now-hidden entry - hand it back to the
+        # window itself so arrows/Esc reach on_key_press again instead of
+        # an invisible widget swallowing them.
+        self.set_focus(None)
+
+    def on_search_changed(self, entry):
+        if not self._search_open:
+            return
+        needle = entry.get_text().strip()
+        if not needle:
+            # Empty query stays put rather than jumping to the first theme
+            # alphabetically - clearing the box back out shouldn't yank
+            # the user away from wherever they'd already landed.
+            return
+        matches = filter_slugs(needle, self.slugs)
+        if matches:
+            # Jump = move() by the difference, never a parallel path:
+            # move() already owns wrap-around, background reseeding
+            # (_load_backgrounds) and the re-render, so a search jump gets
+            # all three exactly the way Left/Right get them.
+            self.move(self.slugs.index(matches[0]) - self.index)
+        # No match: stay where we are. The query narrowing to zero results
+        # mid-keystroke is normal (e.g. "tokyox"); silently holding the
+        # last good match is less jarring than blanking anything out.
+
+    def on_search_key(self, widget, event):
+        keyval = event.keyval
+        if keyval == Gdk.KEY_Escape:
+            # Escape dismisses just the search box, leaving the carousel
+            # where the search landed it - search doubles as pure
+            # navigation that way, and a second Escape still closes the
+            # carousel outright (same layering as the remove-arming Esc).
+            self.close_search()
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            # Enter from inside the box applies the displayed theme
+            # directly - the user has already seen the full-size preview
+            # by the time they press it, so requiring a second Enter
+            # after closing the box would be pure ceremony.
+            self.finish(self.slugs[self.index] if self.slugs else None)
             return True
         return False
 
@@ -1280,6 +1782,9 @@ class Carousel(Gtk.Window):
         self.render()
 
     def on_shortcuts_link_activated(self, label, uri):
+        if uri == SEARCH_THEMES_ACTION:
+            self.open_search()
+            return True
         if uri == CREATE_THEME_ACTION:
             self.open_aether()
             return True
@@ -1309,6 +1814,10 @@ class Carousel(Gtk.Window):
             return
         self.name_label.set_text(f"Applying {slug_to_display(slug)}…")
         self.shortcuts_label.set_text("")
+        # An Enter pressed inside the search box arrives here with the box
+        # still up - hide it so the dimmed "Applying…" screen is clean.
+        self._search_open = False
+        self.search_bar.hide()
         self.card_image.set_opacity(0.5)
         for button in (
             self.left_arrow_btn, self.right_arrow_btn,

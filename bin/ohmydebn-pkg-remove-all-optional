@@ -59,3 +59,11 @@ for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudf
     "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt
   fi
 done
+
+# Pi doesn't fit the loop above - its dpkg package name
+# (ohmydebn-pi-coding-agent) isn't the same string as its remove script's
+# ohmydebn-pi-remove (the loop assumes both are the same $PACKAGE, true
+# for every other entry there but not for Pi's short script name).
+if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
+fi

@@ -281,10 +281,11 @@ show_install_browser_menu() {
 }
 
 show_install_ai_menu() {
-  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)") in
+  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)") in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_install_menu ;;

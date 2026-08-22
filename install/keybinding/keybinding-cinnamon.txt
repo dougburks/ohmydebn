@@ -1,5 +1,6 @@
 keybinding-cinnamon "wm" "switch-panels" "['']" "Removing default hotkey for switch-panels"
 keybinding-cinnamon "wm" "switch-panels-backward" "['']" "Removing default hotkey for switch-panels-backward"
+keybinding-gnome "switch-input-source" "['']" "Removing default hotkey for switch-input-source (next layout) so Super + Space is free for the OhMyDebn menu"
 keybinding-cinnamon "wm" "switch-to-workspace-1" "['<Super>1']" "Press Super + 1 to switch to workspace 1"
 keybinding-cinnamon "wm" "switch-to-workspace-2" "['<Super>2']" "Press Super + 2 to switch to workspace 2"
 keybinding-cinnamon "wm" "switch-to-workspace-3" "['<Super>3']" "Press Super + 3 to switch to workspace 3"

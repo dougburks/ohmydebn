@@ -17,6 +17,13 @@ if [ ! -f $KEYBINDING_STATE ]; then
     eval "$CMD"
   }
 
+  function keybinding-gnome() {
+    local CMD
+    echo "$3"
+    CMD="gsettings set org.gnome.desktop.wm.keybindings $1 \"$2\""
+    eval "$CMD"
+  }
+
   function keybinding-custom() {
     local GSETTINGS1 GSETTINGS2 GSETTINGS3
     echo "$5"

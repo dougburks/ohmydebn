@@ -34,9 +34,9 @@
 # Browse opens bjarneo.github.io/omarchy-themes (a visual, searchable theme
 # gallery) and closes this carousel rather than leaving it open - picking a
 # theme there triggers a registered aether:// URI handler (confirmed real:
-# see ~/.local/share/applications/aether-protocol-handler.desktop ->
-# `aether --import-blueprint %u --auto-apply`) that installs and applies it
-# directly, no need to come back here at all.
+# see /usr/share/applications/li.oever.aether.url-handler.desktop ->
+# `aether --handle-url %u`) that installs and applies it directly, no need
+# to come back here at all.
 #
 # Each theme's preview.png (where present - about half the themes have one;
 # it's each theme's original upstream Omarchy/Hyprland promo mockup, not an

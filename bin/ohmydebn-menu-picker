@@ -603,6 +603,7 @@ class Picker(Gtk.Window):
         scroller.set_max_content_height(max_height)
         scroller.set_propagate_natural_height(True)
         outer.pack_start(scroller, True, True, 0)
+        self.scroller = scroller
 
         self.listbox = Gtk.ListBox()
         self.listbox.set_name("picker-list")
@@ -873,6 +874,20 @@ class Picker(Gtk.Window):
             self.finish(row.value if row is not None else None)
         return GLib.SOURCE_REMOVE
 
+    def page_size(self):
+        """How many rows Page Up/Down should jump - a full screenful, not a
+        fixed count. The scroller's viewport height varies with monitor
+        size and list length (see the propagate_natural_height comment
+        above), so 8 was right for some lists and wrong for others -
+        measuring the real row height against the real viewport height is
+        the only way to match a full page for any given picker."""
+        rows = self.listbox.get_children()
+        row_height = rows[0].get_allocated_height() if rows else 0
+        viewport_height = self.scroller.get_allocated_height()
+        if row_height <= 0 or viewport_height <= 0:
+            return 8
+        return max(1, viewport_height // row_height)
+
     def move_selection(self, keyval):
         rows = self.listbox.get_children()
         if not rows:
@@ -890,9 +905,9 @@ class Picker(Gtk.Window):
         elif keyval == Gdk.KEY_End:
             index = last
         elif keyval == Gdk.KEY_Page_Down:
-            index = min(index + 8, last)
+            index = min(index + self.page_size(), last)
         elif keyval == Gdk.KEY_Page_Up:
-            index = max(index - 8, 0)
+            index = max(index - self.page_size(), 0)
 
         new_row = self.listbox.get_row_at_index(index)
         if new_row is None:

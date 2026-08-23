@@ -66,3 +66,13 @@ if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
   sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc
   touch $OPENCODE_CLI_ALIAS_STATE
 fi
+
+CLAUDE_ALIAS_STATE=~/.local/state/ohmydebn-config/claude-alias
+if [ ! -f $CLAUDE_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Claude Code CLI, run in the current terminal
+alias claude='/usr/share/ohmydebn/bin/ohmydebn-claude-code-cli'
+EOF
+  touch $CLAUDE_ALIAS_STATE
+fi

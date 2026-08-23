@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Companion to ohmydebn-claude-code: that script launches Claude Code in a
+# new terminal window (via ohmydebn-terminal), for use from the app
+# launcher/menu. This one runs claude directly in the caller's existing
+# terminal - the shape a shell alias needs, matching ohmydebn-opencode-cli's
+# relationship to ohmydebn-opencode and ohmydebn-pi-cli's relationship to
+# ohmydebn-pi.
+
+if ! dpkg -s "claude-code" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-claude-code-install
+fi
+
+exec /usr/bin/claude "$@"

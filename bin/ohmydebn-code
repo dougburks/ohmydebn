@@ -7,5 +7,7 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "code" >/dev/null 2>&1; then
-  /usr/bin/code
+  # "$@" lets ohmydebn-ai-cli pass a directory to open (e.g. $PWD) while
+  # every other caller (menu picks, ohmydebn-ai) still runs with no args.
+  /usr/bin/code "$@"
 fi

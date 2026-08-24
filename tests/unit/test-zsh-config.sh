@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Unit tests for install/config/zsh.sh, focused on the two newest
-# state-gated blocks: PI_ALIAS_STATE (appends the `pi` alias, same shape as
-# the pre-existing GRC_STATE/COLOR_MAN_STATE blocks - deliberately NOT
-# baked into config/.zshrc itself, so it doesn't double up on a fresh
-# install where ZSHRC_STATE also copies the template) and
+# Unit tests for install/config/zsh.sh, focused on the newest state-gated
+# blocks: PI_ALIAS_STATE and AI_CLI_ALIAS_STATE (append the `pi` and `a`
+# aliases, same shape as the pre-existing GRC_STATE/COLOR_MAN_STATE blocks -
+# deliberately NOT baked into config/.zshrc itself, so they don't double up
+# on a fresh install where ZSHRC_STATE also copies the template) and
 # OPENCODE_CLI_ALIAS_STATE (a one-time sed migration of the pre-existing
 # `c` alias on installs provisioned before ohmydebn-opencode-cli existed).
 
@@ -48,6 +48,10 @@ assert_eq "fresh install: pi-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/pi-alias" ] && echo yes || echo no)"
 assert_eq "fresh install: opencode-cli-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/opencode-cli-alias" ] && echo yes || echo no)"
+AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
+assert_eq "fresh install: a alias appears exactly once" "1" "$AI_CLI_COUNT"
+assert_eq "fresh install: ai-cli-alias state marker written" "yes" \
+  "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias" ] && echo yes || echo no)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -76,6 +80,8 @@ assert_not_contains "pre-existing install: old c alias value gone" "$ZSHRC_CONTE
   "alias c='/usr/bin/opencode-cli'"
 PI_COUNT=$(grep -Fc "alias pi='$MOCK_BIN/ohmydebn-pi-cli'" "$SCRATCH_HOME/.zshrc")
 assert_eq "pre-existing install: pi alias appended exactly once" "1" "$PI_COUNT"
+AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
+assert_eq "pre-existing install: a alias appended exactly once" "1" "$AI_CLI_COUNT"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -88,16 +94,20 @@ mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/zshrc-20260116"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/pi-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/opencode-cli-alias"
+touch "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias"
 cat >"$SCRATCH_HOME/.zshrc" <<'EOF'
 # Aliases
 alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'
 alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'
+alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
 EOF
 HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/zsh-patched.sh" >/dev/null 2>&1
 PI_COUNT=$(grep -c "^alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'\$" "$SCRATCH_HOME/.zshrc")
 C_COUNT=$(grep -c "^alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'\$" "$SCRATCH_HOME/.zshrc")
+AI_CLI_COUNT=$(grep -c "^alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'\$" "$SCRATCH_HOME/.zshrc")
 assert_eq "already migrated: pi alias still appears exactly once" "1" "$PI_COUNT"
 assert_eq "already migrated: c alias still appears exactly once" "1" "$C_COUNT"
+assert_eq "already migrated: a alias still appears exactly once" "1" "$AI_CLI_COUNT"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

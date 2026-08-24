@@ -76,3 +76,14 @@ alias claude='/usr/share/ohmydebn/bin/ohmydebn-claude-code-cli'
 EOF
   touch $CLAUDE_ALIAS_STATE
 fi
+
+AI_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/ai-cli-alias
+if [ ! -f $AI_CLI_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Default AI assistant, run in the current terminal (or opened on \$PWD for
+# GUI defaults like VS Code/Antigravity/ChatGPT)
+alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
+EOF
+  touch $AI_CLI_ALIAS_STATE
+fi

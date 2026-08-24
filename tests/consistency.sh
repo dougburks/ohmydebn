@@ -563,6 +563,21 @@ else
 fi
 
 echo
+echo "-- ohmydebn-ai-cli agrees with ohmydebn-ai-set-default on the set of AI names --"
+# Same drift risk as the check above, for the `a` alias's target: if a name
+# is ever added to ohmydebn-ai-set-default's case statement without also
+# adding a matching arm to ohmydebn-ai-cli (or vice versa), Super+A and `a`
+# would silently disagree on what the same stored default launches.
+AI_CLI_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai-cli"
+mapfile -t AI_CLI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z-]*(?=\) exec)' "$AI_CLI_SCRIPT" | sort -u)
+if [[ "$(printf '%s\n' "${AI_CLI_DISPATCH_NAMES[@]}")" != "$(printf '%s\n' "${AI_VALID_NAMES[@]}")" ]]; then
+  echo "  FAIL - ohmydebn-ai-cli's dispatch names (${AI_CLI_DISPATCH_NAMES[*]}) don't match ohmydebn-ai-set-default's accepted names (${AI_VALID_NAMES[*]})"
+  FAIL=$((FAIL + 1))
+else
+  echo "  both scripts agree on: ${AI_CLI_DISPATCH_NAMES[*]}"
+fi
+
+echo
 echo "-- local-share.sh and theme-carousel agree on the legacy aether desktop filenames --"
 # Both remove the same stale per-user desktop files (see either one's own
 # comment for why) - install/cleanup/local-share.sh sweeps them once per

@@ -7,5 +7,7 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "chatgpt" >/dev/null 2>&1; then
-  /usr/bin/chatgpt
+  # "$@" lets ohmydebn-ai-cli pass a directory to open (e.g. $PWD) while
+  # every other caller (menu picks, ohmydebn-ai) still runs with no args.
+  /usr/bin/chatgpt "$@"
 fi

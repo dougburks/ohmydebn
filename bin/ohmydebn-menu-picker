@@ -585,6 +585,9 @@ class Picker(Gtk.Window):
             else set()
         )
         self._closing = False
+        # --serve mode only: id of a pending deferred-close timeout (see
+        # _schedule_close()/reload()), or None when nothing's scheduled.
+        self._pending_close_id = None
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         outer.set_border_width(12)
@@ -734,10 +737,18 @@ class Picker(Gtk.Window):
         window is undecorated and skip-taskbar) window title to the new
         breadcrumb - harmless, and lets external tooling (a test, xdotool)
         observe when a reload has actually landed without touching the
-        real request/response protocol. Also re-shows the window -
-        finish() hides it on every request's result (see its own comment
-        on why), so this is what brings it back for whatever screen comes
-        next."""
+        real request/response protocol. Also cancels a pending deferred
+        close (see _schedule_close()) before it can fire - a reload() this
+        soon after a pick means this session isn't over after all, so
+        self.show() below is a no-op on a window that was visible the
+        whole time rather than an actual re-show. (If the close already
+        fired, this process has already quit and reload() can't be called
+        on it at all - get_picker_result on the bash side would have
+        already noticed via kill -0 and fallen back to a fresh one-shot
+        spawn instead.)"""
+        if self._pending_close_id is not None:
+            GLib.source_remove(self._pending_close_id)
+            self._pending_close_id = None
         self.show()
         self.set_title(breadcrumb_prefix or "Menu")
         self.categories = _with_icons(load_categories(go_items))
@@ -1061,20 +1072,19 @@ class Picker(Gtk.Window):
             elif self.mode == "windows":
                 activate_window(value)
             elif self.on_result is not None:
-                # Hidden, not quit - the process stays alive for reload()
-                # to bring it back for whatever screen comes next, but the
-                # *window* must disappear right now: the bash side runs
-                # whatever this pick launches synchronously, and if that's
-                # a foreground GUI app (About, Demo, ...) rather than
-                # another menu level, nothing else would tell this window
-                # to go away until that app closes and the whole
-                # ohmydebn-menu process finally exits - confirmed as a
-                # real report ("the menu remains visible until the
-                # launched app is closed"). A plain reload() a moment
-                # later (the submenu-navigation case) re-shows it there,
-                # fast enough that hiding unconditionally here doesn't
-                # cost the seamless feel of drilling into a submenu.
-                self.hide()
+                # Doesn't quit outright here, in case reload() brings this
+                # window back for whatever screen comes next - but if
+                # nothing does, this process has no reason to keep running
+                # at all: bin/ohmydebn-menu never loops back to show_main_menu,
+                # so a pick with no reload() following it means the whole
+                # script is headed for its natural end (and its EXIT trap)
+                # anyway, whether or not what it just launched (About,
+                # Demo, ...) is still open - see _schedule_close() for why
+                # this is deferred instead of decided immediately (the
+                # picker can't tell "submenu" from "leaf" from the picked
+                # label alone; only bash's own case statement, which runs
+                # after this call already returned, knows that).
+                self._schedule_close()
                 self.on_result(value)
                 return  # stay open - reload() handles the next request
             else:
@@ -1082,12 +1092,49 @@ class Picker(Gtk.Window):
         elif self.on_result is not None:
             # Escape/click-away within one --serve request still needs a
             # response, or the driver's blocking read on the other end of
-            # this request's response pipe would hang forever. Hidden for
-            # the same reason as the real-value case above.
-            self.hide()
+            # this request's response pipe would hang forever. Many
+            # case-statement fallback arms in bin/ohmydebn-menu re-open the
+            # same or parent menu on an empty result, so this can be just
+            # as fast a round-trip as a real pick - same deferred close.
+            self._schedule_close()
             self.on_result("")
             return
         Gtk.main_quit()
+
+    # --serve mode only. Called at pick time, when the picker itself has no
+    # way to know yet whether the bash side is about to call reload() again
+    # (drilling into/back out to another submenu - the common case, and
+    # fast: no process spawn, no external command, just local pipe I/O) or
+    # run some real synchronous command first, with this session's picker
+    # never needed again (the case this exists for). Deferring the close
+    # behind a short timeout and having reload() cancel it (below) means
+    # the common case never even hides, let alone quits - populate() just
+    # swaps the visible content in place - while the process for a real
+    # leaf pick actually exits, rather than lingering hidden until
+    # whatever it launched eventually closes and the whole ohmydebn-menu
+    # script's EXIT trap finally reaps it. 120ms: comfortably past every
+    # observed local round-trip (FIFO write + bash's read/case dispatch +
+    # FIFO write back, all local pipe I/O - no process spawn on this path),
+    # while still short enough that a genuine external launch never reads
+    # as "stuck open".
+    CLOSE_DELAY_MS = 120
+
+    def _schedule_close(self):
+        if self._pending_close_id is None:
+            self._pending_close_id = GLib.timeout_add(self.CLOSE_DELAY_MS, self._deferred_close)
+
+    def _deferred_close(self):
+        self._pending_close_id = None
+        # No self.hide() first - Gtk.main_quit() unwinds run_serve_mode's
+        # Gtk.main() call, which closes both FIFOs and lets the process
+        # exit, taking the window down with it. Exactly what the original,
+        # pre-persistent-picker one-shot finish() already did on a real
+        # pick (fall through to this same Gtk.main_quit() with no hide()
+        # of its own) - that was never the source of the "stays visible"
+        # report; only --serve mode's finish() returning early to stay
+        # alive, unconditionally, was.
+        Gtk.main_quit()
+        return GLib.SOURCE_REMOVE
 
 
 def run_serve_mode(request_fifo_path, response_fifo_path):

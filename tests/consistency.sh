@@ -455,7 +455,7 @@ else
 fi
 
 echo
-echo "-- finish() hides the persistent-picker window before running a pick (regression guard) --"
+echo "-- finish() closes the persistent-picker process before running a leaf pick (regression guard) --"
 # A real report: "the menu remains visible until the launched app is
 # closed" - e.g. picking About or Demo. --serve mode's window stays alive
 # across a whole ohmydebn-menu session (see resize_to_content's comment on
@@ -464,22 +464,40 @@ echo "-- finish() hides the persistent-picker window before running a pick (regr
 # navigation, but a leaf pick runs its command synchronously on the bash
 # side with no further reload() coming, so nothing hid the window until
 # that command finished and the whole session's EXIT trap finally fired.
-# finish() now hides it immediately on every pick (real or cancelled);
-# reload() re-shows it if another screen follows.
+#
+# finish() no longer hides immediately, though - that traded the stuck-open
+# bug for a different real report, a visible hide-then-reshow flash on
+# every ordinary submenu pick (the common case, and fast: no process spawn,
+# just local pipe I/O). It now schedules a close via _schedule_close()
+# instead, and reload() cancels it if another screen follows within
+# CLOSE_DELAY_MS - which the fast submenu-navigation round trip always
+# does, so that path never even hides, let alone quits. bin/ohmydebn-menu
+# never loops back to show_main_menu, so a pick with no reload() following
+# it means this session's picker really is done for good - the deferred
+# callback actually quits the process (Gtk.main_quit(), same as the
+# original one-shot mode's own finish()), not just hides the window, so it
+# doesn't linger as a hidden process until whatever it launched closes and
+# the whole ohmydebn-menu script's EXIT trap eventually reaps it.
 FINISH_START=$(grep -n '^    def finish(self, value):' "$PICKER_FILE" | head -1 | cut -d: -f1)
 FINISH_REL_END=$(tail -n "+$FINISH_START" "$PICKER_FILE" | grep -n '^    def \|^def ' | sed -n '2p' | cut -d: -f1)
 FINISH_BLOCK=$(sed -n "${FINISH_START},$((FINISH_START + FINISH_REL_END - 2))p" "$PICKER_FILE")
 if [[ -z "$FINISH_START" ]]; then
   echo "  FAIL - couldn't find finish() in $(basename "$PICKER_FILE") - did it get renamed?"
   FAIL=$((FAIL + 1))
-elif [[ "$(grep -c 'self\.hide()' <<<"$FINISH_BLOCK")" -lt 2 ]]; then
-  echo "  FAIL - finish() no longer hides the window on both the real-value and cancelled paths back to on_result - a leaf pick (About, Demo, ...) will stay visible again until whatever it launches closes"
+elif [[ "$(grep -c 'self\._schedule_close()' <<<"$FINISH_BLOCK")" -lt 2 ]]; then
+  echo "  FAIL - finish() no longer schedules a close on both the real-value and cancelled paths back to on_result - a leaf pick (About, Demo, ...) will stay visible again until whatever it launches closes"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -A5 'def _deferred_close' "$PICKER_FILE" | grep -q 'Gtk\.main_quit()'; then
+  echo "  FAIL - _schedule_close()'s own timeout callback no longer actually quits the process - a leaf pick would leave it hidden but running forever now"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'GLib\.source_remove' "$PICKER_FILE"; then
+  echo "  FAIL - nothing cancels a pending deferred close from reload() - every ordinary submenu pick would regress back to the hide-then-reshow flash (or worse, an outright quit) this was written to fix"
   FAIL=$((FAIL + 1))
 elif ! grep -q 'self.show()' "$PICKER_FILE"; then
-  echo "  FAIL - nothing re-shows the window after finish() hides it - every screen after the first pick of a session would stay invisible"
+  echo "  FAIL - nothing re-shows the window when reload() cancels a pending close in time - every screen after the first pick of a session would stay invisible"
   FAIL=$((FAIL + 1))
 else
-  echo "  finish() hides the window on both on_result paths, and something re-shows it for the next screen"
+  echo "  finish() schedules a close on both on_result paths, reload() cancels it for a fast submenu round trip, and the window stays visible/shown throughout that path"
 fi
 
 echo

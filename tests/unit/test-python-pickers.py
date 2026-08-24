@@ -1241,5 +1241,115 @@ finally:
     shutil.rmtree(fixture5)
 
 print()
+print("=== Picker: deferred-close scheduling (--serve mode's flash/stuck-open fix) ===")
+
+
+class _FakePicker(mp.Picker):
+    """Exercises finish()/_schedule_close()/_deferred_close()/reload()'s
+    cancellation against a stub that skips Picker.__init__() entirely -
+    same technique _FakeCarousel uses above, for the same reason: a real
+    Picker() needs a live X display (__init__ calls get_monitor_geometry(),
+    which needs Gdk.Display.get_default() - see this module's own
+    docstring). show()/set_title()/populate() are stubbed because *they*
+    need a genuinely realized window/listbox underneath that this bare
+    stub doesn't have - but none of that is what's under test here. The
+    scheduling logic itself (_pending_close_id, _schedule_close(),
+    _deferred_close(), reload()'s cancel-if-pending check) only ever
+    touches plain attributes and real GLib.timeout_add()/source_remove()
+    calls, which need no display at all - confirmed by hand, this whole
+    class instantiates and runs with no DISPLAY set."""
+
+    def __init__(self, on_result=None):  # pylint: disable=super-init-not-called
+        self.mode = "menu"
+        self._closing = False
+        self._pending_close_id = None
+        self.on_result = on_result
+        self.entry = _FakeSearchEntry()
+        self.show_calls = 0
+
+    def show(self):
+        self.show_calls += 1
+
+    def set_title(self, _title):
+        pass
+
+    def populate(self, _rows):
+        pass
+
+
+_main_quit_calls = []
+_real_main_quit = mp.Gtk.main_quit
+mp.Gtk.main_quit = lambda: _main_quit_calls.append(1)
+_leaked_pickers = []
+try:
+    results = []
+    win = _FakePicker(on_result=results.append)
+    win.finish("Install")
+    check_eq("finish(value): on_result gets the value", results, ["Install"])
+    check("finish(value): schedules a pending close instead of hiding/quitting immediately", win._pending_close_id is not None)
+    check_eq("finish(value): doesn't quit immediately - reload() might still be a moment away", len(_main_quit_calls), 0)
+    _leaked_pickers.append(win)
+
+    # The common case: another menu() call (a submenu pick) arrives before
+    # the close would fire. reload() must cancel it - this is the actual
+    # flash fix, not just a hide/show optimization: the window was never
+    # meant to disappear for this pick at all.
+    win2 = _FakePicker(on_result=lambda v: None)
+    win2.finish("Install")
+    check("reload() cancels a pending close", win2._pending_close_id is not None)
+    win2.reload("", "Install")
+    check("reload() actually clears the pending close", win2._pending_close_id is None)
+    check_eq("reload() shows the window", win2.show_calls, 1)
+    check_eq("a cancelled close never fires", len(_main_quit_calls), 0)
+
+    # No pending close (e.g. the session's first request): reload() is
+    # still just a normal show, not an error on a no-op cancel.
+    win3 = _FakePicker(on_result=lambda v: None)
+    win3.reload("", "")
+    check_eq("reload() with nothing pending still shows", win3.show_calls, 1)
+
+    # The rare case: nothing calls reload() in time (a real leaf pick -
+    # About, Demo, ... - bin/ohmydebn-menu never loops back to
+    # show_main_menu, so nothing else is coming). The deferred callback
+    # must actually quit the process, not just hide the window - a hidden
+    # process would linger until whatever it launched closes and the
+    # whole ohmydebn-menu script's own EXIT trap finally reaps it, which
+    # is the exact bug this whole mechanism exists to avoid.
+    win4 = _FakePicker(on_result=lambda v: None)
+    win4.finish("About")
+    win4._deferred_close()
+    check_eq("an uncancelled close quits the process", len(_main_quit_calls), 1)
+    check("an uncancelled close clears _pending_close_id", win4._pending_close_id is None)
+
+    # Escape/click-away (empty result) schedules a close the same way -
+    # many case-statement fallback arms in bin/ohmydebn-menu re-open the
+    # same or parent menu on an empty result, so this needs to be just as
+    # cancellable as a real pick, not hidden/quit unconditionally.
+    results5 = []
+    win5 = _FakePicker(on_result=results5.append)
+    win5.finish(None)
+    check_eq("finish(None) (escape/cancel): on_result gets empty string", results5, [""])
+    check("finish(None): also schedules a pending close", win5._pending_close_id is not None)
+    _leaked_pickers.append(win5)
+
+    # _schedule_close() itself doesn't double-schedule if called twice -
+    # a defensive check on the primitive, independent of finish()'s own
+    # single-call-per-pick guard (_closing).
+    win6 = _FakePicker(on_result=lambda v: None)
+    win6._schedule_close()
+    first_id = win6._pending_close_id
+    win6._schedule_close()
+    check_eq("_schedule_close() doesn't double-schedule", win6._pending_close_id, first_id)
+    _leaked_pickers.append(win6)
+finally:
+    mp.Gtk.main_quit = _real_main_quit
+    # win/win5/win6 above scheduled a real close and neither cancelled nor
+    # fired it - nothing in this process ever runs a GLib main loop, so a
+    # leaked source is harmless here either way, but leave nothing armed.
+    for leaked in _leaked_pickers:
+        if leaked._pending_close_id is not None:
+            mp.GLib.source_remove(leaked._pending_close_id)
+
+print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(0 if TESTS_FAILED == 0 else 1)

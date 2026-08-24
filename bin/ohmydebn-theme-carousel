@@ -134,8 +134,32 @@ REMOVE_ARM_TIMEOUT_MS = 4000
 
 BROWSE_THEMES_URL = "https://bjarneo.github.io/omarchy-themes/"
 
+# Same two names as install/cleanup/local-share.sh's own cleanup loop -
+# keep both lists in sync if either ever changes. That one runs once per
+# ohmydebn-update; this one runs fresh right before the one action that
+# actually sends the user to a page that can fire an aether:// callback,
+# in case aether re-creates either file on its own each time it runs (it's
+# not this repo's code, so that can't be ruled out) - a stale one here
+# would silently skip the confirmation guard for however long until the
+# next update.
+LEGACY_AETHER_DESKTOP_FILES = (
+    "aether-protocol-handler.desktop",
+    "li.oever.aether.url-handler.desktop",
+)
+
 CREATE_THEME_ACTION = "action:create-theme"
 SEARCH_THEMES_ACTION = "action:search-themes"
+
+
+def remove_legacy_aether_desktop_files():
+    apps_dir = os.path.expanduser("~/.local/share/applications")
+    for name in LEGACY_AETHER_DESKTOP_FILES:
+        path = os.path.join(apps_dir, name)
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
 
 def build_shortcuts_markup():
     # Name first, shortcut letter last - matches Cancel/Apply/Remove's own
@@ -1681,6 +1705,7 @@ class Carousel(Gtk.Window):
         return False
 
     def open_browse_themes(self):
+        remove_legacy_aether_desktop_files()
         try:
             Gtk.show_uri_on_window(self, BROWSE_THEMES_URL, Gdk.CURRENT_TIME)
         except GLib.Error:

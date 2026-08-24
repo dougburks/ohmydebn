@@ -1,0 +1,284 @@
+#!/usr/bin/python3
+#
+# ohmydebn-aether-url-guard: confirms and reviews an aether:// link before
+# handing it to the real Aether binary. Aether itself ships in the separate
+# ohmydebn-aether package (built by a companion fpm packaging script, not
+# part of this repo), which also owns li.oever.aether.url-handler.desktop -
+# that file's Exec= needs to point here instead of straight at the aether
+# binary, so every aether:// click - from any website, not just the
+# intended theme gallery - routes through here first.
+#
+# Why this exists: aether:// URLs carry no origin/referrer information (the
+# OS protocol-handler dispatch never passes one), so nothing at this layer
+# can verify which page a click came from - a wrapper can only inspect the
+# URL string itself. And bjarneo.github.io/omarchy-themes's own "Apply"
+# button sets `silent=true`, which makes Aether skip its own confirmation
+# dialog entirely - that's normal, intended behavior for that site, not an
+# attack. So today there is no working prompt distinguishing "the real
+# gallery's Apply button" from "any other site copying the same URL shape".
+# This restores one: every aether:// apply is confirmed here, with the
+# payload's actual host surfaced (and flagged loudly if it isn't the one
+# host the real gallery's theme/wallpaper data has ever pointed at:
+# wallpapers.hel1.your-objectstorage.com - see the omarchy-themes site's own
+# wallpapers.js) and the raw URL itself, ignoring what the link's own
+# silent= flag requested (always asks regardless).
+#
+# The dialog is a plain themed Gtk.Window, not zenity - built the same way
+# ohmydebn-menu-picker builds its own (undecorated, square corners via CSS,
+# colored from the same ~/.config/ohmydebn/current/picker-colors file every
+# theme change already regenerates), so it looks like the rest of ohmydebn
+# instead of a generic system dialog, and reads as plain text (no Pango
+# markup parsing to trip over on a raw URL full of '&'s).
+#
+# Fails closed throughout: a malformed URL, wrong scheme/action, or "no" at
+# the prompt all mean Aether is never launched, never a fallback into it.
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gtk
+
+import os
+import subprocess
+import sys
+from urllib.parse import parse_qsl, urlsplit
+
+AETHER_BIN = "/usr/share/aether/aether"
+
+# The one host every colors=/wallpaper= URL on bjarneo.github.io/omarchy-themes
+# has pointed at, per its own wallpapers.js (window.WALLPAPERS_BASE_URL). Not
+# a promise from Aether or from that site - just the only value observed -
+# so a mismatch is a strong signal, not a guarantee either way.
+KNOWN_PAYLOAD_HOST = "wallpapers.hel1.your-objectstorage.com"
+
+PAYLOAD_PARAMS = ("colors", "wallpaper", "external_theme")
+
+# Same fallback palette ohmydebn-menu-picker uses when no theme has run yet.
+DEFAULT_COLORS = {
+    "bg0": "rgba(20, 20, 24, 0.95)",
+    "bg1": "rgba(20, 20, 24, 1)",
+    "bg3": "rgba(90, 90, 220, 0.95)",
+    "fg0": "rgba(230, 230, 230, 1)",
+}
+
+CSS_TEMPLATE = """
+#guard-window {{
+    background-color: {bg0};
+    border: 2px solid {bg3};
+}}
+#guard-window label {{
+    color: {fg0};
+}}
+#guard-title {{
+    font-weight: bold;
+    font-size: 14pt;
+}}
+#guard-window button {{
+    background-color: {bg1};
+    color: {fg0};
+    border: 2px solid {bg3};
+    border-radius: 0;
+    padding: 6px 18px;
+}}
+#guard-window button:hover {{
+    background-color: {bg3};
+    color: {bg1};
+}}
+* {{
+    font-family: "CaskaydiaMono Nerd Font";
+    font-size: 11pt;
+}}
+"""
+
+
+def hex_to_rgba(hex_value):
+    hex_value = hex_value.lstrip("#")
+    r = int(hex_value[0:2], 16)
+    g = int(hex_value[2:4], 16)
+    b = int(hex_value[4:6], 16)
+    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
+    return f"rgba({r}, {g}, {b}, {a:.3f})"
+
+
+def load_theme_colors():
+    """Same file, same format, same fallback as ohmydebn-menu-picker's own
+    load_theme_colors() - ohmydebn-theme-set-picker writes it fresh on every
+    theme change, so this dialog always matches whatever theme is active."""
+    colors = dict(DEFAULT_COLORS)
+    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                key, _, value = line.strip().partition("=")
+                if key and value:
+                    colors[key] = hex_to_rgba(value)
+    except OSError:
+        pass
+    return colors
+
+
+def payload_host(raw_value):
+    try:
+        return urlsplit(raw_value).hostname or "(no host)"
+    except ValueError:
+        return "(unparsable)"
+
+
+def build_confirmation(raw_url):
+    """Parses an aether:// URL and decides what to show. Pure - no GTK, no
+    subprocess, no filesystem access - so this is what the test suite
+    exercises directly, without needing a display.
+
+    Returns either:
+      ("refuse", message)
+      ("confirm", title, body, forward_url)
+    """
+    parts = urlsplit(raw_url)
+
+    if parts.scheme != "aether":
+        return ("refuse", f"Expected an aether:// link, got scheme {parts.scheme!r}.")
+
+    action = parts.netloc or parts.path.lstrip("/")
+    if action != "apply":
+        return ("refuse", f"Unsupported Aether action {action!r} (expected 'apply').")
+
+    params = dict(parse_qsl(parts.query, keep_blank_values=True))
+
+    payloads = [(name, params[name]) for name in PAYLOAD_PARAMS if params.get(name)]
+    if not payloads:
+        return ("refuse", "This Aether link has no colors=, wallpaper=, or external_theme= payload.")
+
+    lines = []
+    if theme_name := params.get("as_omarchy_theme"):
+        lines.append(f"Installs as theme: {theme_name}")
+        lines.append("")
+
+    mismatched = False
+    for name, value in payloads:
+        host = payload_host(value)
+        flag = ""
+        if host != KNOWN_PAYLOAD_HOST:
+            flag = "  ⚠ NOT the known theme-gallery host"
+            mismatched = True
+        lines.append(f"{name}: {host}{flag}")
+
+    lines.append("")
+    lines.append("Raw URL:")
+    lines.append(raw_url)
+
+    title = "Unrecognized theme source — review before continuing" if mismatched else "Apply theme with Aether?"
+    body = "\n".join(lines)
+    return ("confirm", title, body, raw_url)
+
+
+def show_dialog(title, body, button_labels):
+    """Undecorated, theme-colored, square-cornered modal dialog, centered on
+    screen, matching ohmydebn-menu-picker's own look (same CSS-provider +
+    picker-colors mechanism). button_labels are shown left-to-right; returns
+    the index of the clicked one, or None if the window closed without a
+    click (Escape, window-manager close, no display available).
+    """
+    if not Gtk.init_check()[0]:
+        return None
+
+    window = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+    window.set_decorated(False)
+    window.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+    window.set_skip_taskbar_hint(True)
+    window.set_skip_pager_hint(True)
+    window.set_keep_above(True)
+    window.set_resizable(False)
+    window.set_name("guard-window")
+    window.set_title(title)
+    window.set_position(Gtk.WindowPosition.CENTER)
+
+    colors = load_theme_colors()
+    css = CSS_TEMPLATE.format(**colors).encode("utf-8")
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
+
+    outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+    outer.set_border_width(20)
+    window.add(outer)
+
+    title_label = Gtk.Label(label=title)
+    title_label.set_name("guard-title")
+    title_label.set_line_wrap(True)
+    title_label.set_xalign(0)
+    title_label.set_max_width_chars(64)
+    outer.pack_start(title_label, False, False, 0)
+
+    body_label = Gtk.Label(label=body)
+    body_label.set_line_wrap(True)
+    body_label.set_xalign(0)
+    body_label.set_max_width_chars(64)
+    outer.pack_start(body_label, False, False, 0)
+
+    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    button_box.set_halign(Gtk.Align.END)
+    outer.pack_start(button_box, False, False, 0)
+
+    result = {"index": None}
+
+    def on_click(_btn, index):
+        result["index"] = index
+        window.close()
+
+    default_button = None
+    for i, label in enumerate(button_labels):
+        btn = Gtk.Button(label=label)
+        btn.connect("clicked", on_click, i)
+        button_box.pack_start(btn, False, False, 0)
+        default_button = btn
+
+    def on_key(_widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            window.close()
+            return True
+        return False
+
+    window.connect("key-press-event", on_key)
+    window.connect("destroy", lambda *_a: Gtk.main_quit())
+
+    window.show_all()
+    if default_button is not None:
+        default_button.grab_focus()
+    Gtk.main()
+    return result["index"]
+
+
+def main():
+    if len(sys.argv) != 2:
+        show_dialog("Aether link blocked", "Usage: ohmydebn-aether-url-guard <aether://...>", ["OK"])
+        return 1
+
+    outcome = build_confirmation(sys.argv[1])
+
+    if outcome[0] == "refuse":
+        _, message = outcome
+        show_dialog("Aether link blocked", message, ["OK"])
+        return 1
+
+    _, title, body, forward_url = outcome
+    clicked = show_dialog(title, body, ["Cancel", "Apply"])
+    if clicked != 1:
+        subprocess.run(
+            ["notify-send", "Aether", "Theme import cancelled.", "-t", "3000"],
+            check=False,
+        )
+        return 0
+
+    # Forward the original, unmodified URL as a single argv element - never
+    # re-parsed by a shell - so this only ever adds a confirmation gate in
+    # front of Aether's own handling, it doesn't change what Aether does
+    # with an approved link.
+    os.execv(AETHER_BIN, [AETHER_BIN, "--handle-url", forward_url])
+    return 1  # unreachable if execv succeeds
+
+
+if __name__ == "__main__":
+    sys.exit(main())

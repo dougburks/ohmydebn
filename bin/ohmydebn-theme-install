@@ -19,14 +19,28 @@ if [ -z "$REPO_URL" ]; then
   exit 1
 fi
 
+# git reads a leading dash as an option, and `<helper>::<address>` as a remote
+# helper to run (e.g. `ext::sh -c ...` executes an arbitrary command). The
+# helper name is a bare word at the very start, which is what this matches; an
+# scp-style IPv6 host such as git@[2001:db8::1]:org/repo.git carries `::` too
+# and must still clone.
+if [[ "$REPO_URL" == -* || "$REPO_URL" =~ ^[A-Za-z0-9][A-Za-z0-9+.-]*:: ]]; then
+  echo "Error: '$REPO_URL' names a git option or transport helper, not a repository." >&2
+  exit 1
+fi
+
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
-THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')
+
+# Strip user@host: prefix from scp-style SSH URLs so basename sees just the path
+REPO_PATH="$REPO_URL"
+[[ "$REPO_PATH" != *"://"* && "$REPO_PATH" == *:*/* ]] && REPO_PATH="${REPO_PATH#*:}"
+THEME_NAME=$(basename -- "$REPO_PATH" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')
 
 # Reject names that could escape THEMES_DIR (same check as ohmydebn-theme-remove) -
 # basename() passes "..", "." and embedded "/" segments through unchanged, so a
 # crafted REPO_URL (e.g. one ending in "/..") would otherwise point THEME_PATH
 # at an ancestor of THEMES_DIR and the rm -rf below would delete it.
-if [[ -z "$THEME_NAME" || "$THEME_NAME" == *"/"* || "$THEME_NAME" == "." || "$THEME_NAME" == ".." ]]; then
+if [[ -z "$THEME_NAME" || "$THEME_NAME" == .* || "$THEME_NAME" == */* ]]; then
   echo "Error: invalid theme name derived from '$REPO_URL'." >&2
   exit 1
 fi
@@ -39,10 +53,12 @@ if [ -d "$THEME_PATH" ]; then
 fi
 
 # Clone the repo directly to ~/.config/ohmydebn/themes
-if ! git clone "$REPO_URL" "$THEME_PATH"; then
+if ! git clone -- "$REPO_URL" "$THEME_PATH"; then
   echo "Error: Failed to clone theme repo."
   exit 1
 fi
 
-# Apply the new theme with ohmydebn-theme-set
+# Apply the new theme with ohmydebn-theme-set, which stages only the files a
+# theme installed from a git repo is allowed to contribute and names anything
+# it dropped
 /usr/share/ohmydebn/bin/ohmydebn-theme-set "$THEME_NAME"

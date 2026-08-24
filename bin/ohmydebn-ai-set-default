@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# ohmydebn-ai-set-default: records which AI assistant ohmydebn-ai (Super+A)
+# should launch. Called by bin/ohmydebn-menu's show_ai_menu on every
+# pick, so choosing an AI tool there doubles as making it the default - no
+# separate settings UI to keep in sync with that list.
+# Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|pi|vscode|antigravity>
+
+set -euo pipefail
+
+case "${1:-}" in
+opencode | claude-code | chatgpt | pi | vscode | antigravity) ;;
+*)
+  echo "Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|pi|vscode|antigravity>" >&2
+  exit 1
+  ;;
+esac
+
+mkdir -p "$HOME/.config/ohmydebn/current"
+echo "$1" >"$HOME/.config/ohmydebn/current/default-ai"

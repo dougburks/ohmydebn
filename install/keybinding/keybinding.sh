@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260822
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260824
 
 if [ ! -f $KEYBINDING_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Updating hotkeys"

@@ -1210,6 +1210,36 @@ finally:
     tc.subprocess.run = original_subprocess_run
     shutil.rmtree(fixture4)
 
+print("=== remove_legacy_aether_desktop_files (real function) ===")
+# Same list of names as install/cleanup/local-share.sh's own cleanup loop
+# (kept in sync by hand - see LEGACY_AETHER_DESKTOP_FILES's own comment);
+# this one is called fresh from open_browse_themes() right before sending
+# the user to a page that can fire an aether:// callback, in case aether
+# re-creates either file on its own each time it runs.
+fixture5 = tempfile.mkdtemp()
+apps_dir = os.path.join(fixture5, ".local", "share", "applications")
+os.makedirs(apps_dir)
+for name in tc.LEGACY_AETHER_DESKTOP_FILES:
+    open(os.path.join(apps_dir, name), "w").close()
+other_desktop_file = os.path.join(apps_dir, "some-other-app.desktop")
+open(other_desktop_file, "w").close()
+original_home = os.environ.get("HOME")
+try:
+    os.environ["HOME"] = fixture5
+    tc.remove_legacy_aether_desktop_files()
+    for name in tc.LEGACY_AETHER_DESKTOP_FILES:
+        check(f"{name} removed", not os.path.exists(os.path.join(apps_dir, name)))
+    check("unrelated desktop file left alone", os.path.exists(other_desktop_file))
+    # Calling it again with nothing left to remove doesn't raise.
+    tc.remove_legacy_aether_desktop_files()
+    check("calling again with nothing to remove doesn't raise", True)
+finally:
+    if original_home is None:
+        os.environ.pop("HOME", None)
+    else:
+        os.environ["HOME"] = original_home
+    shutil.rmtree(fixture5)
+
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(0 if TESTS_FAILED == 0 else 1)

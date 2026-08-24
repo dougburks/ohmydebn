@@ -58,10 +58,17 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 
 OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
 MENU_FILE = f"{OHMYDEBN_BIN}/ohmydebn-menu"
 MENU_TREE_LIB = f"{OHMYDEBN_BIN}/ohmydebn-menu-tree"
+
+# Confirmed by actually measuring get_allocated_height(), not estimated
+# from CSS values - see Picker.resize_to_content()'s own comment for what
+# these are for.
+ROW_HEIGHT_PX = 35
+MIN_SCROLLER_ROWS = 3  # cosmetic floor only - a 1-result search shouldn't shrink to a sliver
 
 DEFAULT_COLORS = {
     "bg0": "rgba(20, 20, 24, 0.95)",
@@ -151,8 +158,8 @@ def find_submenu_labels(labels, leaf_displays):
     so get a right-edge ">" marker), derived from data the picker already
     loaded - menu_tree_flatten only ever emits leaves, so an intermediate
     node's name appears solely as a breadcrumb *prefix* of its descendants
-    (e.g. "Browser > Brave Origin (minimal)" under Install), never as its
-    own row. The trailing " > " in the check is what makes this prefix-safe:
+    (e.g. "Browser > Brave Origin (minimal)"), never as its own row. The
+    trailing " > " in the check is what makes this prefix-safe:
     a plain startswith(label) would false-match "Media" against the leaf
     "Media Player > ...". "Apps" needs no special-casing - it's already
     excluded from leaves via MT_SKIP_LABELS, so it can never qualify."""
@@ -533,7 +540,7 @@ CSS_TEMPLATE = """
 
 
 class Picker(Gtk.Window):
-    def __init__(self, go_items="", breadcrumb_prefix="", mode="menu"):
+    def __init__(self, go_items="", breadcrumb_prefix="", mode="menu", on_result=None):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.set_decorated(False)
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
@@ -541,8 +548,17 @@ class Picker(Gtk.Window):
         self.set_skip_pager_hint(True)
         self.set_keep_above(True)
         self.set_name("picker-window")
+        if mode == "menu":
+            self.set_title(breadcrumb_prefix or "Menu")
 
         self.mode = mode
+        # None (the default) is today's one-shot behavior, entirely
+        # unchanged: finish() prints the result and quits. A callable here
+        # is --serve mode's hook (menu mode only - see reload()): finish()
+        # hands it the result instead of quitting, so this same window and
+        # process can be reused for the next request rather than a fresh
+        # process paying GTK/PyGObject's import cost again.
+        self.on_result = on_result
         if mode == "apps":
             self._apps_parsed = load_apps_metadata()
             self.categories = self.leaves = apps_rows(self._apps_parsed)
@@ -583,24 +599,34 @@ class Picker(Gtk.Window):
 
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        # Each row measures 35px tall in practice (confirmed by actually
-        # measuring get_allocated_height(), not estimated from CSS values).
-        # 11 categories need 385px - the previous fixed 360px cut off the
-        # last one (System), forcing a scrollbar on startup even though
-        # everything would otherwise fit. propagate_natural_height lets the
-        # scroller size itself to the real row count between these bounds:
-        # min covers all 11 categories with a little headroom; max used to
-        # be a fixed 630px (~18 rows, matching rofi's own
-        # `listview { lines: 18; }` convention), but that forced a
+        # propagate_natural_height sizes the scroller to the real row count
+        # correctly on this window's first-ever layout, before it's shown.
+        # It stops being enough the moment content changes *after* that
+        # first layout (every reload() to a new screen, every search
+        # keystroke): plain resize() is silently ignored by Cinnamon/
+        # Muffin on this undecorated DIALOG-hint window once mapped
+        # (confirmed by hand - tried directly, and after clearing
+        # set_size_request() first, neither budged it), and --serve mode's
+        # window is *always* mapped with zero rows before reload() ever
+        # populates real content, so every "menu" mode screen depends on
+        # the fix below, not just this initial layout. See
+        # resize_to_content(), called from the end of populate() (every
+        # path that changes what's visible goes through there, including
+        # the unconditional self.populate(self.categories) a few lines
+        # below - so min_content_height doesn't need setting here too,
+        # only max/propagate: whatever this constructor's initial content
+        # actually is, resize_to_content() sets the real min for it before
+        # this window is ever shown).
+        # max_height: used to be a fixed 630px (~18 rows, matching rofi's
+        # own `listview { lines: 18; }` convention), but that forced a
         # scrollbar for lists that would have comfortably fit on screen
         # (e.g. an open-windows list of a dozen or so) - basing it on the
         # actual monitor height instead avoids the scrollbar whenever the
         # list genuinely fits, while still capping (and necessarily still
         # scrolling) a long one like the ~100-entry Apps list that could
         # never fit regardless.
-        max_height = max(300, int(get_monitor_geometry().height * 0.7))
-        scroller.set_min_content_height(400)
-        scroller.set_max_content_height(max_height)
+        self.max_scroller_height = max(300, int(get_monitor_geometry().height * 0.7))
+        scroller.set_max_content_height(self.max_scroller_height)
         scroller.set_propagate_natural_height(True)
         outer.pack_start(scroller, True, True, 0)
         self.scroller = scroller
@@ -694,6 +720,37 @@ class Picker(Gtk.Window):
             self._icon_pool = concurrent.futures.ThreadPoolExecutor(max_workers=12, thread_name_prefix="icon-decode")
             GLib.idle_add(self._resolve_app_icons_batch)
 
+    def reload(self, go_items, breadcrumb_prefix):
+        """--serve mode only (self.on_result is set): repopulates this same
+        already-open menu-mode window for a new screen, instead of a fresh
+        process paying GTK/PyGObject's import cost again (profiled at
+        ~90-140ms) for every single menu level. Mirrors exactly the subset
+        of __init__ that's about *content* (categories/leaves/submenu
+        labels, the listbox, the search entry) - everything about the
+        window/widget tree itself (CSS, size, event handlers) was already
+        built once and stays as-is. Menu mode only: apps/windows are
+        already one-shot, with no chain of levels to amortize a respawn
+        over, so neither needs this. Sets the (otherwise-unused, since this
+        window is undecorated and skip-taskbar) window title to the new
+        breadcrumb - harmless, and lets external tooling (a test, xdotool)
+        observe when a reload has actually landed without touching the
+        real request/response protocol. Also re-shows the window -
+        finish() hides it on every request's result (see its own comment
+        on why), so this is what brings it back for whatever screen comes
+        next."""
+        self.show()
+        self.set_title(breadcrumb_prefix or "Menu")
+        self.categories = _with_icons(load_categories(go_items))
+        self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
+        self.submenu_labels = find_submenu_labels(
+            [value for _display, value, _icon in self.categories],
+            [display for display, _value, _icon in self.leaves],
+        )
+        self.entry.set_text("")
+        self._closing = False
+        self.populate(self.categories)
+        self.entry.grab_focus()
+
     def apply_theme(self):
         colors = load_theme_colors()
         css = CSS_TEMPLATE.format(**colors).encode("utf-8")
@@ -742,6 +799,38 @@ class Picker(Gtk.Window):
         first = self.listbox.get_row_at_index(0)
         if first:
             self.listbox.select_row(first)
+        self.resize_to_content(len(rows))
+
+    def resize_to_content(self, row_count):
+        """Keeps this window sized to what's actually visible, called from
+        the end of populate() - every path that changes the row count
+        (reload() to a new screen, a search keystroke, the very first
+        populate() at construction) goes through there. Needed because
+        propagate_natural_height (see the scroller's own setup comment)
+        only sizes correctly on this window's first-ever layout; once
+        mapped, Cinnamon/Muffin ignores plain resize() outright, but
+        forcing it through actual WM size hints - pinning min and max size
+        to the same value via set_geometry_hints(), then resize() - does
+        work (confirmed by hand). Before the first show, this window isn't
+        mapped yet (get_mapped() is False) - just updating the scroller's
+        min so propagate_natural_height's own first-layout sizing (already
+        correct on its own) picks it up, without forcing anything through
+        the WM-hint path this early.
+        """
+        target_rows = max(MIN_SCROLLER_ROWS, row_count)
+        target_scroller_h = min(target_rows * ROW_HEIGHT_PX, self.max_scroller_height)
+        self.scroller.set_min_content_height(target_scroller_h)
+        if not self.get_mapped():
+            return
+        width = self.get_size()[0]
+        _min_h, natural_h = self.get_preferred_height()
+        geom = Gdk.Geometry()
+        geom.min_width = width
+        geom.max_width = width
+        geom.min_height = natural_h
+        geom.max_height = natural_h
+        self.set_geometry_hints(None, geom, Gdk.WindowHints.MIN_SIZE | Gdk.WindowHints.MAX_SIZE)
+        self.resize(width, natural_h)
 
     def on_search_changed(self, entry):
         text = entry.get_text().strip()
@@ -971,9 +1060,79 @@ class Picker(Gtk.Window):
                 record_app_usage(desktop_id)
             elif self.mode == "windows":
                 activate_window(value)
+            elif self.on_result is not None:
+                # Hidden, not quit - the process stays alive for reload()
+                # to bring it back for whatever screen comes next, but the
+                # *window* must disappear right now: the bash side runs
+                # whatever this pick launches synchronously, and if that's
+                # a foreground GUI app (About, Demo, ...) rather than
+                # another menu level, nothing else would tell this window
+                # to go away until that app closes and the whole
+                # ohmydebn-menu process finally exits - confirmed as a
+                # real report ("the menu remains visible until the
+                # launched app is closed"). A plain reload() a moment
+                # later (the submenu-navigation case) re-shows it there,
+                # fast enough that hiding unconditionally here doesn't
+                # cost the seamless feel of drilling into a submenu.
+                self.hide()
+                self.on_result(value)
+                return  # stay open - reload() handles the next request
             else:
                 print(value)
+        elif self.on_result is not None:
+            # Escape/click-away within one --serve request still needs a
+            # response, or the driver's blocking read on the other end of
+            # this request's response pipe would hang forever. Hidden for
+            # the same reason as the real-value case above.
+            self.hide()
+            self.on_result("")
+            return
         Gtk.main_quit()
+
+
+def run_serve_mode(request_fifo_path, response_fifo_path):
+    """The persistent-picker mechanism bin/ohmydebn-menu's menu() talks to
+    (see the profiling that motivated this: ~90-140ms of every menu-level
+    transition was GTK/PyGObject import cost alone, paid fresh by every
+    single ohmydebn-menu-picker process spawn): one process, one window,
+    reused across requests via reload() instead of a fresh process+import
+    per menu level.
+
+    Protocol, both FIFOs newline-delimited text: a request line is
+    "breadcrumb_prefix<TAB>go_items" (go_items already carries literal
+    "\\n" two-character sequences the same way menu()'s own options string
+    always has - never real newline bytes - so one line is unambiguous);
+    a response line is the picked label, or empty for cancel; the literal
+    request line "QUIT" ends the session. The response FIFO is opened for
+    writing before the request FIFO is opened for reading, since opening a
+    FIFO for reading blocks until a writer exists on the other end.
+    """
+    response_fifo = open(response_fifo_path, "w", buffering=1)
+
+    def send_response(value):
+        response_fifo.write((value or "") + "\n")
+        response_fifo.flush()
+
+    win = Picker(mode="menu", on_result=send_response)
+
+    def on_request_ready(fileobj, _condition):
+        line = fileobj.readline()
+        if not line or line.rstrip("\n") == "QUIT":
+            Gtk.main_quit()
+            return GLib.SOURCE_REMOVE
+        breadcrumb_prefix, _, go_items = line.rstrip("\n").partition("\t")
+        t0 = time.monotonic()
+        win.reload(go_items, breadcrumb_prefix)
+        print(f"[timing] reload({breadcrumb_prefix!r}) took {(time.monotonic() - t0) * 1000:.1f}ms", file=sys.stderr, flush=True)
+        return GLib.SOURCE_CONTINUE
+
+    request_fifo = open(request_fifo_path, "r")
+    GLib.io_add_watch(request_fifo, GLib.IO_IN, on_request_ready)
+
+    win.show_all()
+    Gtk.main()
+    response_fifo.close()
+    request_fifo.close()
 
 
 if __name__ == "__main__":
@@ -981,6 +1140,9 @@ if __name__ == "__main__":
         win = Picker(mode="apps")
     elif len(sys.argv) > 1 and sys.argv[1] == "--windows":
         win = Picker(mode="windows")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--serve":
+        run_serve_mode(sys.argv[2], sys.argv[3])
+        sys.exit(0)
     else:
         go_items_arg = sys.argv[1] if len(sys.argv) > 1 else ""
         breadcrumb_prefix_arg = sys.argv[2] if len(sys.argv) > 2 else ""

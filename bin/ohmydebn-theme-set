@@ -5,6 +5,82 @@ set -euo pipefail
 # Usage: ohmydebn-theme-set [--background <arg>] <theme-name>
 #   <arg> can be "random" or a number (1-based index)
 
+# What a theme installed with `ohmydebn-theme-install <git-url>` may not ship,
+# because these run code rather than just carry color. Neovim loads a theme's
+# neovim.lua at startup (so any *.lua is denied outright), Alacritty's
+# alacritty.toml names the program a new terminal launches, and vscode.json
+# names a VS Code extension that ohmydebn-theme-set-vscode installs - a VS
+# Code extension being arbitrary JavaScript. Everything else a theme ships is
+# color and is kept. A theme the user wrote themselves in
+# ~/.config/ohmydebn/themes (no .git dir left behind by a clone) is not held
+# to this list - it's their machine and their file.
+INSTALLED_THEME_DENIED=(alacritty.toml vscode.json)
+IGNORED_THEME_FILES=()
+
+is_denied_installed_theme_file() {
+  local name="$1" denied
+  [[ "$name" == *.lua ]] && return 0
+  for denied in "${INSTALLED_THEME_DENIED[@]}"; do
+    [[ "$name" == "$denied" ]] && return 0
+  done
+  return 1
+}
+
+# ohmydebn-theme-install clones into ~/.config/ohmydebn/themes, so a .git
+# directory left behind there means the contents came from a stranger and are
+# held to the list above. A plain directory, or a symlink to the user's own
+# working copy, is theirs to fill however they like.
+theme_came_from_a_repo() {
+  local source="$1"
+  [[ ! -L "$source" && -d "$source/.git" ]]
+}
+
+# Copies a directory without ever following a symlink: in an installed theme a
+# symlink points wherever the theme author chose, which is how e.g. a preview
+# image could become a copy of any file the session can read.
+stage_installed_theme_dir() {
+  local source="$1" dest="$2" entry name
+  mkdir -p "$dest"
+  for entry in "$source"/*; do
+    [[ -e "$entry" ]] || continue
+    name=$(basename "$entry")
+    if [[ -L "$entry" ]]; then
+      case "${name,,}" in
+      readme* | license* | changelog* | *.md | *.txt) ;;
+      *) IGNORED_THEME_FILES+=("$name") ;;
+      esac
+    elif [[ -d "$entry" ]]; then
+      stage_installed_theme_dir "$entry" "$dest/$name"
+    else
+      cp "$entry" "$dest/$name"
+    fi
+  done
+}
+
+stage_installed_theme() {
+  local source="$1" dest="$2" entry name
+  for entry in "$source"/*; do
+    [[ -e "$entry" ]] || continue
+    name=$(basename "$entry")
+    if [[ -L "$entry" ]] || is_denied_installed_theme_file "$name"; then
+      case "${name,,}" in
+      readme* | license* | changelog* | *.md | *.txt) ;;
+      *) IGNORED_THEME_FILES+=("$name") ;;
+      esac
+    elif [[ -d "$entry" ]]; then
+      stage_installed_theme_dir "$entry" "$dest/$name"
+    else
+      cp "$entry" "$dest/$name"
+    fi
+  done
+}
+
+report_ignored_theme_files() {
+  ((${#IGNORED_THEME_FILES[@]} > 0)) || return 0
+  echo "Ignored in $THEME_PATH: ${IGNORED_THEME_FILES[*]}" >&2
+  echo "A theme installed from a git repo cannot supply Lua, alacritty.toml, or vscode.json." >&2
+}
+
 BG_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,6 +115,14 @@ OHMYDEBN_THEMES_PATH="/usr/share/ohmydebn-themes"
 
 THEME_NAME=$(echo "$1" | sed -E 's/<[^>]+>//g' | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 
+# The name is joined into paths below that get read from and copied into, so a
+# name like "../../etc" (e.g. typo'd or pasted) must not be allowed to walk
+# THEME_PATH outside of the themes directories.
+if [[ -z "$THEME_NAME" || "$THEME_NAME" == .* || "$THEME_NAME" == */* ]]; then
+  echo "Invalid theme name: $1" >&2
+  exit 1
+fi
+
 if [[ -d "$USER_THEMES_PATH/$THEME_NAME" ]]; then
   THEME_PATH="$USER_THEMES_PATH/$THEME_NAME"
 elif [[ -d "$OHMYDEBN_THEMES_PATH/$THEME_NAME" ]]; then
@@ -57,8 +141,14 @@ fi
 rm -rf "$NEXT_THEME_PATH"
 mkdir -p "$NEXT_THEME_PATH"
 
-# Copy static configs
-find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
+# Copy static configs - staged in full for a theme the user wrote themselves,
+# filtered for one cloned from a git repo by ohmydebn-theme-install
+if theme_came_from_a_repo "$THEME_PATH"; then
+  stage_installed_theme "$THEME_PATH" "$NEXT_THEME_PATH"
+  report_ignored_theme_files
+else
+  find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
+fi
 
 # Resolve theme colors now (handles legacy colors.toml, Omarchy 4+ semantic
 # colors.toml, and alacritty.toml-derived themes) so templates below and

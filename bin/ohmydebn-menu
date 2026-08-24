@@ -11,16 +11,221 @@ DIRECT_ACCESS=false
 
 # Segments queued up by menu() when a search inside one submenu resolves to
 # a descendant reached through further submenus - see menu()'s comment. A
-# FILE, not a shell variable: every show_*_menu calls menu() inside
-# `case $(menu ...) in`, a command substitution subshell, and a subshell's
-# changes to a shell variable (even a global, non-local one) never
-# propagate back out once it exits - confirmed empirically (a trivial
-# `QUEUE=(x); f() { QUEUE=(y); }; $(f); echo "${QUEUE[*]}"` still prints
-# the pre-call value). A real file is the only state that actually
-# survives across that boundary. One queued segment per line; cleaned up
-# on exit since it's specific to this single invocation of ohmydebn-menu.
+# FILE rather than a shell variable/array - originally because every
+# show_*_menu called menu() inside `case $(menu ...) in`, a command
+# substitution subshell whose changes to a shell variable (even a global,
+# non-local one) never propagate back out once it exits, confirmed
+# empirically at the time (a trivial
+# `QUEUE=(x); f() { QUEUE=(y); }; $(f); echo "${QUEUE[*]}"` still printed
+# the pre-call value). menu() itself is a plain call now (see its own
+# comment on why), so that specific reason no longer applies - kept as a
+# file anyway, since it already works and changing it isn't part of what
+# that change was for. One queued segment per line; cleaned up on exit
+# since it's specific to this single invocation of ohmydebn-menu.
 MENU_JUMP_QUEUE_FILE=$(mktemp)
-trap 'rm -f "$MENU_JUMP_QUEUE_FILE"' EXIT
+
+# --- Persistent picker: started once, here, eagerly - not lazily from
+# inside menu()/get_picker_result. Originally this was required: menu()
+# used to run inside a `$(menu ...)` subshell (every show_*_menu called it
+# that way, same as MENU_JUMP_QUEUE_FILE above needing to be a file rather
+# than a variable for exactly this reason), and a file descriptor opened
+# via `exec {FD}<>...` *inside* that subshell would vanish the moment the
+# subshell exited, so a lazy first-use start from in there could never be
+# seen by any later menu() call. menu() is a plain call now (see its own
+# comment on why), so that specific reason no longer applies - kept eager
+# anyway, since it already works and changing it isn't part of what that
+# change was for.
+#
+# One picker per ohmydebn-menu invocation, not a system-wide daemon -
+# reuses one already-warm process/window across every menu() call in this
+# session instead of ohmydebn-menu-picker's GTK/PyGObject import cost
+# (profiled at ~90-140ms) being paid fresh by a brand-new process on every
+# single menu level. Validated directly: two real transitions (Install,
+# then Install > AI) cost ~220ms combined spawning fresh each time, ~45ms
+# reusing one process via ohmydebn-menu-picker --serve.
+PICKER_PID=""
+PICKER_REQ_FD=""
+PICKER_RESP_FD=""
+PICKER_TMP_DIR=""
+
+start_persistent_picker() {
+  local dir req_fifo resp_fifo pid
+  dir=$(mktemp -d) || return 1
+  req_fifo="$dir/req"
+  resp_fifo="$dir/resp"
+  mkfifo "$req_fifo" "$resp_fifo" || {
+    rm -rf "$dir"
+    return 1
+  }
+
+  /usr/share/ohmydebn/bin/ohmydebn-menu-picker --serve "$req_fifo" "$resp_fifo" &
+  pid=$!
+
+  # Response side first, matching ohmydebn-menu-picker's own
+  # run_serve_mode(), which opens its response-FIFO write end before its
+  # request-FIFO read end: opening a FIFO end blocks until the other end
+  # opens too, so opening these out of order on either side deadlocks
+  # both. Any failure past this point kills the just-spawned process
+  # explicitly - PICKER_PID is only ever set once everything it depends on
+  # (both fds) is confirmed open, so a partial failure can't leave this
+  # session thinking a picker is ready when its fds never actually came up.
+  #
+  # Opening the response FIFO for read blocks until a writer opens it -
+  # normally that's the picker itself, almost immediately (real GTK
+  # startup profiled at ~90-140ms). If the picker fails before ever
+  # getting there (crashes, missing dependency, bad args), nothing would
+  # ever open the write end and this would hang forever - confirmed the
+  # hard way, in this exact spot, before this watchdog existed. It gives
+  # the picker 3 real seconds; only if the process has already exited by
+  # then does it open-and-immediately-close the write end itself, which is
+  # just enough to unblock the read-open below with nothing real behind
+  # it, so it comes back with an fd whose very next read is empty/EOF
+  # instead of a hang. (Not used again below for the request FIFO: by the
+  # time the response FIFO is confirmed open, the picker has necessarily
+  # moved on to opening its own read end of the request FIFO next - see
+  # run_serve_mode - so that open has nothing comparable to hang on.)
+  (
+    sleep 3
+    kill -0 "$pid" 2>/dev/null || : >"$resp_fifo"
+  ) &
+  local watchdog_pid=$!
+
+  exec {PICKER_RESP_FD}<"$resp_fifo"
+  local resp_open_status=$?
+  kill "$watchdog_pid" 2>/dev/null
+  wait "$watchdog_pid" 2>/dev/null
+
+  if [[ $resp_open_status -ne 0 ]] || ! kill -0 "$pid" 2>/dev/null; then
+    exec {PICKER_RESP_FD}<&- 2>/dev/null
+    kill -9 "$pid" 2>/dev/null
+    rm -rf "$dir"
+    return 1
+  fi
+
+  exec {PICKER_REQ_FD}>"$req_fifo" || {
+    kill -9 "$pid" 2>/dev/null
+    exec {PICKER_RESP_FD}<&- 2>/dev/null
+    rm -rf "$dir"
+    return 1
+  }
+
+  PICKER_PID=$pid
+  PICKER_TMP_DIR="$dir"
+}
+
+# Closes this session's picker down: tells it to quit (if it's still
+# alive), releases the held-open fds, and removes the per-session temp
+# dir. Safe to call even when no picker ever successfully started (e.g.
+# start_persistent_picker failed at script startup) - every step is
+# individually guarded rather than relying on this whole function's own
+# success/failure, since it also runs from the EXIT trap, where a failing
+# cleanup step must never stop the rest of cleanup from running.
+stop_persistent_picker() {
+  if [[ -n "$PICKER_PID" ]] && kill -0 "$PICKER_PID" 2>/dev/null; then
+    printf 'QUIT\n' >&"$PICKER_REQ_FD" || true
+  fi
+  [[ -n "${PICKER_REQ_FD:-}" ]] && {
+    exec {PICKER_REQ_FD}>&- 2>/dev/null || true
+  }
+  [[ -n "${PICKER_RESP_FD:-}" ]] && {
+    exec {PICKER_RESP_FD}<&- 2>/dev/null || true
+  }
+  [[ -n "$PICKER_TMP_DIR" ]] && rm -rf "$PICKER_TMP_DIR" 2>/dev/null
+  PICKER_PID=""
+}
+
+start_persistent_picker || true # non-fatal: get_picker_result below falls back to a one-shot spawn for the whole session if this didn't work
+
+trap 'rm -f "$MENU_JUMP_QUEUE_FILE"; stop_persistent_picker' EXIT
+
+# Belt-and-suspenders, not the primary fix: menu()/get_picker_result no
+# longer wrap the long "wait for the picker's response" block in `$(...)`
+# (see menu()'s own comment for why - that was the actual bug: an
+# external signal to this top-level PID would kill this process while a
+# `$(menu ...)` subshell, still blocked on the picker mid-request, lived
+# on as an orphan holding the picker's fds open, so the picker never saw
+# the EOF it needed to notice its session was over). What's left after
+# that fix is only ever short-lived - the brief `$(...)` calls for the
+# breadcrumb lookup and the backgrounded-read's own result file, nothing
+# that blocks on a human decision - but `kill -- -$$` (the whole process
+# group, not just this PID) costs nothing to keep as a safety net for
+# whatever that narrow a window still leaves. It also only works if this
+# process is its own process group leader, which isn't guaranteed by every
+# way this script can be launched - so the picker is also killed directly
+# by its tracked PID, which doesn't depend on that.
+trap '[[ -n "$PICKER_PID" ]] && kill -9 "$PICKER_PID" 2>/dev/null; kill -- -$$ 2>/dev/null; exit 143' TERM INT
+
+# Talks to the persistent picker for one request if it's running and
+# responsive, falling back to a direct one-shot spawn - today's original
+# mechanism, entirely unchanged - for just this pick otherwise (never
+# started, has since died, or stopped answering). Deliberately does not
+# try to restart the persistent picker here - once gone, a picker stays
+# gone for the rest of this session, which only costs the speed benefit
+# for whatever's left of it, never correctness. Neither this function nor
+# menu() runs inside a subshell (see menu()'s own comment on why that
+# matters for signal handling), so restarting here would actually work
+# now, unlike in an earlier version of this - left out anyway, on purpose,
+# to keep this change's scope to the signal-handling fix it was for.
+#
+# 300s on the response read is deliberately generous: sized so that no
+# real human decision - which can legitimately take minutes - is ever
+# mistaken for a wedged picker; only one that's genuinely stopped
+# responding falls through to the fallback in practice.
+get_picker_result() {
+  local options="$1" breadcrumb_prefix="$2"
+
+  if [[ -z "$PICKER_PID" ]] || ! kill -0 "$PICKER_PID" 2>/dev/null; then
+    MENU_PICKER_RESULT=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+    return
+  fi
+
+  if ! printf '%s\t%s\n' "$breadcrumb_prefix" "$options" >&"$PICKER_REQ_FD"; then
+    MENU_PICKER_RESULT=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+    return
+  fi
+
+  # The actual wait for the picker's answer happens via the `wait` builtin
+  # on a backgrounded read, not a bare `read -t 300 -u "$PICKER_RESP_FD"`
+  # here directly - confirmed by hand (see the TERM/INT trap's own
+  # comment) that only the former lets a trapped signal interrupt it
+  # promptly; bash defers trap processing for as long as it's blocked
+  # waiting on a command-substitution subshell, however that subshell
+  # spends its own time, and this whole call is now itself a plain
+  # statement (see menu()'s comment for why), not one - so a bare
+  # long-blocking `read` right here would just move the exact same
+  # problem down one level rather than fixing it.
+  #
+  # A backgrounded job can't hand a variable back directly (it's a
+  # separate process) - the read result goes through a temp file, and
+  # since an empty pick (cancel/Escape) is a legitimate, different outcome
+  # than a timed-out/dead picker, the job exits with read's own status
+  # (captured before anything else, so `set -e` here can't discard it)
+  # rather than the caller trying to infer success from the file's
+  # contents alone.
+  local result_file
+  result_file=$(mktemp)
+  (
+    local line status=0
+    read -r -t 300 -u "$PICKER_RESP_FD" line || status=$?
+    printf '%s' "$line" >"$result_file"
+    exit "$status"
+  ) &
+  local read_pid=$!
+  # `|| read_status=$?`, not a bare `wait` + `$?` afterward: this file runs
+  # under `set -e`, and a bare `wait` returning nonzero (the crash/timeout
+  # case this is here to handle) would abort the whole script right here
+  # instead of falling through to the one-shot fallback below.
+  local read_status=0
+  wait "$read_pid" || read_status=$?
+
+  if [[ $read_status -eq 0 ]]; then
+    MENU_PICKER_RESULT=$(<"$result_file")
+    rm -f "$result_file"
+  else
+    rm -f "$result_file"
+    MENU_PICKER_RESULT=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+  fi
+}
 
 back_to() {
   local parent_menu="$1"
@@ -39,12 +244,27 @@ back_to() {
   fi
 }
 
+# menu() is a plain statement now (`menu "Title" "items"`, result read back
+# from $MENU_RESULT afterward), not `case $(menu ...) in` - that changed
+# for one reason: `$(...)` command substitution makes bash wait for the
+# substituted call to finish before it will process a pending trapped
+# signal (TERM/INT above), confirmed by hand with a minimal reproduction
+# (a trapped TERM sent to a script blocked in `x=$(sleep 30)` never ran
+# the trap at all; the same script blocked in `sleep 30 & wait $!` ran it
+# within about a second). Since resolving one menu() call can mean
+# blocking for as long as a human takes to decide - the whole reason
+# get_picker_result waits via `wait` on a backgrounded read rather than a
+# bare blocking read, see its own comment - $(...) here would have handed
+# right back the exact orphaned-picker problem that comment describes,
+# just one layer further out. Every one of this file's ~21 call sites
+# changed together with this function for that reason.
+#
 # menu() is the one place that resolves a search into a descendant several
 # levels down, so every show_*_menu function's own case statement (matching
-# a label from this call's return value against a target - see
-# show_learn_menu below for the plainest example) never has to change - it
-# only ever receives a bare, same-level label back, whether that came from
-# a direct pick or from unwinding a queued multi-hop search.
+# a label from $MENU_RESULT against a target - see show_learn_menu below
+# for the plainest example) never has to change - it only ever receives a
+# bare, same-level label back, whether that came from a direct pick or
+# from unwinding a queued multi-hop search.
 #
 # If the queue file is non-empty, a previous call already resolved a
 # search and queued the remaining path segments - pop the next line and
@@ -55,25 +275,25 @@ back_to() {
 # everything has unwound naturally back to the deepest level.
 #
 # (Note: eval'ing the target directly here and exit-ing was the first
-# design and it's broken - confirmed empirically. Every show_*_menu calls
-# menu() inside `case $(menu ...) in`, a command substitution subshell;
-# `exit` inside menu() only kills that subshell, so the calling case
-# statement's `*) ...` fallback arm still fires afterward, popping an
-# unwanted extra menu on top of whatever the eval'd command already did.)
+# design and it's broken - confirmed empirically, back when every
+# show_*_menu called menu() inside `case $(menu ...) in`: `exit` inside
+# menu() only killed that subshell, so the calling case statement's
+# `*) ...` fallback arm still fired afterward, popping an unwanted extra
+# menu on top of whatever the eval'd command already did.)
 #
 # Otherwise, look up the calling function's breadcrumb prefix (empty if
 # not found, e.g. show_main_menu - which is the "top of tree, no
 # filtering" case) and show the picker scoped to it. A result containing
 # " > " is always the full absolute breadcrumb of a searched descendant
 # (ohmydebn-menu-picker's contract) - strip the prefix, split on " > ",
-# return the first segment now and queue the rest. A plain result (no
-# " > ") is an ordinary same-level pick, returned unchanged exactly like
-# before this feature existed.
+# set $MENU_RESULT to the first segment now and queue the rest. A plain
+# result (no " > ") is an ordinary same-level pick, set unchanged exactly
+# like before this feature existed.
 menu() {
-  # prompt ($1) is accepted but unused - kept so all 21 existing
-  # `menu "Title" "items"` call sites don't need editing, even though
-  # ohmydebn-menu-picker doesn't currently show a title anywhere (no
-  # titlebar; the window is undecorated).
+  # prompt ($1) is accepted but unused - kept so all ~21 existing
+  # `menu "Title" "items"` call sites don't need editing further, even
+  # though ohmydebn-menu-picker doesn't currently show a title anywhere
+  # (no titlebar; the window is undecorated).
   # shellcheck disable=SC2034
   local prompt="$1"
   local options="$2"
@@ -84,7 +304,7 @@ menu() {
     rest_file=$(mktemp)
     tail -n +2 "$MENU_JUMP_QUEUE_FILE" >"$rest_file"
     mv "$rest_file" "$MENU_JUMP_QUEUE_FILE"
-    printf '%s\n' "$head"
+    MENU_RESULT="$head"
     return
   fi
 
@@ -94,8 +314,8 @@ menu() {
     breadcrumb_prefix=$(menu_tree_paths "${BASH_SOURCE[0]}" | awk -F'\t' -v f="$caller" '$1==f{print $2; exit}')
   fi
 
-  local result
-  result=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+  get_picker_result "$options" "$breadcrumb_prefix"
+  local result="$MENU_PICKER_RESULT"
 
   if [[ "$result" == *" > "* ]]; then
     # A searched descendant. ohmydebn-menu-picker always returns the full
@@ -115,11 +335,11 @@ menu() {
       # above) pops exactly one on its next call.
       printf '%s\n' "${rest//" > "/$'\n'}" >"$MENU_JUMP_QUEUE_FILE"
     fi
-    printf '%s\n' "$first"
+    MENU_RESULT="$first"
     return
   fi
 
-  printf '%s\n' "$result"
+  MENU_RESULT="$result"
 }
 
 terminal() {
@@ -146,7 +366,8 @@ install_and_launch() {
 }
 
 show_learn_menu() {
-  case $(menu "Learn" "  Keybindings\n  OhMyDebn\n  Cinnamon\n  Debian\n  Neovim\n󱆃  Bash") in
+  menu "Learn" "  Keybindings\n  OhMyDebn\n  Cinnamon\n  Debian\n  Neovim\n󱆃  Bash"
+  case "$MENU_RESULT" in
   *Keybindings*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://ohmydebn.org/hotkeys/" ;;
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://ohmydebn.org" ;;
   *Cinnamon*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://github.com/linuxmint/cinnamon" ;;
@@ -158,7 +379,8 @@ show_learn_menu() {
 }
 
 show_capture_menu() {
-  case $(menu "Capture" "  Screenshot\n  Screenrecord\n󰃉  Color") in
+  menu "Capture" "  Screenshot\n  Screenrecord\n󰃉  Color"
+  case "$MENU_RESULT" in
   *Screenshot*) show_screenshot_menu ;;
   *Screenrecord*) show_screenrecord_menu ;;
   *Color*) /usr/bin/gcolor3 ;;
@@ -167,7 +389,8 @@ show_capture_menu() {
 }
 
 show_screenshot_menu() {
-  case $(menu "Screenshot" "  Region\n  Window\n  Display") in
+  menu "Screenshot" "  Region\n  Window\n  Display"
+  case "$MENU_RESULT" in
   *Region*) /usr/bin/xdotool key Shift+Print ;;
   *Window*) /usr/bin/xdotool key Alt+Print ;;
   *Display*) /usr/bin/xdotool key Print ;;
@@ -176,7 +399,8 @@ show_screenshot_menu() {
 }
 
 show_screenrecord_menu() {
-  case $(menu "Screenrecord" "  Cinnamon Recorder Start/Stop\n  SimpleScreenRecorder") in
+  menu "Screenrecord" "  Cinnamon Recorder Start/Stop\n  SimpleScreenRecorder"
+  case "$MENU_RESULT" in
   *Start*) /usr/bin/xdotool key Shift+Ctrl+Alt+R ;;
   *Simple*) /usr/share/ohmydebn/bin/ohmydebn-simplescreenrecorder ;;
   *) show_capture_menu ;;
@@ -184,13 +408,12 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  case $(menu "Install" "  Package\n󰖟  Browser\n  Web App\n  TUI\n  Style\n󱚤  AI\n  Editor\n  Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN") in
+  menu "Install" "  Package\n  Web App\n  TUI\n  Style\n  Editor\n  Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN"
+  case "$MENU_RESULT" in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
-  *Browser*) show_install_browser_menu ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
   *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-install ;;
   *Style*) show_install_style_menu ;;
-  *AI*) show_install_ai_menu ;;
   *Editor*) show_install_editor_menu ;;
   *Cybersecurity*) show_install_cybersecurity_menu ;;
   *Utility*) show_install_utility_menu ;;
@@ -204,7 +427,8 @@ show_install_menu() {
 }
 
 show_install_office_menu() {
-  case $(menu "Install" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord") in
+  menu "Install" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord"
+  case "$MENU_RESULT" in
   *LibreOffice*) install "libreoffice" "libreoffice" ;;
   *Calligra*) install "calligra" "calligra" ;;
   *Gnumeric*) install "gnumeric" "gnumeric" ;;
@@ -214,7 +438,8 @@ show_install_office_menu() {
 }
 
 show_install_cybersecurity_menu() {
-  case $(menu "Install" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark") in
+  menu "Install" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark"
+  case "$MENU_RESULT" in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) install "tcpdump" "tcpdump" ;;
   *tshark*) install "tshark" "tshark" ;;
@@ -224,7 +449,8 @@ show_install_cybersecurity_menu() {
 }
 
 show_install_utility_menu() {
-  case $(menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰒒  SSH Server") in
+  menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰒒  SSH Server"
+  case "$MENU_RESULT" in
   *Deskflow*) install "Deskflow" "deskflow" ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
@@ -235,7 +461,8 @@ show_install_utility_menu() {
 }
 
 show_install_vpn_menu() {
-  case $(menu "Install" "󰖂  Cloudflare Warp\n󰖂  Tailscale") in
+  menu "Install" "󰖂  Cloudflare Warp\n󰖂  Tailscale"
+  case "$MENU_RESULT" in
   *Cloudflare*) /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp ;;
   *Tailscale*) /usr/share/ohmydebn/bin/ohmydebn-tailscale ;;
   *) show_install_menu ;;
@@ -243,7 +470,8 @@ show_install_vpn_menu() {
 }
 
 show_install_media_menu() {
-  case $(menu "Install" "  cliamp terminal music player\n  GIMP image editor\n  UxPlay AirPlay receiver") in
+  menu "Install" "  cliamp terminal music player\n  GIMP image editor\n  UxPlay AirPlay receiver"
+  case "$MENU_RESULT" in
   *cliamp*) install "cliamp" "cliamp" ;;
   *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
   *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;
@@ -252,7 +480,8 @@ show_install_media_menu() {
 }
 
 show_install_containerization_menu() {
-  case $(menu "Install" "  Docker\n  Podman\n  Distrobox") in
+  menu "Install" "  Docker\n  Podman\n  Distrobox"
+  case "$MENU_RESULT" in
   *Docker*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-docker-install ;;
   *Podman*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-podman-install ;;
   *Distrobox*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-distrobox-install ;;
@@ -261,15 +490,17 @@ show_install_containerization_menu() {
 }
 
 show_install_virtualization_menu() {
-  case $(menu "Install" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)") in
+  menu "Install" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)"
+  case "$MENU_RESULT" in
   *Boxes*) /usr/share/ohmydebn/bin/ohmydebn-boxes ;;
   *Manager*) /usr/share/ohmydebn/bin/ohmydebn-virtmanager ;;
   *) show_install_menu ;;
   esac
 }
 
-show_install_browser_menu() {
-  case $(menu "Install" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium") in
+show_browser_menu() {
+  menu "Browser" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  case "$MENU_RESULT" in
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
   *Chromium*) install "Chromium" "chromium" ;;
@@ -280,20 +511,25 @@ show_install_browser_menu() {
   esac
 }
 
-show_install_ai_menu() {
-  case $(menu "Install" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)") in
-  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
-  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
-  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
-  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
-  *) show_install_menu ;;
+show_ai_menu() {
+  # Picking any of these also makes it ohmydebn-ai's (Super+A's) default -
+  # see ohmydebn-ai-set-default - so there's no separate "set default AI"
+  # menu duplicating this same list.
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  case "$MENU_RESULT" in
+  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
+  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
+  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-pi ;;
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;
+  *) show_main_menu ;;
   esac
 }
 
 show_install_editor_menu() {
-  case $(menu "Install" "  VSCode\n  Antigravity\n  Emacs") in
+  menu "Install" "  VSCode\n  Antigravity\n  Emacs"
+  case "$MENU_RESULT" in
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *Emacs*) install "Emacs" "emacs" ;;
@@ -302,7 +538,8 @@ show_install_editor_menu() {
 }
 
 show_install_style_menu() {
-  case $(menu "Install" "󰸌  Theme\n  Background") in
+  menu "Install" "󰸌  Theme\n  Background"
+  case "$MENU_RESULT" in
   *Theme*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-theme-install ;;
   *Background*) nemo "$HOME/.config/ohmydebn/current/theme/backgrounds" ;;
   *) show_install_menu ;;
@@ -310,7 +547,8 @@ show_install_style_menu() {
 }
 
 show_remove_menu() {
-  case $(menu "Remove" "  Package\n  Web App\n  TUI\n󰸌  Theme") in
+  menu "Remove" "  Package\n  Web App\n  TUI\n󰸌  Theme"
+  case "$MENU_RESULT" in
   *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-remove ;;
   *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-remove ;;
   *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-remove ;;
@@ -320,7 +558,8 @@ show_remove_menu() {
 }
 
 show_update_menu() {
-  case $(menu "Update" "  OhMyDebn\n  Password\n  Timezone") in
+  menu "Update" "  OhMyDebn\n  Password\n  Timezone"
+  case "$MENU_RESULT" in
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
@@ -329,14 +568,16 @@ show_update_menu() {
 }
 
 show_update_password_menu() {
-  case $(menu "Update Password" "  User") in
+  menu "Update Password" "  User"
+  case "$MENU_RESULT" in
   *User*) present_terminal passwd ;;
   *) show_update_menu ;;
   esac
 }
 
 show_system_menu() {
-  case $(menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown") in
+  menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown"
+  case "$MENU_RESULT" in
   *Lock*) cinnamon-screensaver-command -l ;;
   *Suspend*) systemctl suspend ;;
   *Relaunch*) /usr/bin/cinnamon --replace & ;;
@@ -352,8 +593,9 @@ show_main_menu() {
   # (bin/ohmydebn-menu-tree) - it's real, executed bash (passed as an
   # argument below), not a comment, so it can't silently drift out of
   # sync the way dead/unused data could.
-  local go_items="󰀻  Apps\n󰧑  Learn\n  Capture\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n󰍉  Screen Magnifier\n  System"
-  go_to_menu "$(menu "Go" "$go_items")"
+  local go_items="󰀻  Apps\n󰧑  Learn\n  Capture\n  Style\n󱚤  AI\n󰖟  Browser\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n󰍉  Screen Magnifier\n  System"
+  menu "Go" "$go_items"
+  go_to_menu "$MENU_RESULT"
 }
 
 # Dispatches a bare category label - used both for show_main_menu's own
@@ -368,6 +610,8 @@ go_to_menu() {
   *learn*) show_learn_menu ;;
   *style*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
+  *ai*) show_ai_menu ;;
+  *browser*) show_browser_menu ;;
   *capture*) show_capture_menu ;;
   *screenshot*) show_screenshot_menu ;;
   *screenrecord*) show_screenrecord_menu ;;

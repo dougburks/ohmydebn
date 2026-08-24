@@ -150,4 +150,31 @@ assert_contains "Pi special case: installed Pi gets removed" "$CALLS" "ohmydebn-
 assert_not_contains "dedicated-remove loop: not-installed chatgpt is left alone" "$CALLS" "ohmydebn-chatgpt-remove"
 mock_cleanup
 
+# Scenario 6: on Kali, Firefox is Kali's default and only preinstalled
+# browser (unlike the Debian Cinnamon ISO, which also ships other apps
+# this script removes), so it must be left alone even though it's
+# installed and would otherwise match the "firefox*" glob.
+mock_init
+mock_bin dpkg <<'EOF'
+#!/bin/bash
+if [[ "$1" == "-l" ]]; then
+  case "$2" in
+    brasero|"firefox*") echo "ii  $2  1.0  amd64  desc"; exit 0 ;;
+    *) exit 1 ;;
+  esac
+fi
+exit 1
+EOF
+mock_bin sudo <<'EOF'
+#!/bin/bash
+echo "$*" >>"$MOCK_CALLS"
+exit 0
+EOF
+echo "ID=kali" >"$MOCK_DIR/os-release"
+OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" PATH="$(mock_path)" bash "$SCRIPT" --skip-prompt </dev/null >/dev/null 2>&1
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "Kali: brasero still purged" "$CALLS" "purge brasero"
+assert_not_contains "Kali: firefox* left alone" "$CALLS" "firefox*"
+mock_cleanup
+
 test_summary

@@ -3,7 +3,7 @@
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:89e7c948c74e89a62fc38349079939b7c28baaca9c8c5c8cbff5bc16adf2c39b"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:2222086dfde5ce9f97210e10deee227e9569d535fc450a0a9a4b7c719045995a"
 
 if [[ -n "$1" ]]; then
   IMAGE="$IMAGE_REPO:$1"

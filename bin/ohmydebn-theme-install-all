@@ -16,14 +16,36 @@ read -r
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 
 curl -s $URL | grep github.com | cut -d\" -f2 | while read -r REPO_URL; do
-  THEME_NAME=$(basename "$REPO_URL" .git | sed -E 's/^omarchy-//; s/-theme$//')
+  # Same guards as ohmydebn-theme-install: the page this scrapes is a
+  # substring match, not a real HTML parse, so a URL here is only as
+  # trustworthy as the page's content. git reads a leading dash as an
+  # option, and `<helper>::<address>` as a remote helper to run (e.g.
+  # `ext::sh -c ...` executes an arbitrary command).
+  if [[ "$REPO_URL" == -* || "$REPO_URL" =~ ^[A-Za-z0-9][A-Za-z0-9+.-]*:: ]]; then
+    echo "Skipping '$REPO_URL': names a git option or transport helper, not a repository."
+    echo
+    continue
+  fi
+
+  # Strip user@host: prefix from scp-style SSH URLs so basename sees just the path
+  REPO_PATH="$REPO_URL"
+  [[ "$REPO_PATH" != *"://"* && "$REPO_PATH" == *:*/* ]] && REPO_PATH="${REPO_PATH#*:}"
+  THEME_NAME=$(basename -- "$REPO_PATH" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')
+
+  # Reject names that could escape THEMES_DIR (same check as ohmydebn-theme-install)
+  if [[ -z "$THEME_NAME" || "$THEME_NAME" == .* || "$THEME_NAME" == */* ]]; then
+    echo "Skipping '$REPO_URL': invalid theme name derived from it."
+    echo
+    continue
+  fi
+
   THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
   if [ -d "$THEME_PATH" ]; then
     echo "$THEME_NAME - already installed"
   else
     echo "$THEME_NAME - installing:"
-    if ! GIT_TERMINAL_PROMPT=0 git clone "$REPO_URL" "$THEME_PATH"; then
+    if ! GIT_TERMINAL_PROMPT=0 git clone -- "$REPO_URL" "$THEME_PATH"; then
       echo "Error: Failed to clone $THEME_PATH"
     fi
   fi

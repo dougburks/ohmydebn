@@ -4,10 +4,18 @@ set -e
 
 # Parse command line arguments
 POWER_USER=false
+ASSUME_YES=false
 for arg in "$@"; do
   case $arg in
   --power-user)
     POWER_USER=true
+    shift
+    ;;
+  --yes)
+    # Skips every "Press Enter to continue" prompt below, for unattended runs
+    # (CI smoke tests, scripted provisioning). Everything these prompts warn
+    # about still happens - this only removes the pause to read it.
+    ASSUME_YES=true
     shift
     ;;
   *)
@@ -18,8 +26,10 @@ done
 
 # Check what Linux distro we're running on
 DISTRO_OK=false
-if [ -f /etc/os-release ]; then
-  . /etc/os-release
+OS_RELEASE="${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}"
+if [ -f "$OS_RELEASE" ]; then
+  # shellcheck disable=SC1090
+  . "$OS_RELEASE"
   case "$ID" in
   debian)
     [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
@@ -33,7 +43,7 @@ if [ -f /etc/os-release ]; then
   esac
 fi
 
-if [ "$DISTRO_OK" = false ]; then
+if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   clear
   cat <<EOF
 WARNING!
@@ -46,11 +56,11 @@ IF IT BREAKS YOUR SYSTEM, YOU GET TO KEEP BOTH PIECES!
 
 Press Enter if you are sure you want to continue or Ctrl-c to cancel.
 EOF
-  read input
+  read -r _
 fi
 
 # Check what user is running the script
-if [ "$UID" -eq 0 ]; then
+if [ "$UID" -eq 0 ] && [ "$ASSUME_YES" = false ]; then
   clear
   cat <<EOF
 Looks like you're running as root.
@@ -61,12 +71,19 @@ run this as a normal user that has sudo privileges.
 Press Enter if you are sure you want to continue as root
 or Ctrl-c to cancel.
 EOF
-  read input
+  read -r _
 fi
 
 # Only show welcome message on new installations
 if [ ! -f ~/.local/state/ohmydebn ]; then
-  clear
+  # Unlike the two clear calls above, this one isn't skipped outright under
+  # --yes (the message and the setup below it still run) - but clear itself
+  # still needs to be, since it fails outright with no TERM/TTY (a headless
+  # CI/container run, under --yes) and set -e would take the whole install
+  # down over a cosmetic screen-clear no one is there to see.
+  if [ "$ASSUME_YES" = false ]; then
+    clear
+  fi
   cat <<EOF
 Welcome to OhMyDebn!
 
@@ -85,7 +102,9 @@ WARNING!
 
 Press Enter to continue or Ctrl-c to cancel.
 EOF
-  read input
+  if [ "$ASSUME_YES" = false ]; then
+    read -r _
+  fi
 
   # Update time
   sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
@@ -162,5 +181,17 @@ fi
 export POWER_USER
 
 export PATH="/usr/share/ohmydebn/bin:$PATH"
+
+# ohmydebn.sh applies the desktop-config layer (gsettings, systemctl, Cinnamon
+# theming) on top of the apt package layer above - it needs a running session
+# bus, X/Cinnamon, and a real init system, none of which exist in a headless
+# container. OHMYDEBN_TEST_SKIP_CONFIG lets a smoke test stop right after the
+# package layer succeeds - the part that actually differs across Debian/Kali/
+# Mint - without the config layer's inevitable failure there masking a
+# genuine package-layer result.
+if [ -n "${OHMYDEBN_TEST_SKIP_CONFIG:-}" ]; then
+  echo "OHMYDEBN_TEST_SKIP_CONFIG set - skipping desktop-config layer (ohmydebn.sh)"
+  exit 0
+fi
 
 source /usr/share/ohmydebn/ohmydebn.sh "$@"

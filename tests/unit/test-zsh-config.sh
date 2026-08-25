@@ -52,6 +52,12 @@ AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zs
 assert_eq "fresh install: a alias appears exactly once" "1" "$AI_CLI_COUNT"
 assert_eq "fresh install: ai-cli-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias" ] && echo yes || echo no)"
+# Regression: config/.zshrc's `c` alias already contains the literal string
+# "/usr/share/ohmydebn/bin" (via the ohmydebn-opencode-cli path), which used
+# to false-positive the PATH-update guard and skip appending the actual
+# `export PATH=...` block on every fresh install.
+PATH_EXPORT_COUNT=$(grep -Fc "export PATH=\"$MOCK_BIN:\$PATH\"" "$SCRATCH_HOME/.zshrc")
+assert_eq "fresh install: PATH export block appears exactly once" "1" "$PATH_EXPORT_COUNT"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

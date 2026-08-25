@@ -18,7 +18,7 @@ if [ ! -f $ZSHRC_STATE ]; then
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
-  if ! grep "/usr/share/ohmydebn/bin" $FILE >/dev/null 2>&1; then
+  if ! grep -F 'export PATH="/usr/share/ohmydebn/bin:$PATH"' $FILE >/dev/null 2>&1; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
     cat <<'EOF' >>$FILE
 

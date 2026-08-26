@@ -116,7 +116,7 @@ eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
 
 # Aliases
-alias c='/usr/bin/opencode-cli'
+alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'
 alias ls='/usr/bin/eza -lh --group-directories-first --icons=auto'
 alias lsa='ls -a'
 alias lt='/usr/bin/eza --tree --level=2 --long --icons --git'

@@ -9,6 +9,74 @@ set -e
 # Set default icon theme to grey which should work with most themes
 ICON_THEME="Mint-Y-Grey"
 
+# Buckets a theme's own accent color (e.g. "#5a7fd4") into the closest
+# Mint-Y-* variant, by hue/saturation/lightness computed with plain integer
+# bash arithmetic. Used for any theme not in the curated name list below -
+# most importantly themes applied via the Aether URL handler (bjarneo's
+# omarchy-themes gallery and similar), where every applied theme gets a
+# unique generated name (e.g. "bridge-palette") that never matches the list.
+# Those themes ship their own icons.theme guess, but it has been observed to
+# be an unreliable, often-wrong hue guess (e.g. an olive-green accent labeled
+# Yaru-magenta) - trusting our own accent color, which ohmydebn already
+# normalizes into every theme's colors.toml, is more reliable than trusting
+# that guess.
+icon_theme_for_accent() {
+  local hex="${1#\#}"
+  [[ "$hex" =~ ^[0-9a-fA-F]{6} ]] || return 1
+  local r=$((16#${hex:0:2})) g=$((16#${hex:2:2})) b=$((16#${hex:4:2}))
+
+  local max=$r min=$r
+  ((g > max)) && max=$g; ((g < min)) && min=$g
+  ((b > max)) && max=$b; ((b < min)) && min=$b
+  local delta=$((max - min))
+
+  # Lightness and saturation on a 0-1000 scale (avoids needing floats).
+  local l1000=$(((max + min) * 1000 / 510))
+  local s1000=0
+  if ((delta > 0)); then
+    if ((max + min <= 255)); then
+      s1000=$((delta * 1000 / (max + min)))
+    else
+      s1000=$((delta * 1000 / (510 - max - min)))
+    fi
+  fi
+
+  if ((s1000 < 120)); then
+    echo "Mint-Y-Grey"
+    return 0
+  fi
+
+  local hue=0
+  if ((delta > 0)); then
+    if ((max == r)); then
+      hue=$(((g - b) * 60 / delta))
+    elif ((max == g)); then
+      hue=$(((b - r) * 60 / delta + 120))
+    else
+      hue=$(((r - g) * 60 / delta + 240))
+    fi
+    ((hue < 0)) && hue=$((hue + 360))
+  fi
+
+  if ((hue < 20 || hue >= 340)); then
+    echo "Mint-Y-Red"
+  elif ((hue < 65)); then
+    echo "Mint-Y-Sand"
+  elif ((hue < 170)); then
+    echo "Mint-Y"
+  elif ((hue < 260)); then
+    if ((l1000 < 400)); then
+      echo "Mint-Y-Navy"
+    else
+      echo "Mint-Y-Blue"
+    fi
+  elif ((hue < 290)); then
+    echo "Mint-Y-Purple"
+  else
+    echo "Mint-Y-Pink"
+  fi
+}
+
 # Read theme name from current theme file
 THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || echo "ohmydebn")
 
@@ -43,9 +111,13 @@ matte-black | retropc | ristretto)
   ICON_THEME="Mint-Y-Sand"
   ;;
 *)
-  # For any other theme, check to see if it specifies an icon theme
-  # If so, then use that icon theme to select a corresponding mint icon theme
-  if [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
+  # For any other theme, prefer its own accent color (normalized into every
+  # theme's colors.toml by ohmydebn-theme-set-colors) over its shipped
+  # icons.theme guess - see icon_theme_for_accent above for why.
+  CURRENT_ACCENT=$(grep -E '^\s*accent\s*=' ~/.config/ohmydebn/current/theme/colors.toml 2>/dev/null | head -1 | sed -E 's/.*=\s*"([^"]*)".*/\1/')
+  if [[ -n "$CURRENT_ACCENT" ]] && FROM_ACCENT=$(icon_theme_for_accent "$CURRENT_ACCENT"); then
+    ICON_THEME="$FROM_ACCENT"
+  elif [[ -f ~/.config/ohmydebn/current/theme/icons.theme ]]; then
     ORIG_ICON_THEME=$(cat ~/.config/ohmydebn/current/theme/icons.theme)
     case $ORIG_ICON_THEME in
     # blue

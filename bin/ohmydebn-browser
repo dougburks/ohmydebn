@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# ohmydebn-browser: launches the user's default web browser with no URL,
+# for a plain "just open my browser" keypress. Bound to Super+B (see
+# install/keybinding/keybinding-custom.txt), replacing the old hardcoded
+# /usr/bin/gnome-www-browser target - a Debian alternatives name GNOME
+# stopped shipping years ago, so on most systems it's unset and the
+# keybinding silently did nothing.
+#
+# xdg-open needs a URL/file argument to do anything useful, so it can't be
+# used bare here. gtk-launch instead takes a .desktop file id and launches
+# it correctly with no argument required, so: ask xdg-settings which
+# browser is the desktop-wide default, then hand its .desktop id to
+# gtk-launch. Falls back to x-www-browser (the Debian alternatives entry
+# point) or sensible-browser if xdg-settings/gtk-launch come back empty,
+# unavailable, or fail to launch.
+
+set -uo pipefail
+
+if command -v xdg-settings >/dev/null 2>&1 && command -v gtk-launch >/dev/null 2>&1; then
+  browser_desktop_id=$(xdg-settings get default-web-browser 2>/dev/null)
+  if [[ -n "$browser_desktop_id" ]] && gtk-launch "$browser_desktop_id" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
+
+if command -v x-www-browser >/dev/null 2>&1; then
+  exec x-www-browser
+fi
+
+if command -v sensible-browser >/dev/null 2>&1; then
+  exec sensible-browser
+fi
+
+command -v notify-send >/dev/null 2>&1 && notify-send "OhMyDebn" "No default web browser is configured." -t 3000
+exit 1

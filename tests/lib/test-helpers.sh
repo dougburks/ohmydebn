@@ -32,6 +32,11 @@ mock_init() {
   mkdir -p "$MOCK_BIN"
   : >"$MOCK_CALLS"
   export MOCK_DIR MOCK_BIN MOCK_CALLS
+  # Stubs run as their own bash process (not sourced), so without this,
+  # `mock_log` called from inside a stub is just a missing command - export
+  # -f is what makes the "call mock_log from inside a stub" usage below
+  # actually work there instead of silently doing nothing.
+  export -f mock_log
 }
 
 mock_cleanup() {

@@ -18,7 +18,6 @@ else
   # Install packages
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install docker.io
-  sudo usermod -aG docker "$USER"
 
   # Output message to user
   cat <<EOF
@@ -26,6 +25,18 @@ else
 ================================================================================
 
 Docker is now installed.
+
+Your user has NOT been added to the docker group. Membership in that group is
+effectively passwordless root: anything running as you (a rogue script, a
+poisoned dependency) could run 'docker run -v /:/host' and rewrite the host
+as root, with no password prompt. Use 'sudo docker ...' instead.
+
+If you understand the risk and want the convenience of running docker without
+sudo, add yourself to the group with:
+
+  sudo usermod -aG docker "\$USER"
+
+then log out and back in.
 
 EOF
 fi

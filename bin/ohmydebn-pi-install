@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Pi is not currently installed."
+    echo
+    echo "Continuing will install it, built from:"
+    echo "https://github.com/earendil-works/pi"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt -y install ohmydebn-pi-coding-agent
+fi

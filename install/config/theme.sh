@@ -74,3 +74,23 @@ if [ ! -f $FASTFETCH_CONFIG_BACKFILL_STATE ]; then
   fi
   touch $FASTFETCH_CONFIG_BACKFILL_STATE
 fi
+
+# Backfill the GTK pickers' color file for installs that already had a theme
+# active before ohmydebn-theme-set-picker existed - same reasoning as the
+# fastfetch backfill above: the "default theme is set" block only runs
+# ohmydebn-theme-set on a truly fresh install, so an upgrader's
+# current/picker-colors was simply never written. ohmydebn-menu-picker falls
+# back to a generic default palette when that file is missing, so upgraders
+# saw the wrong colors until they next ran ohmydebn-theme-set themselves.
+# Resolve colors from the already-active current/theme (not the original
+# theme source) and only touch the picker's own color file - not the full
+# ohmydebn-theme-set - to avoid side effects like cycling the background.
+PICKER_COLORS_BACKFILL_STATE=~/.local/state/ohmydebn-config/picker-colors-backfill-20260825
+if [ ! -f $PICKER_COLORS_BACKFILL_STATE ]; then
+  if [ -d ~/.config/ohmydebn/current/theme ]; then
+    COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors ~/.config/ohmydebn/current/theme)
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-picker "$COLORS_SOURCE"
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"
+  fi
+  touch $PICKER_COLORS_BACKFILL_STATE
+fi

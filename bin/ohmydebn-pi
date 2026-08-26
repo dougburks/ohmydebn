@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# If not installed, then offer to install it
+if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-pi-install
+fi
+
+# If installed, then run it in a terminal window. Pi is a CLI/TUI coding
+# agent (like OpenCode, not a GUI app like ChatGPT/Claude Code) and the
+# package installs no /usr/bin symlink - only
+# /usr/lib/ohmydebn-pi-coding-agent/pi - so it has to be run through a
+# terminal directly at that path, the same way ohmydebn-opencode runs
+# /usr/bin/opencode-cli.
+if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  mkdir -p ~/pi-sessions && cd "$(mktemp -d ~/pi-sessions/session-XXXXXX)"
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Pi' -e /usr/lib/ohmydebn-pi-coding-agent/pi
+fi

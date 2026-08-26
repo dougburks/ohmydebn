@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# ohmydebn-ai-cli: launches the user's default AI assistant in-place - the
+# shape the `a` shell alias needs, matching how
+# ohmydebn-opencode-cli/ohmydebn-claude-code-cli/ohmydebn-pi-cli run their
+# tool in the caller's existing terminal instead of opening a new window the
+# way ohmydebn-ai (Super+A) does. Three of the six defaults (chatgpt/vscode/
+# antigravity) are GUI editors with no terminal-native form, so those are
+# opened on $PWD instead of run inside the terminal itself.
+#
+# Same default-lookup/fallback logic as ohmydebn-ai - see that script's own
+# comment for why an unset or corrupted stored value falls back to opencode.
+
+set -euo pipefail
+
+DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
+
+name="opencode"
+if [[ -f "$DEFAULT_AI_FILE" ]]; then
+  stored=$(<"$DEFAULT_AI_FILE")
+  case "$stored" in
+  opencode | claude-code | chatgpt | pi | vscode | antigravity) name="$stored" ;;
+  esac
+fi
+
+case "$name" in
+opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode-cli ;;
+claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code-cli ;;
+pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi-cli ;;
+chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt "$PWD" ;;
+vscode) exec /usr/share/ohmydebn/bin/ohmydebn-code "$PWD" ;;
+antigravity) exec /usr/share/ohmydebn/bin/ohmydebn-antigravity "$PWD" ;;
+esac

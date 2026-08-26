@@ -17,19 +17,47 @@ if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
   echo "Press Enter to install it or Ctrl-C to cancel."
   read -r
 
-  # Install virtualization packages
-  sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install qemu-kvm virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf
+  # qemu-kvm is a virtual package with no installation candidate on Debian
+  # trixie; pick the concrete backend that matches the host architecture.
+  case "$(dpkg --print-architecture)" in
+    amd64) qemu_pkg="qemu-system-x86" ;;
+    arm64|armhf) qemu_pkg="qemu-system-arm" ;;
+    ppc64el) qemu_pkg="qemu-system-ppc" ;;
+    s390x) qemu_pkg="qemu-system-s390x" ;;
+    riscv64|mips*) qemu_pkg="qemu-system-misc" ;;
+    *) qemu_pkg="qemu-system-x86" ;;
+  esac
 
-  # Add user account to the libvirt and kvm groups
-  sudo adduser "$USER" libvirt
+  # Install virtualization packages. passt gives qemu:///session VMs decent
+  # NAT networking (session mode has no bridge/virbr0 like system mode does).
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install "$qemu_pkg" virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf passt
+
+  # Only add the user to the kvm group, for /dev/kvm access. Deliberately NOT
+  # adding to the libvirt group or enabling the system libvirtd: this sets up
+  # qemu:///session (per-user, unprivileged) rather than qemu:///system, since
+  # libvirt group membership is effectively root-equivalent (arbitrary disk
+  # paths, root-run hooks) and session mode avoids that entirely for a
+  # single-user desktop.
   sudo adduser "$USER" kvm
 
-  # Restart cinnamon desktop to make user account changes take effect
+  # Restart cinnamon desktop to make the kvm group change take effect
   setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
 
-  # Enable and start libvirtd
-  sudo systemctl enable --now libvirtd
+  # System mode ships a default storage pool automatically; session mode
+  # doesn't, so the first "create VM" in virt-manager would otherwise fail
+  # with no default pool. Define and start one under the user's own files.
+  mkdir -p ~/.local/share/libvirt/images
+  if ! virsh --connect qemu:///session pool-info default >/dev/null 2>&1; then
+    virsh --connect qemu:///session pool-define-as default dir --target ~/.local/share/libvirt/images
+    virsh --connect qemu:///session pool-autostart default
+    virsh --connect qemu:///session pool-start default
+  fi
+
+  # Point virt-manager at qemu:///session by default instead of the empty
+  # connection list it would otherwise show on first launch.
+  gsettings set org.virt-manager.virt-manager.connections uris "['qemu:///session']"
+  gsettings set org.virt-manager.virt-manager.connections autoconnect "['qemu:///session']"
 
   # Output message to user
   cat <<EOF

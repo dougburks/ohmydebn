@@ -1,0 +1,78 @@
+name: Install Drift Monitor
+
+# Catches the currently-PUBLISHED ohmydebn package failing to install on a
+# supported distro's real, live repos - e.g. a package OhMyDebn depends on
+# (directly, or transitively via cinnamon-desktop-environment) gets renamed,
+# removed, or made unavailable upstream. Kali is a rolling release, so its
+# repo content genuinely changes under us; this is not a one-time compat
+# check, it needs to keep running.
+#
+# Deliberately scoped to install.sh's apt/package layer only - the part that
+# actually differs across distros. ohmydebn.sh (the desktop-config layer:
+# gsettings, systemctl, Cinnamon theming) needs a running session bus, X, and
+# a real init system, none of which exist in a headless container, so it is
+# skipped here via OHMYDEBN_TEST_SKIP_CONFIG (see install.sh). That layer's
+# individual scripts already have their own mocked unit test coverage.
+#
+# This intentionally installs the PUBLISHED ohmydebn package from
+# packages.ohmydebn.org, not a build of this checkout - it is a drift
+# monitor for what real users get right now, not a per-PR check of this
+# branch's changes (the .deb build itself lives in a separate packaging
+# repo). install.sh is still taken from this checkout, since this repo is
+# its source of truth.
+
+on:
+  schedule:
+    # Weekly rather than daily: catches upstream repo drift (the actual
+    # thing this guards against) without paging anyone over transient
+    # mirror hiccups. Monday 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  install-smoke-test:
+    name: install (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:trixie", "docker.io/kalilinux/kali-rolling"]
+    container:
+      image: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bootstrap container (sudo, non-root sudoer, no real service starts)
+        run: |
+          apt-get update
+          apt-get install -y sudo
+
+          # Installing cinnamon-desktop-environment (an ohmydebn hard-depend)
+          # pulls in packages whose postinst tries to start services via
+          # SysV init scripts. There is no running init here to start them
+          # against, so make every such attempt a clean no-op instead of a
+          # hang or an unrelated failure.
+          printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
+          chmod +x /usr/sbin/policy-rc.d
+
+          # A real OhMyDebn install is run by a normal user with sudo, not
+          # root - install.sh's own root-check prompt exists for exactly
+          # this reason, so match that shape here rather than run as root.
+          useradd -m -s /bin/bash tester
+          echo "tester ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/tester
+          chmod 0440 /etc/sudoers.d/tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+
+      - name: Run install.sh (package layer only)
+        run: |
+          su - tester -c "
+            cd '$GITHUB_WORKSPACE' &&
+            DEBIAN_FRONTEND=noninteractive OHMYDEBN_TEST_SKIP_CONFIG=1 \
+              bash install.sh --yes
+          "
+
+      - name: Verify the ohmydebn package actually installed
+        run: su - tester -c "dpkg -s ohmydebn"

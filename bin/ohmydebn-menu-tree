@@ -16,10 +16,19 @@ _mt_block_end() {
   echo $((start + rel - 1))
 }
 
+# Returns the line with the function's own `menu "Title" "Options"` call,
+# not the `case "$MENU_RESULT" in` line right after it - _mt_item_labels
+# below needs the menu() call itself (that's where "Title"/"Options" live),
+# and _mt_arms/_mt_block_end's arm/esac scan starting one line early here
+# than strictly necessary is harmless (neither this line nor the case line
+# matches an arm pattern). Was `case \$(menu "` - see menu()'s own comment
+# for why every show_*_menu's call site changed from
+# `case $(menu "Title" "Options") in` to this same call as a plain
+# statement, `case "$MENU_RESULT" in` on its own line right after.
 _mt_menu_block_start() {
   local file="$1" func="$2" fstart rel
   fstart=$(grep -n "^${func}() {" "$file" | head -1 | cut -d: -f1) || return 1
-  rel=$(tail -n "+$fstart" "$file" | grep -n 'case \$(menu "' | head -1 | cut -d: -f1) || return 1
+  rel=$(tail -n "+$fstart" "$file" | grep -n '^\s*menu "' | head -1 | cut -d: -f1) || return 1
   echo $((fstart + rel - 1))
 }
 

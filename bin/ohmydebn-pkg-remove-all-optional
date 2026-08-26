@@ -23,13 +23,26 @@ pkg_glob_installed() {
   grep -q '^ii' <<<"$dpkg_list"
 }
 
+# Kali doesn't ship an alternative browser out of the box the way the
+# Debian Cinnamon ISO does, and removing its Firefox (Kali's default and
+# only preinstalled browser) leaves the desktop without one - so leave
+# Firefox alone there. OHMYDEBN_TEST_OS_RELEASE lets tests point this at a
+# fake os-release file instead of the real /etc/os-release.
+KALI=false
+OS_RELEASE="${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}"
+if [ -f "$OS_RELEASE" ]; then
+  # shellcheck disable=SC1090
+  . "$OS_RELEASE"
+  [ "${ID:-}" = "kali" ] && KALI=true
+fi
+
 # Batch every purge into a single `apt purge` call instead of one per
 # package/pattern - each individual `apt purge` pays dpkg's trigger-
 # processing cost (mandb, icon caches, desktop/mime databases) on its own,
 # and with Firefox/LibreOffice/etc. from the base Debian 13 Cinnamon ISO
 # usually installed, that cost was being paid dozens of times over.
 TO_PURGE=()
-for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox duplicity emacs "firefox*" gnome-boxes \
+for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox duplicity emacs gnome-boxes \
   gnome-calculator gnome-chess gnome-games gnumeric goldendict-ng hexchat hoichess \
   "libreoffice*" localsend ohmydebn-opencode-cli pidgin podman rclone remmina tcpdump thunderbird "transmission*" \
   tshark uxplay virt-manager wireshark x11vnc; do
@@ -37,6 +50,10 @@ for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox dupl
     TO_PURGE+=("$PACKAGE")
   fi
 done
+
+if [ "$KALI" = false ] && pkg_glob_installed "firefox*"; then
+  TO_PURGE+=("firefox*")
+fi
 
 if [[ ${#TO_PURGE[@]} -gt 0 ]] && ! sudo /usr/bin/apt -y purge "${TO_PURGE[@]}"; then
   # Something in the batch failed (e.g. a conflict between two packages);
@@ -59,3 +76,11 @@ for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudf
     "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt
   fi
 done
+
+# Pi doesn't fit the loop above - its dpkg package name
+# (ohmydebn-pi-coding-agent) isn't the same string as its remove script's
+# ohmydebn-pi-remove (the loop assumes both are the same $PACKAGE, true
+# for every other entry there but not for Pi's short script name).
+if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
+fi

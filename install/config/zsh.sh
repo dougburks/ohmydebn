@@ -18,7 +18,7 @@ if [ ! -f $ZSHRC_STATE ]; then
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
-  if ! grep "/usr/share/ohmydebn/bin" $FILE >/dev/null 2>&1; then
+  if ! grep -F 'export PATH="/usr/share/ohmydebn/bin:$PATH"' $FILE >/dev/null 2>&1; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
     cat <<'EOF' >>$FILE
 
@@ -49,4 +49,41 @@ export MANROFFOPT="-c"
 export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 EOF
   touch $COLOR_MAN_STATE
+fi
+
+PI_ALIAS_STATE=~/.local/state/ohmydebn-config/pi-alias
+if [ ! -f $PI_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Pi CLI coding agent, run in the current terminal
+alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'
+EOF
+  touch $PI_ALIAS_STATE
+fi
+
+OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias
+if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
+  sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc
+  touch $OPENCODE_CLI_ALIAS_STATE
+fi
+
+CLAUDE_ALIAS_STATE=~/.local/state/ohmydebn-config/claude-alias
+if [ ! -f $CLAUDE_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Claude Code CLI, run in the current terminal
+alias claude='/usr/share/ohmydebn/bin/ohmydebn-claude-code-cli'
+EOF
+  touch $CLAUDE_ALIAS_STATE
+fi
+
+AI_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/ai-cli-alias
+if [ ! -f $AI_CLI_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Default AI assistant, run in the current terminal (or opened on \$PWD for
+# GUI defaults like VS Code/Antigravity/ChatGPT)
+alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
+EOF
+  touch $AI_CLI_ALIAS_STATE
 fi

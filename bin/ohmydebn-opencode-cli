@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Companion to ohmydebn-opencode: that script launches OpenCode in a new
+# terminal window (via ohmydebn-terminal), for use from the app
+# launcher/menu. This one runs opencode-cli directly in the caller's
+# existing terminal - the shape the `c` shell alias needs, matching
+# ohmydebn-pi-cli's relationship to ohmydebn-pi.
+
+if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-opencode-install
+fi
+
+exec /usr/bin/opencode-cli "$@"

@@ -85,6 +85,14 @@ mapfile -t REMOVE_ALL_PACKAGES < <(awk '/^for PACKAGE in/{n++} n==2{print; if (/
 for pkg in "${REMOVE_ALL_PACKAGES[@]}"; do
   SKIP_PROMPT_NAMES+=("ohmydebn-${pkg}-remove")
 done
+# Pi sits just outside that loop (its dpkg package name,
+# ohmydebn-pi-coding-agent, isn't the same string as its remove script's
+# ohmydebn-pi-remove, unlike every other entry the loop above handles) -
+# same explicit-grep exception already used above for
+# ohmydebn-pkg-remove-all-optional's own --skip-prompt invocation.
+if grep -q 'ohmydebn-pi-remove --skip-prompt' "$REMOVE_ALL_SH"; then
+  SKIP_PROMPT_NAMES+=("ohmydebn-pi-remove")
+fi
 CHECKED=0
 for name in "${SKIP_PROMPT_NAMES[@]}"; do
   CHECKED=$((CHECKED + 1))
@@ -184,18 +192,32 @@ echo "  checked $CHECKED guarded config files"
 
 # -- check 8: every ohmydebn-menu case arm can actually match its own menu --
 #
-# ohmydebn-menu has two different case-statement styles: `case $(menu "Title"
-# "items") in ...` (dispatches on a displayed selection - checked here) and
-# `case "${1,,}" in ...` in go_to_menu() (dispatches on a CLI argument, not
-# a menu selection - deliberately not covered by this check). Scoped per
-# block (not a whole-file keyword pool) so a keyword from one menu can't
-# spuriously "match" unrelated text in a different menu elsewhere in the file.
+# ohmydebn-menu has two different case-statement styles: `menu "Title"
+# "items"` immediately followed by `case "$MENU_RESULT" in ...` (dispatches
+# on a displayed selection - checked here; see menu()'s own comment in
+# ohmydebn-menu for why this isn't `case $(menu "Title" "items") in` in one
+# statement anymore) and `case "${1,,}" in ...` in go_to_menu() (dispatches
+# on a CLI argument, not a menu selection - deliberately not covered by
+# this check). Scoped per block (not a whole-file keyword pool) so a
+# keyword from one menu can't spuriously "match" unrelated text in a
+# different menu elsewhere in the file.
 
 echo
 echo "-- ohmydebn-menu case-arm consistency --"
 MENU_FILE="$REPO_ROOT/bin/ohmydebn-menu"
 CHECKED=0
-mapfile -t BLOCK_STARTS < <(grep -n 'case \$(menu "' "$MENU_FILE" | cut -d: -f1)
+# Every `menu "Title" "items"` call in the file, except show_main_menu's -
+# that one hands its result to go_to_menu instead of a case block of its
+# own (see check 10's own exclusion of it below), so it's filtered out
+# here by checking what actually follows rather than by name: a real
+# case-block start always has `case "$MENU_RESULT" in` on the very next
+# line.
+mapfile -t ALL_MENU_CALLS < <(grep -n '^\s*menu "' "$MENU_FILE" | cut -d: -f1)
+BLOCK_STARTS=()
+for start in "${ALL_MENU_CALLS[@]}"; do
+  next_line=$(sed -n "$((start + 1))p" "$MENU_FILE")
+  [[ "$next_line" == *'case "$MENU_RESULT" in'* ]] && BLOCK_STARTS+=("$start")
+done
 for start in "${BLOCK_STARTS[@]}"; do
   rel_end=$(tail -n "+$start" "$MENU_FILE" | grep -n '^\s*esac' | head -1 | cut -d: -f1)
   end=$((start + rel_end - 1))
@@ -340,9 +362,11 @@ with open(menu_file, encoding="utf-8") as f:
     src = f.read()
 
 # The two shapes items strings are written in this file: inline in a
-# `case $(menu "Title" "items") in` call, or built up in a local var first
-# (today, only show_main_menu's go_items) and referenced as "$go_items".
-items_strings = re.findall(r'case \$\(menu "[^"]*" "([^"]*)"\) in', src)
+# `menu "Title" "items"` call (see menu()'s own comment in ohmydebn-menu
+# for why this isn't `case $(menu "Title" "items") in` as one statement
+# anymore), or built up in a local var first (today, only show_main_menu's
+# go_items) and referenced as "$go_items".
+items_strings = re.findall(r'^\s*menu "[^"]*" "([^"]*)"$', src, re.MULTILINE)
 m = re.search(r'local go_items="([^"]*)"', src)
 if m:
     items_strings.append(m.group(1))
@@ -404,6 +428,202 @@ if ! grep -q 'set_ellipsize(Pango.EllipsizeMode.END)' "$PICKER_FILE"; then
   FAIL=$((FAIL + 1))
 else
   echo "  ellipsize is set on the row label"
+fi
+
+echo
+echo "-- populate() keeps this window sized to its content (regression guard) --"
+# resize_to_content()'s own comment explains why this matters: Cinnamon/
+# Muffin silently ignores plain resize() on this undecorated DIALOG-hint
+# window once it's mapped (confirmed by hand), which --serve mode's window
+# always is by the time reload()/on_search_changed() change what's showing
+# - so without the set_geometry_hints()-forced resize below, any screen
+# with more rows than whatever was visible at this window's first-ever
+# layout gets a scrollbar it can never grow out of for the rest of its
+# life. This is exactly what broke when Install > AI's items moved to
+# their own top-level AI menu and pushed the Go screen from 11 to 12 rows.
+if ! grep -q 'def resize_to_content' "$PICKER_FILE"; then
+  echo "  FAIL - resize_to_content() is gone from $(basename "$PICKER_FILE") - screens with more rows than this window's first-ever layout will silently get a permanent scrollbar again"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'self.resize_to_content(len(rows))' "$PICKER_FILE"; then
+  echo "  FAIL - populate() no longer calls resize_to_content() - a reload() or search keystroke that changes the row count won't resize this window anymore"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'set_geometry_hints' "$PICKER_FILE"; then
+  echo "  FAIL - resize_to_content() no longer uses set_geometry_hints() - a plain resize() alone is silently ignored post-map on this window (confirmed by hand), so this would regress right back to the bug it fixed"
+  FAIL=$((FAIL + 1))
+else
+  echo "  resize_to_content() exists, is wired into populate(), and forces the resize via WM size hints"
+fi
+
+echo
+echo "-- finish() closes the persistent-picker process before running a leaf pick (regression guard) --"
+# A real report: "the menu remains visible until the launched app is
+# closed" - e.g. picking About or Demo. --serve mode's window stays alive
+# across a whole ohmydebn-menu session (see resize_to_content's comment on
+# why), and finish() used to leave it visible after sending a pick back,
+# trusting reload() to repaint it for the next screen - true for submenu
+# navigation, but a leaf pick runs its command synchronously on the bash
+# side with no further reload() coming, so nothing hid the window until
+# that command finished and the whole session's EXIT trap finally fired.
+#
+# finish() no longer hides immediately, though - that traded the stuck-open
+# bug for a different real report, a visible hide-then-reshow flash on
+# every ordinary submenu pick (the common case, and fast: no process spawn,
+# just local pipe I/O). It now schedules a close via _schedule_close()
+# instead, and reload() cancels it if another screen follows within
+# CLOSE_DELAY_MS - which the fast submenu-navigation round trip always
+# does, so that path never even hides, let alone quits. bin/ohmydebn-menu
+# never loops back to show_main_menu, so a pick with no reload() following
+# it means this session's picker really is done for good - the deferred
+# callback actually quits the process (Gtk.main_quit(), same as the
+# original one-shot mode's own finish()), not just hides the window, so it
+# doesn't linger as a hidden process until whatever it launched closes and
+# the whole ohmydebn-menu script's EXIT trap eventually reaps it.
+FINISH_START=$(grep -n '^    def finish(self, value):' "$PICKER_FILE" | head -1 | cut -d: -f1)
+FINISH_REL_END=$(tail -n "+$FINISH_START" "$PICKER_FILE" | grep -n '^    def \|^def ' | sed -n '2p' | cut -d: -f1)
+FINISH_BLOCK=$(sed -n "${FINISH_START},$((FINISH_START + FINISH_REL_END - 2))p" "$PICKER_FILE")
+if [[ -z "$FINISH_START" ]]; then
+  echo "  FAIL - couldn't find finish() in $(basename "$PICKER_FILE") - did it get renamed?"
+  FAIL=$((FAIL + 1))
+elif [[ "$(grep -c 'self\._schedule_close()' <<<"$FINISH_BLOCK")" -lt 2 ]]; then
+  echo "  FAIL - finish() no longer schedules a close on both the real-value and cancelled paths back to on_result - a leaf pick (About, Demo, ...) will stay visible again until whatever it launches closes"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -A5 'def _deferred_close' "$PICKER_FILE" | grep -q 'Gtk\.main_quit()'; then
+  echo "  FAIL - _schedule_close()'s own timeout callback no longer actually quits the process - a leaf pick would leave it hidden but running forever now"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'GLib\.source_remove' "$PICKER_FILE"; then
+  echo "  FAIL - nothing cancels a pending deferred close from reload() - every ordinary submenu pick would regress back to the hide-then-reshow flash (or worse, an outright quit) this was written to fix"
+  FAIL=$((FAIL + 1))
+elif ! grep -q 'self.show()' "$PICKER_FILE"; then
+  echo "  FAIL - nothing re-shows the window when reload() cancels a pending close in time - every screen after the first pick of a session would stay invisible"
+  FAIL=$((FAIL + 1))
+else
+  echo "  finish() schedules a close on both on_result paths, reload() cancels it for a fast submenu round trip, and the window stays visible/shown throughout that path"
+fi
+
+echo
+echo "-- show_ai_menu picks stay in sync with ohmydebn-ai-set-default --"
+# ohmydebn-ai (Super+A) launches whatever bin/ohmydebn-menu's
+# show_ai_menu last recorded via ohmydebn-ai-set-default - see that
+# function's own comment. There's no separate "set default AI" menu, so if
+# a pick's set-default call names the wrong tool (or is missing/reordered
+# after the launcher instead of before it), Super+A silently launches
+# something other than what was just picked.
+AI_MENU_START=$(grep -n '^show_ai_menu() {' "$MENU_FILE" | head -1 | cut -d: -f1)
+AI_MENU_REL_END=$(tail -n "+$AI_MENU_START" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
+AI_MENU_END=$((AI_MENU_START + AI_MENU_REL_END - 1))
+AI_MENU_BLOCK=$(sed -n "${AI_MENU_START},${AI_MENU_END}p" "$MENU_FILE")
+declare -A AI_ARM_TO_DEFAULT_NAME=(
+  [OpenCode]=opencode
+  [Claude]=claude-code
+  [ChatGPT]=chatgpt
+  [Pi]=pi
+  [Antigravity]=antigravity
+  [VSCode]=vscode
+)
+CHECKED=0
+for arm in "${!AI_ARM_TO_DEFAULT_NAME[@]}"; do
+  CHECKED=$((CHECKED + 1))
+  expected="${AI_ARM_TO_DEFAULT_NAME[$arm]}"
+  # The arm's own block: from its `*Arm*)` line up to the next `;;`.
+  arm_block=$(echo "$AI_MENU_BLOCK" | awk -v pat="\\\*${arm}\\\*\\)" '
+    $0 ~ pat { capturing=1 }
+    capturing { print }
+    capturing && /;;/ { exit }
+  ')
+  if [[ -z "$arm_block" ]]; then
+    echo "  FAIL - show_ai_menu has no '*${arm}*)' arm anymore (expected one setting default '$expected')"
+    FAIL=$((FAIL + 1))
+  elif ! echo "$arm_block" | grep -qP "ohmydebn-ai-set-default $expected\b"; then
+    echo "  FAIL - '*${arm}*)' arm doesn't call 'ohmydebn-ai-set-default $expected' - Super+A won't launch what this pick just opened"
+    FAIL=$((FAIL + 1))
+  fi
+done
+echo "  checked $CHECKED AI picks"
+
+echo
+echo "-- ohmydebn-ai and ohmydebn-ai-set-default agree on the set of AI names --"
+# Independent of show_ai_menu's own picks (checked above): if a name
+# is ever added to one script's case statement without the other, either
+# ohmydebn-ai-set-default accepts a name ohmydebn-ai can't launch (silently
+# no-ops - its case has no matching arm and falls through with nothing
+# exec'd), or ohmydebn-ai-set-default rejects a name ohmydebn-menu is
+# actually trying to set as the new default.
+AI_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai"
+AI_SET_DEFAULT_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai-set-default"
+mapfile -t AI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z-]*(?=\) exec)' "$AI_SCRIPT" | sort -u)
+# The valid-names line is a single "a | b | c)" case pattern, not one name
+# per line - pull that whole line out, then split it on '|'.
+AI_VALID_LINE=$(grep -E '^[a-z][a-z-]*( \| [a-z][a-z-]*)+\)' "$AI_SET_DEFAULT_SCRIPT")
+mapfile -t AI_VALID_NAMES < <(echo "${AI_VALID_LINE%)*}" | tr '|' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u)
+if [[ "$(printf '%s\n' "${AI_DISPATCH_NAMES[@]}")" != "$(printf '%s\n' "${AI_VALID_NAMES[@]}")" ]]; then
+  echo "  FAIL - ohmydebn-ai's dispatch names (${AI_DISPATCH_NAMES[*]}) don't match ohmydebn-ai-set-default's accepted names (${AI_VALID_NAMES[*]})"
+  FAIL=$((FAIL + 1))
+else
+  echo "  both scripts agree on: ${AI_DISPATCH_NAMES[*]}"
+fi
+
+echo
+echo "-- ohmydebn-ai-cli agrees with ohmydebn-ai-set-default on the set of AI names --"
+# Same drift risk as the check above, for the `a` alias's target: if a name
+# is ever added to ohmydebn-ai-set-default's case statement without also
+# adding a matching arm to ohmydebn-ai-cli (or vice versa), Super+A and `a`
+# would silently disagree on what the same stored default launches.
+AI_CLI_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai-cli"
+mapfile -t AI_CLI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z-]*(?=\) exec)' "$AI_CLI_SCRIPT" | sort -u)
+if [[ "$(printf '%s\n' "${AI_CLI_DISPATCH_NAMES[@]}")" != "$(printf '%s\n' "${AI_VALID_NAMES[@]}")" ]]; then
+  echo "  FAIL - ohmydebn-ai-cli's dispatch names (${AI_CLI_DISPATCH_NAMES[*]}) don't match ohmydebn-ai-set-default's accepted names (${AI_VALID_NAMES[*]})"
+  FAIL=$((FAIL + 1))
+else
+  echo "  both scripts agree on: ${AI_CLI_DISPATCH_NAMES[*]}"
+fi
+
+echo
+echo "-- local-share.sh and theme-carousel agree on the legacy aether desktop filenames --"
+# Both remove the same stale per-user desktop files (see either one's own
+# comment for why) - install/cleanup/local-share.sh sweeps them once per
+# ohmydebn-update, bin/ohmydebn-theme-carousel's open_browse_themes()
+# re-sweeps right before the one action that can trigger aether to
+# recreate one. If either list drifts from the other, one of the two
+# sweep points silently stops protecting against a name the other still
+# knows about.
+LOCAL_SHARE_SH="$REPO_ROOT/install/cleanup/local-share.sh"
+THEME_CAROUSEL="$REPO_ROOT/bin/ohmydebn-theme-carousel"
+LEGACY_LINE=$(grep -E '^for FILE in .*\.desktop.*; do$' "$LOCAL_SHARE_SH")
+mapfile -t LEGACY_BASH_NAMES < <(echo "${LEGACY_LINE#for FILE in }" | sed 's/; do$//' | tr ' ' '\n' | sort -u)
+PY_BLOCK=$(sed -n '/^LEGACY_AETHER_DESKTOP_FILES = ($/,/^)$/p' "$THEME_CAROUSEL")
+mapfile -t LEGACY_PY_NAMES < <(echo "$PY_BLOCK" | grep -oP '"\K[a-zA-Z0-9_.-]+\.desktop(?=")' | sort -u)
+if [[ -z "$LEGACY_LINE" ]]; then
+  echo "  FAIL - couldn't find the 'for FILE in ...desktop...; do' loop in $(basename "$LOCAL_SHARE_SH") - did it get restructured?"
+  FAIL=$((FAIL + 1))
+elif [[ -z "$PY_BLOCK" ]]; then
+  echo "  FAIL - couldn't find LEGACY_AETHER_DESKTOP_FILES in $(basename "$THEME_CAROUSEL") - did it get renamed?"
+  FAIL=$((FAIL + 1))
+elif [[ "$(printf '%s\n' "${LEGACY_BASH_NAMES[@]}")" != "$(printf '%s\n' "${LEGACY_PY_NAMES[@]}")" ]]; then
+  echo "  FAIL - local-share.sh's legacy names (${LEGACY_BASH_NAMES[*]}) don't match theme-carousel's LEGACY_AETHER_DESKTOP_FILES (${LEGACY_PY_NAMES[*]})"
+  FAIL=$((FAIL + 1))
+else
+  echo "  both agree on: ${LEGACY_BASH_NAMES[*]}"
+fi
+
+echo
+echo "-- open_browse_themes() actually calls remove_legacy_aether_desktop_files() --"
+# The function working in isolation (covered in test-python-pickers.py) is
+# not the same as it actually being called from the one place it matters -
+# a future edit to open_browse_themes() could drop the call while leaving
+# the function itself, and its own unit tests, untouched and still green.
+BROWSE_START=$(grep -n '^    def open_browse_themes(self):' "$THEME_CAROUSEL" | head -1 | cut -d: -f1)
+BROWSE_REL_END=$(tail -n "+$BROWSE_START" "$THEME_CAROUSEL" | grep -n '^    def \|^def ' | sed -n '2p' | cut -d: -f1)
+if [[ -z "$BROWSE_START" ]]; then
+  echo "  FAIL - couldn't find open_browse_themes() in $(basename "$THEME_CAROUSEL") - did it get renamed?"
+  FAIL=$((FAIL + 1))
+else
+  BROWSE_BLOCK=$(sed -n "${BROWSE_START},$((BROWSE_START + BROWSE_REL_END - 2))p" "$THEME_CAROUSEL")
+  if ! grep -q 'remove_legacy_aether_desktop_files()' <<<"$BROWSE_BLOCK"; then
+    echo "  FAIL - open_browse_themes() no longer calls remove_legacy_aether_desktop_files() - a stale per-user handler wouldn't be cleaned up before sending the user to a page that can trigger aether"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  open_browse_themes() calls remove_legacy_aether_desktop_files()"
+  fi
 fi
 
 echo

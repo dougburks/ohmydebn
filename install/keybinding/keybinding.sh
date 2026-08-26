@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260818
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260824
 
 if [ ! -f $KEYBINDING_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Updating hotkeys"
@@ -10,11 +10,18 @@ if [ ! -f $KEYBINDING_STATE ]; then
   KEYBINDING_CINNAMON=$KEYBINDING_DIR/keybinding-cinnamon.txt
   KEYBINDING_CUSTOM=$KEYBINDING_DIR/keybinding-custom.txt
 
+  # gsettings keys can be renamed/removed between Cinnamon versions (e.g.
+  # "switch-input-source" no longer exists on Cinnamon 6.4+). `eval`ing a
+  # failing `gsettings set` under the caller's `set -e`, from inside a
+  # sourced function, can trip a bash bug ("pop_var_context: head of
+  # shell_variables not a function context") that aborts the whole install.
+  # `|| echo ... >&2` keeps the function's own exit status 0 so one missing
+  # key just prints a warning instead of taking down the rest of the install.
   function keybinding-cinnamon() {
     local CMD
     echo "$4"
     CMD="gsettings set org.cinnamon.desktop.keybindings.$1 $2 \"$3\""
-    eval "$CMD"
+    eval "$CMD" || echo "Warning: skipped keybinding $1.$2 (not present in this Cinnamon version)" >&2
   }
 
   function keybinding-custom() {
@@ -23,9 +30,9 @@ if [ ! -f $KEYBINDING_STATE ]; then
     GSETTINGS1="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ name \"$2\""
     GSETTINGS2="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ command \"$3\""
     GSETTINGS3="gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/ binding \"$4\""
-    eval "$GSETTINGS1"
-    eval "$GSETTINGS2"
-    eval "$GSETTINGS3"
+    eval "$GSETTINGS1" || echo "Warning: skipped custom keybinding $1 name" >&2
+    eval "$GSETTINGS2" || echo "Warning: skipped custom keybinding $1 command" >&2
+    eval "$GSETTINGS3" || echo "Warning: skipped custom keybinding $1 binding" >&2
   }
 
   # To create new custom keybindings, first specify how many custom keybindings we're going to load

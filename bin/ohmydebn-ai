@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# ohmydebn-ai: launches the user's default AI assistant. Bound to Super+A
+# (see install/keybinding/keybinding-custom.txt). The default is set by
+# picking any of the six options in bin/ohmydebn-menu's top-level AI menu
+# (show_ai_menu) - that picker doubles as "set default" (see
+# ohmydebn-ai-set-default), so there's no separate settings UI to keep in
+# sync with that list. Falls back to OpenCode - Super+A's original,
+# hardcoded target - when nothing's been picked yet or the stored value
+# isn't one of the six known names, so upgraders' muscle memory doesn't
+# change until they deliberately pick something else.
+
+set -euo pipefail
+
+DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
+
+name="opencode"
+if [[ -f "$DEFAULT_AI_FILE" ]]; then
+  stored=$(<"$DEFAULT_AI_FILE")
+  case "$stored" in
+  opencode | claude-code | chatgpt | pi | vscode | antigravity) name="$stored" ;;
+  esac
+fi
+
+case "$name" in
+opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
+claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
+chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi ;;
+vscode) exec /usr/share/ohmydebn/bin/ohmydebn-code ;;
+antigravity) exec /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+esac

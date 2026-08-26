@@ -7,5 +7,7 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "antigravity" >/dev/null 2>&1; then
-  /usr/share/antigravity/bin/antigravity
+  # "$@" lets ohmydebn-ai-cli pass a directory to open (e.g. $PWD) while
+  # every other caller (menu picks, ohmydebn-ai) still runs with no args.
+  /usr/share/antigravity/bin/antigravity "$@"
 fi

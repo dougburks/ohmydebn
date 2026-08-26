@@ -1,9 +1,39 @@
 #!/bin/bash
 
+# Rootless podman's default network backend (pasta) forwards published
+# ports on both IPv4 and IPv6. On systems where /etc/hosts resolves
+# "localhost" to ::1 before 127.0.0.1 (the default on most current
+# Debian-family systems, Kali included), the browser connects over IPv6 -
+# but the so-crates container's server only listens on IPv4 inside the
+# container, so that connection just hangs/refuses and port 8000 looks
+# unreachable even though the container is up. Forcing pasta to IPv4-only
+# sidesteps the mismatch; nothing this script publishes needs IPv6.
+ensure_pasta_ipv4() {
+  local conf="$HOME/.config/containers/containers.conf"
+
+  # Already configured (by this script or by hand) - leave it alone rather
+  # than fight a value someone deliberately chose.
+  if [[ -f "$conf" ]] && grep -q '^[[:space:]]*pasta_options[[:space:]]*=' "$conf"; then
+    return
+  fi
+
+  mkdir -p "$(dirname "$conf")"
+
+  if [[ -f "$conf" ]] && grep -q '^\[network\]' "$conf"; then
+    # Insert right after the existing [network] header so this lands in
+    # that section instead of floating in whichever one happens to be last.
+    sed -i '/^\[network\]/a pasta_options = ["-4"]' "$conf"
+  else
+    printf '\n[network]\npasta_options = ["-4"]\n' >>"$conf"
+  fi
+}
+
+ensure_pasta_ipv4
+
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:89e7c948c74e89a62fc38349079939b7c28baaca9c8c5c8cbff5bc16adf2c39b"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:2222086dfde5ce9f97210e10deee227e9569d535fc450a0a9a4b7c719045995a"
 
 if [[ -n "$1" ]]; then
   IMAGE="$IMAGE_REPO:$1"

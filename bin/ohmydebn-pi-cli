@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Companion to ohmydebn-pi: that script launches Pi in a new terminal
+# window (via ohmydebn-terminal), for use from the app launcher/menu. This
+# one runs Pi directly in the caller's existing terminal - the shape the
+# `pi` shell alias needs, matching how the `c` alias runs opencode-cli
+# in-place instead of opening a window for it.
+
+if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-pi-install
+fi
+
+exec /usr/lib/ohmydebn-pi-coding-agent/pi "$@"

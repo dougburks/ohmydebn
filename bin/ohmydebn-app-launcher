@@ -3,7 +3,7 @@
 # Launches the GTK app picker (ohmydebn-menu-picker --apps), which replaced
 # rofi's `-show drun -show-icons` here - see that script's own comment for
 # how it enumerates and launches .desktop entries. Referenced by
-# ohmydebn-menu's Apps dispatch and the Super+R/Super+Space keybinding.
+# ohmydebn-menu's Apps dispatch and the Super+R keybinding.
 # Renamed from ohmydebn-rofi-apps once nothing in the codebase called rofi
 # anywhere anymore.
 exec /usr/share/ohmydebn/bin/ohmydebn-menu-picker --apps

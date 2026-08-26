@@ -19,8 +19,11 @@ cd "$REPO_ROOT" || exit 1
 FAIL=0
 CHECKED=0
 
-mapfile -d '' -t SCRIPTS < <(find bin install tests -type f -print0 | xargs -0 grep -lZ '^#!.*sh' 2>/dev/null)
-mapfile -d '' -t PY_SCRIPTS < <(find bin install tests -type f -print0 | xargs -0 grep -lZ '^#!.*python' 2>/dev/null)
+# Root-level scripts (install.sh, ohmydebn.sh) live outside bin/install/tests,
+# so they need their own non-recursive find - a plain `find .` would also
+# re-walk bin/install/tests, double-checking everything in them.
+mapfile -d '' -t SCRIPTS < <({ find . -maxdepth 1 -type f -print0; find bin install tests -type f -print0; } | xargs -0 grep -lZ '^#!.*sh' 2>/dev/null)
+mapfile -d '' -t PY_SCRIPTS < <({ find . -maxdepth 1 -type f -print0; find bin install tests -type f -print0; } | xargs -0 grep -lZ '^#!.*python' 2>/dev/null)
 
 if command -v shellcheck >/dev/null 2>&1; then
   HAVE_SHELLCHECK=true

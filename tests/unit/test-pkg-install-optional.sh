@@ -69,10 +69,6 @@ fi
 [[ "$1" == "/usr/bin/apt-mark" ]] && exit 0
 exit 0
 EOF
-  # mock_log is defined in test-helpers.sh, running in THIS shell - the
-  # sudo stub above runs as its own process, so give it a self-contained
-  # copy instead of relying on the function being inherited.
-  sed -i "1a mock_log() { echo \"\$*\" >> \"\$MOCK_CALLS\"; }" "$MOCK_BIN/sudo"
 }
 
 echo "=== ohmydebn-pkg-install-optional ==="

@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# ohmydebn-terminal-tiled (the only thing that ever launches this, inside
+# the alacritty session it starts) resizes and tiles that window shortly
+# after spawning it, not before - its own launch, activate, and gTile
+# tiling steps together take a bit under half a second. Without waiting
+# that out first, the very first ttfx launch below queries `tput lines`
+# while the window is still at its small pre-tile size and locks that
+# wrong canvas height in for its whole first animation, only
+# self-correcting once this outer loop naturally rotates to the next
+# ttfx invocation and re-queries the (by then correct) size - confirmed
+# live as exactly the reported bug: small at first, correct only after
+# the first rotation. 0.6s: comfortably past ohmydebn-terminal-tiled's
+# own ~0.4s, same kind of empirically-picked, not perfectly synchronized,
+# margin as that script's own sleep-before-xdotool-search.
+sleep 0.6
+
 while true; do
   /usr/bin/ttfx -i ~/.config/ohmydebn/branding/logo.txt \
     --frame-rate 240 --canvas-width 0 --canvas-height $(($(tput lines) - 2)) \

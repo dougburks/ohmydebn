@@ -61,3 +61,19 @@ if [ ! -f $NEMO_CONFIG_STATE ]; then
   mkdir -p ~/.local/state/ohmydebn-config
   touch $NEMO_CONFIG_STATE
 fi
+
+IBUS_PANEL_STATE=~/.local/state/ohmydebn-config/ibus-panel-20260828
+if [ ! -f $IBUS_PANEL_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Hiding the ibus systray icon"
+  gsettings set org.freedesktop.ibus.panel show-icon-on-systray false
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $IBUS_PANEL_STATE
+fi
+
+CLOCK_FORMAT_STATE=~/.local/state/ohmydebn-config/clock-format-20260828
+if [ ! -f $CLOCK_FORMAT_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Setting clock to 12-hour format"
+  gsettings set org.cinnamon.desktop.interface clock-use-24h false
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $CLOCK_FORMAT_STATE
+fi

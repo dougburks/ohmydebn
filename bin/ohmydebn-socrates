@@ -1,9 +1,16 @@
 #!/bin/bash
 
-if ! dpkg -s "podman" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-podman-install
-fi
-
-if dpkg -s "podman" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/share/ohmydebn/bin/ohmydebn-socrates-run
-fi
+# One terminal window for the whole lifecycle (install-if-needed, then
+# run) instead of a separate floating install-presentation terminal
+# followed by a second terminal for SO-CRATES itself - see
+# ohmydebn-cliamp's own comment for why (confirmed live, same bug).
+exec setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn --title "SO-CRATES" -e bash -c '
+  if ! dpkg -s "podman" >/dev/null 2>&1; then
+    /usr/share/ohmydebn/bin/ohmydebn-show-logo
+    /usr/share/ohmydebn/bin/ohmydebn-podman-install
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+  fi
+  if dpkg -s "podman" >/dev/null 2>&1; then
+    exec /usr/share/ohmydebn/bin/ohmydebn-socrates-run
+  fi
+'

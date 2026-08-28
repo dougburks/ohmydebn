@@ -1,0 +1,326 @@
+#!/usr/bin/python3
+#
+# Graphical disk speed test - a GTK/Cairo recreation of Omarchy's own
+# QML speed-test overlay (~/git/omarchy's shell/Ui/SpeedTestOverlay.qml,
+# the "Quattro" checkout - the same overlay Omarchy's own network speed
+# test uses, explicitly "shared by the network and disk speed tests" per
+# its own top comment). See ohmydebn_speedtest_common.py, shared with
+# ohmydebn-network-speedtest-gui, for the dial widget itself and the
+# theme-accent color it uses.
+#
+# Measurement approach mirrors Omarchy's own bin/omarchy-disk-speedtest
+# exactly (see ohmydebn-disk-speedtest, the terminal version of this same
+# test, for the fuller comment): direct I/O (O_DIRECT, bypassing the page
+# cache) against several exclusive per-run scratch files in parallel via
+# ohmydebn-disk-speedtest-worker, sampling the backing block device's own
+# kernel I/O counters once a second rather than trusting dd's
+# self-reported rate. Runs read then write, each for a fixed duration,
+# unlike Omarchy's own toggleable live overlay - this is a self-contained
+# window with a real end, not a panel meant to be switched on and off.
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk
+
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_speedtest_common as common
+
+WORKER = "/usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-worker"
+
+PARALLEL_WORKERS = 4
+CHUNK_MB = 4
+FILE_MB = 256
+DURATION_SECONDS = 8
+
+
+def run(*args, **kwargs):
+    return subprocess.run(args, capture_output=True, text=True, check=False, **kwargs)
+
+
+def resolve_device(target_dir):
+    """Finds the block device backing target_dir and a human-readable
+    name for it - walks dm-crypt/LVM layers and the partition table up
+    to the whole device that carries the hardware model, matching
+    Omarchy's own script exactly, since a raw device name (dm-1,
+    nvme0n1p2) is a lot less useful to read than "Samsung 990 PRO".
+    Returns (dev, display_name) or (None, error_message)."""
+    source_dev = run("findmnt", "-no", "SOURCE", "--target", target_dir).stdout.strip()
+    source_dev = source_dev.split("[", 1)[0]  # strip a btrfs subvolume suffix: /dev/sda2[/@home]
+    if not source_dev.startswith("/dev/"):
+        return None, f"Cannot find a disk behind {target_dir}"
+
+    resolved = run("readlink", "-f", source_dev).stdout.strip()
+    dev = os.path.basename(resolved)
+    if not os.access(f"/sys/class/block/{dev}/stat", os.R_OK):
+        return None, f"No I/O statistics for {dev}"
+
+    disk = dev
+    while True:
+        slaves_dir = f"/sys/class/block/{disk}/slaves"
+        try:
+            slaves = sorted(os.listdir(slaves_dir))
+        except OSError:
+            slaves = []
+        if not slaves:
+            break
+        disk = slaves[0]
+    if os.path.isfile(f"/sys/class/block/{disk}/partition"):
+        parent = run("readlink", "-f", f"/sys/class/block/{disk}").stdout.strip()
+        disk = os.path.basename(os.path.dirname(parent))
+
+    model = run("lsblk", "-dno", "MODEL", f"/dev/{disk}").stdout.strip()
+    return dev, (model or disk)
+
+
+def device_sectors(dev, phase):
+    try:
+        with open(f"/sys/class/block/{dev}/stat", encoding="utf-8") as f:
+            stats = f.read().split()
+        return int(stats[2] if phase == "read" else stats[6])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+class SpeedTestWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Disk Speed Test")
+        self.set_default_size(640, 420)
+        self.set_resizable(False)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+
+        self.target_dir = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "ohmydebn")
+        self.dev = None
+        self.chunk_file = None
+        self.test_files = []
+        self.worker_procs = []
+        self.tick_source = None
+        self.phase = "idle"  # idle -> staging -> read -> write -> done
+        self.elapsed = 0
+        self.before_sectors = None
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_border_width(24)
+        self.add(outer)
+
+        self.title_label = Gtk.Label(label="DISK SPEED TEST")
+        self.title_label.get_style_context().add_class("speedtest-title")
+        outer.pack_start(self.title_label, False, False, 0)
+
+        dial_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=48)
+        dial_row.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(dial_row, True, True, 0)
+        self.read_dial = common.SpeedDial("READ", "MB/s")
+        self.write_dial = common.SpeedDial("WRITE", "MB/s")
+        dial_row.pack_start(self.read_dial, False, False, 0)
+        dial_row.pack_start(self.write_dial, False, False, 0)
+
+        self.status_label = Gtk.Label(label="")
+        outer.pack_start(self.status_label, False, False, 0)
+
+        self.run_button = Gtk.Button(label="Run Again")
+        self.run_button.set_halign(Gtk.Align.CENTER)
+        self.run_button.connect("clicked", lambda _b: self.start_test())
+        self.run_button.set_no_show_all(True)
+        outer.pack_start(self.run_button, False, False, 0)
+
+        common.apply_dark_scrim_css()
+
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("destroy", self._on_destroy)
+        # See ohmydebn-network-speedtest-gui's own comment on this exact
+        # pattern: worker subprocesses each start their own session so
+        # os.killpg() can take out dd cleanly, which means a bare
+        # SIGTERM/SIGINT to this process needs the same GLib-integrated
+        # handler to still clean them (and this test's own scratch files)
+        # up, not just a normal window close.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+
+    def _on_terminate_signal(self):
+        self.destroy()
+        return GLib.SOURCE_REMOVE
+
+    def _on_key_press(self, _widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.destroy()
+            return True
+        return False
+
+    def _on_destroy(self, _widget):
+        self._kill_workers()
+        self._remove_scratch_files()
+
+    def start_test(self):
+        self.run_button.hide()
+        self.status_label.set_text("")
+        self.read_dial.reset()
+        self.write_dial.reset()
+        self._kill_workers()
+        self._remove_scratch_files()
+        self.phase = "staging"
+        self.status_label.set_text("Preparing test files...")
+        GLib.idle_add(self._stage)
+
+    def _fail(self, message):
+        self.status_label.set_markup(common.error_markup(message))
+        self.phase = "done"
+        self._kill_workers()
+        self._remove_scratch_files()
+        self.run_button.show()
+
+    def _stage(self):
+        os.makedirs(self.target_dir, exist_ok=True)
+        dev, name_or_error = resolve_device(self.target_dir)
+        if dev is None:
+            self._fail(name_or_error)
+            return GLib.SOURCE_REMOVE
+        self.dev = dev
+        self.title_label.set_text(name_or_error.upper())
+
+        try:
+            usage = os.statvfs(self.target_dir)
+            available_mb = usage.f_bavail * usage.f_frsize / 1_000_000
+        except OSError:
+            available_mb = 0
+        needed_mb = PARALLEL_WORKERS * FILE_MB * 2
+        if available_mb < needed_mb:
+            self._fail(f"Need at least {needed_mb:.0f}MB free on {self.target_dir}")
+            return GLib.SOURCE_REMOVE
+
+        self.status_label.set_text(f"Preparing test files on {name_or_error}...")
+
+        # Exclusive per-run scratch files via mkstemp, never a predictable
+        # name - see ohmydebn-disk-speedtest's own comment on exactly why
+        # (a guessable name could already be planted as a symlink, or
+        # collide with a real file, or get stepped on by a second
+        # concurrent run).
+        chunk_fd, self.chunk_file = tempfile.mkstemp(prefix="ohmydebn-disk-speedtest-", suffix=".src", dir="/dev/shm")
+        os.close(chunk_fd)
+        subprocess.run(
+            ["dd", "if=/dev/urandom", f"of={self.chunk_file}", f"bs={CHUNK_MB}M", f"count={FILE_MB // CHUNK_MB}", "status=none"],
+            check=False,
+        )
+
+        self.test_files = []
+        for _ in range(PARALLEL_WORKERS):
+            fd, path = tempfile.mkstemp(prefix="disk-speedtest-", suffix=".dat", dir=self.target_dir)
+            os.close(fd)
+            subprocess.run(["chattr", "+C", path], check=False, stderr=subprocess.DEVNULL)  # best-effort: NOCOW on btrfs
+            self.test_files.append(path)
+
+        # Stages real data into every test file before any measured phase
+        # - freshly-created files have nothing in them to read yet, and
+        # the read phase needs to measure real throughput, not instant
+        # EOFs.
+        stage_procs = [
+            subprocess.Popen(
+                ["dd", f"if={self.chunk_file}", f"of={f}", f"bs={CHUNK_MB}M", "oflag=direct", "conv=notrunc", "status=none"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for f in self.test_files
+        ]
+        failed = any(proc.wait() != 0 for proc in stage_procs)
+        if failed or not self.test_files or os.path.getsize(self.test_files[0]) == 0:
+            self._fail(f"Direct disk I/O is not available on {self.target_dir}")
+            return GLib.SOURCE_REMOVE
+
+        self._start_phase("read")
+        return GLib.SOURCE_REMOVE
+
+    def _start_phase(self, phase):
+        self.phase = phase
+        self.elapsed = 0
+        self.status_label.set_text("Read in progress..." if phase == "read" else "Write in progress...")
+        self._kill_workers()
+        for f in self.test_files:
+            args = [WORKER, phase, f] + ([self.chunk_file] if phase == "write" else [])
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            self.worker_procs.append(proc)
+        self.before_sectors = device_sectors(self.dev, phase)
+        if self.tick_source is not None:
+            GLib.source_remove(self.tick_source)
+        self.tick_source = GLib.timeout_add(1000, self._tick)
+
+    def _tick(self):
+        after = device_sectors(self.dev, self.phase)
+        if after is not None and self.before_sectors is not None:
+            mbps = max(0.0, (after - self.before_sectors) * 512 / 1_000_000)
+            dial = self.read_dial if self.phase == "read" else self.write_dial
+            dial.set_value(mbps)
+            self.before_sectors = after
+
+        self.elapsed += 1
+        if self.elapsed >= DURATION_SECONDS:
+            if self.phase == "read":
+                self.read_dial.stop()
+                self._start_phase("write")
+                return GLib.SOURCE_REMOVE
+            self.write_dial.stop()
+            self._kill_workers()
+            self._remove_scratch_files()
+            self.phase = "done"
+            self.status_label.set_text("Speed test complete.")
+            self.run_button.show()
+            self.tick_source = None
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
+    def _kill_workers(self):
+        # Doesn't wait for these to actually exit (matches
+        # ohmydebn-network-speedtest-gui's own _kill_workers()) - blocking
+        # the GTK main loop on a handful of dd processes noticing SIGTERM
+        # isn't worth it just to sequence a file removal that would
+        # succeed immediately either way (unlinking an open file doesn't
+        # fail or block on Linux; the space itself is freed once the
+        # still-exiting process's own fd closes, which is a harmless,
+        # momentary delay rather than a correctness problem).
+        for proc in self.worker_procs:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+        self.worker_procs = []
+
+    def _remove_scratch_files(self):
+        for path in [self.chunk_file, *self.test_files]:
+            if not path:
+                continue
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        self.chunk_file = None
+        self.test_files = []
+
+
+def main():
+    win = SpeedTestWindow()
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    win.run_button.hide()
+    GLib.idle_add(win.start_test)
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

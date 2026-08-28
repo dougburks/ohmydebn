@@ -14,6 +14,18 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg
   echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list
+
+  # Restricts this repo to the one package it's actually needed for - a
+  # bare signed-by trusts the repo's key to sign anything, so without this
+  # a compromised or malicious upstream could ship a package under some
+  # other name (colliding with a real Debian package, say) and have apt
+  # prefer it on some later, completely unrelated `apt install`/upgrade.
+  # Pin-Priority: -1 on the wildcard blocks every package from this origin
+  # by default; the second stanza re-allows just helium-bin at the normal
+  # priority apt would already give it unpinned.
+  printf 'Package: *\nPin: origin "pkg.helium.computer"\nPin-Priority: -1\n\nPackage: helium-bin\nPin: origin "pkg.helium.computer"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/helium.pref >/dev/null
+
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install helium-bin
 
   cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/

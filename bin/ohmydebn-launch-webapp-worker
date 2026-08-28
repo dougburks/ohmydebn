@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+# Internal helper for ohmydebn-launch-webapp - not a menu entry itself,
+# no install check, nothing user-facing. Picks the installed default
+# browser and opens $1 as a kiosk/app window in it, falling back to
+# xdg-open for anything else. Pulled out into its own script so
+# ohmydebn-launch-webapp can wrap this browser-picking logic with
+# ohmydebn-launch-tiled without also tiling ohmydebn-launch-tiled's own
+# active-window-capture step before the browser exists.
+
+# Get the default browser
+DEFAULT_BROWSER=$(xdg-settings get default-web-browser)
+
+# Check if the default browser is Firefox or Chromium
+if [[ $DEFAULT_BROWSER == *"firefox"* ]]; then
+    firefox --kiosk "$1"
+elif [[ $DEFAULT_BROWSER == *"chromium"* ]] || [[ $DEFAULT_BROWSER == *"chrome"* ]]; then
+    chromium --app="$1"
+else
+    # Fallback to xdg-open if browser is unsupported
+    xdg-open "$1"
+fi

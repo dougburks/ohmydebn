@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Cloudflare Warp" /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp-install
 fi
 
 if dpkg -s "cloudflare-warp" >/dev/null 2>&1; then

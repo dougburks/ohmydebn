@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# gedit tiled to the right half with gaps immediately after launch, via
+# the shared ohmydebn-launch-tiled helper - the same TileFocusedWindow
+# grid ("2 2 1 0 1 2") as the "Tile with gaps 6 right half" keybinding.
+# Bound to Ctrl+Super+E in keybinding-custom.txt in place of a bare call
+# to /usr/bin/gedit. Right half (not left) because the left half is
+# reserved for the persistently-open terminal - see
+# ohmydebn-terminal-left-tiled.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/bin/gedit

@@ -22,6 +22,17 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |
     sudo tee /etc/apt/sources.list.d/claude-code.list
+
+  # Restricts this repo to the one package it's actually needed for
+  # (confirmed via `apt-cache depends claude-code` - no same-repo
+  # dependency like Brave's brave-keyring) - a bare signed-by trusts the
+  # repo's key to sign anything, so without this a compromised or
+  # malicious upstream could ship a package under some other name and have
+  # apt prefer it on some later, completely unrelated `apt install`/
+  # upgrade.
+  printf 'Package: *\nPin: origin "downloads.claude.ai"\nPin-Priority: -1\n\nPackage: claude-code\nPin: origin "downloads.claude.ai"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/claude-code.pref >/dev/null
+
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install claude-code
 fi

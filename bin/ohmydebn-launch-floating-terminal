@@ -1,8 +1,9 @@
 #!/bin/bash
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <command>" >&2
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 <title> <command>" >&2
   exit 1
 fi
-cmd="$1"
-setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e bash -c "$cmd"
+title="$1"
+cmd="$2"
+setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn --title "$title" -e bash -c "$cmd"

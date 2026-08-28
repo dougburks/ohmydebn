@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "uxplay" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "UxPlay" /usr/share/ohmydebn/bin/ohmydebn-uxplay-install
+fi
+
+if dpkg -s "uxplay" >/dev/null 2>&1; then
+  # UxPlay isn't a CLI tool you look up usage for like tcpdump/tshark - it's
+  # a long-running foreground receiver that waits for an AirPlay
+  # connection and displays the mirrored video itself, so it just runs
+  # directly here (no --help, no dropping into a shell afterward): when
+  # the user closes it (Ctrl+C), the terminal should close with it, not
+  # leave a bare shell prompt behind.
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "UxPlay" "uxplay"
+fi

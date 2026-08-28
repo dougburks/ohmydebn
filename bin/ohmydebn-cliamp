@@ -2,10 +2,20 @@
 
 set -euo pipefail
 
-if ! dpkg -s "cliamp" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-cliamp-install
-fi
-
-if dpkg -s "cliamp" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'cliamp' -e /usr/bin/cliamp
-fi
+# One terminal window for the whole lifecycle (install-if-needed, then
+# run) instead of a separate floating install-presentation terminal
+# followed by a second terminal for cliamp itself - two *-tiled callers
+# (ohmydebn-cliamp-tiled) confirmed live that the second window never got
+# tiled, since ohmydebn-launch-tiled only ever tiles the first window it
+# sees. Collapsing into one window removes the problem instead of trying
+# to detect a second one.
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'cliamp' -e bash -c '
+  if ! dpkg -s "cliamp" >/dev/null 2>&1; then
+    /usr/share/ohmydebn/bin/ohmydebn-show-logo
+    /usr/share/ohmydebn/bin/ohmydebn-cliamp-install
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+  fi
+  if dpkg -s "cliamp" >/dev/null 2>&1; then
+    exec /usr/bin/cliamp
+  fi
+'

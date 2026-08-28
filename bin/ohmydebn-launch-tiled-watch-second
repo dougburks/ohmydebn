@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+# Internal helper for ohmydebn-launch-tiled's
+# OHMYDEBN_LAUNCH_TILED_WATCH_SECOND - not a menu entry itself, no
+# install check, nothing user-facing. Split into its own script (rather
+# than an inline backgrounded block) so it can be launched via setsid:
+# ohmydebn-launch-tiled backgrounding-and-disowning a subshell in place
+# still leaves that subshell in the same process group/session as
+# ohmydebn-launch-tiled itself, so it gets reaped right along with it the
+# moment whatever's supervising the keybinding (Cinnamon, in practice)
+# considers ohmydebn-launch-tiled "done" - disown only stops THIS shell
+# from sending SIGHUP on its own exit, it doesn't move the job to a new
+# session. setsid does. Confirmed live as the actual reason the first
+# version of this (inline, no setsid) tiled the first window but never
+# the second.
+#
+# Usage: ohmydebn-launch-tiled-watch-second <first_win> <prev_win> <exclude_win> <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan>
+
+set -uo pipefail
+
+FIRST_WIN="$1"
+PREV_WIN="$2"
+EXCLUDE_WIN="$3"
+shift 3
+GRID=("$@")
+
+for _ in $(seq 1 300); do
+  CUR_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+  if [ -n "${CUR_WIN:-}" ] && [ "$CUR_WIN" != "$FIRST_WIN" ] &&
+    [ "$CUR_WIN" != "${PREV_WIN:-}" ] && [ "$CUR_WIN" != "${EXCLUDE_WIN:-}" ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$CUR_WIN" "${GRID[@]}"
+    exit 0
+  fi
+  /usr/bin/sleep 0.2
+done

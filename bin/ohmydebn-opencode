@@ -2,13 +2,18 @@
 
 set -euo pipefail
 
-# If not installed, then offer to install it
-if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-opencode-install
-fi
-
-# If installed, then run it in a terminal window
-if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
-  mkdir -p ~/opencode-sessions && cd "$(mktemp -d ~/opencode-sessions/session-XXXXXX)"
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OpenCode' -e /usr/bin/opencode-cli
-fi
+# One terminal window for the whole lifecycle (install-if-needed, then
+# run) instead of a separate floating install-presentation terminal
+# followed by a second terminal for OpenCode itself - see
+# ohmydebn-cliamp's own comment for why (confirmed live, same bug).
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OpenCode' -e bash -c '
+  if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+    /usr/share/ohmydebn/bin/ohmydebn-show-logo
+    /usr/share/ohmydebn/bin/ohmydebn-opencode-install
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+  fi
+  if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+    mkdir -p ~/opencode-sessions && cd "$(mktemp -d ~/opencode-sessions/session-XXXXXX)"
+    exec /usr/bin/opencode-cli
+  fi
+'

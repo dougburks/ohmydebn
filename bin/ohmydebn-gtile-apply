@@ -1,0 +1,28 @@
+#!/bin/bash
+#
+# Activates a window (by ID) and tiles it via gTile's TileFocusedWindow,
+# given a grid as 6 positional args (cols rows colIndex rowIndex colSpan
+# rowSpan) - the same values keybinding-custom.txt's own "Tile with
+# gaps N ..." entries pass to that same DBus method. Shared by every
+# OhMyDebn script that launches a window pre-tiled
+# (ohmydebn-terminal-tiled, ohmydebn-browser-tiled, and
+# ohmydebn-fastfetch-gui-tiled via ohmydebn-terminal-tiled's own
+# OHMYDEBN_TILE_GRID override) so the actual gdbus call only has to live
+# in one place.
+#
+# gTile's TileFocusedWindow operates on whatever window currently has
+# focus, not one it's told about directly - has to be activated first.
+
+set -uo pipefail
+
+WIN_ID="${1:-}"
+shift || true
+
+if [ -z "$WIN_ID" ] || [ "$#" -ne 6 ]; then
+  exit 0
+fi
+
+/usr/bin/xdotool windowactivate "$WIN_ID" || true
+/usr/bin/gdbus call --session --dest org.gTile.Control \
+  --object-path /org/gTile/Control \
+  --method org.gTile.Control.TileFocusedWindow "$@" >/dev/null || true

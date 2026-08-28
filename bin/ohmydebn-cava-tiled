@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# cava tiled to the bottom right corner with gaps immediately after
+# launch, via ohmydebn-terminal-tiled's own OHMYDEBN_TILE_GRID override -
+# the same TileFocusedWindow grid ("2 2 1 1 1 1") as the "Tile with gaps
+# 3 bottom right corner" keybinding. Bound to Ctrl+Super+A in
+# keybinding-custom.txt in place of a bare ohmydebn-terminal call.
+
+set -euo pipefail
+
+export OHMYDEBN_TILE_GRID="2 2 1 1 1 1"
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal-tiled --title 'cava' -e /usr/bin/cava

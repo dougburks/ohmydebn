@@ -1,0 +1,221 @@
+#!/bin/bash
+#
+# Disk speed test, adapted from Omarchy's own bin/omarchy-disk-speedtest
+# (~/git/omarchy, the "Quattro" checkout) - same measurement approach:
+# direct I/O (O_DIRECT, bypassing the page cache) against several
+# exclusive per-run scratch files in parallel, sampling the backing
+# block device's own kernel I/O counters once a second rather than
+# trusting dd's self-reported rate. Reworked into one self-contained,
+# fixed-duration run (read then write, each timed, with a final avg/peak
+# summary) instead of Omarchy's own toggleable live overlay, matching
+# this project's own ohmydebn-network-speedtest.
+#
+# Scratch files are always created via mktemp, never a predictable name
+# built from a fixed pattern - Omarchy's own script documents exactly
+# why: a guessable name could already be planted as a symlink ahead of
+# time, made to collide with a real file, or stepped on by a second
+# concurrent run.
+
+set -uo pipefail
+
+if [[ -n "${1:-}" && ! -d "$1" ]]; then
+  echo "Usage: ohmydebn-disk-speedtest [target-dir]" >&2
+  exec bash
+fi
+target_dir="${1:-${XDG_CACHE_HOME:-$HOME/.cache}/ohmydebn}"
+parallel=4
+chunk_mb=4
+file_mb=256
+duration=8
+
+mkdir -p "$target_dir"
+
+worker_pids=()
+chunk_file=""
+test_files=()
+
+# Kills every worker this phase started (pkill -P catches dd itself as
+# the direct child; kill only reaches the worker script's own PID, but
+# dd is what's actually still running once the worker's while-loop
+# condition next gets checked, so both are needed).
+stop_workers() {
+  local pid
+  for pid in "${worker_pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill "$pid" 2>/dev/null || true
+  done
+  for pid in "${worker_pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    wait "$pid" 2>/dev/null || true
+  done
+  worker_pids=()
+}
+
+# Unlink before stopping the workers, so even a cleanup cut short by an
+# impatient SIGKILL has already taken the names off the filesystem. A
+# live write worker's next dd pass recreates its file by name, so sweep
+# again once they are gone - same double-unlink Omarchy's own script
+# uses, for the same reason.
+cleanup() {
+  rm -f ${chunk_file:+"$chunk_file"} "${test_files[@]:-}"
+  stop_workers
+  rm -f ${chunk_file:+"$chunk_file"} "${test_files[@]:-}"
+}
+# Only a safety net for this process being killed before it reaches its
+# own exit path below - every one of those paths ends in `exec bash`, not
+# a normal `exit`, precisely so a failure or Ctrl+D still hands back a
+# real shell instead of the whole terminal window closing - and `exec`
+# replaces this process outright rather than exiting it, which never
+# fires an EXIT trap. Confirmed live: without an explicit `cleanup` call
+# right before every one of those `exec bash`es (see finish() below),
+# every scratch file this run created was left behind on the disk it had
+# just finished measuring.
+trap cleanup EXIT
+
+# The one real exit path every branch below funnels through.
+finish() {
+  cleanup
+  exec bash
+}
+
+format_mbps() {
+  awk -v value="$1" 'BEGIN {
+    if (value <= 0) print "0.0"
+    else if (value < 10) printf "%.1f\n", value
+    else printf "%.0f\n", value
+  }'
+}
+
+# Resolves the block device backing the target directory, so throughput
+# can be sampled from its kernel I/O counters the same way the network
+# speed test samples the interface counters.
+source_dev=$(findmnt -no SOURCE --target "$target_dir" 2>/dev/null)
+source_dev=${source_dev%%\[*} # Strip a btrfs subvolume suffix: /dev/sda2[/@home]
+
+if [[ "$source_dev" != /dev/* ]]; then
+  echo "Cannot find a disk behind $target_dir" >&2
+  finish
+fi
+
+dev=$(readlink -f "$source_dev")
+dev=${dev##*/}
+
+if [[ ! -r "/sys/class/block/$dev/stat" ]]; then
+  echo "No I/O statistics for $dev" >&2
+  finish
+fi
+
+available_mb=$(df --output=avail -m "$target_dir" | tail -1 | tr -d ' ')
+if ((available_mb < parallel * file_mb * 2)); then
+  echo "Need at least $((parallel * file_mb * 2))MB free on $target_dir" >&2
+  finish
+fi
+
+# Names the physical disk under test, walking dm-crypt/LVM layers and the
+# partition table up to the whole device that carries the hardware model
+# - a raw device name (dm-1, nvme0n1p2) is a lot less useful to read than
+# "disk Samsung 990 PRO".
+disk="$dev"
+while slave=$(ls "/sys/class/block/$disk/slaves" 2>/dev/null | head -1); [[ -n "$slave" ]]; do
+  disk="$slave"
+done
+if [[ -f "/sys/class/block/$disk/partition" ]]; then
+  parent=$(readlink -f "/sys/class/block/$disk")
+  parent="${parent%/*}"
+  disk="${parent##*/}"
+fi
+model=$(lsblk -dno MODEL "/dev/$disk" 2>/dev/null | sed 's/^ *//; s/ *$//')
+
+echo "Testing disk speed on ${model:-$disk} (about $((duration * 2))s total)..."
+
+# The stress data must be incompressible, staged once in RAM (tmpfs) so
+# reading it back to feed the write phase never itself touches the disk
+# under test.
+chunk_file=$(mktemp /dev/shm/ohmydebn-disk-speedtest-XXXXXX.src)
+for ((i = 0; i < parallel; i++)); do
+  file=$(mktemp "$target_dir/disk-speedtest-XXXXXX.dat")
+  chattr +C "$file" 2>/dev/null || true # best-effort: NOCOW on btrfs, so O_DIRECT is truly direct there
+  test_files+=("$file")
+done
+dd if=/dev/urandom of="$chunk_file" bs=${chunk_mb}M count=$((file_mb / chunk_mb)) status=none
+
+# Stages real data into every test file before any measured phase -
+# freshly-created files have nothing in them to read yet, and the read
+# phase needs to measure real throughput, not instant EOFs.
+for file in "${test_files[@]}"; do
+  dd if="$chunk_file" of="$file" bs=${chunk_mb}M oflag=direct conv=notrunc status=none 2>/dev/null &
+  worker_pids+=("$!")
+done
+stage_failed=0
+for pid in "${worker_pids[@]}"; do
+  wait "$pid" || stage_failed=1
+done
+worker_pids=()
+
+if ((stage_failed)) || [[ ! -s "${test_files[0]}" ]]; then
+  echo "Direct disk I/O is not available on $target_dir" >&2
+  finish
+fi
+
+device_sectors() {
+  local -a stats
+  read -r -a stats <"/sys/class/block/$dev/stat"
+  if [[ "$1" == "read" ]]; then
+    echo "${stats[2]}"
+  else
+    echo "${stats[6]}"
+  fi
+}
+
+# Runs one phase for a fixed $duration seconds, printing a live MB/s
+# reading every second (from real device sector-counter deltas, not dd's
+# own self-reported speed) and a final avg/peak summary computed from
+# every reading collected.
+run_phase() {
+  local phase="$1" label="$2"
+  echo
+  echo "== $label =="
+  worker_pids=()
+  local file
+  for file in "${test_files[@]}"; do
+    /usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-worker "$phase" "$file" "$chunk_file" &
+    worker_pids+=("$!")
+  done
+
+  local before after rate elapsed=0
+  local readings=()
+  before=$(device_sectors "$phase")
+  while ((elapsed < duration)); do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    after=$(device_sectors "$phase")
+    rate=$(awk -v before="$before" -v after="$after" 'BEGIN {
+      if (after < before) print 0
+      else print (after - before) * 512 / 1000000
+    }')
+    printf '  %2ds: %s MB/s\n' "$elapsed" "$(format_mbps "$rate")"
+    readings+=("$rate")
+    before="$after"
+  done
+
+  stop_workers
+
+  if ((${#readings[@]} > 0)); then
+    printf '%s\n' "${readings[@]}" | awk -v label="$label" '
+      { sum += $1; if ($1 > max) max = $1; n++ }
+      END {
+        if (n > 0) {
+          avg = sum / n
+          printf "  %s result: avg %.0f MB/s, peak %.0f MB/s\n", label, avg, max
+        }
+      }'
+  fi
+}
+
+run_phase read "Read"
+run_phase write "Write"
+
+echo
+echo "Speed test complete. Press Ctrl+D or type 'exit' to close."
+finish

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "distrobox" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Distrobox" /usr/share/ohmydebn/bin/ohmydebn-distrobox-install
+fi
+
+if dpkg -s "distrobox" >/dev/null 2>&1; then
+  # Distrobox has no GUI, so "launching" it means opening a terminal
+  # already running --help - a starting point for whatever subcommand the
+  # user actually needs - then dropping into an interactive shell in that
+  # same window so they can act on it immediately instead of the terminal
+  # just closing again.
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Distrobox" "distrobox --help; exec bash"
+fi

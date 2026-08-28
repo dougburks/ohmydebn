@@ -1,0 +1,107 @@
+#!/bin/bash
+#
+# Launches an arbitrary command in the background, then tiles whatever
+# window ends up active/focused afterward via ohmydebn-gtile-apply.
+# Generalizes the approach ohmydebn-browser-tiled originally used
+# (necessary because a browser launch can't be tracked by a fresh PID:
+# gtk-launch forks and detaches, and most browsers are single-instance -
+# "launching" one that's already running just raises its existing window
+# rather than starting a new process) to any command with the same
+# problem. Most of OhMyDebn's own app launchers go through at least one
+# extra layer of indirection (a dpkg-installed check, a floating-terminal
+# helper, an app's own single-instance re-activation) before the real
+# window-owning process exists, so a PID
+# captured at the top level - the way ohmydebn-terminal-tiled tracks
+# alacritty directly, safe there because it execs alacritty itself with
+# no indirection - would rarely match the actual window here. Always
+# tiles whatever ends up focused, rather than trying to tell a fresh
+# window from a raised one - same tradeoff ohmydebn-browser-tiled's own
+# comment already covered.
+#
+# Usage: ohmydebn-launch-tiled <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]
+#
+# OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (optional): a window ID the poll below
+# must never accept as the launched app's window, even once it becomes
+# active - for callers that are themselves a closing GUI window (a picker,
+# a carousel) rather than a plain hotkey with nothing of their own on
+# screen. PREV_WIN below is captured while that caller window is still
+# active (Gtk.main_quit()/a picker's deferred close don't make a window
+# disappear immediately), so PREV_WIN already IS the caller - excluding
+# the caller a second time here would be redundant. What actually needs
+# excluding is whatever briefly regains focus WHEN the caller closes -
+# for ohmydebn-menu, that's the window that was active before the picker
+# ever appeared (e.g. a terminal you had focused); for the theme
+# carousel, whatever was active before it launched. That transient
+# refocus differs from PREV_WIN(caller), so without this it reads as
+# "the change" this loop is waiting for, and the real app - which
+# usually hasn't opened yet - never gets tiled. Set by ohmydebn-menu
+# (captured once at startup, before its picker ever appears) and
+# ohmydebn-theme-carousel (captured in __main__, before the carousel
+# window exists) to the same "whatever was active before I existed"
+# value, for exactly this reason.
+#
+# OHMYDEBN_LAUNCH_TILED_WATCH_SECOND (optional, "1" to enable): after
+# tiling the first window found below, keep watching in a detached
+# background process for a SECOND, later window and tile that too. For
+# dpkg-gated app launchers (ohmydebn-cliamp, ohmydebn-socrates,
+# ohmydebn-claude-code, and every AI CLI reachable via ohmydebn-ai) that
+# show a floating install-presentation terminal first on a cold install,
+# then open a completely different, real window for the app itself once
+# installation finishes - which the poll below never sees, since it
+# already accepted the presentation window as WIN_ID and this script is
+# about to exit. Detached (not inline) because installation can take far
+# longer than any single UI action should hold this script's own exit up
+# for - ohmydebn-menu in particular dispatches case arms in its own
+# foreground shell, so it would otherwise stay blocked for however long
+# the install takes. Off by default: watching indiscriminately for up to
+# a minute after every tiled launch would risk re-tiling whatever the
+# user happens to focus next for an unrelated reason during that window,
+# for the many callers that only ever open one window.
+
+set -uo pipefail
+
+if [ "$#" -lt 7 ] || [ "$7" != "--" ]; then
+  echo "Usage: $0 <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]" >&2
+  exit 1
+fi
+GRID=("$1" "$2" "$3" "$4" "$5" "$6")
+shift 7
+
+PREV_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+EXCLUDE_WIN="${OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN:-}"
+
+"$@" &
+
+# Polling for the active window to change adapts to any launch speed (a
+# fixed sleep needed manual re-tuning per machine when this was still
+# inline in ohmydebn-browser-tiled), with a 5s timeout as a backstop for
+# the raise-existing-window case where focus might never move (e.g. the
+# app was already the focused window). CUR_WIN is also checked against
+# EXCLUDE_WIN on every iteration, not just once, so a caller window that
+# keeps flickering active/inactive during its own close can't be picked
+# up on a later poll either.
+WIN_ID="$PREV_WIN"
+for _ in $(seq 1 50); do
+  CUR_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+  if [ -n "${CUR_WIN:-}" ] && [ "$CUR_WIN" != "${PREV_WIN:-}" ] && [ "$CUR_WIN" != "${EXCLUDE_WIN:-}" ]; then
+    WIN_ID="$CUR_WIN"
+    break
+  fi
+  /usr/bin/sleep 0.1
+done
+
+if [ -n "${WIN_ID:-}" ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" "${GRID[@]}"
+
+  if [ "${OHMYDEBN_LAUNCH_TILED_WATCH_SECOND:-}" = "1" ]; then
+    # setsid, not just a backgrounded-and-disowned subshell in place: see
+    # ohmydebn-launch-tiled-watch-second's own comment for why - a plain
+    # `(...) & disown` stays in this process's own session/process group
+    # and gets reaped right along with it once ohmydebn-launch-tiled
+    # itself looks "done" to whatever's supervising it.
+    setsid /usr/share/ohmydebn/bin/ohmydebn-launch-tiled-watch-second \
+      "$WIN_ID" "${PREV_WIN:-}" "${EXCLUDE_WIN:-}" "${GRID[@]}" \
+      >/dev/null 2>&1 &
+    disown
+  fi
+fi

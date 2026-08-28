@@ -1,0 +1,40 @@
+#!/bin/bash
+#
+# An Alacritty window tiled full-screen-with-gaps via gTile immediately
+# after launch, via the shared ohmydebn-gtile-apply helper - so a fresh
+# window already looks like you'd just re-tiled it that way yourself.
+# Used by Super+Return's own terminal keybinding and by
+# ohmydebn-demo-gui; not folded into ohmydebn-terminal itself - that
+# script is shared by every OTHER caller (menu-launched terminals, the
+# floating-terminal wrappers), none of which want this. "$@" passes
+# straight through to alacritty, same contract as ohmydebn-terminal
+# itself.
+#
+# OHMYDEBN_TILE_GRID overrides the default full-screen grid with any
+# other gTile TileFocusedWindow grid - e.g. ohmydebn-fastfetch-gui-tiled
+# sets it to the upper-left-quarter grid instead, reusing this same
+# launch-and-track logic rather than duplicating it for a different tile
+# target.
+
+set -euo pipefail
+
+GRID="${OHMYDEBN_TILE_GRID:-2 2 0 0 2 2}"
+
+/usr/bin/alacritty "$@" &
+PID=$!
+
+# Sleeping for 0.2s works on some systems but other systems need 0.4s -
+# same wait ohmydebn-terminal itself uses before its own xdotool search.
+/usr/bin/sleep 0.4
+
+WIN_ID=$(/usr/bin/xdotool search --pid "$PID" | tail -n 1) || true
+if [ -n "$WIN_ID" ]; then
+  # GRID is deliberately unquoted below: it's 6 space-separated
+  # positional gTile args, not a single token.
+  # shellcheck disable=SC2086
+  /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" $GRID
+fi
+
+# Wait for the terminal to close so callers can depend on completion,
+# matching ohmydebn-terminal's own contract.
+wait "$PID"

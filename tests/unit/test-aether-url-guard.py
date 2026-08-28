@@ -95,6 +95,7 @@ print()
 print("=== ohmydebn-aether-url-guard show_dialog() (real GTK, needs a display) ===")
 
 if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+    import re
     import subprocess
     import threading
 
@@ -125,21 +126,49 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
         )
         check("window geometry is queryable (window is mapped, not just requested)", "WIDTH" in geom)
 
-        screen = subprocess.run(
-            ["xdotool", "getdisplaygeometry"], capture_output=True, text=True, check=False
-        ).stdout.split()
-        if "WIDTH" in geom and len(screen) == 2:
+        # `xdotool getdisplaygeometry` reports the combined virtual screen
+        # across every connected monitor, not the one monitor GTK actually
+        # centers the dialog on - on a dual-monitor setup that's a
+        # different rectangle whenever the dialog lands on the non-primary
+        # monitor (confirmed live: two 2560x1440 monitors side by side,
+        # dialog centered on the second one, combined-screen center off by
+        # a full monitor width, well outside any sane tolerance). Find the
+        # actual monitor rectangle the window's center falls in via xrandr
+        # instead, and check centering against that.
+        def monitor_rects():
+            out = subprocess.run(
+                ["xrandr", "--query"], capture_output=True, text=True, check=False
+            ).stdout
+            rects = []
+            for line in out.splitlines():
+                if " connected" not in line:
+                    continue
+                m = re.search(r"(\d+)x(\d+)\+(\d+)\+(\d+)", line)
+                if m:
+                    w, h, x, y = (int(g) for g in m.groups())
+                    rects.append((x, y, w, h))
+            return rects
+
+        if "WIDTH" in geom:
             win_x, win_y = int(geom["X"]), int(geom["Y"])
             win_w, win_h = int(geom["WIDTH"]), int(geom["HEIGHT"])
-            screen_w, screen_h = int(screen[0]), int(screen[1])
             center_x = win_x + win_w / 2
             center_y = win_y + win_h / 2
-            # A loose tolerance (10% of screen size) - this is checking real
-            # window-manager placement, not GTK's exact requested position.
-            check(
-                "window is centered on screen, not e.g. top-left corner",
-                abs(center_x - screen_w / 2) < screen_w * 0.1 and abs(center_y - screen_h / 2) < screen_h * 0.1,
+            rects = monitor_rects()
+            mon = next(
+                ((x, y, w, h) for x, y, w, h in rects if x <= center_x < x + w and y <= center_y < y + h),
+                None,
             )
+            if mon:
+                mon_x, mon_y, mon_w, mon_h = mon
+                # A loose tolerance (10% of the monitor's size) - this is
+                # checking real window-manager placement, not GTK's exact
+                # requested position.
+                check(
+                    "window is centered on screen, not e.g. top-left corner",
+                    abs(center_x - (mon_x + mon_w / 2)) < mon_w * 0.1
+                    and abs(center_y - (mon_y + mon_h / 2)) < mon_h * 0.1,
+                )
 
         # windowkill uses XKillClient, which forcibly drops the whole X
         # connection - since this test runs in-process with the dialog

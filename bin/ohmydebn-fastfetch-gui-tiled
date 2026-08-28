@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# The fastfetch system-summary window (same content as
+# ohmydebn-fastfetch-gui) tiled to the upper-right quarter with gaps
+# immediately after launch, via ohmydebn-terminal-tiled's own
+# OHMYDEBN_TILE_GRID override - the same TileFocusedWindow grid
+# ("2 2 1 0 1 1") as the "Tile with gaps 9 top right corner" keybinding.
+# Bound to Ctrl+Shift+S in keybinding-custom.txt in place of
+# ohmydebn-fastfetch-gui, so the summary always opens somewhere useful
+# instead of full-screen, where you'd have to move it yourself to see
+# anything else at the same time.
+
+set -euo pipefail
+
+export OHMYDEBN_TILE_GRID="2 2 1 0 1 1"
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal-tiled \
+  --title 'OhMyDebn fastfetch' -e /usr/share/ohmydebn/bin/ohmydebn-fastfetch-pause

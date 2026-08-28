@@ -3,9 +3,9 @@
 set -euo pipefail
 
 if ! dpkg -s "powershell" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-powershell-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "PowerShell" /usr/share/ohmydebn/bin/ohmydebn-powershell-install
 fi
 
 if dpkg -s "powershell" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal /usr/bin/pwsh
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "PowerShell" /usr/bin/pwsh
 fi

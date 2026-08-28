@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# The default AI assistant (see ohmydebn-ai) tiled to the right half
+# with gaps immediately after launch, via the shared ohmydebn-launch-
+# tiled helper - the same TileFocusedWindow grid ("2 2 1 0 1 2") as the
+# "Tile with gaps 6 right half" keybinding. Bound to Super+A in
+# keybinding-custom.txt in place of a bare call to ohmydebn-ai. Right
+# half (not left) because the left half is reserved for the
+# persistently-open terminal - see ohmydebn-terminal-left-tiled.
+
+set -euo pipefail
+
+# Every AI CLI ohmydebn-ai can dispatch to (opencode, claude-code,
+# chatgpt, pi, vscode, antigravity) shows a floating install-presentation
+# terminal first on a cold install, then a different, real window for
+# the app itself once installation finishes - see ohmydebn-launch-tiled's
+# own comment on OHMYDEBN_LAUNCH_TILED_WATCH_SECOND for why that second
+# window needs this to get tiled too.
+export OHMYDEBN_LAUNCH_TILED_WATCH_SECOND=1
+exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/share/ohmydebn/bin/ohmydebn-ai

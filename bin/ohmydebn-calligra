@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "calligra" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Calligra" /usr/share/ohmydebn/bin/ohmydebn-calligra-install
+fi
+
+if dpkg -s "calligra" >/dev/null 2>&1; then
+  /usr/bin/calligralauncher
+fi

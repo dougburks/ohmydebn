@@ -29,8 +29,6 @@ PACKAGES=(
   cinnamon-desktop-environment
   yaru-theme-gtk
   yaru-theme-icon
-  gir1.2-gtk4layershell-1.0
-  libgtk4-layer-shell0
   libspa-0.2-bluetooth
   gvfs-backends
   libnotify-bin

@@ -35,7 +35,14 @@ if [ -f "$OS_RELEASE" ]; then
     [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
   linuxmint)
-    [ "$DEBIAN_CODENAME" = "trixie" ] && DISTRO_OK=true
+    # LMDE (Debian-based) sets DEBIAN_CODENAME; regular Mint (Ubuntu-based)
+    # sets UBUNTU_CODENAME instead - both report ID=linuxmint, so both need
+    # checking here. Regular Mint 22.x tracks Ubuntu 24.04 "noble" as its
+    # base (VERSION_CODENAME is Mint's own release name, e.g. "zena" - not
+    # useful for distro-family detection).
+    if [ "$DEBIAN_CODENAME" = "trixie" ] || [ "$UBUNTU_CODENAME" = "noble" ]; then
+      DISTRO_OK=true
+    fi
     ;;
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true

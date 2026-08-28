@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# A plain Alacritty terminal tiled to the left half with gaps
+# immediately after launch, via ohmydebn-terminal-tiled's own
+# OHMYDEBN_TILE_GRID override - the same TileFocusedWindow grid
+# ("2 2 0 0 1 2") as the "Tile with gaps 4 left half" keybinding. Bound
+# to Super+Return in keybinding-custom.txt in place of a bare call to
+# ohmydebn-terminal-tiled, which still defaults to full-screen for
+# ohmydebn-demo-gui's own use - not changed here, since that default is
+# depended on elsewhere. The terminal anchors the left half because it's
+# the window kept open persistently, with every other (more transient)
+# app launcher tiled to the right half instead - see those launchers'
+# own comments. "$@" passes straight through to
+# ohmydebn-terminal-tiled/alacritty, same contract as ohmydebn-terminal
+# itself.
+
+set -euo pipefail
+
+export OHMYDEBN_TILE_GRID="2 2 0 0 1 2"
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal-tiled "$@"

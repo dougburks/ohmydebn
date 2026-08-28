@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# VSCode tiled to the right half with gaps immediately after launch, via
+# the shared ohmydebn-launch-tiled helper - the same TileFocusedWindow
+# grid ("2 2 1 0 1 2") as the "Tile with gaps 6 right half" keybinding.
+# Bound to Ctrl+Super+S in keybinding-custom.txt in place of a bare call
+# to ohmydebn-code. Right half (not left) because the left half is
+# reserved for the persistently-open terminal - see
+# ohmydebn-terminal-left-tiled.
+#
+# Unlike cliamp/socrates/claude-code/opencode/pi, ohmydebn-code can't be
+# collapsed into a single terminal window: it launches /usr/bin/code, a
+# native GUI binary, as its second phase rather than running inside a
+# terminal, so a cold install still shows a floating install-
+# presentation terminal first, then a completely separate VSCode window
+# once installation finishes - see ohmydebn-launch-tiled's own comment
+# on OHMYDEBN_LAUNCH_TILED_WATCH_SECOND for why that second window needs
+# this to get tiled too.
+
+set -euo pipefail
+
+export OHMYDEBN_LAUNCH_TILED_WATCH_SECOND=1
+exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/share/ohmydebn/bin/ohmydebn-code

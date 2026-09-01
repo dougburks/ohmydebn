@@ -5,13 +5,34 @@
 # rowSpan) - the same values keybinding-custom.txt's own "Tile with
 # gaps N ..." entries pass to that same DBus method. Shared by every
 # OhMyDebn script that launches a window pre-tiled
-# (ohmydebn-terminal-tiled, ohmydebn-browser-tiled, and
-# ohmydebn-fastfetch-gui-tiled via ohmydebn-terminal-tiled's own
+# (ohmydebn-terminal-tiled, ohmydebn-launch-tiled, and
+# ohmydebn-logo-gui-tiled via ohmydebn-terminal-tiled's own
 # OHMYDEBN_TILE_GRID override) so the actual gdbus call only has to live
 # in one place.
 #
 # gTile's TileFocusedWindow operates on whatever window currently has
 # focus, not one it's told about directly - has to be activated first.
+#
+# The window is hidden (via ohmydebn-gtile-hide, wrapping
+# _NET_WM_WINDOW_OPACITY - a standard property Cinnamon's Mutter-based
+# compositor honors) for the duration of the activate+tile+animate
+# sequence, so callers never show the window at its pre-tile spawn
+# position - it only becomes visible already in its final tiled spot.
+# Purely a compositor hint: unlike windowunmap, it doesn't affect
+# focus/activation, so windowactivate and gTile's own focus-based
+# targeting still work normally while it's applied. If
+# desktop-effects/compositing is off, setting this property is a no-op
+# and callers just see the old instant-jump behavior - never worse.
+#
+# Calling ohmydebn-gtile-hide again here is redundant for the current
+# callers (ohmydebn-terminal-tiled and ohmydebn-launch-tiled) - they
+# already hide the window the instant their own poll loop finds it, since
+# waiting until control
+# reaches this script would already be too late to prevent that first
+# flash. Kept here anyway as a safety net for any future caller that
+# skips its own poll-and-hide step, and because it's a cheap no-op
+# (setting the same property to the same value) when the window is
+# already hidden.
 
 set -uo pipefail
 
@@ -22,7 +43,35 @@ if [ -z "$WIN_ID" ] || [ "$#" -ne 6 ]; then
   exit 0
 fi
 
-/usr/bin/xdotool windowactivate "$WIN_ID" || true
+/usr/share/ohmydebn/bin/ohmydebn-gtile-hide "$WIN_ID"
+
+# windowactivate can silently no-op if the window isn't mapped/focusable
+# yet - a real race now that callers hide+grab WIN_ID as early as
+# possible (sometimes before the window has even mapped), rather than
+# waiting out a fixed sleep chosen specifically to dodge this. A blind
+# single attempt then risks leaving input focus on whatever WAS already
+# active, which TileFocusedWindow below would happily tile instead -
+# exactly the "tiled my other window" bug this loop exists to prevent.
+# Retrying against getactivewindow's own report of what's focused, up to
+# 0.4s (20 * 0.02s, the old sleep's own worst-case budget), makes this
+# self-verifying instead of a guess.
+for _ in $(seq 1 20); do
+  /usr/bin/xdotool windowactivate "$WIN_ID" 2>/dev/null || true
+  CUR_ACTIVE=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+  [ "${CUR_ACTIVE:-}" = "$WIN_ID" ] && break
+  /usr/bin/sleep 0.02
+done
+
 /usr/bin/gdbus call --session --dest org.gTile.Control \
   --object-path /org/gTile/Control \
   --method org.gTile.Control.TileFocusedWindow "$@" >/dev/null || true
+
+# gTile's own move/resize is applied by the time the gdbus call above
+# returns, but Cinnamon's size-change effect (System Settings > Effects,
+# ~100ms scale animation by default) still has to finish playing out
+# before the window looks settled - this buffer just needs to outlast
+# that animation, not match it exactly, since the window is invisible
+# either way until the property is removed below.
+/usr/bin/sleep 0.15
+
+/usr/bin/xprop -id "$WIN_ID" -remove _NET_WM_WINDOW_OPACITY 2>/dev/null || true

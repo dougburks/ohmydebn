@@ -527,7 +527,7 @@ show_office_menu() {
 show_cybersecurity_menu() {
   menu "Cybersecurity" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark"
   case "$MENU_RESULT" in
-  *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates-tiled ;;
+  *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
   *tcpdump*) /usr/share/ohmydebn/bin/ohmydebn-tcpdump ;;
   *tshark*) /usr/share/ohmydebn/bin/ohmydebn-tshark ;;
   *wireshark*) /usr/share/ohmydebn/bin/ohmydebn-wireshark ;;
@@ -560,8 +560,8 @@ show_vpn_menu() {
 show_media_menu() {
   menu "Media" "  Cava audio visualizer\n  cliamp terminal music player\n  UxPlay AirPlay receiver"
   case "$MENU_RESULT" in
-  *Cava*) /usr/share/ohmydebn/bin/ohmydebn-cava-tiled ;;
-  *cliamp*) /usr/share/ohmydebn/bin/ohmydebn-cliamp-tiled ;;
+  *Cava*) /usr/share/ohmydebn/bin/ohmydebn-cava ;;
+  *cliamp*) /usr/share/ohmydebn/bin/ohmydebn-cliamp ;;
   *UxPlay*) /usr/share/ohmydebn/bin/ohmydebn-uxplay ;;
   *) show_apps_menu ;;
   esac
@@ -649,12 +649,12 @@ show_ai_menu() {
   # menu duplicating this same list.
   menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
-  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
-  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code-tiled ;;
-  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt-tiled ;;
-  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-pi ;;
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity-tiled ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code-tiled ;;
+  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
+  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
+  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_apps_menu ;;
   esac
 }
@@ -662,8 +662,8 @@ show_ai_menu() {
 show_editor_menu() {
   menu "Editors" "  VSCode\n  Antigravity\n  Emacs\n  GIMP"
   case "$MENU_RESULT" in
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity-tiled ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code-tiled ;;
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *Emacs*) /usr/share/ohmydebn/bin/ohmydebn-emacs ;;
   *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
   *) show_apps_menu ;;
@@ -684,7 +684,7 @@ show_remove_menu() {
 show_update_menu() {
   menu "Update" "  OhMyDebn\n  Password\n  Timezone"
   case "$MENU_RESULT" in
-  *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui-tiled ;;
+  *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
   *) show_main_menu ;;
@@ -752,7 +752,7 @@ go_to_menu() {
   *utility*) show_utility_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;
-  *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui-tiled ;;
+  *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui ;;
   *demo*) /usr/share/ohmydebn/bin/ohmydebn-demo-gui ;;
   *system*) show_system_menu ;;
   esac

@@ -16,12 +16,10 @@ read -r
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 
 curl -s $URL | grep github.com | cut -d\" -f2 | while read -r REPO_URL; do
-  # Same guards as ohmydebn-theme-install: the page this scrapes is a
+  # Same guard as ohmydebn-theme-install: the page this scrapes is a
   # substring match, not a real HTML parse, so a URL here is only as
-  # trustworthy as the page's content. git reads a leading dash as an
-  # option, and `<helper>::<address>` as a remote helper to run (e.g.
-  # `ext::sh -c ...` executes an arbitrary command).
-  if [[ "$REPO_URL" == -* || "$REPO_URL" =~ ^[A-Za-z0-9][A-Za-z0-9+.-]*:: ]]; then
+  # trustworthy as the page's content.
+  if ! /usr/share/ohmydebn/bin/ohmydebn-git-url-check "$REPO_URL" 2>/dev/null; then
     echo "Skipping '$REPO_URL': names a git option or transport helper, not a repository."
     echo
     continue

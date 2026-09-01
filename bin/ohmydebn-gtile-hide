@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# Sets a window fully transparent via _NET_WM_WINDOW_OPACITY, the same
+# compositor hint ohmydebn-gtile-apply uses to keep a freshly-launched
+# window invisible until it's been tiled. Split out so callers that poll
+# for a new window's ID (ohmydebn-terminal-tiled, ohmydebn-launch-tiled)
+# can hide it the instant they find it - inside their own detection loop,
+# before ohmydebn-gtile-apply even runs. Hiding only once control reaches
+# ohmydebn-gtile-apply is too late: that poll/sleep to find the window in
+# the first place is exactly the window during which it's already mapped
+# and visible at its pre-tile spawn position, so the flash has already
+# happened by the time ohmydebn-gtile-apply's own (redundant, harmless)
+# opacity-0 call runs.
+
+set -uo pipefail
+
+WIN_ID="${1:-}"
+[ -z "$WIN_ID" ] && exit 0
+
+/usr/bin/xprop -id "$WIN_ID" -f _NET_WM_WINDOW_OPACITY 32c \
+  -set _NET_WM_WINDOW_OPACITY 0 2>/dev/null || true

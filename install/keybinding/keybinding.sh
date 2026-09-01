@@ -68,11 +68,15 @@ if [ ! -f $KEYBINDING_STATE ]; then
     source "$KEYBINDING_CUSTOM"
   ) | grep -v "Removing" | sort
 
-  # Apply keybindings
+  # Apply keybindings. Doesn't restart Cinnamon directly - see
+  # finalization/gtile-restart-flag.sh's own comment on why: two independent
+  # backgrounded `cinnamon --replace &` calls in the same run would race
+  # each other. OHMYDEBN_CINNAMON_RESTART_NEEDED is the same shared flag
+  # gtile-restart-flag.sh sets; finalization/finale.sh does the one actual
+  # restart at the end if anything asked for it.
   if pgrep -x cinnamon >/dev/null; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Restarting desktop to apply hotkey configuration"
-    sleep 1s
-    setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update to apply hotkeys"
+    export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
     echo "You can see all hotkeys by pressing Super + K"
   fi
 

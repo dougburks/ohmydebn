@@ -39,24 +39,6 @@
 # ohmydebn-theme-carousel (captured in __main__, before the carousel
 # window exists) to the same "whatever was active before I existed"
 # value, for exactly this reason.
-#
-# OHMYDEBN_LAUNCH_TILED_WATCH_SECOND (optional, "1" to enable): after
-# tiling the first window found below, keep watching in a detached
-# background process for a SECOND, later window and tile that too. For
-# dpkg-gated app launchers (ohmydebn-cliamp, ohmydebn-socrates,
-# ohmydebn-claude-code, and every AI CLI reachable via ohmydebn-ai) that
-# show a floating install-presentation terminal first on a cold install,
-# then open a completely different, real window for the app itself once
-# installation finishes - which the poll below never sees, since it
-# already accepted the presentation window as WIN_ID and this script is
-# about to exit. Detached (not inline) because installation can take far
-# longer than any single UI action should hold this script's own exit up
-# for - ohmydebn-menu in particular dispatches case arms in its own
-# foreground shell, so it would otherwise stay blocked for however long
-# the install takes. Off by default: watching indiscriminately for up to
-# a minute after every tiled launch would risk re-tiling whatever the
-# user happens to focus next for an unrelated reason during that window,
-# for the many callers that only ever open one window.
 
 set -uo pipefail
 
@@ -79,29 +61,23 @@ EXCLUDE_WIN="${OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN:-}"
 # app was already the focused window). CUR_WIN is also checked against
 # EXCLUDE_WIN on every iteration, not just once, so a caller window that
 # keeps flickering active/inactive during its own close can't be picked
-# up on a later poll either.
+# up on a later poll either. 0.02s between checks (was 0.1s) so the gap
+# between "window has focus" and "window is hidden" below stays as small
+# as possible - the window is already visible at its pre-tile position
+# once it has focus, so every extra poll interval here is extra time the
+# user sees it there before it disappears. 250 iterations keeps the same
+# ~5s overall timeout as before.
 WIN_ID="$PREV_WIN"
-for _ in $(seq 1 50); do
+for _ in $(seq 1 250); do
   CUR_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
   if [ -n "${CUR_WIN:-}" ] && [ "$CUR_WIN" != "${PREV_WIN:-}" ] && [ "$CUR_WIN" != "${EXCLUDE_WIN:-}" ]; then
     WIN_ID="$CUR_WIN"
+    /usr/share/ohmydebn/bin/ohmydebn-gtile-hide "$WIN_ID"
     break
   fi
-  /usr/bin/sleep 0.1
+  /usr/bin/sleep 0.02
 done
 
 if [ -n "${WIN_ID:-}" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" "${GRID[@]}"
-
-  if [ "${OHMYDEBN_LAUNCH_TILED_WATCH_SECOND:-}" = "1" ]; then
-    # setsid, not just a backgrounded-and-disowned subshell in place: see
-    # ohmydebn-launch-tiled-watch-second's own comment for why - a plain
-    # `(...) & disown` stays in this process's own session/process group
-    # and gets reaped right along with it once ohmydebn-launch-tiled
-    # itself looks "done" to whatever's supervising it.
-    setsid /usr/share/ohmydebn/bin/ohmydebn-launch-tiled-watch-second \
-      "$WIN_ID" "${PREV_WIN:-}" "${EXCLUDE_WIN:-}" "${GRID[@]}" \
-      >/dev/null 2>&1 &
-    disown
-  fi
 fi

@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# Opens a plain (untiled) terminal - gTile-OhMyDebn's own window-created
+# auto-tile handler tiles this window itself, matching wmClass
+# "Alacritty" + title "OhMyDebn Terminal" against
+# /usr/share/ohmydebn/config/tile-rules.json. The --title is new here
+# (the old ohmydebn-terminal-left-tiled passed "$@" straight through with
+# no title override) - needed to give this specific terminal a stable
+# identity distinct from any other plain terminal, since it's otherwise
+# indistinguishable by wmClass alone. Doesn't change anything visible -
+# terminal window titles aren't shown anywhere on this desktop's own UI.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OhMyDebn Terminal' "$@"

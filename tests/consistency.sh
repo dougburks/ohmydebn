@@ -815,27 +815,6 @@ check_tile_grid() {
 TERMINAL_TILED_DEFAULT_GRID=$(grep -oP 'OHMYDEBN_TILE_GRID:-\K[0-9 ]+(?=\})' "$REPO_ROOT/bin/ohmydebn-terminal-tiled")
 check_tile_grid "Tile with gaps 5 full" "$TERMINAL_TILED_DEFAULT_GRID" "ohmydebn-terminal-tiled's default grid"
 
-# Every OHMYDEBN_TILE_GRID-override launcher, paired with the named
-# keybinding its own comment claims to match - add a new
-# "script:keybinding label" entry here when a new one of these wrapper
-# scripts is added, rather than a new copy-pasted extraction+check block.
-# Reused below for the delegation check too, so the set of launchers only
-# has to be listed in one place.
-GRID_OVERRIDE_LAUNCHERS=(
-  "ohmydebn-fastfetch-gui-tiled:Tile with gaps 9 top right corner"
-  "ohmydebn-btop-gui-tiled:Tile with gaps 3 bottom right corner"
-  "ohmydebn-terminal-left-tiled:Tile with gaps 4 left half"
-  "ohmydebn-update-gui-tiled:Tile with gaps 6 right half"
-  "ohmydebn-neovim-tiled:Tile with gaps 6 right half"
-  "ohmydebn-cava-tiled:Tile with gaps 3 bottom right corner"
-)
-for ENTRY in "${GRID_OVERRIDE_LAUNCHERS[@]}"; do
-  SCRIPT="${ENTRY%%:*}"
-  LABEL="${ENTRY#*:}"
-  GRID=$(grep -oP 'OHMYDEBN_TILE_GRID="\K[0-9 ]+(?=")' "$REPO_ROOT/bin/$SCRIPT")
-  check_tile_grid "$LABEL" "$GRID" "$SCRIPT's grid"
-done
-
 # Every ohmydebn-launch-tiled-based launcher, same "script:keybinding
 # label" shape as above - these call ohmydebn-launch-tiled directly with
 # the grid as its own leading args, rather than going through
@@ -843,18 +822,8 @@ done
 # tracked by a fresh PID (see ohmydebn-launch-tiled's own comment).
 LAUNCH_TILED_LAUNCHERS=(
   "ohmydebn-browser-tiled:Tile with gaps 5 full"
-  "ohmydebn-keepass-tiled:Tile with gaps 5 full"
   "ohmydebn-file-manager-tiled:Tile with gaps 6 right half"
-  "ohmydebn-socrates-tiled:Tile with gaps 6 right half"
-  "ohmydebn-claude-code-tiled:Tile with gaps 6 right half"
-  "ohmydebn-ai-tiled:Tile with gaps 6 right half"
-  "ohmydebn-editor-tiled:Tile with gaps 6 right half"
-  "ohmydebn-cliamp-tiled:Tile with gaps 3 bottom right corner"
   "ohmydebn-launch-webapp:Tile with gaps 6 right half"
-  "ohmydebn-aether-tiled:Tile with gaps 6 right half"
-  "ohmydebn-antigravity-tiled:Tile with gaps 6 right half"
-  "ohmydebn-code-tiled:Tile with gaps 6 right half"
-  "ohmydebn-chatgpt-tiled:Tile with gaps 6 right half"
 )
 for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
   SCRIPT="${ENTRY%%:*}"
@@ -882,21 +851,6 @@ for TILED_SCRIPT in ohmydebn-terminal-tiled ohmydebn-launch-tiled; do
 done
 
 echo
-echo "-- OHMYDEBN_TILE_GRID launchers delegate to ohmydebn-terminal-tiled (regression guard) --"
-# Guards against the launch-and-track-by-PID logic getting duplicated
-# instead of reused via OHMYDEBN_TILE_GRID - exactly why that override
-# exists.
-for ENTRY in "${GRID_OVERRIDE_LAUNCHERS[@]}"; do
-  GRID_LAUNCHER="${ENTRY%%:*}"
-  if ! grep -qE '^\s*(exec )?/usr/share/ohmydebn/bin/ohmydebn-terminal-tiled\b' "$REPO_ROOT/bin/$GRID_LAUNCHER"; then
-    echo "  FAIL - $GRID_LAUNCHER doesn't call ohmydebn-terminal-tiled"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  $GRID_LAUNCHER calls ohmydebn-terminal-tiled"
-  fi
-done
-
-echo
 echo "-- ohmydebn-launch-tiled-based launchers delegate to ohmydebn-launch-tiled (regression guard) --"
 # Guards against the launch-then-poll-for-focus-change logic getting
 # duplicated instead of reused - exactly why ohmydebn-launch-tiled exists.
@@ -911,28 +865,23 @@ for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
 done
 
 echo
-echo "-- dpkg-gated launchers opt into OHMYDEBN_LAUNCH_TILED_WATCH_SECOND (regression guard) --"
-# ohmydebn-cliamp/-socrates/-claude-code/-opencode/-pi were collapsed
-# into a single terminal window for their whole lifecycle
-# (install-if-needed, then run - see ohmydebn-cliamp's own comment), so
-# their *-tiled wrappers no longer need this. ohmydebn-antigravity-tiled
-# and ohmydebn-ai-tiled (which can also dispatch to ohmydebn-antigravity,
-# among others) still do: ohmydebn-antigravity launches a native GUI
-# binary as its second phase rather than running inside a terminal -
-# that second window can't be collapsed away the same way, so it still
-# needs ohmydebn-launch-tiled's own comment on this variable to apply.
-# Must export the flag, or that second window silently never gets tiled
-# once installation finishes (exactly the bug this variable exists to
-# fix, first reported live for cliamp before it was collapsed away
-# instead).
-WATCH_SECOND_LAUNCHERS=(ohmydebn-ai-tiled ohmydebn-antigravity-tiled ohmydebn-code-tiled ohmydebn-chatgpt-tiled)
-for WATCH_SECOND_LAUNCHER in "${WATCH_SECOND_LAUNCHERS[@]}"; do
-  if ! grep -qE '^\s*export OHMYDEBN_LAUNCH_TILED_WATCH_SECOND=1\s*$' "$REPO_ROOT/bin/$WATCH_SECOND_LAUNCHER"; then
-    echo "  FAIL - $WATCH_SECOND_LAUNCHER doesn't export OHMYDEBN_LAUNCH_TILED_WATCH_SECOND=1"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  $WATCH_SECOND_LAUNCHER exports OHMYDEBN_LAUNCH_TILED_WATCH_SECOND=1"
-  fi
+echo "-- browser real-window rules in tile-rules.json match \"Tile with gaps 5 full\" (regression guard) --"
+# Real browser windows (once installed) are meant to maximize
+# full-screen-with-gaps, not land in the same right-half slot as their
+# own install-presentation window - see config/tile-rules.json's
+# Brave-origin/Brave-browser entries (matched on wmClass alone, no
+# titleRegex, since a browser's title changes constantly as the user
+# navigates).
+for BROWSER_WM_CLASS in Brave-origin Brave-browser; do
+  BROWSER_GRID=$(python3 -c "
+import json
+rules = json.load(open('$REPO_ROOT/config/tile-rules.json'))
+for r in rules:
+    if r.get('wmClass') == '$BROWSER_WM_CLASS' and 'titleRegex' not in r:
+        print(' '.join(str(n) for n in r['grid']))
+        break
+")
+  check_tile_grid "Tile with gaps 5 full" "$BROWSER_GRID" "tile-rules.json's $BROWSER_WM_CLASS rule"
 done
 
 echo
@@ -958,6 +907,8 @@ MENU_HOTKEY_PAIRS=(
   "Visual Studio Code:show_ai_menu:VSCode"
   "Visual Studio Code:show_editor_menu:VSCode"
   "Cava:show_media_menu:Cava"
+  "AI (default):show_ai_menu:OpenCode"
+  "AI (default):show_ai_menu:Pi"
 )
 for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
   IFS=':' read -r KB_LABEL MENU_FUNC MENU_KEYWORD <<<"$ENTRY"
@@ -1038,6 +989,122 @@ for f in "${REPO_ADDING_SCRIPTS[@]}"; do
   fi
 done
 echo "  checked $CHECKED third-party-repo installers"
+
+echo
+echo "-- config/tile-rules.json is valid JSON with a sane schema (regression guard) --"
+# gTile-OhMyDebn's auto-tile handler treats an unparseable/malformed rule
+# file as empty (no error, no tiling) - real, but silent, exactly the
+# kind of regression a broken edit here could ship without anyone
+# noticing until "why did tiling stop working" turns up later.
+TILE_RULES_CHECK=$(python3 -c "
+import json, sys
+try:
+    rules = json.load(open('$REPO_ROOT/config/tile-rules.json'))
+except Exception as e:
+    print('invalid JSON: ' + str(e))
+    sys.exit(1)
+if not isinstance(rules, list):
+    print('top level is not a JSON array')
+    sys.exit(1)
+problems = []
+for i, r in enumerate(rules):
+    if not isinstance(r.get('wmClass'), str):
+        problems.append('rule %d missing/invalid wmClass' % i)
+    grid = r.get('grid')
+    if not isinstance(grid, list) or len(grid) != 6 or not all(isinstance(n, int) for n in grid):
+        problems.append('rule %d missing/invalid grid (need exactly 6 integers)' % i)
+    if 'titleRegex' in r and not isinstance(r['titleRegex'], str):
+        problems.append('rule %d has a non-string titleRegex' % i)
+if problems:
+    print('; '.join(problems))
+    sys.exit(1)
+print(str(len(rules)) + ' rules, all well-formed')
+")
+if [ $? -ne 0 ]; then
+  echo "  FAIL - $TILE_RULES_CHECK"
+  FAIL=$((FAIL + 1))
+else
+  echo "  $TILE_RULES_CHECK"
+fi
+
+echo
+echo "-- tile-rules.json titles match their launcher's --title (regression guard) --"
+# Curated: launcher script -> the literal title string its rule's
+# titleRegex should exactly match. Guards the exact mistake class hit
+# live this session (a window's real title/wmClass turning out to differ
+# from what was assumed, silently breaking the match) - here specifically
+# against an app's --title and its tile-rules.json entry drifting apart
+# independently after the fact.
+TITLE_OWNERS=(
+  "ohmydebn-cliamp:cliamp"
+  "ohmydebn-claude-code:Claude Code"
+  "ohmydebn-opencode:OpenCode"
+  "ohmydebn-pi:Pi"
+  "ohmydebn-socrates:SO-CRATES"
+  "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
+  "ohmydebn-btop-gui:btop"
+  "ohmydebn-terminal-left:OhMyDebn Terminal"
+  "ohmydebn-update-gui:OhMyDebn Update"
+  "ohmydebn-neovim:nvim"
+  "ohmydebn-cava:cava"
+)
+for ENTRY in "${TITLE_OWNERS[@]}"; do
+  LAUNCHER="${ENTRY%%:*}"
+  TITLE="${ENTRY#*:}"
+  if ! grep -qF -- "--title '$TITLE'" "$REPO_ROOT/bin/$LAUNCHER" && ! grep -qF -- "--title \"$TITLE\"" "$REPO_ROOT/bin/$LAUNCHER"; then
+    echo "  FAIL - $LAUNCHER doesn't pass --title '$TITLE'"
+    FAIL=$((FAIL + 1))
+  elif ! grep -qF "\"titleRegex\": \"^$TITLE\$\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no titleRegex \"^$TITLE\$\" entry for $LAUNCHER"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $LAUNCHER's --title '$TITLE' has a matching tile-rules.json entry"
+  fi
+done
+
+# Same idea for the GUI apps' install-presentation window, whose title
+# comes from ohmydebn-launch-floating-terminal-with-presentation's own
+# arg instead of a direct --title flag.
+PRESENTATION_TITLE_OWNERS=(
+  "ohmydebn-chatgpt:ChatGPT"
+  "ohmydebn-code:VSCode"
+  "ohmydebn-antigravity:Antigravity"
+  "ohmydebn-brave-origin:Brave Origin"
+  "ohmydebn-brave-browser:Brave Browser"
+)
+for ENTRY in "${PRESENTATION_TITLE_OWNERS[@]}"; do
+  LAUNCHER="${ENTRY%%:*}"
+  TITLE="${ENTRY#*:}"
+  if ! grep -qF "ohmydebn-launch-floating-terminal-with-presentation \"$TITLE\"" "$REPO_ROOT/bin/$LAUNCHER"; then
+    echo "  FAIL - $LAUNCHER doesn't pass \"$TITLE\" to ohmydebn-launch-floating-terminal-with-presentation"
+    FAIL=$((FAIL + 1))
+  elif ! grep -qF "\"titleRegex\": \"^$TITLE\$\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no titleRegex \"^$TITLE\$\" entry for $LAUNCHER's presentation window"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $LAUNCHER's presentation window \"$TITLE\" has a matching tile-rules.json entry"
+  fi
+done
+
+echo
+echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
+# Apps matched on wmClass alone (no titleRegex - their title changes
+# constantly, so it can't be matched on): the real window for each GUI
+# app above, plus the single-instance apps that never had an
+# install-presentation phase to begin with. Confirms the entry hasn't
+# been typo'd or accidentally dropped - the live wmClass values
+# themselves came from a live wmctrl/Looking Glass check each time (see
+# the scripts' own commit history), not something re-derivable from
+# source, so this can only check presence, not correctness.
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt Brave-origin Brave-browser KeePassXC Gedit Aether)
+for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
+  if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""
+    FAIL=$((FAIL + 1))
+  else
+    echo "  tile-rules.json has an entry for wmClass \"$WMCLASS\""
+  fi
+done
 
 echo
 echo "$FAIL failure(s)"

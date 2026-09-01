@@ -4,5 +4,45 @@
 # Usage: ohmydebn-theme-set-btop
 #
 
-# Restart btop to apply new theme
-pkill -SIGUSR2 btop 2>/dev/null || true
+# SIGUSR2 hot-reloads btop's config/theme from disk without restarting it -
+# but only on btop >= 1.3.1, which is where that handler was added
+# (upstream changelog: "Add hot-reloading of config file with CTRL+R or
+# SIGUSR2 signal"). Any older btop has no handler for SIGUSR2 at all, so
+# the signal falls back to its POSIX default action - terminating the
+# process - confirmed as the real cause of a reported bug where btop's
+# window (run as `alacritty -e btop`, no --hold, so the window closes the
+# instant its child dies) vanished the moment a theme was applied, on a
+# machine running btop 1.3.0. Version-gating below means an old btop just
+# keeps its current colors until the user restarts it by hand, rather
+# than being killed out from under them. A version that fails to parse
+# (unexpected `--version` output, or no btop installed) is treated the
+# same as "too old" - skipping the signal is always the safe default here,
+# never the dangerous one.
+BTOP_VERSION=$(/usr/bin/btop --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+if [ -n "$BTOP_VERSION" ] && printf '%s\n' "1.3.1" "$BTOP_VERSION" | sort -C -V 2>/dev/null; then
+  pkill -SIGUSR2 btop 2>/dev/null || true
+else
+  # Can't confirm this btop will hot-reload cleanly (too old, or the
+  # version couldn't be parsed at all) - falling back to killing and
+  # relaunching the hotkey's own btop window (Super+T / ohmydebn-btop-gui)
+  # instead of leaving it showing stale colors until the user restarts it
+  # by hand. Matched by the wrapper's own cmdline, not a bare "btop" name
+  # match, so a btop the user opened by hand in an ordinary terminal is
+  # left alone. Killing the wrapper alone wouldn't close the window - bash
+  # doesn't forward signals to a backgrounded child - so its alacritty
+  # child is the actual kill target, same as the original bug (killing
+  # the window's process closes the window, since it runs with no
+  # --hold), just deliberate this time. gTile-OhMyDebn's own
+  # window-created auto-tile handler re-tiles the relaunched window
+  # itself (matching wmClass "Alacritty" + title "btop"), same as any
+  # other fresh btop launch - no tiling logic needed here.
+  while IFS= read -r WRAPPER_PID; do
+    [ -z "$WRAPPER_PID" ] && continue
+    ALACRITTY_PID=$(pgrep -P "$WRAPPER_PID" -x alacritty | head -1)
+    if [ -n "$ALACRITTY_PID" ]; then
+      kill "$ALACRITTY_PID" 2>/dev/null || true
+      /usr/share/ohmydebn/bin/ohmydebn-btop-gui >/dev/null 2>&1 &
+      disown
+    fi
+  done < <(pgrep -f "ohmydebn-terminal --title btop -e /usr/bin/btop")
+fi

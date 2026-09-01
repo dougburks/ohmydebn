@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Opens a plain (untiled) terminal running cava - gTile-OhMyDebn's own
+# window-created auto-tile handler tiles this window itself, matching
+# wmClass "Alacritty" + title "cava" against
+# /usr/share/ohmydebn/config/tile-rules.json.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'cava' -e /usr/bin/cava

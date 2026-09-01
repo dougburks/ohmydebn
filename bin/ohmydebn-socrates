@@ -1,16 +1,7 @@
 #!/bin/bash
+#
+# Opens a plain (untiled) terminal running ohmydebn-socrates-launch - see
+# ohmydebn-cliamp's own comment on why the payload lives in a separate
+# script instead of here.
 
-# One terminal window for the whole lifecycle (install-if-needed, then
-# run) instead of a separate floating install-presentation terminal
-# followed by a second terminal for SO-CRATES itself - see
-# ohmydebn-cliamp's own comment for why (confirmed live, same bug).
-exec setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn --title "SO-CRATES" -e bash -c '
-  if ! dpkg -s "podman" >/dev/null 2>&1; then
-    /usr/share/ohmydebn/bin/ohmydebn-show-logo
-    /usr/share/ohmydebn/bin/ohmydebn-podman-install
-    /usr/share/ohmydebn/bin/ohmydebn-show-done
-  fi
-  if dpkg -s "podman" >/dev/null 2>&1; then
-    exec /usr/share/ohmydebn/bin/ohmydebn-socrates-run
-  fi
-'
+exec setsid /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn --title "SO-CRATES" -e /usr/share/ohmydebn/bin/ohmydebn-socrates-launch

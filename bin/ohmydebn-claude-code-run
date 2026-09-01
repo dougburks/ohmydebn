@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for Claude Code, meant to run
+# inside an already-open terminal (via -e) rather than opening one of its
+# own - see ohmydebn-claude-code, which wraps this in a terminal instead
+# of duplicating it.
+
+set -euo pipefail
+
+if ! dpkg -s "claude-code" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-claude-code-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "claude-code" >/dev/null 2>&1; then
+  mkdir -p ~/claude-sessions && cd "$(mktemp -d ~/claude-sessions/session-XXXXXX)"
+  exec /usr/bin/claude
+fi

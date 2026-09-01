@@ -8,7 +8,7 @@
 # keybinding-cinnamon.txt) so the file manager can be launched through
 # this tiling wrapper instead. Right half (not left) because the left
 # half is reserved for the persistently-open terminal - see
-# ohmydebn-terminal-left-tiled.
+# ohmydebn-terminal-left.
 
 set -euo pipefail
 

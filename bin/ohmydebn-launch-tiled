@@ -1,0 +1,83 @@
+#!/bin/bash
+#
+# Launches an arbitrary command in the background, then tiles whatever
+# window ends up active/focused afterward via ohmydebn-gtile-apply.
+# Generalizes the approach ohmydebn-browser-tiled originally used
+# (necessary because a browser launch can't be tracked by a fresh PID:
+# gtk-launch forks and detaches, and most browsers are single-instance -
+# "launching" one that's already running just raises its existing window
+# rather than starting a new process) to any command with the same
+# problem. Most of OhMyDebn's own app launchers go through at least one
+# extra layer of indirection (a dpkg-installed check, a floating-terminal
+# helper, an app's own single-instance re-activation) before the real
+# window-owning process exists, so a PID
+# captured at the top level - the way ohmydebn-terminal-tiled tracks
+# alacritty directly, safe there because it execs alacritty itself with
+# no indirection - would rarely match the actual window here. Always
+# tiles whatever ends up focused, rather than trying to tell a fresh
+# window from a raised one - same tradeoff ohmydebn-browser-tiled's own
+# comment already covered.
+#
+# Usage: ohmydebn-launch-tiled <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]
+#
+# OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (optional): a window ID the poll below
+# must never accept as the launched app's window, even once it becomes
+# active - for callers that are themselves a closing GUI window (a picker,
+# a carousel) rather than a plain hotkey with nothing of their own on
+# screen. PREV_WIN below is captured while that caller window is still
+# active (Gtk.main_quit()/a picker's deferred close don't make a window
+# disappear immediately), so PREV_WIN already IS the caller - excluding
+# the caller a second time here would be redundant. What actually needs
+# excluding is whatever briefly regains focus WHEN the caller closes -
+# for ohmydebn-menu, that's the window that was active before the picker
+# ever appeared (e.g. a terminal you had focused); for the theme
+# carousel, whatever was active before it launched. That transient
+# refocus differs from PREV_WIN(caller), so without this it reads as
+# "the change" this loop is waiting for, and the real app - which
+# usually hasn't opened yet - never gets tiled. Set by ohmydebn-menu
+# (captured once at startup, before its picker ever appears) and
+# ohmydebn-theme-carousel (captured in __main__, before the carousel
+# window exists) to the same "whatever was active before I existed"
+# value, for exactly this reason.
+
+set -uo pipefail
+
+if [ "$#" -lt 7 ] || [ "$7" != "--" ]; then
+  echo "Usage: $0 <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]" >&2
+  exit 1
+fi
+GRID=("$1" "$2" "$3" "$4" "$5" "$6")
+shift 7
+
+PREV_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+EXCLUDE_WIN="${OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN:-}"
+
+"$@" &
+
+# Polling for the active window to change adapts to any launch speed (a
+# fixed sleep needed manual re-tuning per machine when this was still
+# inline in ohmydebn-browser-tiled), with a 5s timeout as a backstop for
+# the raise-existing-window case where focus might never move (e.g. the
+# app was already the focused window). CUR_WIN is also checked against
+# EXCLUDE_WIN on every iteration, not just once, so a caller window that
+# keeps flickering active/inactive during its own close can't be picked
+# up on a later poll either. 0.02s between checks (was 0.1s) so the gap
+# between "window has focus" and "window is hidden" below stays as small
+# as possible - the window is already visible at its pre-tile position
+# once it has focus, so every extra poll interval here is extra time the
+# user sees it there before it disappears. 250 iterations keeps the same
+# ~5s overall timeout as before.
+WIN_ID="$PREV_WIN"
+for _ in $(seq 1 250); do
+  CUR_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+  if [ -n "${CUR_WIN:-}" ] && [ "$CUR_WIN" != "${PREV_WIN:-}" ] && [ "$CUR_WIN" != "${EXCLUDE_WIN:-}" ]; then
+    WIN_ID="$CUR_WIN"
+    /usr/share/ohmydebn/bin/ohmydebn-gtile-hide "$WIN_ID"
+    break
+  fi
+  /usr/bin/sleep 0.02
+done
+
+if [ -n "${WIN_ID:-}" ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" "${GRID[@]}"
+fi

@@ -1,0 +1,330 @@
+#!/usr/bin/python3
+#
+# ohmydebn-virtmanager-passt-upgrade: lists every qemu:///session VM and
+# shows whether its user-mode networking is already using passt (the
+# backend ohmydebn-virtmanager-install sets up for newly-installed
+# Virtual Machine Manager - see that script's own comment for why: passt
+# gives qemu:///session VMs decent NAT networking, unlike QEMU's built-in
+# slirp user-mode default). Neither virt-manager's nor GNOME Boxes' own
+# GUI has a way to pick passt as the backend for an existing VM's network
+# device - today that needs a manual `virsh edit` - so this offers a
+# one-click upgrade for any VM that's missing it, regardless of which one
+# of the two created it: both manage domains through the same
+# qemu:///session libvirt connection this script queries, so a VM Boxes
+# created is exactly as visible/upgradable here as one virt-manager
+# created (confirmed live: two of this machine's own qemu:///session
+# domains carry Boxes' own <boxes:gnome-boxes> XML metadata, and this tool
+# detects/upgrades them the same as any other). The window's title says
+# "Virtual Machine Networking", not "Virt-Manager Networking", for exactly
+# this reason.
+#
+# Detection/upgrade both work purely through already-installed tooling
+# (virsh, virt-xml - the latter guaranteed present since the virt-manager
+# package hard-depends on virt-install, which provides it): dumpxml, look
+# for <backend type='passt'/> on every type='user' <interface>, and if any
+# are missing it, `virt-xml --edit --network mac=<mac>,backend.type=passt`
+# adds just that one line (confirmed live via --print-diff against a real
+# VM: a clean, minimal edit, nothing else touched). Targeting by MAC
+# rather than a bare --edit disambiguates VMs with more than one NIC.
+#
+# The upgrade only ever runs against a shut-off VM: a network backend
+# change needs a fresh QEMU process to take effect (virt-xml --edit only
+# touches the persistent/offline XML, not a live domain), so upgrading a
+# running VM would either silently do nothing until its next restart or
+# require a second, separate "hot vs. persistent" code path - refusing
+# outright until the VM is shut down keeps the button's result unambiguous
+# instead of leaving the user unsure whether it actually took effect.
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk
+
+import os
+import subprocess
+import xml.etree.ElementTree as ET
+
+VIRSH = "/usr/bin/virsh"
+VIRT_XML = "/usr/bin/virt-xml"
+CONNECT = "qemu:///session"
+
+
+def list_vm_names():
+    """Every qemu:///session domain, running or not - `virsh list --name`
+    (unlike the tabular `list --all`) is one name per line, nothing to
+    parse out of column widths."""
+    result = subprocess.run(
+        [VIRSH, "--connect", CONNECT, "list", "--all", "--name"],
+        capture_output=True, text=True, check=False,
+    )
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_vm_state(name):
+    result = subprocess.run(
+        [VIRSH, "--connect", CONNECT, "domstate", name],
+        capture_output=True, text=True, check=False,
+    )
+    return result.stdout.strip() or "unknown"
+
+
+# get_passt_status()'s three return values:
+#   "passt"           - every type='user' interface already has the passt backend
+#   "needs_upgrade"   - at least one type='user' interface is missing it
+#   "not_applicable"  - no type='user' interfaces at all (not this VM's
+#                        networking setup - e.g. a VM with a bridged/
+#                        virtual-network interface instead of session
+#                        mode's usual user-mode NIC)
+def get_passt_status(name):
+    """Returns (status, missing_macs) - missing_macs is the MAC address of
+    every type='user' interface that still needs the passt backend added,
+    for upgrade_to_passt() to target individually."""
+    result = subprocess.run(
+        [VIRSH, "--connect", CONNECT, "dumpxml", name],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return "unknown", []
+    try:
+        root = ET.fromstring(result.stdout)
+    except ET.ParseError:
+        return "unknown", []
+    user_ifaces = [
+        iface for iface in root.findall("./devices/interface") if iface.get("type") == "user"
+    ]
+    if not user_ifaces:
+        return "not_applicable", []
+    missing_macs = []
+    for iface in user_ifaces:
+        backend = iface.find("backend")
+        if backend is None or backend.get("type") != "passt":
+            mac_el = iface.find("mac")
+            if mac_el is not None:
+                missing_macs.append(mac_el.get("address"))
+    return ("needs_upgrade", missing_macs) if missing_macs else ("passt", [])
+
+
+def get_monitor_geometry():
+    """Same pointer-based monitor lookup ohmydebn-menu-picker uses - not
+    the primary monitor, since that would always cap this window's height
+    to the left screen's usable space on a multi-monitor setup regardless
+    of which one the user is actually working on."""
+    display = Gdk.Display.get_default()
+    seat = display.get_default_seat()
+    _screen, x, y = seat.get_pointer().get_position()
+    monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor() or display.get_monitor(0)
+    return monitor.get_geometry()
+
+
+def upgrade_to_passt(name, macs):
+    """Adds the passt backend to each of this VM's still-missing
+    interfaces, one virt-xml call per MAC (targeting by MAC rather than a
+    bare --edit, so a multi-NIC VM doesn't reject the edit as ambiguous).
+    Raises CalledProcessError on failure - the caller shows it, rather
+    than this silently leaving some interfaces half-upgraded with no
+    indication which ones."""
+    for mac in macs:
+        subprocess.run(
+            [
+                VIRT_XML, "--connect", CONNECT, name,
+                "--edit", "--network", f"mac={mac},backend.type=passt",
+            ],
+            capture_output=True, text=True, check=True,
+        )
+
+
+def hex_to_rgba(hex_value):
+    """Same conversion ohmydebn-menu-picker uses for this same file -
+    picker-colors stores #RRGGBBAA (an 8-digit hex with alpha baked in),
+    which GTK's CSS parser rejects outright ("Junk at end of value",
+    confirmed live) since it only understands #RRGGBB or rgba(...)."""
+    hex_value = hex_value.lstrip("#")
+    r = int(hex_value[0:2], 16)
+    g = int(hex_value[2:4], 16)
+    b = int(hex_value[4:6], 16)
+    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
+    return f"rgba({r}, {g}, {b}, {a:.3f})"
+
+
+def load_theme_colors():
+    """Same small key=value file ohmydebn-theme-set-picker writes on every
+    theme change that ohmydebn-menu-picker reads - keeps this window's
+    look in sync with the active theme with no separate palette."""
+    colors = {"bg0": "#1e1e2e", "bg1": "#313244", "bg3": "#585b70", "fg0": "#cdd6f4"}
+    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                key, _, value = line.strip().partition("=")
+                if key in colors and value:
+                    colors[key] = value
+    except OSError:
+        pass
+    return {key: hex_to_rgba(value) for key, value in colors.items()}
+
+
+CSS_TEMPLATE = """
+window {{
+    background-color: {bg0};
+}}
+#vm-list row {{
+    padding: 10px 16px;
+    color: {fg0};
+    border-bottom: 1px solid {bg3};
+}}
+.vm-name {{
+    font-weight: bold;
+    color: {fg0};
+}}
+.vm-state {{
+    color: {fg0};
+    opacity: 0.7;
+}}
+.status-ok {{
+    color: #a6e3a1;
+}}
+.status-needs-upgrade {{
+    color: #f9e2af;
+}}
+.status-na {{
+    color: {fg0};
+    opacity: 0.5;
+}}
+* {{
+    font-family: "CaskaydiaMono Nerd Font";
+    font-size: 11pt;
+}}
+"""
+
+STATUS_LABELS = {
+    "passt": ("Using passt", "status-ok"),
+    "needs_upgrade": ("Not using passt", "status-needs-upgrade"),
+    "not_applicable": ("N/A (no user-mode NIC)", "status-na"),
+    "unknown": ("Unknown", "status-na"),
+}
+
+
+class PasstUpgradeWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Virtual Machine Networking")
+        self.set_default_size(560, -1)
+        self.set_border_width(0)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(outer)
+
+        header = Gtk.Label(label="  Passt networking upgrade", xalign=0)
+        header.set_margin_top(14)
+        header.set_margin_bottom(10)
+        header.set_margin_start(16)
+        outer.pack_start(header, False, False, 0)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        # Grows this window to fit however many VMs there are, up to 70% of
+        # the usable monitor height - past that it scrolls instead of
+        # running off/behind the screen edge. propagate_natural_height
+        # makes the ScrolledWindow ask for its content's real height (up
+        # to the max) instead of an arbitrary fixed one; the row count
+        # here is fixed for this window's whole lifetime (refresh() only
+        # ever updates existing rows' state/button text, never adds or
+        # removes a VM), so unlike ohmydebn-menu-picker this never needs
+        # to re-negotiate size after the window is already shown - it
+        # only has to get this right once, before the first show().
+        scroller.set_max_content_height(max(300, int(get_monitor_geometry().height * 0.7)))
+        scroller.set_propagate_natural_height(True)
+        outer.pack_start(scroller, True, True, 0)
+
+        self.listbox = Gtk.ListBox()
+        self.listbox.set_name("vm-list")
+        self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        scroller.add(self.listbox)
+
+        self.apply_theme()
+        self.refresh()
+        self.connect("destroy", Gtk.main_quit)
+
+    def apply_theme(self):
+        colors = load_theme_colors()
+        css = CSS_TEMPLATE.format(**colors).encode("utf-8")
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    def refresh(self):
+        for child in self.listbox.get_children():
+            self.listbox.remove(child)
+        for name in list_vm_names():
+            self.listbox.add(self._build_row(name))
+        self.listbox.show_all()
+
+    def _build_row(self, name):
+        state = get_vm_state(name)
+        status, macs = get_passt_status(name)
+        label_text, style_class = STATUS_LABELS[status]
+
+        row = Gtk.ListBoxRow()
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        row.add(box)
+
+        text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        name_label = Gtk.Label(label=name, xalign=0)
+        name_label.get_style_context().add_class("vm-name")
+        state_label = Gtk.Label(label=state, xalign=0)
+        state_label.get_style_context().add_class("vm-state")
+        text_col.pack_start(name_label, False, False, 0)
+        text_col.pack_start(state_label, False, False, 0)
+        box.pack_start(text_col, True, True, 0)
+
+        status_label = Gtk.Label(label=label_text, xalign=1)
+        status_label.get_style_context().add_class(style_class)
+        box.pack_start(status_label, False, False, 0)
+
+        upgrade_button = Gtk.Button(label="Upgrade to passt")
+        can_upgrade = status == "needs_upgrade" and state == "shut off"
+        upgrade_button.set_sensitive(can_upgrade)
+        if status == "needs_upgrade" and state != "shut off":
+            upgrade_button.set_tooltip_text("Shut down this VM first to upgrade its networking.")
+        upgrade_button.connect("clicked", self.on_upgrade_clicked, name, macs)
+        box.pack_start(upgrade_button, False, False, 0)
+
+        return row
+
+    def on_upgrade_clicked(self, button, name, macs):
+        confirm = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text=f"Upgrade {name}'s networking to passt?",
+        )
+        confirm.format_secondary_text(
+            "This edits the VM's saved configuration. It only takes effect the next time it's started."
+        )
+        response = confirm.run()
+        confirm.destroy()
+        if response != Gtk.ResponseType.YES:
+            return
+        try:
+            upgrade_to_passt(name, macs)
+        except subprocess.CalledProcessError as exc:
+            error = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text=f"Couldn't upgrade {name}",
+            )
+            error.format_secondary_text((exc.stderr or exc.stdout or str(exc)).strip())
+            error.run()
+            error.destroy()
+        self.refresh()
+
+
+if __name__ == "__main__":
+    win = PasstUpgradeWindow()
+    win.show_all()
+    Gtk.main()

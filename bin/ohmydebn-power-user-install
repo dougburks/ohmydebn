@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -e
+
+echo "This will remove the optional apps that ship on the base Debian 13"
+echo "Cinnamon ISO (Firefox, LibreOffice, etc.) and install a curated set of"
+echo "power-user extras (Virtual Machine Manager, Brave, Claude Code, GIMP,"
+echo "OpenCode, Podman, and more)."
+echo
+echo "Press Enter to continue or Ctrl-C to cancel."
+read -r
+
+POWER_USER=true bash /usr/share/ohmydebn/install/packaging/power-user.sh

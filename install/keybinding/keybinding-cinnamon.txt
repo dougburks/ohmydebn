@@ -8,5 +8,5 @@ keybinding-cinnamon "wm" "switch-to-workspace-4" "['<Super>4']" "Press Super + 4
 keybinding-cinnamon "wm" "toggle-maximized" "['<Super>Page_Up']" "Press Super + PageUp to maximize a window"
 keybinding-cinnamon "wm" "minimize" "['<Super>Page_Down']" "Press Super + PageDown to minimize a window"
 keybinding-cinnamon "wm" "close" "['<Alt>F4', '<Super>w']" "Press Super + W to close a window"
-keybinding-cinnamon "media-keys" "home" "['XF86Explorer', '<Super>F']" "Press Super + F to open file manager"
+keybinding-cinnamon "media-keys" "home" "['XF86Explorer']" "Freeing Super + F from the default file-manager binding so it can launch the file manager tiled instead (see keybinding-custom.txt)"
 keybinding-cinnamon "media-keys" "video-rotation-lock" "['<Primary><Shift><Super>o']" "Press Ctrl + Shift + Super + O to toggle video rotation lock"

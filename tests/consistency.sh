@@ -258,8 +258,13 @@ echo "  checked ${#ALL_BINDINGS[@]} key-combo assignments"
 
 echo
 echo "-- flattened menu-picker search list stays in sync with the real menu tree --"
-# shellcheck disable=SC2034 # read by menu_tree_flatten() in ohmydebn-menu-tree
-MT_SKIP_LABELS=(Apps)
+# No explicit MT_SKIP_LABELS here on purpose - this exercises
+# ohmydebn-menu-tree's own MT_DEFAULT_SKIP_LABELS ("Other Apps") the same
+# way every real caller does (ohmydebn-menu-picker's load_leaves(), the
+# ohmydebn-package-build repo's shipped-cache pregeneration), rather than
+# hand-repeating the literal a fourth time - that repetition is exactly
+# what once let one copy silently drift to a stale "Apps" for a long time
+# without anything noticing.
 mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>/dev/null)
 if [[ ${#FLAT[@]} -eq 0 ]]; then
   echo "  FAIL - menu_tree_flatten produced zero leaves"
@@ -296,6 +301,139 @@ for dupe in "${PATH_DUPES[@]}"; do
   FAIL=$((FAIL + 1))
 done
 echo "  checked ${#PATHS[@]} func -> breadcrumb paths"
+
+# Regression guard for a real bug: _mt_menu_block_start() searched forward
+# from a function's own opening line for the first `menu "` call anywhere
+# in the *rest of the file*, not bounded to that function's own body. A
+# function with no menu() call of its own (show_other_apps_menu, which
+# talks to the persistent picker directly instead - see its own comment in
+# ohmydebn-menu) silently "borrowed" whatever function's menu() call
+# happened to follow it in the file - confirmed live: once Other Apps
+# became reachable through _mt_walk() (nested under Apps) rather than
+# skipped outright via MT_SKIP_LABELS (which only the top-level walk in
+# _mt_flatten_uncached ever checks), it inherited show_containers_menu's
+# own Docker/Podman/Distrobox items instead of correctly reporting nothing
+# to walk. A synthetic fixture, not the real menu file, so this keeps
+# catching a regression in the tool itself regardless of which real
+# function happens to follow which.
+echo
+echo "-- _mt_menu_block_start() doesn't borrow a following function's menu() call (regression guard) --"
+# Deliberately invoked via a fresh `bash -c` below, not a plain call in
+# this already-running script - this file's own `set -uo pipefail`
+# (line 16) would silently make `$(pipeline) || return 1` behave
+# correctly even with the exact bug this guards against, since pipefail
+# propagates a pipeline's real failure through trailing `head`/`cut`
+# commands that would otherwise exit 0 on empty input. ohmydebn-menu-tree
+# explicitly never sets pipefail itself (every caller sources it with its
+# own flags - see its header comment), and its real vulnerable caller,
+# ohmydebn-menu-picker's run_menu_tree(), is exactly this: a plain
+# `bash -c` with no pipefail. Testing under this script's own pipefail
+# would only prove the bug can't happen *here*, not that it can't happen
+# in the one place it actually did.
+BORROW_FIXTURE=$(mktemp)
+printf 'no_menu_call_test() {\n  echo "no menu() call in this function"\n}\n\nhas_menu_call_test() {\n  menu "Real" "  Item"\n  case "$MENU_RESULT" in\n  *) : ;;\n  esac\n}\n' >"$BORROW_FIXTURE"
+if bash -c 'source "$1"; _mt_menu_block_start "$2" no_menu_call_test' _ "$REPO_ROOT/bin/ohmydebn-menu-tree" "$BORROW_FIXTURE" >/dev/null 2>&1; then
+  echo "  FAIL - found a menu() block for a function with none of its own (borrowed the next function's instead)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  correctly reports no block for a function with no menu() call"
+fi
+rm -f "$BORROW_FIXTURE"
+
+# Regression guard for a second real bug, found alongside the one above:
+# _mt_item_labels()/_mt_flatten_uncached()'s label extraction used
+# `^\S+\s+\K.*`, requiring a leading icon character before the separating
+# spaces - a handful of real items (Cybersecurity, Editor, Virtualization,
+# ...) have never carried one, so grep's `^\S+` anchor simply failed to
+# match and silently produced no output at all for that one line, dropping
+# the item's label (and so its whole subtree) out of the flattened search
+# list with no warning, no crash, nothing to notice. A synthetic
+# icon-less fixture, not the real menu file, so this keeps catching a
+# regression in the tool itself even if those specific items eventually
+# gain real icons.
+echo
+echo "-- _mt_item_labels() extracts a label even without a leading icon (regression guard) --"
+ICONLESS_FIXTURE=$(mktemp)
+printf 'iconless_test_menu() {\n  menu "Test" "  Has No Icon"\n  case "$MENU_RESULT" in\n  *) : ;;\n  esac\n}\n' >"$ICONLESS_FIXTURE"
+mapfile -t ICONLESS_LABELS < <(_mt_item_labels "$ICONLESS_FIXTURE" "$(_mt_menu_block_start "$ICONLESS_FIXTURE" iconless_test_menu)")
+rm -f "$ICONLESS_FIXTURE"
+if [[ "${ICONLESS_LABELS[0]:-}" != "Has No Icon" ]]; then
+  echo "  FAIL - an icon-less item's label was dropped instead of extracted (got: ${ICONLESS_LABELS[*]:-<nothing>})"
+  FAIL=$((FAIL + 1))
+else
+  echo "  correctly extracts an icon-less item's label"
+fi
+
+echo
+echo "-- ohmydebn-menu-picker's ALWAYS_SUBMENU_LABELS matches ohmydebn-menu-tree's MT_DEFAULT_SKIP_LABELS --"
+# Same set of names by construction: a label excluded from the static
+# menu-tree walk (MT_DEFAULT_SKIP_LABELS) has no leaves for
+# find_submenu_labels() to match against, so it needs the exact same
+# label hand-added back via ALWAYS_SUBMENU_LABELS to still earn its ">"
+# marker - see that constant's own comment in ohmydebn-menu-picker. Two
+# independent hand-copies of the same set is exactly the kind of
+# duplication that already let MT_SKIP_LABELS itself drift stale once;
+# this catches the two ever disagreeing instead of relying on nobody
+# forgetting to update both.
+TREE_DEFAULT_SKIP=$(printf '%s\n' "${MT_DEFAULT_SKIP_LABELS[@]}" | sort)
+PICKER_ALWAYS_SUBMENU=$(python3 -c "
+import re
+with open('$REPO_ROOT/bin/ohmydebn-menu-picker', encoding='utf-8') as f:
+    src = f.read()
+m = re.search(r'ALWAYS_SUBMENU_LABELS = \{([^}]*)\}', src)
+labels = re.findall(r'\"([^\"]*)\"', m.group(1)) if m else []
+print('\n'.join(sorted(labels)))
+")
+if [[ "$TREE_DEFAULT_SKIP" != "$PICKER_ALWAYS_SUBMENU" ]]; then
+  echo "  FAIL - MT_DEFAULT_SKIP_LABELS ($TREE_DEFAULT_SKIP) != ALWAYS_SUBMENU_LABELS ($PICKER_ALWAYS_SUBMENU)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  both agree on: $(tr '\n' ' ' <<<"$TREE_DEFAULT_SKIP")"
+fi
+
+# Regression guard for a real bug: go_to_menu()'s case arms are matched in
+# file order against a lowercased category label, and bash's `case` picks
+# the *first* arm whose glob matches - not the most specific one. Adding
+# "Containerization" to the top level once silently routed to show_ai_menu
+# instead of show_containerization_menu, because "*ai*)" was listed first
+# and "containerization" contains "ai" as a substring (conta-AI-nerization)
+# - found only by hand-checking menu_tree_paths()'s output, nothing
+# automated caught it. Generalizes that check: for every top-level
+# show_*_menu function (breadcrumb with no " > " - a nested one like
+# show_install_style_menu's name isn't expected to reduce this cleanly,
+# since it carries its parent's own name too), stripping "show_"/"_menu"
+# from the function name must reproduce its own category label exactly -
+# if it doesn't, something else's case arm shadowed the real one.
+echo
+echo "-- Go-menu categories resolve to their own show_*_menu, not a shadowed earlier arm --"
+CHECKED=0
+for path in "${PATHS[@]}"; do
+  func="${path%%$'\t'*}"
+  breadcrumb="${path#*$'\t'}"
+  [[ "$breadcrumb" == *" > "* ]] && continue
+  CHECKED=$((CHECKED + 1))
+  core="${func#show_}"
+  core="${core%_menu}"
+  # A multi-word category's function name only has to reflect ONE of its
+  # words, not the whole thing concatenated - e.g. a category named
+  # "Foo Bar" only needs its dispatch keyword to be "foo" or "bar", not
+  # "foobar". Checking membership in the word list, not equality against
+  # the whole label, avoids that false positive while still catching the
+  # real bug:
+  # "containerization" is one word with no spaces, so show_ai_menu's core
+  # "ai" (not equal to, and not a member of, {"containerization"}) still
+  # fails exactly as it should.
+  mapfile -t words < <(echo "$breadcrumb" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n')
+  match=false
+  for word in "${words[@]}"; do
+    [[ "$core" == "$word" ]] && match=true && break
+  done
+  if [[ "$match" == false ]]; then
+    echo "  FAIL - $func resolves to \"$breadcrumb\", but its own name implies \"$core\" - check go_to_menu()'s case-arm order for a shadowing keyword"
+    FAIL=$((FAIL + 1))
+  fi
+done
+echo "  checked $CHECKED top-level Go-menu categories"
 
 # -- check 11: rofi is never invoked anywhere - a regression guard, not a
 #              consistency-of-something-else check, for the ohmydebn-menu-
@@ -625,6 +763,348 @@ else
     echo "  open_browse_themes() calls remove_legacy_aether_desktop_files()"
   fi
 fi
+
+echo
+echo "-- floating-terminal launches always pass a title (regression guard) --"
+# Both ohmydebn-launch-floating-terminal-with-presentation and
+# ohmydebn-launch-floating-terminal used to take just a <command>, which
+# left every on-demand app's install/run terminal showing "Alacritty" in
+# the taskbar no matter what was actually running - confirmed live and
+# fixed by making <title> a required first argument. Guards against the
+# next new on-demand app script reintroducing that bug by passing the
+# install-script path as the first arg again instead of a quoted title:
+# \K only captures the single character right after the helper name and
+# its trailing spaces, so a real call (title always starts with a quote,
+# whether literal or a variable like "$1") passes, while the old buggy
+# shape (a bare /path/to/..., starting with /) fails.
+mapfile -t TITLELESS_HITS < <(grep -rHnoP 'ohmydebn-launch-floating-terminal(-with-presentation)? +\K.' "$REPO_ROOT/bin" "$REPO_ROOT/install" 2>/dev/null | grep -v ':"$')
+for hit in "${TITLELESS_HITS[@]}"; do
+  file="${hit%%:*}"
+  echo "  FAIL - ${file#"$REPO_ROOT"/} calls a floating-terminal helper with a bare path instead of a quoted title"
+  FAIL=$((FAIL + 1))
+done
+echo "  checked floating-terminal helper call sites in bin/ and install/"
+
+echo
+echo "-- pre-tiled launchers' gTile grids match their intended \"Tile with gaps N ...\" keybindings --"
+# Each of these launches a window and immediately tiles it via
+# ohmydebn-gtile-apply - ohmydebn-terminal-tiled directly; every
+# OHMYDEBN_TILE_GRID-override launcher indirectly through
+# ohmydebn-terminal-tiled; every ohmydebn-launch-tiled-based launcher
+# indirectly through ohmydebn-launch-tiled - claiming (in its own
+# comment) to match a specific named "Tile with gaps N ..." keybinding
+# exactly, so a freshly launched window already looks like you'd just
+# re-tiled it that way yourself. This checks each claim against the real
+# keybinding instead of trusting the comment, so they can't silently
+# drift apart if any one of them is ever edited alone.
+check_tile_grid() {
+  local keybinding_label="$1" actual_grid="$2" source_desc="$3"
+  local keybinding_line keybinding_grid
+  keybinding_line=$(grep "\"$keybinding_label\"" "$REPO_ROOT/install/keybinding/keybinding-custom.txt")
+  keybinding_grid=$(grep -oP 'TileFocusedWindow \K[0-9 ]+' <<<"$keybinding_line" | sed 's/ *$//')
+  if [[ -z "$keybinding_grid" || -z "$actual_grid" ]]; then
+    echo "  FAIL - couldn't find a TileFocusedWindow grid for $source_desc or \"$keybinding_label\""
+    FAIL=$((FAIL + 1))
+  elif [[ "$keybinding_grid" != "$actual_grid" ]]; then
+    echo "  FAIL - $source_desc ($actual_grid) doesn't match \"$keybinding_label\"'s ($keybinding_grid)"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  grids match: $actual_grid ($source_desc)"
+  fi
+}
+TERMINAL_TILED_DEFAULT_GRID=$(grep -oP 'OHMYDEBN_TILE_GRID:-\K[0-9 ]+(?=\})' "$REPO_ROOT/bin/ohmydebn-terminal-tiled")
+check_tile_grid "Tile with gaps 5 full" "$TERMINAL_TILED_DEFAULT_GRID" "ohmydebn-terminal-tiled's default grid"
+
+# Every ohmydebn-launch-tiled-based launcher, same "script:keybinding
+# label" shape as above - these call ohmydebn-launch-tiled directly with
+# the grid as its own leading args, rather than going through
+# ohmydebn-terminal-tiled, because their target app can't be reliably
+# tracked by a fresh PID (see ohmydebn-launch-tiled's own comment).
+LAUNCH_TILED_LAUNCHERS=(
+  "ohmydebn-browser-tiled:Tile with gaps 5 full"
+  "ohmydebn-file-manager-tiled:Tile with gaps 6 right half"
+  "ohmydebn-launch-webapp:Tile with gaps 6 right half"
+)
+for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
+  SCRIPT="${ENTRY%%:*}"
+  LABEL="${ENTRY#*:}"
+  GRID=$(grep -oP 'ohmydebn-launch-tiled \K[0-9 ]+(?= -- )' "$REPO_ROOT/bin/$SCRIPT")
+  check_tile_grid "$LABEL" "$GRID" "$SCRIPT's grid"
+done
+
+echo
+echo "-- ohmydebn-terminal-tiled and ohmydebn-launch-tiled both delegate to ohmydebn-gtile-apply (regression guard) --"
+# Guards against either script's tiling call getting inlined back into a
+# second copy instead of going through the shared helper above - that's
+# exactly the duplication this helper was extracted to avoid.
+for TILED_SCRIPT in ohmydebn-terminal-tiled ohmydebn-launch-tiled; do
+  # Anchored to an actual invocation (line starts with the path, after
+  # only whitespace) rather than a bare substring match, so a comment
+  # mentioning the helper's name can't make a since-removed real call
+  # look like it's still there.
+  if ! grep -qE '^\s*/usr/share/ohmydebn/bin/ohmydebn-gtile-apply\b' "$REPO_ROOT/bin/$TILED_SCRIPT"; then
+    echo "  FAIL - $TILED_SCRIPT doesn't call ohmydebn-gtile-apply"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $TILED_SCRIPT calls ohmydebn-gtile-apply"
+  fi
+done
+
+echo
+echo "-- ohmydebn-launch-tiled-based launchers delegate to ohmydebn-launch-tiled (regression guard) --"
+# Guards against the launch-then-poll-for-focus-change logic getting
+# duplicated instead of reused - exactly why ohmydebn-launch-tiled exists.
+for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
+  LAUNCH_TILED_LAUNCHER="${ENTRY%%:*}"
+  if ! grep -qE '^\s*(exec )?/usr/share/ohmydebn/bin/ohmydebn-launch-tiled\b' "$REPO_ROOT/bin/$LAUNCH_TILED_LAUNCHER"; then
+    echo "  FAIL - $LAUNCH_TILED_LAUNCHER doesn't call ohmydebn-launch-tiled"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $LAUNCH_TILED_LAUNCHER calls ohmydebn-launch-tiled"
+  fi
+done
+
+echo
+echo "-- browser real-window rules in tile-rules.json match \"Tile with gaps 5 full\" (regression guard) --"
+# Real browser windows (once installed) are meant to maximize
+# full-screen-with-gaps, not land in the same right-half slot as their
+# own install-presentation window - see config/tile-rules.json's
+# Brave-origin/Brave-browser entries (matched on wmClass alone, no
+# titleRegex, since a browser's title changes constantly as the user
+# navigates).
+for BROWSER_WM_CLASS in Brave-origin Brave-browser; do
+  BROWSER_GRID=$(python3 -c "
+import json
+rules = json.load(open('$REPO_ROOT/config/tile-rules.json'))
+for r in rules:
+    if r.get('wmClass') == '$BROWSER_WM_CLASS' and 'titleRegex' not in r:
+        print(' '.join(str(n) for n in r['grid']))
+        break
+")
+  check_tile_grid "Tile with gaps 5 full" "$BROWSER_GRID" "tile-rules.json's $BROWSER_WM_CLASS rule"
+done
+
+echo
+echo "-- menu entries stay in sync with their equivalent hotkey's launcher (regression guard) --"
+# Some apps are reachable both via a keybinding-custom.txt hotkey and an
+# ohmydebn-menu case arm - when the hotkey gets rewired to a *-tiled
+# launcher, the menu arm needs the same rewiring, or picking it from the
+# menu silently falls back to the untiled behavior (this is exactly what
+# happened to cliamp and ohmydebn-update-gui before both call sites were
+# fixed together). Curated (not derived by scanning every hotkey/menu
+# pair), since not every dual-reachable app is meant to tile the same way
+# from both paths - adding a pair here asserts a real decision, not just
+# whatever the menu happened to do.
+# Each entry: "keybinding label:menu function:menu case keyword"
+MENU_HOTKEY_PAIRS=(
+  "cliamp:show_media_menu:cliamp"
+  "ohmydebn-update:show_update_menu:OhMyDebn"
+  "SO-CRATES:show_cybersecurity_menu:SO-CRATES"
+  "Claude Code:show_ai_menu:Claude"
+  "fastfetch:go_to_menu:about"
+  "Antigravity:show_ai_menu:Antigravity"
+  "Antigravity:show_editor_menu:Antigravity"
+  "Visual Studio Code:show_ai_menu:VSCode"
+  "Visual Studio Code:show_editor_menu:VSCode"
+  "Cava:show_media_menu:Cava"
+  "AI (default):show_ai_menu:OpenCode"
+  "AI (default):show_ai_menu:Pi"
+)
+for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
+  IFS=':' read -r KB_LABEL MENU_FUNC MENU_KEYWORD <<<"$ENTRY"
+  KB_COMMAND=$(grep "\"$KB_LABEL\"" "$REPO_ROOT/install/keybinding/keybinding-custom.txt" | awk -F'"' '{print $4}')
+  FUNC_START=$(grep -n "^${MENU_FUNC}()" "$MENU_FILE" | head -1 | cut -d: -f1)
+  FUNC_END_REL=$(tail -n "+$FUNC_START" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
+  FUNC_END=$((FUNC_START + FUNC_END_REL - 1))
+  MENU_ARM=$(sed -n "${FUNC_START},${FUNC_END}p" "$MENU_FILE" | grep -P "\*${MENU_KEYWORD}\*\)" |
+    sed -E 's/^[[:space:]]*\*[^*]*\*\)[[:space:]]*//; s/[[:space:]]*;;[[:space:]]*$//')
+  # A menu arm may run a side-effecting command first (e.g. the AI
+  # submenu's ohmydebn-ai-set-default) before the actual launch - only
+  # the final ";"-separated statement is the one that has to match the
+  # hotkey's launcher.
+  MENU_COMMAND="${MENU_ARM##*; }"
+  if [[ -z "$KB_COMMAND" || -z "$MENU_COMMAND" ]]; then
+    echo "  FAIL - couldn't find both a keybinding command for \"$KB_LABEL\" and a menu command for $MENU_FUNC's *${MENU_KEYWORD}*"
+    FAIL=$((FAIL + 1))
+  elif [[ "$KB_COMMAND" != "$MENU_COMMAND" ]]; then
+    echo "  FAIL - hotkey \"$KB_LABEL\" ($KB_COMMAND) and menu $MENU_FUNC's *${MENU_KEYWORD}* ($MENU_COMMAND) launch different commands"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  \"$KB_LABEL\" hotkey and $MENU_FUNC's *${MENU_KEYWORD}* menu entry agree: $KB_COMMAND"
+  fi
+done
+
+echo
+echo "-- ohmydebn-menu captures OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN before the picker exists (regression guard) --"
+# Must run before start_persistent_picker's own invocation (not its
+# function definition further up the file), not from inside menu() - see
+# the assignment's own comment for why: capturing "the active window"
+# from inside menu() would grab the picker itself, which is already
+# redundant with ohmydebn-launch-tiled's own PREV_WIN capture (see that
+# script's comment) rather than the window that actually needs excluding
+# (whatever was active before the picker ever appeared). Confirmed live:
+# capturing inside menu() was exactly the first, wrong attempt at this.
+EXCLUDE_ASSIGN_LINE=$(grep -n '^OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN=' "$MENU_FILE" | head -1 | cut -d: -f1)
+PICKER_START_CALL_LINE=$(grep -n '^start_persistent_picker ||' "$MENU_FILE" | head -1 | cut -d: -f1)
+MENU_FUNC_START_LINE=$(grep -n '^menu() {' "$MENU_FILE" | head -1 | cut -d: -f1)
+MENU_FUNC_END_REL=$(tail -n "+$MENU_FUNC_START_LINE" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
+MENU_FUNC_END_LINE=$((MENU_FUNC_START_LINE + MENU_FUNC_END_REL - 1))
+if [[ -z "$EXCLUDE_ASSIGN_LINE" || -z "$PICKER_START_CALL_LINE" ]]; then
+  echo "  FAIL - couldn't find both the OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN assignment and the start_persistent_picker call"
+  FAIL=$((FAIL + 1))
+elif [[ "$EXCLUDE_ASSIGN_LINE" -ge "$PICKER_START_CALL_LINE" ]]; then
+  echo "  FAIL - OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (line $EXCLUDE_ASSIGN_LINE) isn't captured before start_persistent_picker (line $PICKER_START_CALL_LINE)"
+  FAIL=$((FAIL + 1))
+elif [[ "$EXCLUDE_ASSIGN_LINE" -ge "$MENU_FUNC_START_LINE" && "$EXCLUDE_ASSIGN_LINE" -le "$MENU_FUNC_END_LINE" ]]; then
+  echo "  FAIL - OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (line $EXCLUDE_ASSIGN_LINE) is captured from inside menu() ($MENU_FUNC_START_LINE-$MENU_FUNC_END_LINE) - that grabs the picker, not the pre-picker window"
+  FAIL=$((FAIL + 1))
+else
+  echo "  captured at line $EXCLUDE_ASSIGN_LINE, before start_persistent_picker (line $PICKER_START_CALL_LINE) and outside menu() (line $MENU_FUNC_START_LINE-$MENU_FUNC_END_LINE)"
+fi
+
+echo
+echo "-- every third-party apt repo is pinned to its own package(s) (regression guard) --"
+# A bare `signed-by` trusts a repo's key to sign anything at all - without
+# an apt-preferences pin scoping the repo to the specific package(s) it's
+# actually needed for, a compromised or malicious upstream could ship a
+# package under some other name (colliding with a real Debian package,
+# say) and have apt prefer it on some later, completely unrelated
+# `apt install`/upgrade, on any machine that ever ran this one installer.
+# Confirmed live (via apt-cache policy against a scratch
+# Dir::Etc::PreferencesParts, and by fetching each repo's real Packages
+# file into a scratch apt state to check dependencies) that every
+# existing third-party-repo installer got exactly this pin when the
+# pattern was added - this guards the next new one from skipping it.
+# Matched by the write itself (tee/curl -o onto sources.list.d), not a
+# mere existence check - ohmydebn-boxes-install/ohmydebn-virtmanager-
+# install both test `[ -f .../proxmox.sources ]` without ever adding a
+# repo of their own, and must NOT be flagged here.
+mapfile -t REPO_ADDING_SCRIPTS < <(grep -lP '\b(tee|curl)\b[^\n]*(-o\s+|>\s*)?/etc/apt/sources\.list\.d/' "$REPO_ROOT"/bin/*-install 2>/dev/null)
+CHECKED=0
+for f in "${REPO_ADDING_SCRIPTS[@]}"; do
+  CHECKED=$((CHECKED + 1))
+  if ! grep -q 'preferences\.d' "$f"; then
+    echo "  FAIL - ${f#"$REPO_ROOT"/} adds a third-party apt repo but never pins it to specific package(s) via /etc/apt/preferences.d"
+    FAIL=$((FAIL + 1))
+  fi
+done
+echo "  checked $CHECKED third-party-repo installers"
+
+echo
+echo "-- config/tile-rules.json is valid JSON with a sane schema (regression guard) --"
+# gTile-OhMyDebn's auto-tile handler treats an unparseable/malformed rule
+# file as empty (no error, no tiling) - real, but silent, exactly the
+# kind of regression a broken edit here could ship without anyone
+# noticing until "why did tiling stop working" turns up later.
+TILE_RULES_CHECK=$(python3 -c "
+import json, sys
+try:
+    rules = json.load(open('$REPO_ROOT/config/tile-rules.json'))
+except Exception as e:
+    print('invalid JSON: ' + str(e))
+    sys.exit(1)
+if not isinstance(rules, list):
+    print('top level is not a JSON array')
+    sys.exit(1)
+problems = []
+for i, r in enumerate(rules):
+    if not isinstance(r.get('wmClass'), str):
+        problems.append('rule %d missing/invalid wmClass' % i)
+    grid = r.get('grid')
+    if not isinstance(grid, list) or len(grid) != 6 or not all(isinstance(n, int) for n in grid):
+        problems.append('rule %d missing/invalid grid (need exactly 6 integers)' % i)
+    if 'titleRegex' in r and not isinstance(r['titleRegex'], str):
+        problems.append('rule %d has a non-string titleRegex' % i)
+if problems:
+    print('; '.join(problems))
+    sys.exit(1)
+print(str(len(rules)) + ' rules, all well-formed')
+")
+if [ $? -ne 0 ]; then
+  echo "  FAIL - $TILE_RULES_CHECK"
+  FAIL=$((FAIL + 1))
+else
+  echo "  $TILE_RULES_CHECK"
+fi
+
+echo
+echo "-- tile-rules.json titles match their launcher's --title (regression guard) --"
+# Curated: launcher script -> the literal title string its rule's
+# titleRegex should exactly match. Guards the exact mistake class hit
+# live this session (a window's real title/wmClass turning out to differ
+# from what was assumed, silently breaking the match) - here specifically
+# against an app's --title and its tile-rules.json entry drifting apart
+# independently after the fact.
+TITLE_OWNERS=(
+  "ohmydebn-cliamp:cliamp"
+  "ohmydebn-claude-code:Claude Code"
+  "ohmydebn-opencode:OpenCode"
+  "ohmydebn-pi:Pi"
+  "ohmydebn-socrates:SO-CRATES"
+  "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
+  "ohmydebn-btop-gui:btop"
+  "ohmydebn-terminal-left:OhMyDebn Terminal"
+  "ohmydebn-update-gui:OhMyDebn Update"
+  "ohmydebn-neovim:nvim"
+  "ohmydebn-cava:cava"
+)
+for ENTRY in "${TITLE_OWNERS[@]}"; do
+  LAUNCHER="${ENTRY%%:*}"
+  TITLE="${ENTRY#*:}"
+  if ! grep -qF -- "--title '$TITLE'" "$REPO_ROOT/bin/$LAUNCHER" && ! grep -qF -- "--title \"$TITLE\"" "$REPO_ROOT/bin/$LAUNCHER"; then
+    echo "  FAIL - $LAUNCHER doesn't pass --title '$TITLE'"
+    FAIL=$((FAIL + 1))
+  elif ! grep -qF "\"titleRegex\": \"^$TITLE\$\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no titleRegex \"^$TITLE\$\" entry for $LAUNCHER"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $LAUNCHER's --title '$TITLE' has a matching tile-rules.json entry"
+  fi
+done
+
+# Same idea for the GUI apps' install-presentation window, whose title
+# comes from ohmydebn-launch-floating-terminal-with-presentation's own
+# arg instead of a direct --title flag.
+PRESENTATION_TITLE_OWNERS=(
+  "ohmydebn-chatgpt:ChatGPT"
+  "ohmydebn-code:VSCode"
+  "ohmydebn-antigravity:Antigravity"
+  "ohmydebn-brave-origin:Brave Origin"
+  "ohmydebn-brave-browser:Brave Browser"
+)
+for ENTRY in "${PRESENTATION_TITLE_OWNERS[@]}"; do
+  LAUNCHER="${ENTRY%%:*}"
+  TITLE="${ENTRY#*:}"
+  if ! grep -qF "ohmydebn-launch-floating-terminal-with-presentation \"$TITLE\"" "$REPO_ROOT/bin/$LAUNCHER"; then
+    echo "  FAIL - $LAUNCHER doesn't pass \"$TITLE\" to ohmydebn-launch-floating-terminal-with-presentation"
+    FAIL=$((FAIL + 1))
+  elif ! grep -qF "\"titleRegex\": \"^$TITLE\$\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no titleRegex \"^$TITLE\$\" entry for $LAUNCHER's presentation window"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $LAUNCHER's presentation window \"$TITLE\" has a matching tile-rules.json entry"
+  fi
+done
+
+echo
+echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
+# Apps matched on wmClass alone (no titleRegex - their title changes
+# constantly, so it can't be matched on): the real window for each GUI
+# app above, plus the single-instance apps that never had an
+# install-presentation phase to begin with. Confirms the entry hasn't
+# been typo'd or accidentally dropped - the live wmClass values
+# themselves came from a live wmctrl/Looking Glass check each time (see
+# the scripts' own commit history), not something re-derivable from
+# source, so this can only check presence, not correctness.
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt Brave-origin Brave-browser KeePassXC Gedit Aether)
+for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
+  if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
+    echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""
+    FAIL=$((FAIL + 1))
+  else
+    echo "  tile-rules.json has an entry for wmClass \"$WMCLASS\""
+  fi
+done
 
 echo
 echo "$FAIL failure(s)"

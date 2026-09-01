@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# ohmydebn-aether: launches the Aether theme builder. gTile-OhMyDebn's
+# own window-created auto-tile handler tiles this window itself,
+# matching its own wmClass against
+# /usr/share/ohmydebn/config/tile-rules.json.
+
+set -euo pipefail
+
+exec /usr/share/aether/aether

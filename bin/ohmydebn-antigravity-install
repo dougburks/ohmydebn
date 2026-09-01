@@ -19,6 +19,20 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
   echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-central1-apt.pkg.dev/projects/antigravity-auto-updater-dev/ antigravity-debian main" |
     sudo tee /etc/apt/sources.list.d/antigravity.list >/dev/null
 
+  # Restricts this repo to the one package it's actually needed for
+  # (confirmed via `apt-cache depends antigravity` - no same-repo
+  # dependency like Brave's brave-keyring) - a bare signed-by trusts the
+  # repo's key to sign anything, so without this a compromised or
+  # malicious upstream could ship a package under some other name and have
+  # apt prefer it on some later, completely unrelated `apt install`/
+  # upgrade. Pin: origin matches by hostname only, not the full URL path -
+  # us-central1-apt.pkg.dev is Google Artifact Registry's shared regional
+  # endpoint, so if some other project's apt repo ever gets added on this
+  # same hostname, its allowed package(s) belong in *this* stanza too,
+  # not a separate untested one.
+  printf 'Package: *\nPin: origin "us-central1-apt.pkg.dev"\nPin-Priority: -1\n\nPackage: antigravity\nPin: origin "us-central1-apt.pkg.dev"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/antigravity.pref >/dev/null
+
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install antigravity
 fi

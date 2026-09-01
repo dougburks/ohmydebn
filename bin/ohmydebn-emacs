@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "emacs" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Emacs" /usr/share/ohmydebn/bin/ohmydebn-emacs-install
+fi
+
+if dpkg -s "emacs" >/dev/null 2>&1; then
+  /usr/bin/emacs
+fi

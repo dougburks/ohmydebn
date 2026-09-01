@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for SO-CRATES, meant to run
+# inside an already-open terminal (via -e) rather than opening one of its
+# own - see ohmydebn-socrates, which wraps this in a terminal instead of
+# duplicating it.
+# Named -launch, not -run, to not collide with ohmydebn-socrates-run -
+# the existing podman-container runner this execs into once podman
+# itself is confirmed installed, a different script for a different job.
+
+set -euo pipefail
+
+if ! dpkg -s "podman" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-podman-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "podman" >/dev/null 2>&1; then
+  exec /usr/share/ohmydebn/bin/ohmydebn-socrates-run
+fi

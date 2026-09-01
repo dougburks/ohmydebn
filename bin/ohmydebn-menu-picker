@@ -114,7 +114,17 @@ def load_categories(go_items):
         # Keep the original separator (1 or 2 spaces) for display instead of
         # hardcoding two - forcing two after a wide glyph like the
         # magnifying glass left a visibly oversized gap before "Cybersecurity".
-        m = re.match(r"^(\S+)(\s+)(.*)$", item)
+        # The icon itself is optional (\S*, not \S+) - a few items
+        # (Cybersecurity, Editor, Virtualization, ...) have never carried
+        # one, just the same leading separator every icon-bearing item
+        # also has before its label. \S+ required at least one non-
+        # whitespace character before that separator, so it flatly failed
+        # to match any icon-less item at all (the string starts with
+        # whitespace) - confirmed live: m was None, and m.group(1) below
+        # crashed the whole persistent picker process with an
+        # AttributeError the moment such an item's menu ever got shown
+        # (e.g. entering "Apps", which has five of them).
+        m = re.match(r"^(\S*)(\s+)(.*)$", item)
         icon, sep, label = m.group(1), m.group(2), m.group(3).strip()
         rows.append((f"{icon}{sep}{label}", label))
     return rows
@@ -133,15 +143,25 @@ def load_leaves(breadcrumb_prefix=""):
     consistent absolute string to work with, no relative/absolute
     reconstruction needed anywhere.
 
-    Apps launches a separate dynamic app picker, not a direct action -
-    excluding it here matches the UX call already made when this tree was
-    first flattened (see ohmydebn-menu's git history / the removed
-    show_flat_menu): every other row in a search result does something
-    directly, so Apps popping a second full-screen picker would stand out.
+    Other Apps' descendants are runtime-discovered .desktop entries, not
+    static bash-literal items like every other branch of this tree - there's
+    nothing for this bash-source-parsing walk to statically enumerate, so
+    it's excluded here the same way "Apps" or "Office" or any other real
+    submenu would be if it could somehow have live-scanned children -
+    ohmydebn-menu-tree's own MT_DEFAULT_SKIP_LABELS already does this by
+    default, so this call doesn't need to (and deliberately no longer
+    does) set MT_SKIP_LABELS itself; see that default's own comment for
+    why hand-repeating the literal here independently was the actual bug
+    that let this exclusion silently stop working for a while. It's still
+    searchable from wherever it's in scope (the root, or from within
+    "Apps" - see Picker.on_search_changed()'s own comment), just via a
+    different path: on_search_changed() merges in a live match against
+    load_apps_metadata() directly (see _matching_app_rows()) rather than
+    through this function.
     """
     rows = []
     match_prefix = f"{breadcrumb_prefix} > " if breadcrumb_prefix else ""
-    for line in run_menu_tree(f'MT_SKIP_LABELS=(Apps); menu_tree_flatten "{MENU_FILE}"'):
+    for line in run_menu_tree(f'menu_tree_flatten "{MENU_FILE}"'):
         breadcrumb, _, _target = line.partition("\t")
         if match_prefix:
             if not breadcrumb.startswith(match_prefix):
@@ -153,17 +173,35 @@ def load_leaves(breadcrumb_prefix=""):
     return rows
 
 
+# Labels excluded from the static menu-tree walk (see
+# MT_DEFAULT_SKIP_LABELS in ohmydebn-menu-tree) because their own content
+# is runtime-discovered rather than a static bash-literal item list -
+# "Other Apps" is the only one today. Excluded from menu_tree_flatten()
+# means excluded from find_submenu_labels()'s own leaf-prefix check too
+# (there's no "Other Apps > ..." leaf for it to ever match against), so
+# without this override it never earned the right-edge ">" marker a real
+# submenu gets - even though picking it leads to a further screen exactly
+# like any other submenu (see show_other_apps_menu's own comment in
+# ohmydebn-menu). Mirrors the bash-side constant by value rather than a
+# live round trip on every reload() - tests/consistency.sh guards the two
+# staying in sync, the same drift that let MT_SKIP_LABELS itself go stale
+# for a long time being exactly the risk a second hand-copied literal
+# reintroduces here.
+ALWAYS_SUBMENU_LABELS = {"Other Apps"}
+
+
 def find_submenu_labels(labels, leaf_displays):
     """Which of this level's category labels lead to a further submenu (and
-    so get a right-edge ">" marker), derived from data the picker already
+    so get a right-edge ">" marker). Two sources: data the picker already
     loaded - menu_tree_flatten only ever emits leaves, so an intermediate
     node's name appears solely as a breadcrumb *prefix* of its descendants
-    (e.g. "Browser > Brave Origin (minimal)"), never as its own row. The
-    trailing " > " in the check is what makes this prefix-safe:
-    a plain startswith(label) would false-match "Media" against the leaf
-    "Media Player > ...". "Apps" needs no special-casing - it's already
-    excluded from leaves via MT_SKIP_LABELS, so it can never qualify."""
-    return {label for label in labels if any(d.startswith(f"{label} > ") for d in leaf_displays)}
+    (e.g. "Browser > Brave Origin (minimal)"), never as its own row, and
+    the trailing " > " in the check is what makes this prefix-safe (a
+    plain startswith(label) would false-match "Media" against the leaf
+    "Media Player > ...") - plus ALWAYS_SUBMENU_LABELS above, for the one
+    real submenu that check can never see on its own."""
+    from_leaves = {label for label in labels if any(d.startswith(f"{label} > ") for d in leaf_displays)}
+    return from_leaves | (set(labels) & ALWAYS_SUBMENU_LABELS)
 
 
 _EXEC_FIELD_CODES = {"%f", "%F", "%u", "%U", "%d", "%D", "%n", "%N", "%i", "%c", "%k", "%v", "%m"}
@@ -543,13 +581,25 @@ class Picker(Gtk.Window):
     def __init__(self, go_items="", breadcrumb_prefix="", mode="menu", on_result=None):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.set_decorated(False)
-        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        # NORMAL, not DIALOG: confirmed live (xprop on the mapped window)
+        # that Muffin only honors _NET_WM_STATE_SKIP_TASKBAR for a DIALOG
+        # when it has a transient parent - this window has none, so with
+        # DIALOG it silently ignored skip_taskbar_hint below and showed up
+        # in the panel's window list anyway. UTILITY does get skip-taskbar
+        # honored, but Muffin then also declines to give it real X input
+        # focus on map (confirmed live: _NET_WM_STATE_DEMANDS_ATTENTION
+        # instead of _NET_WM_STATE_FOCUSED, and xdotool getactivewindow
+        # pointing at whatever was behind it) - so arrow keys/typing landed
+        # on the window underneath instead of this picker. NORMAL is the
+        # only type hint of the three that gets both: skip-taskbar honored
+        # *and* real focus on map.
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_keep_above(True)
         self.set_name("picker-window")
         if mode == "menu":
-            self.set_title(breadcrumb_prefix or "Menu")
+            self.set_title(breadcrumb_prefix or "OhMyDebn Menu")
 
         self.mode = mode
         # None (the default) is today's one-shot behavior, entirely
@@ -559,9 +609,21 @@ class Picker(Gtk.Window):
         # process can be reused for the next request rather than a fresh
         # process paying GTK/PyGObject's import cost again.
         self.on_result = on_result
+        # All four always initialized regardless of mode, not just when
+        # mode == "apps" at construction time: --serve mode always starts
+        # in mode="menu" and only reaches apps content later - either via
+        # reload() switching self.mode to "apps" ("Other Apps"), or while
+        # still in mode="menu" via a top-level search merge (see
+        # _matching_app_rows()) - so this same cache/in-flight state needs
+        # to exist from the start regardless of which mode this window
+        # opens in. See _ensure_apps_scanned()/_start_icon_loading() for
+        # how each is used.
+        self._apps_parsed = None
+        self._resolved_icons = {}
+        self._icon_loading_active = False
+        self._icon_pool = None
         if mode == "apps":
-            self._apps_parsed = load_apps_metadata()
-            self.categories = self.leaves = apps_rows(self._apps_parsed)
+            self._load_apps_rows()
         elif mode == "windows":
             self.categories = self.leaves = load_windows()
         else:
@@ -588,6 +650,16 @@ class Picker(Gtk.Window):
         # --serve mode only: id of a pending deferred-close timeout (see
         # _schedule_close()/reload()), or None when nothing's scheduled.
         self._pending_close_id = None
+        self.breadcrumb_prefix = breadcrumb_prefix
+        # Remembers, per breadcrumb level, which submenu row was last
+        # activated to descend from it - restored on reload() (see there)
+        # so pressing Escape back up to a level highlights the item that
+        # was previously selected, rather than always resetting to the
+        # first row. Lives only as long as this --serve process does,
+        # which is the right scope: a brand new picker session (after the
+        # idle-close timeout, or the one-shot fallback path) should start
+        # clean, not resurrect a stale position from hours ago.
+        self._return_selection = {}
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         outer.set_border_width(12)
@@ -679,6 +751,22 @@ class Picker(Gtk.Window):
         # display.
         width_by_mode = {"apps": 500, "windows": 800}
         self.set_default_size(width_by_mode.get(mode, 480), -1)
+        # Positioned here, before this window is ever shown, not from the
+        # "show" signal as before - confirmed live that get_size() already
+        # reports the real width right after set_default_size() above, with
+        # no realize/map needed first, and position_window()'s own math
+        # only ever depends on that fixed width plus monitor geometry
+        # (never on content height - resize_to_content() only ever changes
+        # height, this window's width is set once here and never
+        # revisited). Moving a not-yet-shown window sets GTK/X11's
+        # initial-position hint, which the WM honors on map instead of
+        # doing its own default/smart placement - so the very first frame
+        # already lands centered instead of visibly appearing at whatever
+        # the WM would have otherwise picked (confirmed by hand: the old
+        # show-signal-triggered, idle_add-deferred call left a real,
+        # visible one-frame flash at the WM's default spot before jumping
+        # to center).
+        self.position_window()
 
         self.apply_theme()
         self.connect("show", self.on_show)
@@ -705,35 +793,23 @@ class Picker(Gtk.Window):
             # point being that resolving icons (the slow part - see
             # load_apps_metadata()'s comment) no longer happens before the
             # user ever sees the launcher appear.
-            self._icon_queue = list(self._apps_parsed)
-            self._resolved_icons = {}
-            # 12 workers, not one-per-icon or unbounded: confirmed by direct
-            # benchmarking to be past the knee of the curve on real
-            # hardware (8 workers: ~0.38s for a full ~300-icon set; 12:
-            # ~0.19s; 16-24: no further real improvement, just more idle
-            # threads) - this is a foreground GUI launch, not a place to
-            # grab arbitrarily many cores for shrinking returns. Created
-            # once and reused across every batch below rather than
-            # per-batch, and explicitly shut down (wait=False - nothing is
-            # still running by then, every batch already waited for its
-            # own results) once the last batch finishes - an unclosed
-            # pool's idle worker threads block process exit otherwise
-            # (confirmed live: Gtk.main() returned but the process itself
-            # hung until those threads were joined).
-            self._icon_pool = concurrent.futures.ThreadPoolExecutor(max_workers=12, thread_name_prefix="icon-decode")
-            GLib.idle_add(self._resolve_app_icons_batch)
+            self._start_icon_loading()
 
-    def reload(self, go_items, breadcrumb_prefix):
+    def reload(self, go_items, breadcrumb_prefix, mode="menu"):
         """--serve mode only (self.on_result is set): repopulates this same
-        already-open menu-mode window for a new screen, instead of a fresh
-        process paying GTK/PyGObject's import cost again (profiled at
-        ~90-140ms) for every single menu level. Mirrors exactly the subset
-        of __init__ that's about *content* (categories/leaves/submenu
-        labels, the listbox, the search entry) - everything about the
-        window/widget tree itself (CSS, size, event handlers) was already
-        built once and stays as-is. Menu mode only: apps/windows are
-        already one-shot, with no chain of levels to amortize a respawn
-        over, so neither needs this. Sets the (otherwise-unused, since this
+        already-open window for a new screen, instead of a fresh process
+        paying GTK/PyGObject's import cost again (profiled at ~90-140ms) for
+        every single menu level. Mirrors exactly the subset of __init__
+        that's about *content* (categories/leaves/submenu labels, the
+        listbox, the search entry) - everything about the window/widget tree
+        itself (CSS, size, event handlers) was already built once and stays
+        as-is. Windows mode is still always one-shot (no chain of levels to
+        amortize a respawn over) and never reaches this; mode is either
+        "menu" (the ordinary nested Go-menu tree, the default and today's
+        only caller) or "apps" (Other Apps shown as a real level of that
+        same tree instead of a separate ohmydebn-app-launcher process - see
+        show_other_apps_menu() in ohmydebn-menu and _load_apps_rows()/
+        _start_icon_loading() below). Sets the (otherwise-unused, since this
         window is undecorated and skip-taskbar) window title to the new
         breadcrumb - harmless, and lets external tooling (a test, xdotool)
         observe when a reload has actually landed without touching the
@@ -750,17 +826,102 @@ class Picker(Gtk.Window):
             GLib.source_remove(self._pending_close_id)
             self._pending_close_id = None
         self.show()
-        self.set_title(breadcrumb_prefix or "Menu")
-        self.categories = _with_icons(load_categories(go_items))
-        self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
-        self.submenu_labels = find_submenu_labels(
-            [value for _display, value, _icon in self.categories],
-            [display for display, _value, _icon in self.leaves],
-        )
+        self.set_title(breadcrumb_prefix or "OhMyDebn Menu")
+        self.breadcrumb_prefix = breadcrumb_prefix
+        self.mode = mode
+        if mode == "apps":
+            self._load_apps_rows()
+            self._start_icon_loading()
+            self.submenu_labels = set()
+        else:
+            self.categories = _with_icons(load_categories(go_items))
+            self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
+            self.submenu_labels = find_submenu_labels(
+                [value for _display, value, _icon in self.categories],
+                [display for display, _value, _icon in self.leaves],
+            )
         self.entry.set_text("")
         self._closing = False
         self.populate(self.categories)
+        return_value = self._return_selection.get(breadcrumb_prefix)
+        if return_value is not None:
+            for row in self.listbox.get_children():
+                if row.value == return_value:
+                    self.listbox.select_row(row)
+                    break
         self.entry.grab_focus()
+
+    def _ensure_apps_scanned(self):
+        """Lazily parses installed .desktop entries once per persistent-
+        picker session and caches them on self - not eagerly on every
+        reload() to the top-level Go menu, since most Go-menu visits never
+        type a search or open "Other Apps" at all. Both _load_apps_rows()
+        (a real visit to "Other Apps") and _matching_app_rows() (every
+        top-level search keystroke - see on_search_changed()) go through
+        this same cache: re-walking every .desktop file per keystroke would
+        be far too slow, and there's no correctness reason for "Other
+        Apps"'s own list to differ from what a search just showed a moment
+        earlier in the same session. A brand new ohmydebn-menu invocation
+        gets a fresh --serve process (see its own start_persistent_picker())
+        and so a fresh scan too - an app installed mid-session simply won't
+        show up until the next one, the same staleness window every other
+        per-session cache in this file already accepts (e.g.
+        _return_selection)."""
+        if self._apps_parsed is None:
+            self._apps_parsed = load_apps_metadata()
+
+    def _load_apps_rows(self):
+        """Builds this window's full apps-mode content (the real "Other
+        Apps" view, not a search merge - see _matching_app_rows() for
+        that)."""
+        self._ensure_apps_scanned()
+        self.categories = self.leaves = apps_rows(self._apps_parsed, self._resolved_icons)
+
+    def _matching_app_rows(self, needle):
+        """Other Apps' own entries, merged into a live search from
+        wherever it's actually in scope (the true root, or from within
+        "Apps" itself - see on_search_changed()'s own comment on why both).
+        Filters self._apps_parsed directly by name first, then only builds
+        display rows (and looks up icons) for what actually matched,
+        rather than materializing every installed app's row on every
+        keystroke just to throw most of them away."""
+        self._ensure_apps_scanned()
+        self._start_icon_loading()
+        matched = [entry for entry in self._apps_parsed if needle in entry[0].lower()]
+        return apps_rows(matched, self._resolved_icons)
+
+    def _start_icon_loading(self):
+        """Starts background icon-decode batches for whatever in
+        self._apps_parsed isn't already in self._resolved_icons - a no-op
+        if a run is already active (self._icon_loading_active) or nothing's
+        left unresolved, so calling this from every _matching_app_rows()
+        keystroke and from _load_apps_rows() never restarts or duplicates
+        work already in flight or already done. Unlike an earlier version
+        of this, there's no still-running pool to shut down and no session
+        counter to guard a scheduled batch against going stale: since
+        self._apps_parsed is now a stable, cached list (see
+        _ensure_apps_scanned()) rather than re-scanned fresh on every
+        visit, an in-flight batch is always still working toward the one
+        real target set, whatever happens to self.mode in the meantime -
+        the only thing that still needs checking, in
+        _resolve_app_icons_batch() itself, is whether it's still safe to
+        touch self.categories/self.leaves once done."""
+        if self._icon_loading_active:
+            return
+        unresolved = [entry for entry in self._apps_parsed if entry[3] not in self._resolved_icons]
+        if not unresolved:
+            return
+        self._icon_loading_active = True
+        self._icon_queue = unresolved
+        # 12 workers, not one-per-icon or unbounded: confirmed by direct
+        # benchmarking to be past the knee of the curve on real hardware (8
+        # workers: ~0.38s for a full ~300-icon set; 12: ~0.19s; 16-24: no
+        # further real improvement, just more idle threads) - this is a
+        # foreground GUI action, not a place to grab arbitrarily many cores
+        # for shrinking returns. Created once and reused across every batch
+        # in _resolve_app_icons_batch rather than per-batch.
+        self._icon_pool = concurrent.futures.ThreadPoolExecutor(max_workers=12, thread_name_prefix="icon-decode")
+        GLib.idle_add(self._resolve_app_icons_batch)
 
     def apply_theme(self):
         colors = load_theme_colors()
@@ -800,8 +961,11 @@ class Picker(Gtk.Window):
             # so the string printed back to ohmydebn-menu (and every case
             # arm matching on it) is exactly what it was before markers
             # existed. Search results are all leaves, so they never carry
-            # one.
-            if self.mode == "menu" and value in self.submenu_labels:
+            # one. isinstance guards this from ever even trying `in` on a
+            # merged-in app row's value - see on_search_changed()'s own
+            # comment - which is an (exec_tokens, desktop_id) tuple
+            # containing a list, and so unhashable.
+            if self.mode == "menu" and isinstance(value, str) and value in self.submenu_labels:
                 box.pack_end(Gtk.Label(label=">", xalign=1), False, False, 0)
             row.value = value
             row.add(box)
@@ -856,6 +1020,20 @@ class Picker(Gtk.Window):
             matches = [(d, v, i) for d, v, i in self.leaves if needle in d.lower()]
         else:
             matches = [(d, v, i) for d, v, i in self.leaves if needle in v.lower()]
+            # Other Apps merged in whenever it's actually in scope: it
+            # lives at "Apps > Other Apps", so it's a reachable descendant
+            # both from the true root (breadcrumb_prefix == "", where
+            # load_leaves() itself already has an empty match_prefix and
+            # so searches the *whole* static tree, not just direct
+            # children) and from within "Apps" itself - but not from
+            # inside an unrelated sibling submenu like Media, matching
+            # load_leaves()'s own per-level scoping. Excluded from the
+            # static menu-tree walk entirely (see load_leaves()'s own
+            # comment) since its entries are runtime-discovered, not
+            # something that walk can parse - this is the live
+            # equivalent, computed directly instead.
+            if self.mode == "menu" and self.breadcrumb_prefix in ("", "Apps"):
+                matches = matches + self._matching_app_rows(needle)
         self.populate(matches)
 
     # 60: confirmed by direct instrumentation that each GLib.idle_add
@@ -874,33 +1052,47 @@ class Picker(Gtk.Window):
     _ICON_BATCH_SIZE = 60
 
     def _resolve_app_icons_batch(self):
-        """The deferred second half of apps-mode loading (see
+        """The deferred second half of apps loading (see
         load_apps_metadata()'s comment) - runs in small batches across many
         idle callbacks, after the window is already showing, rather than
-        resolving all ~300 icons in one uninterrupted call. Each batch does
-        its own icon lookups (resolve_icon_path - main-thread-only, but
-        confirmed near-free) and then hands the actual decoding
-        (decode_icon_pixbuf - confirmed to be nearly all of the real cost)
-        to self._icon_pool, so this one batch's icons decode in parallel
-        across several cores instead of serially on this callback.
-        Combined with chunking itself, this took a real ~4-second,
-        completely-frozen single-threaded resolve (see the pre-threading
-        version of this method in git history/backups) down to well under
-        a second total, spread thin enough per batch that the window never
-        visibly stalls. Returning SOURCE_CONTINUE instead of doing the
-        whole list hands control back to GLib after every batch, so
-        pending input/redraw sources get a chance to run before the next
-        chunk starts. The listbox already shows every app without icons
-        from the initial populate() in __init__, so there's nothing to
-        repopulate until every icon is resolved - re-populate()ing after
-        every batch would just add N/_ICON_BATCH_SIZE redundant full
-        listbox rebuilds for no visible benefit, since rows already exist
-        and are already searchable. Re-populate() reselects row 0 by
-        default, which would yank the selection back to the top out from
-        under anyone who already arrow-keyed away during the icon-loading
-        pause; restoring the previously-selected value here (falling
-        through to row 0 only if it's gone, e.g. filtered out by a search
-        typed in the meantime) avoids that."""
+        resolving every unresolved icon in one uninterrupted call. Each
+        batch does its own icon lookups (resolve_icon_path -
+        main-thread-only, but confirmed near-free) and then hands the
+        actual decoding (decode_icon_pixbuf - confirmed to be nearly all of
+        the real cost) to self._icon_pool, so this one batch's icons decode
+        in parallel across several cores instead of serially on this
+        callback. Combined with chunking itself, this took a real
+        ~4-second, completely-frozen single-threaded resolve (see the
+        pre-threading version of this method in git history/backups) down
+        to well under a second total, spread thin enough per batch that the
+        window never visibly stalls. Returning SOURCE_CONTINUE instead of
+        doing the whole list hands control back to GLib after every batch,
+        so pending input/redraw sources get a chance to run before the
+        next chunk starts.
+
+        _start_icon_loading() guarantees only one of these chains ever
+        runs at a time and that self._apps_parsed never changes underneath
+        it (see its own comment), so there's no staleness to guard against
+        here - only whether it's still safe to touch self.categories/
+        self.leaves once the whole queue drains: this pool may have been
+        started for "Other Apps" itself (self.mode == "apps", where
+        categories/leaves ARE the apps list) or for a top-level search
+        merge (self.mode == "menu" - see _matching_app_rows(), whose own
+        return value is what actually needs the freshly resolved icons,
+        computed fresh on every call rather than cached on self). Either
+        way, on_search_changed() is what needs to run once new icons land -
+        for "Other Apps" that means re-filtering the just-updated
+        self.leaves; for a menu-mode search it means recomputing the merged
+        app matches, picking up icons that weren't ready a moment ago.
+        Calling it unconditionally is safe even if the user has since
+        cleared the search or moved to yet another submenu - it always
+        just reflects whatever's actually in the entry right now.
+        populate() (called from inside on_search_changed()) always
+        reselects row 0, which would yank the selection back to the top
+        out from under anyone who already arrow-keyed away during the
+        icon-loading pause; restoring the previously-selected value here
+        (falling through to row 0 only if it's gone, e.g. filtered out by
+        a search typed in the meantime) avoids that."""
         batch, self._icon_queue = self._icon_queue[: self._ICON_BATCH_SIZE], self._icon_queue[self._ICON_BATCH_SIZE :]
         paths = [resolve_icon_path(icon_name) for _name, _exec_tokens, icon_name, _desktop_id in batch]
         pixbufs = self._icon_pool.map(decode_icon_pixbuf, paths)
@@ -910,7 +1102,9 @@ class Picker(Gtk.Window):
             return GLib.SOURCE_CONTINUE
 
         self._icon_pool.shutdown(wait=False)
-        self.categories = self.leaves = apps_rows(self._apps_parsed, self._resolved_icons)
+        self._icon_loading_active = False
+        if self.mode == "apps":
+            self.categories = self.leaves = apps_rows(self._apps_parsed, self._resolved_icons)
         selected = self.listbox.get_selected_row()
         selected_value = selected.value if selected is not None else None
         self.on_search_changed(self.entry)
@@ -921,18 +1115,55 @@ class Picker(Gtk.Window):
                     break
         return GLib.SOURCE_REMOVE
 
+    def _remember_descent(self, value):
+        """Records that `value` (a submenu row) was activated from the
+        current breadcrumb level, for reload() to restore on the way back
+        - see _return_selection's own comment in __init__. No-op for a
+        leaf pick (nothing to remember there; picking a leaf ends this
+        menu entirely rather than returning to it), in apps/windows mode,
+        or for an Other-Apps row merged into a top-level menu-mode search
+        (see _matching_app_rows()). The isinstance check must come first,
+        not just rely on submenu_labels being empty for those: an app row's
+        value is (exec_tokens_list, desktop_id), a tuple containing a list,
+        and `in` on a set has to hash its operand before it can find out
+        the set is empty - the same unhashable-list crash populate()
+        already guards against the same way, confirmed live to otherwise
+        take down every Enter/click in the app launcher before it ever
+        reaches finish()."""
+        if self.mode == "menu" and isinstance(value, str) and value in self.submenu_labels:
+            self._return_selection[self.breadcrumb_prefix] = value
+
     def on_row_activated(self, listbox, row):
+        self._remember_descent(row.value)
         self.finish(row.value)
 
     def on_entry_key(self, widget, event):
         keyval = event.keyval
         if keyval == Gdk.KEY_Escape:
+            # A non-empty query clears first and stays open, rather than
+            # discarding the whole search on one stray Escape - the
+            # existing back-a-level/close behavior (finish(None), below)
+            # only fires once the query is already empty, so it's
+            # unchanged for that case.
+            if self.entry.get_text():
+                self.entry.set_text("")
+                self.on_search_changed(self.entry)
+                return True
             self.finish(None)
             return True
-        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_Right):
             row = self.listbox.get_selected_row()
             if row is not None:
+                self._remember_descent(row.value)
                 self.finish(row.value)
+            return True
+        if keyval == Gdk.KEY_Left:
+            # Mirrors Right-as-accept above: a direct "back a level"
+            # binding, not folded into Escape's clear-search-first nuance -
+            # same finish(None) either way reaches bash's own
+            # go-back-to-parent fallback (every show_*_menu's `*) show_..
+            # ;;` case arm on an empty result).
+            self.finish(None)
             return True
         if keyval in (
             Gdk.KEY_Up, Gdk.KEY_Down, Gdk.KEY_Home, Gdk.KEY_End,
@@ -1029,7 +1260,6 @@ class Picker(Gtk.Window):
 
     def on_show(self, widget):
         self.entry.grab_focus()
-        GLib.idle_add(self.position_window)
 
     def on_map_grab_keyboard(self, widget, event):
         # Without this, Cinnamon's own <Ctrl><Alt>Tab global keybinding -
@@ -1065,10 +1295,34 @@ class Picker(Gtk.Window):
         if self.mode == "windows":
             Gdk.Display.get_default().get_default_seat().ungrab()
         if value:
-            if self.mode == "apps":
+            if isinstance(value, tuple):
+                # An app value - either real apps mode (standalone or
+                # "Other Apps" embedded in --serve) or a row picked
+                # straight out of a top-level menu-mode search merge (see
+                # _matching_app_rows()/on_search_changed()) - checked by
+                # the value's own shape rather than self.mode, since the
+                # latter is "menu" in that last case. Ordinary menu-mode
+                # values are always plain breadcrumb strings and
+                # windows-mode values are Wnck.Window objects, so neither
+                # can ever hit this branch by mistake.
                 exec_tokens, desktop_id = value
                 launch_app(exec_tokens)
                 record_app_usage(desktop_id)
+                if self.on_result is not None:
+                    # Other Apps embedded in --serve mode (see
+                    # show_other_apps_menu() in ohmydebn-menu): a real pick here
+                    # is a leaf action exactly like any other menu-mode
+                    # leaf, so it goes through the same deferred-close/
+                    # on_result round trip instead of falling through to
+                    # the unconditional Gtk.main_quit() below, which is
+                    # only correct for the standalone one-shot launcher
+                    # (on_result is None there). desktop_id is sent back
+                    # only as a non-empty marker - bash's case arm only
+                    # ever checks it against "" (cancelled) - the actual
+                    # launch already happened above.
+                    self._schedule_close()
+                    self.on_result(desktop_id)
+                    return
             elif self.mode == "windows":
                 activate_window(value)
             elif self.on_result is not None:
@@ -1146,13 +1400,18 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
     per menu level.
 
     Protocol, both FIFOs newline-delimited text: a request line is
-    "breadcrumb_prefix<TAB>go_items" (go_items already carries literal
-    "\\n" two-character sequences the same way menu()'s own options string
-    always has - never real newline bytes - so one line is unambiguous);
-    a response line is the picked label, or empty for cancel; the literal
-    request line "QUIT" ends the session. The response FIFO is opened for
-    writing before the request FIFO is opened for reading, since opening a
-    FIFO for reading blocks until a writer exists on the other end.
+    "breadcrumb_prefix<TAB>go_items<TAB>mode" (go_items already carries
+    literal "\\n" two-character sequences the same way menu()'s own options
+    string always has - never real newline bytes - so one line is
+    unambiguous); mode is "apps" for show_other_apps_menu()'s
+    Other-Apps-as-a-submenu requests, or omitted (an ordinary two-field
+    line, from every
+    other, unmodified show_*_menu call through menu()) for the default
+    "menu"; a response line is the picked label, or empty for cancel; the
+    literal request line "QUIT" ends the session. The response FIFO is
+    opened for writing before the request FIFO is opened for reading, since
+    opening a FIFO for reading blocks until a writer exists on the other
+    end.
     """
     response_fifo = open(response_fifo_path, "w", buffering=1)
 
@@ -1167,9 +1426,11 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
         if not line or line.rstrip("\n") == "QUIT":
             Gtk.main_quit()
             return GLib.SOURCE_REMOVE
-        breadcrumb_prefix, _, go_items = line.rstrip("\n").partition("\t")
+        breadcrumb_prefix, _, remainder = line.rstrip("\n").partition("\t")
+        go_items, _, mode = remainder.partition("\t")
+        mode = mode or "menu"
         t0 = time.monotonic()
-        win.reload(go_items, breadcrumb_prefix)
+        win.reload(go_items, breadcrumb_prefix, mode)
         print(f"[timing] reload({breadcrumb_prefix!r}) took {(time.monotonic() - t0) * 1000:.1f}ms", file=sys.stderr, flush=True)
         return GLib.SOURCE_CONTINUE
 
@@ -1178,6 +1439,15 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
 
     win.show_all()
     Gtk.main()
+    # Defensive, not load-bearing in the common case (every real pick/
+    # cancel already goes through _start_icon_loading()'s own shutdown or
+    # this batch's own once its queue drains): only actually matters if the
+    # whole session ends (QUIT, or this process killed outright) while
+    # "Other Apps" is still mid-icon-load, which would otherwise leave an
+    # un-shut-down pool for the interpreter's own atexit handling to block
+    # on joining.
+    if win._icon_pool is not None:
+        win._icon_pool.shutdown(wait=False)
     response_fifo.close()
     request_fifo.close()
 

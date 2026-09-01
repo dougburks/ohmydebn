@@ -17,7 +17,7 @@ if [ "${POWER_USER:-false}" = true ]; then
   /usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --skip-prompt ||
     echo "Warning: ohmydebn-pkg-remove-all-optional failed, continuing." >&2
 
-  for SCRIPT in ohmydebn-boxes-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
+  for SCRIPT in ohmydebn-virtmanager-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
     ohmydebn-gimp-install ohmydebn-opencode-install ohmydebn-podman-install; do
     "/usr/share/ohmydebn/bin/$SCRIPT" --skip-prompt ||
       echo "Warning: $SCRIPT failed, continuing." >&2

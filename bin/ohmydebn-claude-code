@@ -1,12 +1,9 @@
 #!/bin/bash
+#
+# Opens a plain (untiled) terminal running ohmydebn-claude-code-run - see
+# ohmydebn-cliamp's own comment on why the payload lives in a separate
+# script instead of here.
 
 set -euo pipefail
 
-if ! dpkg -s "claude-code" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-claude-code-install
-fi
-
-if dpkg -s "claude-code" >/dev/null 2>&1; then
-  mkdir -p ~/claude-sessions && cd "$(mktemp -d ~/claude-sessions/session-XXXXXX)"
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/bin/claude
-fi
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/share/ohmydebn/bin/ohmydebn-claude-code-run

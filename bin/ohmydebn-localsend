@@ -4,7 +4,7 @@ set -euo pipefail
 
 # If not installed, then offer to install it
 if ! dpkg -s "localsend" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-localsend-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "LocalSend" /usr/share/ohmydebn/bin/ohmydebn-localsend-install
 fi
 
 # If installed, run it

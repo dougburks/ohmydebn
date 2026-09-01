@@ -19,6 +19,16 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" |
     sudo tee /etc/apt/sources.list.d/cloudflare-client.list
 
+  # Restricts this repo to the one package it's actually needed for
+  # (confirmed via `apt-cache depends cloudflare-warp` - no same-repo
+  # dependency like Brave's brave-keyring) - a bare signed-by trusts the
+  # repo's key to sign anything, so without this a compromised or
+  # malicious upstream could ship a package under some other name and have
+  # apt prefer it on some later, completely unrelated `apt install`/
+  # upgrade.
+  printf 'Package: *\nPin: origin "pkg.cloudflareclient.com"\nPin-Priority: -1\n\nPackage: cloudflare-warp\nPin: origin "pkg.cloudflareclient.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/cloudflare-client.pref >/dev/null
+
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install cloudflare-warp
 fi

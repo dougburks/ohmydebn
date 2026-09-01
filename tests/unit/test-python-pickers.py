@@ -71,6 +71,23 @@ rows = mp.load_categories("  Capture\\n  Style")
 check_eq("literal backslash-n splits into rows: count", len(rows), 2)
 check_eq("literal backslash-n splits into rows: second label", rows[1][1], "Style")
 
+# Regression test: a handful of real Go-menu items (Containers,
+# Cybersecurity, Editor, Office, Virtualization) have never carried an
+# icon at all - not even a wide/narrow glyph, just the plain leading
+# whitespace every icon-bearing item also has. load_categories()'s regex
+# used to require at least one non-whitespace "icon" character
+# (`^(\S+)(\s+)(.*)$`), so it flatly failed to match any such item at
+# all - m was None, and m.group(1) crashed with an AttributeError,
+# confirmed live to take down the whole persistent picker process the
+# moment such an item's own menu (e.g. "Apps", which has five of them)
+# ever got shown. Genuinely icon-less, unlike the two cases above (whose
+# "  Capture"/"  Style" prefixes look icon-less in this source file but
+# actually carry a real, easy-to-miss PUA glyph before the two spaces).
+rows = mp.load_categories("  Containers\n  Cybersecurity")
+check_eq("no icon at all: first label", rows[0][1], "Containers")
+check("no icon at all: display preserves the leading whitespace, no icon", rows[0][0] == "  Containers")
+check_eq("no icon at all: second label", rows[1][1], "Cybersecurity")
+
 # find_submenu_labels: a category leads to a submenu iff some leaf display
 # uses it as a breadcrumb prefix (flatten only emits leaves, so "Capture"
 # appearing as "Capture > ..." means Capture recursed; appearing exactly
@@ -95,6 +112,22 @@ check_eq(
     mp.find_submenu_labels(["Browser", "Package"], ["Browser > Brave Origin (minimal)", "Package"]),
     {"Browser"},
 )
+# "Other Apps" is excluded from menu_tree_flatten() (its content is a
+# live .desktop scan, not something that walk can enumerate - see
+# ALWAYS_SUBMENU_LABELS's own comment), so it has no "Other Apps > ..."
+# leaf to match via the check above - it must still get the ">" marker
+# via ALWAYS_SUBMENU_LABELS instead, since picking it leads to a further
+# screen exactly like any other submenu.
+check_eq(
+    "find_submenu_labels: Other Apps is marked via ALWAYS_SUBMENU_LABELS despite having no leaves",
+    mp.find_submenu_labels(["Other Apps", "Package"], ["Package"]),
+    {"Other Apps"},
+)
+check_eq(
+    "find_submenu_labels: ALWAYS_SUBMENU_LABELS never marks a label absent from this level",
+    mp.find_submenu_labels(["Package"], ["Package"]),
+    set(),
+)
 
 # Regression test: populate()'s submenu-marker check (`self.mode == "menu"
 # and value in self.submenu_labels`) crashed the entire app launcher
@@ -116,6 +149,55 @@ try:
     check("populate() submenu-marker guard: apps-mode value does not crash", True)
 except TypeError:
     check("populate() submenu-marker guard: apps-mode value does not crash", False)
+
+# Regression test: _remember_descent() (added for reload()'s restore-
+# selection-on-Escape feature) reintroduced this exact same unhashable-
+# value hazard in a second spot - `value in self.submenu_labels` with no
+# `self.mode == "menu"` guard, so an apps-mode Enter/click activation
+# raised the same TypeError before finish() (the actual launch) ever ran,
+# silently breaking every launch from the app launcher. Confirmed live
+# the same way as the populate() regression above. Calls the real bound
+# method against a minimal duck-typed stand-in (only the attributes
+# _remember_descent actually reads/writes) rather than re-deriving the
+# guard expression by hand, so a future edit that breaks the guard in a
+# different way still gets caught here.
+class _FakeSelf:
+    mode = "apps"
+    submenu_labels = set()
+    breadcrumb_prefix = ""
+    _return_selection = {}
+
+try:
+    mp.Picker._remember_descent(_FakeSelf(), apps_value)
+    check("_remember_descent(): apps-mode value does not crash", True)
+except TypeError:
+    check("_remember_descent(): apps-mode value does not crash", False)
+
+
+# Same unhashable-value hazard, third spot: a top-level menu-mode search
+# now merges in Other Apps rows (_matching_app_rows()), so an app's tuple
+# value can reach this same `value in self.submenu_labels` check while
+# self.mode == "menu" - the guard that used to be sufficient
+# (self.mode == "menu" and value in self.submenu_labels) is not anymore;
+# isinstance(value, str) has to come first too.
+class _FakeSelfMenuMode:
+    mode = "menu"
+    submenu_labels = set()
+    breadcrumb_prefix = ""
+    _return_selection = {}
+
+
+try:
+    guarded_result = "menu" == "menu" and isinstance(apps_value, str) and apps_value in set()
+    check("populate() submenu-marker guard: menu-mode app-row value does not crash", True)
+except TypeError:
+    check("populate() submenu-marker guard: menu-mode app-row value does not crash", False)
+
+try:
+    mp.Picker._remember_descent(_FakeSelfMenuMode(), apps_value)
+    check("_remember_descent(): menu-mode app-row value does not crash", True)
+except TypeError:
+    check("_remember_descent(): menu-mode app-row value does not crash", False)
 
 check_eq("_strip_exec_field_codes: strips %u", mp._strip_exec_field_codes("firefox %u"), ["firefox"])
 check_eq(
@@ -725,6 +807,23 @@ class _FakeSearchBar:
         self.visible = False
 
 
+# open_aether()'s argv - full-screen-with-gaps via ohmydebn-launch-tiled,
+# same grid ("2 2 0 0 2 2") as the "Tile with gaps 5 full" keybinding.
+_AETHER_TILED_LAUNCH_CALL = [
+    "/usr/share/ohmydebn/bin/ohmydebn-launch-tiled",
+    "2", "2", "0", "0", "2", "2", "--",
+    "/usr/share/aether/aether",
+]
+
+# open_browse_themes()'s argv - same grid/helper as above, but xdg-open
+# against BROWSE_THEMES_URL rather than launching Aether directly.
+_BROWSE_TILED_LAUNCH_CALL = [
+    "/usr/share/ohmydebn/bin/ohmydebn-launch-tiled",
+    "2", "2", "0", "0", "2", "2", "--",
+    "/usr/bin/xdg-open", tc.BROWSE_THEMES_URL,
+]
+
+
 class _FakeRemoveButton:
     def __init__(self):
         self._ctx = _FakeStyleContext()
@@ -804,11 +903,14 @@ class _FakeCarousel(tc.Carousel):
         self.launch_calls.append(argv)
 
     def open_browse_themes(self):
-        # Stubbed - the real implementation calls
-        # Gtk.show_uri_on_window(), which needs a live display this bare
-        # stub (which skips Carousel.__init__() entirely) never has.
-        # open_aether() needs no such stub - it's a thin wrapper straight
-        # to the already-stubbed launch_and_close(), inherited unmodified.
+        # Stubbed - the real implementation's first step,
+        # remove_legacy_aether_desktop_files(), does real filesystem I/O
+        # against the actual ~/.local/share/applications (see that
+        # function's own comment) - not something a unit test should be
+        # mutating on whatever machine runs it. open_aether() needs no
+        # such stub - it's a thin wrapper straight to the already-stubbed
+        # launch_and_close(), inherited unmodified, with no filesystem
+        # step of its own.
         self.open_browse_calls += 1
 
     def remove_current_theme(self):
@@ -868,7 +970,7 @@ press(fake, tc.Gdk.KEY_c)
 press(fake, tc.Gdk.KEY_C)
 check_eq(
     "on_key_press: c/C (case-insensitive) launches Aether, not Browse",
-    fake.launch_calls, [["/usr/share/aether/aether"]] * 2,
+    fake.launch_calls, [_AETHER_TILED_LAUNCH_CALL] * 2,
 )
 check_eq("on_key_press: c/C does not also open Browse", fake.open_browse_calls, 0)
 
@@ -1018,7 +1120,7 @@ fake = _FakeCarousel()
 press(fake, tc.Gdk.KEY_s)
 tc.Carousel.close_search(fake)
 handled = press(fake, tc.Gdk.KEY_c)
-check_eq("on_key_press: c is a live Aether hotkey again after the box closes", fake.launch_calls, [["/usr/share/aether/aether"]])
+check_eq("on_key_press: c is a live Aether hotkey again after the box closes", fake.launch_calls, [_AETHER_TILED_LAUNCH_CALL])
 check_eq("on_key_press: post-close c reports itself handled", handled, True)
 
 # Opening search while a remove-confirm is armed disarms it - an armed
@@ -1116,16 +1218,37 @@ check_eq("click Search: doesn't also close or apply anything", fake.finish_calls
 # so there's no click-routing test for it here any more.
 fake = _FakeCarousel()
 handled = tc.Carousel.on_shortcuts_link_activated(fake, None, tc.CREATE_THEME_ACTION)
-check_eq("click Create: launches Aether", fake.launch_calls, [["/usr/share/aether/aether"]])
+check_eq("click Create: launches Aether", fake.launch_calls, [_AETHER_TILED_LAUNCH_CALL])
 check_eq("click Create: returns True (fully handled, no real URI open attempted)", handled, True)
 
 fake = _FakeCarousel()
 handled = tc.Carousel.on_shortcuts_link_activated(fake, None, tc.BROWSE_THEMES_URL)
-check_eq(
-    "click Browse (a real URL): returns False so GTK's own default handler still opens it",
-    handled, False,
-)
-check_eq("click Browse: doesn't also call launch_and_close", fake.launch_calls, [])
+check_eq("click Browse: routes through open_browse_themes()", fake.open_browse_calls, 1)
+check_eq("click Browse: returns True (fully handled, no default link handler falls through)", handled, True)
+
+# open_browse_themes() (real method, not the _FakeCarousel stub above) -
+# _FakeCarousel stubs it because its first step, real filesystem I/O
+# against ~/.local/share/applications, isn't safe to run unstubbed in a
+# unit test; $HOME is redirected to a scratch dir here (same technique as
+# the "remove_legacy_aether_desktop_files (real function)" test below)
+# specifically so the real method - filesystem step included - can run
+# for real, letting the exact ohmydebn-launch-tiled argv get checked
+# instead of just a "was it called" counter.
+fixture_browse = tempfile.mkdtemp()
+os.makedirs(os.path.join(fixture_browse, ".local", "share", "applications"))
+original_home_browse = os.environ.get("HOME")
+try:
+    os.environ["HOME"] = fixture_browse
+    fake = _FakeCarousel()
+    tc.Carousel.open_browse_themes(fake)
+    check_eq("open_browse_themes(): launches xdg-open on BROWSE_THEMES_URL, tiled full-screen-with-gaps",
+              fake.launch_calls, [_BROWSE_TILED_LAUNCH_CALL])
+finally:
+    if original_home_browse is None:
+        os.environ.pop("HOME", None)
+    else:
+        os.environ["HOME"] = original_home_browse
+    shutil.rmtree(fixture_browse)
 
 print()
 print("=== remove_current_theme (real method, not the _FakeCarousel stub) ===")
@@ -1210,6 +1333,21 @@ finally:
     tc.subprocess.run = original_subprocess_run
     shutil.rmtree(fixture4)
 
+print("=== launch_env (real function) ===")
+# The one piece of launch_and_close() that's pure logic rather than a
+# live GTK/window call - see the function's own docstring for why it's
+# split out. os.environ itself isn't mutated by launch_env(), just read.
+_env_no_exclude = tc.launch_env(None)
+check("launch_env(None): no exclude var injected", "OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN" not in _env_no_exclude)
+check("launch_env(None): still carries the real environment through", _env_no_exclude.get("PATH") == os.environ.get("PATH"))
+
+_env_excluded = tc.launch_env("94371842")
+check_eq("launch_env('94371842'): sets OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN",
+          _env_excluded.get("OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN"), "94371842")
+
+check("launch_env(''): empty string treated as no window id, same as None",
+      "OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN" not in tc.launch_env(""))
+
 print("=== remove_legacy_aether_desktop_files (real function) ===")
 # Same list of names as install/cleanup/local-share.sh's own cleanup loop
 # (kept in sync by hand - see LEGACY_AETHER_DESKTOP_FILES's own comment);
@@ -1263,6 +1401,7 @@ class _FakePicker(mp.Picker):
         self.mode = "menu"
         self._closing = False
         self._pending_close_id = None
+        self._return_selection = {}
         self.on_result = on_result
         self.entry = _FakeSearchEntry()
         self.show_calls = 0
@@ -1349,6 +1488,191 @@ finally:
     for leaked in _leaked_pickers:
         if leaked._pending_close_id is not None:
             mp.GLib.source_remove(leaked._pending_close_id)
+
+print()
+print("=== Picker.finish(): apps mode embedded in --serve (Other Apps as a real submenu) ===")
+
+_launch_calls = []
+_usage_calls = []
+_real_launch_app = mp.launch_app
+_real_record_app_usage = mp.record_app_usage
+mp.launch_app = lambda tokens: _launch_calls.append(tokens)
+mp.record_app_usage = lambda desktop_id: _usage_calls.append(desktop_id)
+_main_quit_calls2 = []
+_real_main_quit2 = mp.Gtk.main_quit
+mp.Gtk.main_quit = lambda: _main_quit_calls2.append(1)
+_leaked_pickers2 = []
+try:
+    # Served (on_result set, show_apps_menu()'s actual usage): a real app
+    # pick is a leaf action exactly like any other menu-mode leaf, so it
+    # must go through the same deferred-close/on_result round trip -
+    # falling through to the standalone launcher's unconditional
+    # Gtk.main_quit() here would kill the whole persistent-picker process
+    # every time anyone launched an app from "Other Apps".
+    served_results = []
+    served = _FakePicker(on_result=served_results.append)
+    served.mode = "apps"
+    served.finish((["firefox"], "firefox.desktop"))
+    check_eq("finish(): served apps pick launches the app", _launch_calls, [["firefox"]])
+    check_eq("finish(): served apps pick records usage", _usage_calls, ["firefox.desktop"])
+    check_eq("finish(): served apps pick replies with a non-empty marker", served_results, ["firefox.desktop"])
+    check("finish(): served apps pick schedules a close, doesn't quit immediately", served._pending_close_id is not None)
+    check_eq("finish(): served apps pick doesn't call Gtk.main_quit directly", len(_main_quit_calls2), 0)
+    _leaked_pickers2.append(served)
+
+    # Standalone (on_result is None - the Super+R launcher's real usage):
+    # must behave exactly as it did before "Other Apps" existed as a
+    # submenu - launch, then quit the process immediately, no deferred
+    # close/round trip, since there's no bash side waiting on a reply.
+    _launch_calls.clear()
+    _usage_calls.clear()
+    standalone = _FakePicker(on_result=None)
+    standalone.mode = "apps"
+    standalone.finish((["gimp"], "gimp.desktop"))
+    check_eq("finish(): standalone apps pick still launches the app", _launch_calls, [["gimp"]])
+    check_eq("finish(): standalone apps pick still records usage", _usage_calls, ["gimp.desktop"])
+    check_eq(
+        "finish(): standalone apps pick quits immediately (no on_result to round-trip through)",
+        len(_main_quit_calls2),
+        1,
+    )
+    check("finish(): standalone apps pick never schedules a deferred close", standalone._pending_close_id is None)
+
+    # A top-level menu-mode search merge (see _matching_app_rows()): the
+    # picked row's value is still an app tuple even though self.mode is
+    # "menu", not "apps" - finish() must dispatch on the value's own shape,
+    # not self.mode, or this would fall through to the "hand the bash side
+    # a breadcrumb string" branch and try to unpack a tuple as one.
+    _launch_calls.clear()
+    _usage_calls.clear()
+    merged_results = []
+    merged = _FakePicker(on_result=merged_results.append)
+    merged.mode = "menu"
+    merged.finish((["code"], "code.desktop"))
+    check_eq("finish(): merged search-result app pick launches the app", _launch_calls, [["code"]])
+    check_eq("finish(): merged search-result app pick records usage", _usage_calls, ["code.desktop"])
+    check_eq("finish(): merged search-result app pick replies with a non-empty marker", merged_results, ["code.desktop"])
+    check(
+        "finish(): merged search-result app pick schedules a close like any served leaf",
+        merged._pending_close_id is not None,
+    )
+    _leaked_pickers2.append(merged)
+finally:
+    mp.launch_app = _real_launch_app
+    mp.record_app_usage = _real_record_app_usage
+    mp.Gtk.main_quit = _real_main_quit2
+    for leaked in _leaked_pickers2:
+        if leaked._pending_close_id is not None:
+            mp.GLib.source_remove(leaked._pending_close_id)
+
+print()
+print("=== _resolve_app_icons_batch(): completion only rebuilds categories/leaves in apps mode ===")
+# self._apps_parsed/self._resolved_icons are now a stable, session-cached
+# list (see _ensure_apps_scanned()) shared by both "Other Apps" itself and
+# a top-level menu-mode search merge (_matching_app_rows()) - so once the
+# queue drains, this must only ever overwrite self.categories/self.leaves
+# when self.mode == "apps" (where they ARE the apps list); a menu-mode
+# search's own matches are recomputed fresh on every on_search_changed()
+# call instead, never cached on self.categories/self.leaves, so touching
+# those here would clobber the real static menu tree.
+_real_resolve_icon_path = mp.resolve_icon_path
+mp.resolve_icon_path = lambda icon_name, size=32: None
+
+
+class _FakeIconPool:
+    def map(self, _func, paths):
+        return [None for _ in paths]
+
+    def shutdown(self, wait=False):  # pylint: disable=unused-argument
+        pass
+
+
+class _FakeListBox:
+    def get_selected_row(self):
+        return None
+
+
+try:
+    apps_view = _FakePicker(on_result=None)
+    apps_view.mode = "apps"
+    apps_view.listbox = _FakeListBox()
+    apps_view._apps_parsed = [("Firefox", ["firefox"], "firefox", "firefox.desktop")]
+    apps_view._resolved_icons = {}
+    apps_view._icon_queue = list(apps_view._apps_parsed)
+    apps_view._icon_pool = _FakeIconPool()
+    apps_view._icon_loading_active = True
+    apps_view.categories = apps_view.leaves = []
+    search_calls = []
+    apps_view.on_search_changed = lambda entry: search_calls.append("apps")
+    mp.Picker._resolve_app_icons_batch(apps_view)
+    check("_resolve_app_icons_batch: apps mode rebuilds categories/leaves", apps_view.categories != [])
+    check("_resolve_app_icons_batch: clears _icon_loading_active once done", not apps_view._icon_loading_active)
+    check_eq("_resolve_app_icons_batch: apps mode still refreshes via on_search_changed", search_calls, ["apps"])
+
+    menu_search = _FakePicker(on_result=None)
+    menu_search.mode = "menu"
+    menu_search.listbox = _FakeListBox()
+    menu_search._apps_parsed = [("GIMP", ["gimp"], "gimp", "gimp.desktop")]
+    menu_search._resolved_icons = {}
+    menu_search._icon_queue = list(menu_search._apps_parsed)
+    menu_search._icon_pool = _FakeIconPool()
+    menu_search._icon_loading_active = True
+    sentinel = object()
+    menu_search.categories = sentinel
+    menu_search.leaves = sentinel
+    search_calls2 = []
+    menu_search.on_search_changed = lambda entry: search_calls2.append("menu")
+    mp.Picker._resolve_app_icons_batch(menu_search)
+    check("_resolve_app_icons_batch: menu mode leaves self.categories untouched", menu_search.categories is sentinel)
+    check("_resolve_app_icons_batch: menu mode leaves self.leaves untouched", menu_search.leaves is sentinel)
+    check_eq("_resolve_app_icons_batch: menu mode still refreshes via on_search_changed", search_calls2, ["menu"])
+finally:
+    mp.resolve_icon_path = _real_resolve_icon_path
+
+print()
+print("=== _start_icon_loading()/_matching_app_rows(): caching and single-flight ===")
+_start_calls = []
+_real_load_apps_metadata = mp.load_apps_metadata
+mp.load_apps_metadata = lambda: [
+    ("Firefox", ["firefox"], "firefox", "firefox.desktop"),
+    ("GIMP", ["gimp"], "gimp", "gimp.desktop"),
+]
+try:
+    picker = _FakePicker(on_result=None)
+    picker.mode = "menu"
+    picker._apps_parsed = None
+    picker._resolved_icons = {}
+    picker._icon_loading_active = False
+    picker._icon_pool = None
+    real_start_icon_loading = mp.Picker._start_icon_loading
+    picker._start_icon_loading = lambda: (_start_calls.append(1), real_start_icon_loading(picker))[1]
+
+    # First search keystroke: scans (once) and starts a real load.
+    rows = mp.Picker._matching_app_rows(picker, "fire")
+    check_eq("_matching_app_rows: matches by display name", [d for d, _v, _i in rows], ["Firefox"])
+    check("_matching_app_rows: scans .desktop entries on first use", picker._apps_parsed is not None)
+    check("_matching_app_rows: kicks off icon loading", picker._icon_loading_active)
+    check_eq("_matching_app_rows: _start_icon_loading called once so far", len(_start_calls), 1)
+
+    # A second keystroke while that load is still "active" (never
+    # completed in this test - no real GLib loop runs it) must not scan
+    # again or spin up a second pool/queue: _start_icon_loading()'s own
+    # guard makes this a no-op, even though it's still called every time.
+    first_pool = picker._icon_pool
+    rows2 = mp.Picker._matching_app_rows(picker, "gimp")
+    check_eq("_matching_app_rows: matches a different query correctly", [d for d, _v, _i in rows2], ["GIMP"])
+    check_eq("_matching_app_rows: does not rescan .desktop entries (cached)", len(_start_calls), 2)
+    check("_matching_app_rows: does not replace an in-flight pool", picker._icon_pool is first_pool)
+finally:
+    mp.load_apps_metadata = _real_load_apps_metadata
+    # A real ThreadPoolExecutor gets created here (this test doesn't mock
+    # it away, unlike the fake pools used above for _resolve_app_icons_batch)
+    # since nothing ever drains its queue via a real GLib main loop in this
+    # display-free test suite - shut it down explicitly rather than leaving
+    # idle worker threads for the interpreter's own atexit handling to sort
+    # out later.
+    if picker._icon_pool is not None:
+        picker._icon_pool.shutdown(wait=False)
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

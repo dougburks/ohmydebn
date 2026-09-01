@@ -26,10 +26,57 @@ _mt_block_end() {
 # `case $(menu "Title" "Options") in` to this same call as a plain
 # statement, `case "$MENU_RESULT" in` on its own line right after.
 _mt_menu_block_start() {
-  local file="$1" func="$2" fstart rel
-  fstart=$(grep -n "^${func}() {" "$file" | head -1 | cut -d: -f1) || return 1
-  rel=$(tail -n "+$fstart" "$file" | grep -n '^\s*menu "' | head -1 | cut -d: -f1) || return 1
+  local file="$1" func="$2" fstart fend rel
+  # Every one of these three checks tests $var for emptiness explicitly
+  # rather than `$(pipeline) || return 1` - this file deliberately never
+  # sets `set -o pipefail` itself (see its own header comment: callers
+  # source it with their own, different flag settings), and a bash
+  # pipeline's exit status without pipefail is just its LAST command's -
+  # `grep -n ... | head -1 | cut -d: -f1` still "succeeds" (cut trivially
+  # exits 0 on empty input) even when grep found nothing, so `|| return 1`
+  # here never actually fired for that case. Confirmed live: called from
+  # ohmydebn-menu-picker's run_menu_tree(), a plain `bash -c` with no
+  # pipefail, this silently returned fstart-1 as a "found" block for
+  # show_other_apps_menu (which has no menu() call of its own - it talks
+  # to the persistent picker directly instead, see its own comment in
+  # ohmydebn-menu) instead of correctly failing, corrupting the walk from
+  # a made-up line instead of skipping it outright.
+  fstart=$(grep -n "^${func}() {" "$file" | head -1 | cut -d: -f1)
+  [[ -z "$fstart" ]] && return 1
+  # Bounded to this function's own closing brace (a bare "}" at column 0 -
+  # every function in this file is top-level, never nested, so the first
+  # one after fstart is always this function's own end) - not an
+  # unbounded search to end-of-file. Without this bound, a function with
+  # no menu() call of its own silently "borrowed" the next function's
+  # menu() line instead of correctly reporting none found: confirmed live,
+  # this walk once attributed show_containers_menu's own Docker/Podman/
+  # Distrobox items to "Other Apps" this same way.
+  fend=$(tail -n "+$fstart" "$file" | grep -n '^}' | head -1 | cut -d: -f1)
+  [[ -z "$fend" ]] && return 1
+  fend=$((fstart + fend - 1))
+  rel=$(sed -n "${fstart},${fend}p" "$file" | grep -n '^\s*menu "' | head -1 | cut -d: -f1)
+  [[ -z "$rel" ]] && return 1
   echo $((fstart + rel - 1))
+}
+
+# Splits one "icon  Label" item into "icon<TAB>label" - the icon is
+# optional (`\S*`, not `\S+`): a few items (Cybersecurity, Editor,
+# Virtualization, ...) have never carried one, just the same leading
+# whitespace every icon-bearing item also has before its label. Single
+# source of truth for this split: it used to be hand-duplicated three
+# times (here, inline in _mt_flatten_uncached, and in
+# menu_tree_categories), and with `\S+` instead of `\S*` that duplication
+# is exactly what let it recur - one copy got fixed and the other two
+# didn't notice until a real item with no icon actually hit them. A
+# missing icon returns empty via `^\S*` rather than grep's own "no match"
+# `^\S+` would give (which silently dropped the whole item, label
+# included - not a crash, just that item's own leaves quietly missing
+# from search).
+_mt_split_icon_label() {
+  local item="$1" icon label
+  icon=$(grep -oP '^\S*' <<<"$item")
+  label=$(grep -oP '^\S*\s+\K.*' <<<"$item")
+  printf '%s\t%s\n' "$icon" "$label"
 }
 
 # Splits a menu()'s "icon  Label\nicon  Label..." string into icon-stripped
@@ -41,7 +88,7 @@ _mt_item_labels() {
   local raw
   raw=$(sed -n "${2}p" "$1" | grep -oP 'menu "[^"]*" "\K[^"]*')
   printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r item; do
-    grep -oP '^\S+\s+\K.*' <<<"$item"
+    _mt_split_icon_label "$item" | cut -f2
   done
 }
 
@@ -116,24 +163,49 @@ _mt_walk() {
 # go_to_menu's arms, never enumerate its arms directly, or those phantom
 # entries leak into the flattened list as fake top-level rows.
 #
-# Honors a global MT_SKIP_LABELS array (exact-match against Go item labels)
-# for entries that shouldn't appear in the flattened list.
+# Go-menu categories with runtime-discovered, not statically enumerable,
+# content - see show_other_apps_menu's own comment in ohmydebn-menu for
+# why "Other Apps" is the one entry here. Used by _mt_flatten_uncached
+# below whenever a caller hasn't set its own MT_SKIP_LABELS (see there) -
+# every real caller (ohmydebn-menu-picker's load_leaves(),
+# tests/consistency.sh, and the separate ohmydebn-package-build repo's
+# shipped-cache pregeneration) used to hand-set this same literal
+# instead, and one of those three copies silently drifted (a stale
+# "Apps" instead of "Other Apps") for a long time without anything
+# noticing, since it happened to still be an inert no-op right up until a
+# real top-level category was ever named exactly "Apps". One canonical
+# value here removes the copies that could each independently go stale.
+MT_DEFAULT_SKIP_LABELS=("Other Apps")
+
+# Honors a global MT_SKIP_LABELS array (exact-match against Go item
+# labels) for entries that shouldn't appear in the flattened list - falls
+# back to MT_DEFAULT_SKIP_LABELS above when the caller hasn't set one at
+# all (checked via `declare -p`, not `${MT_SKIP_LABELS[@]:-}`, so a
+# caller that deliberately sets MT_SKIP_LABELS=() to skip nothing is
+# still honored rather than silently falling back to the default too).
 _mt_flatten_uncached() {
   local file="$1" goline raw
   goline=$(grep -n '^\s*local go_items="' "$file" | head -1 | cut -d: -f1)
   raw=$(sed -n "${goline}p" "$file" | grep -oP 'local go_items="\K[^"]*')
   local labels=()
-  mapfile -t labels < <(printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r i; do grep -oP '^\S+\s+\K.*' <<<"$i"; done)
+  mapfile -t labels < <(printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r i; do _mt_split_icon_label "$i" | cut -f2; done)
 
   local gstart gend arms=()
   gstart=$(grep -nF 'case "${1,,}" in' "$file" | head -1 | cut -d: -f1)
   gend=$(_mt_block_end "$file" "$gstart")
   mapfile -t arms < <(_mt_arms "$file" "$gstart" "$gend")
 
+  local -a skip_labels
+  if declare -p MT_SKIP_LABELS &>/dev/null; then
+    skip_labels=("${MT_SKIP_LABELS[@]}")
+  else
+    skip_labels=("${MT_DEFAULT_SKIP_LABELS[@]}")
+  fi
+
   local label
   for label in "${labels[@]}"; do
     local skip=0 s
-    for s in "${MT_SKIP_LABELS[@]:-}"; do
+    for s in "${skip_labels[@]:-}"; do
       [[ "$label" == "$s" ]] && { skip=1; break; }
     done
     [[ $skip -eq 1 ]] && continue
@@ -241,9 +313,6 @@ menu_tree_categories() {
   goline=$(grep -n '^\s*local go_items="' "$file" | head -1 | cut -d: -f1)
   raw=$(sed -n "${goline}p" "$file" | grep -oP 'local go_items="\K[^"]*')
   printf '%s\n' "${raw//\\n/$'\n'}" | while IFS= read -r item; do
-    local icon label
-    icon=$(grep -oP '^\S+' <<<"$item")
-    label=$(grep -oP '^\S+\s+\K.*' <<<"$item")
-    printf '%s\t%s\n' "$icon" "$label"
+    _mt_split_icon_label "$item"
   done
 }

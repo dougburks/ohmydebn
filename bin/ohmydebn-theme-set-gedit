@@ -6,6 +6,16 @@
 
 set -e
 
+# gsettings keys can be renamed/removed between gedit versions (e.g.
+# "theme-variant" doesn't exist before gedit 47, so it's absent on Mint's
+# 46.2) - `|| true` keeps each line's exit status 0 so a missing key is
+# silently skipped instead of aborting this script under its own `set -e`,
+# which would in turn abort ohmydebn-theme-set (also `set -e`) and skip
+# every theming step queued after gedit: starship, antigravity, cava, eza,
+# fastfetch, opencode, vscode. This runs on every theme switch, so a warning
+# here would repeat every time - not worth it for a known, permanent version
+# gate that isn't actionable.
+
 # set theme-variant to dark and then to light to force update
-gsettings set org.gnome.gedit.preferences.ui theme-variant 'dark'
-gsettings set org.gnome.gedit.preferences.ui theme-variant 'light'
+gsettings set org.gnome.gedit.preferences.ui theme-variant 'dark' || true
+gsettings set org.gnome.gedit.preferences.ui theme-variant 'light' || true

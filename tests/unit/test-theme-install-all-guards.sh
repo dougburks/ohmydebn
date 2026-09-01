@@ -25,6 +25,8 @@ if [[ "$1" == "clone" ]]; then
 fi
 exit 0
 EOF
+  sed "s#/usr/share/ohmydebn/bin/ohmydebn-git-url-check#$REPO_ROOT/bin/ohmydebn-git-url-check#g" "$SCRIPT" >"$MOCK_DIR/theme-install-all-patched.sh"
+  SCRIPT="$MOCK_DIR/theme-install-all-patched.sh"
 }
 
 # $1: the raw line curl should emit for the page fetch (already containing

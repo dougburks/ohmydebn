@@ -1,0 +1,22 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for Pi, meant to run inside an
+# already-open terminal (via -e) rather than opening one of its own -
+# see ohmydebn-pi, which wraps this in a terminal instead of duplicating
+# it. Pi is a CLI/TUI coding agent (like OpenCode, not a GUI app like
+# ChatGPT/Claude Code) and the package installs no /usr/bin symlink - only
+# /usr/lib/ohmydebn-pi-coding-agent/pi - so it has to be run through a
+# terminal directly at that path, the same way ohmydebn-opencode-run
+# runs /usr/bin/opencode-cli.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-pi-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
+  mkdir -p ~/pi-sessions && cd "$(mktemp -d ~/pi-sessions/session-XXXXXX)"
+  exec /usr/lib/ohmydebn-pi-coding-agent/pi
+fi

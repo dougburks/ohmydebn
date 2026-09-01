@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "deskflow" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Deskflow" /usr/share/ohmydebn/bin/ohmydebn-deskflow-install
+fi
+
+if dpkg -s "deskflow" >/dev/null 2>&1; then
+  /usr/bin/deskflow
+fi

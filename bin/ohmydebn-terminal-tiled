@@ -1,0 +1,60 @@
+#!/bin/bash
+#
+# An Alacritty window tiled full-screen-with-gaps via gTile immediately
+# after launch, via the shared ohmydebn-gtile-apply helper - so a fresh
+# window already looks like you'd just re-tiled it that way yourself.
+# Used by ohmydebn-demo-gui and ohmydebn-logo-gui-tiled; not folded into
+# ohmydebn-terminal itself - that script is shared by every OTHER caller
+# (menu-launched terminals, the floating-terminal wrappers), none of
+# which want this. Most of the apps that used to reach this via an
+# OHMYDEBN_TILE_GRID-overriding wrapper (btop, fastfetch, cava, nvim,
+# the left-dock terminal, the update GUI) have since moved onto
+# gTile-OhMyDebn's own window-created auto-tile handler instead (see
+# config/tile-rules.json) - this script's own PID-based hide is still
+# what makes that possible flash-free for the two remaining direct
+# callers. "$@" passes straight through to alacritty, same contract as
+# ohmydebn-terminal itself.
+#
+# OHMYDEBN_TILE_GRID overrides the default full-screen grid with any
+# other gTile TileFocusedWindow grid - e.g. ohmydebn-logo-gui-tiled sets
+# it to the top-right-corner grid instead, reusing this same
+# launch-and-track logic rather than duplicating it for a different tile
+# target.
+
+set -euo pipefail
+
+GRID="${OHMYDEBN_TILE_GRID:-2 2 0 0 2 2}"
+
+/usr/bin/alacritty "$@" &
+PID=$!
+
+# A fixed sleep (this used to be a flat 0.4s, tuned up from 0.2s for
+# slower systems) means the window sits fully visible at its untiled
+# spawn position for that whole duration before anything hides it -
+# that's the visible "appears, then jumps" a fixed wait can't avoid.
+# Polling every 0.02s and hiding the window (ohmydebn-gtile-hide) the
+# instant xdotool can see it closes that gap down to whatever the
+# window actually took to become searchable, typically well under 0.4s,
+# instead of always waiting out the slow-system worst case. 100
+# iterations (2s) keeps a generous timeout for slower systems without
+# the wasted latency the old flat sleep imposed on faster ones.
+WIN_ID=""
+for _ in $(seq 1 100); do
+  WIN_ID=$(/usr/bin/xdotool search --pid "$PID" 2>/dev/null | tail -n 1) || true
+  if [ -n "$WIN_ID" ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-gtile-hide "$WIN_ID"
+    break
+  fi
+  /usr/bin/sleep 0.02
+done
+
+if [ -n "$WIN_ID" ]; then
+  # GRID is deliberately unquoted below: it's 6 space-separated
+  # positional gTile args, not a single token.
+  # shellcheck disable=SC2086
+  /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" $GRID
+fi
+
+# Wait for the terminal to close so callers can depend on completion,
+# matching ohmydebn-terminal's own contract.
+wait "$PID"

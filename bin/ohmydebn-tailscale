@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if ! dpkg -s "tailscale" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-tailscale-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Tailscale" /usr/share/ohmydebn/bin/ohmydebn-tailscale-install
 fi
 
 if dpkg -s "tailscale" >/dev/null 2>&1; then

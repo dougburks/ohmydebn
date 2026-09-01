@@ -102,18 +102,73 @@ elif [[ -f "$THEME_PATH/alacritty.toml" ]]; then
   CURSOR=$(grep -E "^\s*(.*\.)?cursor\s*=" "$ALACRITTY_TOML" | head -1 | sed -E 's/.*=\s*['\''"]?([^'\''"\ ]+)['\''"]?.*/\1/' | sed 's|^0x|#|')
   CURSOR=${CURSOR:-$FG}
 
-  BLUE=$(grep -E "^\s*(.*\.)?(normal\.)?blue\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  # A bare `red = "..."` line looks identical whether it's under
+  # [colors.normal] or [colors.bright] - a plain grep across the whole file
+  # (as background/foreground/cursor above still do, since those names never
+  # appear in both sections) can't tell which table it's actually in and
+  # would always return whichever comes first. This tracks the current
+  # `[section]` while scanning so normal.* and bright.* are read from their
+  # real table, not just "whichever occurrence appears first" - it also
+  # still handles single-line dotted keys (normal.red = "...",
+  # colors.bright.red = "...") some themes use instead of table headers.
+  get_alacritty_color() {
+    local name="$1" section="$2"
+    awk -v name="$name" -v section="$section" '
+      /^[ \t]*\[/ {
+        cur = $0
+        gsub(/^[ \t]*\[|\][ \t]*$/, "", cur)
+        next
+      }
+      {
+        line = $0
+        sub(/^[ \t]*/, "", line)
+        if ((cur == section || cur ~ ("\\." section "$")) && line ~ ("^" name "[ \t]*=")) {
+          val = line
+        } else if (line ~ ("^(colors\\.)?" section "\\." name "[ \t]*=")) {
+          val = line
+        }
+      }
+      END { if (val != "") print val }
+    ' "$ALACRITTY_TOML" | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|'
+  }
+
+  BLUE=$(get_alacritty_color blue normal)
   ACCENT="${BLUE:-$FG}"
 
-  BLACK=$(grep -E "^\s*(.*\.)?(normal\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  WHITE=$(grep -E "^\s*(.*\.)?(normal\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  BRIGHT_BLACK=$(grep -E "^\s*(.*\.)?(bright\.)?black\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
-  BRIGHT_WHITE=$(grep -E "^\s*(.*\.)?(bright\.)?white\s*=" "$ALACRITTY_TOML" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
+  BLACK=$(get_alacritty_color black normal)
+  RED=$(get_alacritty_color red normal)
+  GREEN=$(get_alacritty_color green normal)
+  YELLOW=$(get_alacritty_color yellow normal)
+  MAGENTA=$(get_alacritty_color magenta normal)
+  CYAN=$(get_alacritty_color cyan normal)
+  WHITE=$(get_alacritty_color white normal)
+
+  BRIGHT_BLACK=$(get_alacritty_color black bright)
+  BRIGHT_RED=$(get_alacritty_color red bright)
+  BRIGHT_GREEN=$(get_alacritty_color green bright)
+  BRIGHT_YELLOW=$(get_alacritty_color yellow bright)
+  BRIGHT_BLUE=$(get_alacritty_color blue bright)
+  BRIGHT_MAGENTA=$(get_alacritty_color magenta bright)
+  BRIGHT_CYAN=$(get_alacritty_color cyan bright)
+  BRIGHT_WHITE=$(get_alacritty_color white bright)
 
   BLACK=${BLACK:-$FG}
+  RED=${RED:-$FG}
+  GREEN=${GREEN:-$FG}
+  YELLOW=${YELLOW:-$FG}
+  BLUE=${BLUE:-$FG}
+  MAGENTA=${MAGENTA:-$FG}
+  CYAN=${CYAN:-$FG}
   WHITE=${WHITE:-$FG}
-  BRIGHT_BLACK=${BRIGHT_BLACK:-$FG}
-  BRIGHT_WHITE=${BRIGHT_WHITE:-$FG}
+
+  BRIGHT_BLACK=${BRIGHT_BLACK:-$BLACK}
+  BRIGHT_RED=${BRIGHT_RED:-$RED}
+  BRIGHT_GREEN=${BRIGHT_GREEN:-$GREEN}
+  BRIGHT_YELLOW=${BRIGHT_YELLOW:-$YELLOW}
+  BRIGHT_BLUE=${BRIGHT_BLUE:-$BLUE}
+  BRIGHT_MAGENTA=${BRIGHT_MAGENTA:-$MAGENTA}
+  BRIGHT_CYAN=${BRIGHT_CYAN:-$CYAN}
+  BRIGHT_WHITE=${BRIGHT_WHITE:-$WHITE}
 
   cat >"$TEMP_COLORS_TOML" <<EOF
 accent = "$ACCENT"
@@ -124,8 +179,20 @@ selection_foreground = "$BG"
 selection_background = "$FG"
 
 color0 = "$BLACK"
+color1 = "$RED"
+color2 = "$GREEN"
+color3 = "$YELLOW"
+color4 = "$BLUE"
+color5 = "$MAGENTA"
+color6 = "$CYAN"
 color7 = "$WHITE"
 color8 = "$BRIGHT_BLACK"
+color9 = "$BRIGHT_RED"
+color10 = "$BRIGHT_GREEN"
+color11 = "$BRIGHT_YELLOW"
+color12 = "$BRIGHT_BLUE"
+color13 = "$BRIGHT_MAGENTA"
+color14 = "$BRIGHT_CYAN"
 color15 = "$BRIGHT_WHITE"
 EOF
 

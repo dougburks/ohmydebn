@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# Internal helper for ohmydebn-network-speedtest and
+# ohmydebn-network-speedtest-gui - not a menu entry itself, no install
+# check, nothing user-facing. Repeatedly hits the given fast.com URLs
+# (round-robin, so several copies of this running in parallel spread load
+# across different Netflix OCA nodes instead of hammering just one) until
+# a request fails, for $1=down (downloads and discards the body) or
+# $1=up (uploads 64MB of zeroes per request). Runs until killed or a
+# request fails - the caller starts several of these in parallel and is
+# the one deciding when a measurement window is over, by killing this
+# process group.
+#
+# Pulled out into its own script so the terminal and GTK versions of the
+# speed test share this one implementation instead of the bash and Python
+# entry points each carrying their own copy - exactly the kind of
+# duplication that already caused real bugs elsewhere in this project.
+
+set -uo pipefail
+
+direction="$1"
+shift
+urls=("$@")
+url_count=${#urls[@]}
+idx=$RANDOM
+
+if [[ "$direction" == "down" ]]; then
+  while true; do
+    url=${urls[$((idx % url_count))]}
+    curl -fsS -o /dev/null "$url" 2>/dev/null || exit 0
+    idx=$((idx + 1))
+  done
+else
+  while true; do
+    url=${urls[$((idx % url_count))]}
+    dd if=/dev/zero bs=1M count=64 2>/dev/null | curl -fsS -o /dev/null -X POST --data-binary @- "$url" 2>/dev/null || exit 0
+    idx=$((idx + 1))
+  done
+fi

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "wireshark" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Wireshark" /usr/share/ohmydebn/bin/ohmydebn-wireshark-install
+fi
+
+if dpkg -s "wireshark" >/dev/null 2>&1; then
+  /usr/bin/wireshark
+fi

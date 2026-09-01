@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# Internal helper for ohmydebn-disk-speedtest and
+# ohmydebn-disk-speedtest-gui - not a menu entry itself, no install
+# check, nothing user-facing. Repeatedly does direct I/O (O_DIRECT,
+# bypassing the page cache, so this measures the real device rather than
+# memory) against the given scratch file until a request fails, for
+# $1=read (reads the file, discarding it) or $1=write (rewrites it in
+# place from $3, a chunk-file already staged with random data - the
+# stress data must be incompressible so nothing between the write call
+# and the flash can shrink it, matching Omarchy's own
+# bin/omarchy-disk-speedtest). Runs until killed or a dd fails - the
+# caller starts several of these in parallel and is the one deciding
+# when a measurement window is over, by killing this process group.
+
+set -uo pipefail
+
+phase="$1"
+file="$2"
+chunk_mb=4
+
+if [[ "$phase" == "write" ]]; then
+  chunk_file="$3"
+  while true; do
+    dd if="$chunk_file" of="$file" bs=${chunk_mb}M oflag=direct conv=notrunc status=none 2>/dev/null || exit 0
+  done
+else
+  while true; do
+    dd if="$file" of=/dev/null bs=${chunk_mb}M iflag=direct status=none 2>/dev/null || exit 0
+  done
+fi

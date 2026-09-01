@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "uxplay" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "UxPlay AirPlay Receiver is not currently installed."
+    echo
+    echo "Continuing will install it from the standard Debian repos."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+
+    read -r
+  fi
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install uxplay
+fi

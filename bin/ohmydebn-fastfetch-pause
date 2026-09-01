@@ -5,17 +5,37 @@
 # terminal's own reflow fighting those fixed column offsets - the info panel
 # visibly tears. Re-clearing and re-running on every size change is the fix
 # (same technique Omarchy's own about-screen script uses for this).
+#
+# Also re-renders on SIGUSR2, so ohmydebn-theme-set-fastfetch can refresh an
+# already-open window in place after a theme change, instead of leaving it
+# showing stale colors until closed and reopened - same hot-reload
+# convention as btop/cava/opencode-cli's own ohmydebn-theme-set-* scripts.
+# PID_FILE lets that script target this exact process with `kill` rather
+# than `pkill`: pkill's plain name match can't reach a 25-char script name
+# (comm is truncated to 15 chars), and `pkill -f` cmdline matching would
+# also hit the parent alacritty process, since its own argv includes this
+# script's path as the -e target.
+
+PID_FILE=~/.cache/ohmydebn/fastfetch-pause.pid
+mkdir -p "$(dirname "$PID_FILE")"
+echo $$ >"$PID_FILE"
+trap 'rm -f "$PID_FILE"' EXIT
+
+render() {
+  clear
+  /usr/share/ohmydebn/bin/ohmydebn-fastfetch
+}
+
+trap 'SIZE=$(stty size); render' USR2
 
 SIZE=$(stty size)
-clear
-/usr/share/ohmydebn/bin/ohmydebn-fastfetch
+render
 
 while :; do
   read -t 0.5 -n 1 -s && break
   CURRENT_SIZE=$(stty size)
   if [[ "$CURRENT_SIZE" != "$SIZE" ]]; then
     SIZE="$CURRENT_SIZE"
-    clear
-    /usr/share/ohmydebn/bin/ohmydebn-fastfetch
+    render
   fi
 done

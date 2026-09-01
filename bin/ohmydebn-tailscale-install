@@ -19,6 +19,18 @@ if ! dpkg -s "tailscale" >/dev/null 2>&1; then
   curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list |
     sudo /usr/bin/tee /etc/apt/sources.list.d/tailscale.list
 
+  # Restricts this repo to the packages it's actually needed for - a bare
+  # signed-by trusts the repo's key to sign anything, so without this a
+  # compromised or malicious upstream could ship a package under some
+  # other name and have apt prefer it on some later, completely unrelated
+  # `apt install`/upgrade. tailscale-archive-keyring is only a Recommends
+  # (confirmed via `apt-cache depends tailscale`, not a hard Depends like
+  # Brave's brave-keyring), but it's how this repo rotates its own signing
+  # key over time, so it's allowed alongside tailscale itself rather than
+  # left to silently never install.
+  printf 'Package: *\nPin: origin "pkgs.tailscale.com"\nPin-Priority: -1\n\nPackage: tailscale tailscale-archive-keyring\nPin: origin "pkgs.tailscale.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/tailscale.pref >/dev/null
+
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install tailscale
   sudo /usr/bin/tailscale set --operator="$USER"
 fi

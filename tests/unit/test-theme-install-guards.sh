@@ -29,7 +29,9 @@ EOF
 echo "ohmydebn-theme-set $*" >>"$MOCK_CALLS"
 exit 0
 EOF
-  sed "s#/usr/share/ohmydebn/bin/ohmydebn-theme-set#$MOCK_BIN/ohmydebn-theme-set#g" "$SCRIPT" >"$MOCK_DIR/theme-install-patched.sh"
+  sed -e "s#/usr/share/ohmydebn/bin/ohmydebn-theme-set#$MOCK_BIN/ohmydebn-theme-set#g" \
+    -e "s#/usr/share/ohmydebn/bin/ohmydebn-git-url-check#$REPO_ROOT/bin/ohmydebn-git-url-check#g" \
+    "$SCRIPT" >"$MOCK_DIR/theme-install-patched.sh"
 }
 
 install_theme() {

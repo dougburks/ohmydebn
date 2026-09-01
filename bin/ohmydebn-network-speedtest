@@ -1,0 +1,125 @@
+#!/bin/bash
+#
+# Network speed test, adapted from Omarchy's own
+# bin/omarchy-network-speedtest (~/git/omarchy, the "Quattro" checkout) -
+# same measurement approach: hammer several of Netflix's fast.com CDN
+# endpoints in parallel and sample the network interface's own byte
+# counters once a second, rather than trusting any single HTTP transfer's
+# self-reported rate. Reworked into one self-contained, fixed-duration run
+# (download then upload, each timed, with a final avg/peak summary)
+# instead of Omarchy's own toggleable live overlay (a Hyprland/quickshell
+# panel querying this same measurement indefinitely) - this launches into
+# an ordinary floating terminal instead, so a bounded run with a real end
+# makes more sense than an overlay meant to be switched on and off.
+#
+# curl and jq are both guaranteed ohmydebn dependencies (see
+# install/packaging/dependencies.sh) - no install-check wrapper needed,
+# unlike on-demand tools such as tcpdump that aren't installed by default.
+
+set -uo pipefail
+
+probe=1.1.1.1
+parallel=8
+url_count=3
+duration=8
+
+format_mbps() {
+  awk -v value="$1" 'BEGIN {
+    if (value <= 0) print "0.0"
+    else if (value < 10) printf "%.1f\n", value
+    else printf "%.0f\n", value
+  }'
+}
+
+iface=$(ip route get "$probe" 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }')
+
+if [[ -z "$iface" || ! -r "/sys/class/net/$iface/statistics/rx_bytes" || ! -r "/sys/class/net/$iface/statistics/tx_bytes" ]]; then
+  echo "No active network interface found." >&2
+  exec bash
+fi
+
+echo "Fetching speed test endpoints..."
+fast_token="YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm"
+fast_api_url="https://api.fast.com/netflix/speedtest/v2?https=true&token=$fast_token&urlCount=$url_count"
+fast_urls=$(curl -fsS "$fast_api_url" 2>/dev/null | jq -r '.targets[]?.url // empty')
+
+if [[ -z "$fast_urls" ]]; then
+  echo "Failed to fetch speed test endpoints - check your connection." >&2
+  exec bash
+fi
+
+traffic_pids=()
+
+# Kills every worker this run started, including dd's own pipeline
+# partner on the upload side (pkill -P catches that child; kill only
+# reaches the curl parent) - run again at the end of each direction and
+# on exit/interrupt (see trap below), so an interrupted test never leaves
+# curl/dd processes still hammering the network in the background.
+cleanup() {
+  local pid
+  for pid in "${traffic_pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill "$pid" 2>/dev/null || true
+  done
+  for pid in "${traffic_pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    wait "$pid" 2>/dev/null || true
+  done
+  traffic_pids=()
+}
+trap cleanup EXIT
+
+# Runs one direction for a fixed $duration seconds, printing a live Mbps
+# reading every second (from real interface byte-counter deltas, not
+# curl's own self-reported speed) and a final avg/peak summary computed
+# from every reading collected - avoids fiddly incremental float-max
+# tracking in bash by just handing the whole set to awk once at the end.
+run_direction() {
+  local direction="$1" label="$2" stat_field="$3"
+  echo
+  echo "== $label =="
+  traffic_pids=()
+  local i
+  for ((i = 0; i < parallel; i++)); do
+    /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-worker "$direction" $fast_urls &
+    traffic_pids+=("$!")
+  done
+
+  local before after rate elapsed=0
+  local readings=()
+  before=$(cat "/sys/class/net/$iface/statistics/${stat_field}_bytes")
+  while ((elapsed < duration)); do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    after=$(cat "/sys/class/net/$iface/statistics/${stat_field}_bytes")
+    rate=$(awk -v before="$before" -v after="$after" 'BEGIN {
+      if (after < before) print 0
+      else print (after - before) * 8 / 1000000
+    }')
+    printf '  %2ds: %s Mbps\n' "$elapsed" "$(format_mbps "$rate")"
+    readings+=("$rate")
+    before="$after"
+  done
+
+  cleanup
+
+  if ((${#readings[@]} > 0)); then
+    printf '%s\n' "${readings[@]}" | awk -v label="$label" '
+      { sum += $1; if ($1 > max) max = $1; n++ }
+      END {
+        if (n > 0) {
+          avg = sum / n
+          printf "  %s result: avg %.0f Mbps, peak %.0f Mbps\n", label, avg, max
+        }
+      }'
+  fi
+}
+
+echo "Testing network speed on $iface (about $((duration * 2))s total)..."
+run_direction down "Download" rx
+run_direction up "Upload" tx
+
+echo
+echo "Speed test complete. Press Ctrl+D or type 'exit' to close."
+exec bash

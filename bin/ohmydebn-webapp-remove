@@ -1,13 +1,19 @@
 #!/bin/bash
 
 ICON_DIR="$HOME/.local/share/applications/icons"
-DESKTOP_DIR="$HOME/.local/share/applications/"
+DESKTOP_DIR="$HOME/.local/share/applications"
 
 if [ "$#" -eq 0 ]; then
-  # Find all web apps
+  # Find all web apps. ohmydebn-webapp-install didn't always guard against
+  # '/' in the app name, so a launcher from before that guard existed could
+  # be nested (e.g. "foo/bar.desktop") - record the path relative to
+  # DESKTOP_DIR, not just the basename, so a legacy nested launcher can
+  # still be matched up and removed correctly below instead of silently
+  # resolving to the wrong (nonexistent) top-level path.
   while IFS= read -r -d '' file; do
     if grep -q '^Exec=.*ohmydebn-launch-webapp.*' "$file"; then
-      WEB_APPS+=("$(basename "${file%.desktop}")")
+      REL_PATH="${file#"$DESKTOP_DIR"/}"
+      WEB_APPS+=("${REL_PATH%.desktop}")
     fi
   done < <(find "$DESKTOP_DIR" -name '*.desktop' -print0)
 
@@ -39,7 +45,10 @@ if [[ ${#APP_NAMES[@]} -eq 0 ]]; then
 fi
 
 for APP_NAME in "${APP_NAMES[@]}"; do
-  if [[ "$APP_NAME" == */* ]]; then
+  # A name picked from the scan above may legitimately contain '/' (a
+  # legacy nested launcher predating this guard) - only reject '/' in names
+  # typed directly on the command line, the untrusted-input case.
+  if [[ "$#" -ne 0 && "$APP_NAME" == */* ]]; then
     echo "Skipping '$APP_NAME': app name must not contain '/'."
     continue
   fi

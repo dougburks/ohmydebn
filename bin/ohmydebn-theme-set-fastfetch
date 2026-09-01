@@ -13,3 +13,17 @@ else
   # still show.
   ln -snf /usr/share/ohmydebn/config/fastfetch/config-default.jsonc $FASTFETCH_CONFIG/config.jsonc
 fi
+
+# Refresh an already-open fastfetch window (ohmydebn-fastfetch-gui) in
+# place, rather than leaving it showing stale colors until closed and
+# reopened. Signal the PID directly instead of pkill - see
+# ohmydebn-fastfetch-pause for why, and for the matching SIGUSR2 trap. The
+# /proc/*/cmdline check guards against a stale pidfile pointing at a PID
+# that's since exited and been reused by an unrelated process.
+FASTFETCH_PAUSE_PID_FILE=~/.cache/ohmydebn/fastfetch-pause.pid
+if [ -f "$FASTFETCH_PAUSE_PID_FILE" ]; then
+  FASTFETCH_PAUSE_PID=$(cat "$FASTFETCH_PAUSE_PID_FILE")
+  if grep -aq "ohmydebn-fastfetch-pause" "/proc/$FASTFETCH_PAUSE_PID/cmdline" 2>/dev/null; then
+    kill -SIGUSR2 "$FASTFETCH_PAUSE_PID" 2>/dev/null || true
+  fi
+fi

@@ -14,6 +14,18 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
   sudo curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+
+  # Restricts this repo to the packages it's actually needed for (both
+  # brave variants share it - see ohmydebn-brave-origin-install, which
+  # writes this same file, for the full reasoning and why brave-keyring
+  # is included alongside the two browser packages) - a bare signed-by
+  # trusts the repo's key to sign anything, so without this a compromised
+  # or malicious upstream could ship a package under some other name and
+  # have apt prefer it on some later, completely unrelated
+  # `apt install`/upgrade.
+  printf 'Package: *\nPin: origin "brave-browser-apt-release.s3.brave.com"\nPin-Priority: -1\n\nPackage: brave-browser brave-origin brave-keyring\nPin: origin "brave-browser-apt-release.s3.brave.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/brave-browser-release.pref >/dev/null
+
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install brave-browser
   mkdir -p ~/.config/BraveSoftware

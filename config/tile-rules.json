@@ -1,0 +1,27 @@
+[
+  { "wmClass": "Alacritty", "titleRegex": "^cliamp$", "grid": [2, 2, 1, 1, 1, 1] },
+  { "wmClass": "Alacritty", "titleRegex": "^Claude Code$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^OpenCode$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^Pi$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn fastfetch$", "grid": [2, 2, 1, 0, 1, 1] },
+  { "wmClass": "Alacritty", "titleRegex": "^btop$", "grid": [2, 2, 1, 1, 1, 1] },
+  { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Terminal$", "grid": [2, 2, 0, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Update$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^nvim$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^cava$", "grid": [2, 2, 1, 1, 1, 1] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^SO-CRATES$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^ChatGPT$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^VSCode$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^Antigravity$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^Brave Origin$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^Brave Browser$", "grid": [2, 2, 1, 0, 1, 2] },
+
+  { "wmClass": "code", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Antigravity", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Chatgpt", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Brave-origin", "grid": [2, 2, 0, 0, 2, 2] },
+  { "wmClass": "Brave-browser", "grid": [2, 2, 0, 0, 2, 2] },
+  { "wmClass": "KeePassXC", "grid": [2, 2, 0, 0, 2, 2] },
+  { "wmClass": "Gedit", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Aether", "grid": [2, 2, 1, 0, 1, 2] }
+]

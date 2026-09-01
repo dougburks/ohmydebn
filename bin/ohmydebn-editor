@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# ohmydebn-editor: launches gedit. gTile-OhMyDebn's own window-created
+# auto-tile handler tiles this window itself, matching its own wmClass
+# against /usr/share/ohmydebn/config/tile-rules.json (gedit's title
+# changes with whatever file is open, so it can't be matched on).
+
+set -euo pipefail
+
+exec /usr/bin/gedit "$@"

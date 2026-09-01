@@ -17,7 +17,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== install/packaging/power-user.sh ==="
 
 setup_mocks() {
-  for name in ohmydebn-pkg-remove-all-optional ohmydebn-boxes-install \
+  for name in ohmydebn-pkg-remove-all-optional ohmydebn-virtmanager-install \
     ohmydebn-brave-origin-install ohmydebn-claude-code-install ohmydebn-gimp-install \
     ohmydebn-opencode-install ohmydebn-podman-install ohmydebn-pkg-install-optional \
     ohmydebn-magnifier-enable; do
@@ -54,7 +54,7 @@ setup_mocks
 POWER_USER=true PATH="$(mock_path)" bash "$MOCK_DIR/power-user-patched.sh" >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "POWER_USER=true: removal runs with --skip-prompt" "$CALLS" "ohmydebn-pkg-remove-all-optional --skip-prompt"
-for name in ohmydebn-boxes-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
+for name in ohmydebn-virtmanager-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
   ohmydebn-gimp-install ohmydebn-opencode-install ohmydebn-podman-install; do
   assert_contains "POWER_USER=true: $name runs with --skip-prompt" "$CALLS" "$name --skip-prompt"
 done

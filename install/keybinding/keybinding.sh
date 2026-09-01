@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260824
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260828
 
 if [ ! -f $KEYBINDING_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Updating hotkeys"
@@ -11,17 +11,24 @@ if [ ! -f $KEYBINDING_STATE ]; then
   KEYBINDING_CUSTOM=$KEYBINDING_DIR/keybinding-custom.txt
 
   # gsettings keys can be renamed/removed between Cinnamon versions (e.g.
-  # "switch-input-source" no longer exists on Cinnamon 6.4+). `eval`ing a
+  # "switch-input-source" no longer exists on Cinnamon 6.4+, which every
+  # default install is now on - so this isn't a rare edge case, it's the
+  # normal path, hence fully silent rather than a warning). `eval`ing a
   # failing `gsettings set` under the caller's `set -e`, from inside a
   # sourced function, can trip a bash bug ("pop_var_context: head of
   # shell_variables not a function context") that aborts the whole install.
-  # `|| echo ... >&2` keeps the function's own exit status 0 so one missing
-  # key just prints a warning instead of taking down the rest of the install.
+  # `|| true` keeps the function's own exit status 0 so one missing key
+  # doesn't take down the rest of the install; redirecting the eval's own
+  # stdout/stderr swallows gsettings' own "No such key ..." message too,
+  # not just the warning line that used to follow it - there's nothing an
+  # end user could do about a Cinnamon schema not having a given key
+  # anyway, so neither line is actionable enough to justify showing on
+  # every single default install.
   function keybinding-cinnamon() {
     local CMD
     echo "$4"
     CMD="gsettings set org.cinnamon.desktop.keybindings.$1 $2 \"$3\""
-    eval "$CMD" || echo "Warning: skipped keybinding $1.$2 (not present in this Cinnamon version)" >&2
+    eval "$CMD" >/dev/null 2>&1 || true
   }
 
   function keybinding-custom() {
@@ -61,11 +68,15 @@ if [ ! -f $KEYBINDING_STATE ]; then
     source "$KEYBINDING_CUSTOM"
   ) | grep -v "Removing" | sort
 
-  # Apply keybindings
+  # Apply keybindings. Doesn't restart Cinnamon directly - see
+  # finalization/gtile-restart-flag.sh's own comment on why: two independent
+  # backgrounded `cinnamon --replace &` calls in the same run would race
+  # each other. OHMYDEBN_CINNAMON_RESTART_NEEDED is the same shared flag
+  # gtile-restart-flag.sh sets; finalization/finale.sh does the one actual
+  # restart at the end if anything asked for it.
   if pgrep -x cinnamon >/dev/null; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Restarting desktop to apply hotkey configuration"
-    sleep 1s
-    setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update to apply hotkeys"
+    export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
     echo "You can see all hotkeys by pressing Super + K"
   fi
 

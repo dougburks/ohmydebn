@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if ! dpkg -s "gimp" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation /usr/share/ohmydebn/bin/ohmydebn-gimp-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "GIMP" /usr/share/ohmydebn/bin/ohmydebn-gimp-install
 fi
 
 if dpkg -s "gimp" >/dev/null 2>&1; then

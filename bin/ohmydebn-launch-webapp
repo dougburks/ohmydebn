@@ -1,14 +1,18 @@
 #!/bin/bash
+#
+# Every webapp (Calendar, GMail, Google, Hotkeys, X, the OhMyDebn
+# website, every user-installed webapp from ohmydebn-webapp-install, and
+# ohmydebn-menu's doc links) tiled to the right half with gaps
+# immediately after launch, via the shared ohmydebn-launch-tiled helper -
+# the same TileFocusedWindow grid ("2 2 1 0 1 2") as the "Tile with gaps
+# 6 right half" keybinding. Right half (not left) because the left half
+# is reserved for the persistently-open terminal - see
+# ohmydebn-terminal-left. The actual browser-picking logic lives in
+# ohmydebn-launch-webapp-worker, since a browser opening a kiosk/app
+# window is single-instance and may just raise an existing window rather
+# than spawning a fresh one - the same launch-then-poll-for-focus-change
+# case ohmydebn-browser-tiled already handles.
 
-# Get the default browser
-DEFAULT_BROWSER=$(xdg-settings get default-web-browser)
+set -euo pipefail
 
-# Check if the default browser is Firefox or Chromium
-if [[ $DEFAULT_BROWSER == *"firefox"* ]]; then
-    firefox --kiosk "$1"
-elif [[ $DEFAULT_BROWSER == *"chromium"* ]] || [[ $DEFAULT_BROWSER == *"chrome"* ]]; then
-    chromium --app="$1"
-else
-    # Fallback to xdg-open if browser is unsupported
-    xdg-open "$1"
-fi
+exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/share/ohmydebn/bin/ohmydebn-launch-webapp-worker "$1"

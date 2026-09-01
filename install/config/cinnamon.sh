@@ -54,10 +54,41 @@ if [ ! -f $GTILE_CONFIG_STATE ]; then
   touch $GTILE_CONFIG_STATE
 fi
 
+# The ohmydebn-gtile minimum-version warning and the "restart Cinnamon if
+# the installed version changed" check both live in
+# install/finalization/gtile-restart-flag.sh, not here - this script runs
+# as part of config/all.sh, which is sourced *before*
+# finalization/updates.sh actually runs `apt upgrade` (see ohmydebn.sh's
+# own packaging -> config -> cleanup -> finalization order). Checking the
+# installed version here would see the OLD, pre-upgrade version - both a
+# stale "out of date" warning that's already wrong by the time this run
+# finishes, and (confirmed live) restarting Cinnamon before ohmydebn-gtile
+# had even been upgraded that run.
+
 NEMO_CONFIG_STATE=~/.local/state/ohmydebn-config/nemo-config-20250924
 if [ ! -f $NEMO_CONFIG_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring nemo file manager for list view"
   gsettings set org.nemo.preferences default-folder-viewer 'list-view'
   mkdir -p ~/.local/state/ohmydebn-config
   touch $NEMO_CONFIG_STATE
+fi
+
+IBUS_PANEL_STATE=~/.local/state/ohmydebn-config/ibus-panel-20260828
+if [ ! -f $IBUS_PANEL_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Hiding the ibus systray icon"
+  # ibus isn't an ohmydebn dependency - it only shows up because it ships on
+  # the Debian Cinnamon ISO. On other bases (e.g. Kali, which defaults to
+  # XFCE) its schema is absent, so `|| true` keeps this line from aborting
+  # the rest of the install under the caller's `set -e`.
+  gsettings set org.freedesktop.ibus.panel show-icon-on-systray false || true
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $IBUS_PANEL_STATE
+fi
+
+CLOCK_FORMAT_STATE=~/.local/state/ohmydebn-config/clock-format-20260828
+if [ ! -f $CLOCK_FORMAT_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Setting clock to 12-hour format"
+  gsettings set org.cinnamon.desktop.interface clock-use-24h false
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch $CLOCK_FORMAT_STATE
 fi

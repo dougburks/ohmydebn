@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# The file manager tiled to the right half with gaps immediately after
+# launch, via the shared ohmydebn-launch-tiled helper - the same
+# TileFocusedWindow grid ("2 2 1 0 1 2") as the "Tile with gaps 6 right
+# half" keybinding. Bound to Super+F in keybinding-custom.txt, replacing
+# Cinnamon's own built-in media-keys "home" binding for that key (see
+# keybinding-cinnamon.txt) so the file manager can be launched through
+# this tiling wrapper instead. Right half (not left) because the left
+# half is reserved for the persistently-open terminal - see
+# ohmydebn-terminal-left.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/share/ohmydebn/bin/ohmydebn-file-manager

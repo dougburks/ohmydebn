@@ -1,0 +1,277 @@
+#!/usr/bin/python3
+#
+# Graphical network speed test - a GTK/Cairo recreation of Omarchy's own
+# QML speed-test overlay (~/git/omarchy's shell/Ui/SpeedTestOverlay.qml,
+# the "Quattro" checkout): two open 270-degree dials side by side on a
+# near-black scrim, a glowing accent value arc, a needle that fades
+# toward the pivot, and a big digital readout in the middle of each - see
+# ohmydebn_speedtest_common.py, shared with ohmydebn-disk-speedtest-gui,
+# for the dial widget itself and the theme-accent color it uses. That
+# QML original is a Hyprland/quickshell layer-shell panel with no GTK
+# equivalent, so this redraws the same visual language from scratch on a
+# plain Cairo canvas rather than porting QML - simplified in a few places
+# (no ignition sweep on open, no tick-ring animation) but the dial
+# geometry, colors, and layout follow the same design.
+#
+# Measurement approach also mirrors Omarchy's own
+# bin/omarchy-network-speedtest exactly (see ohmydebn-network-speedtest,
+# the terminal version of this same test, for the fuller comment): hammer
+# several fast.com CDN endpoints in parallel via
+# ohmydebn-network-speedtest-worker and sample the network interface's
+# own byte counters once a second, rather than trusting any single HTTP
+# transfer's self-reported rate. Runs download then upload, each for a
+# fixed duration, unlike Omarchy's own toggleable live overlay - this is
+# a self-contained window with a real end, not a panel meant to be
+# switched on and off.
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, GLib, Gtk
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_speedtest_common as common
+
+WORKER = "/usr/share/ohmydebn/bin/ohmydebn-network-speedtest-worker"
+
+PROBE_HOST = "1.1.1.1"
+PARALLEL_WORKERS = 8
+URL_COUNT = 3
+DURATION_SECONDS = 8
+
+FAST_TOKEN = "YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm"
+FAST_API_URL = f"https://api.fast.com/netflix/speedtest/v2?https=true&token={FAST_TOKEN}&urlCount={URL_COUNT}"
+
+
+def detect_iface():
+    try:
+        out = subprocess.run(
+            ["ip", "route", "get", PROBE_HOST], capture_output=True, text=True, check=False, timeout=3
+        ).stdout.split()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for i, tok in enumerate(out):
+        if tok == "dev" and i + 1 < len(out):
+            return out[i + 1]
+    return None
+
+
+def read_bytes(iface, field):
+    try:
+        with open(f"/sys/class/net/{iface}/statistics/{field}_bytes", encoding="utf-8") as f:
+            return int(f.read().strip())
+    except OSError:
+        return None
+
+
+def friendly_connection_name(iface):
+    """A human-readable label for the interface under test, for the
+    title - matches Omarchy's own network-speedtest panel, which titles
+    itself with the connection under test (its own omarchy-network-status
+    distinguishes wifi/ethernet, then names the SSID or just "Ethernet").
+    Simplified here to Linux's own predictable interface-naming
+    convention (wl*/ww* = wireless, en*/eth* = wired) instead of an extra
+    NetworkManager/SSID lookup, since the title only needs to say what
+    kind of connection is being tested, not which specific Wi-Fi
+    network - falls back to the raw interface name, uppercased, for
+    anything that doesn't match either pattern."""
+    if iface.startswith(("wl", "ww")):
+        return "Wi-Fi"
+    if iface.startswith(("en", "eth")):
+        return "Ethernet"
+    return iface.upper()
+
+
+class SpeedTestWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Network Speed Test")
+        self.set_default_size(640, 420)
+        self.set_resizable(False)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_decorated(False)
+        self.set_keep_above(True)
+
+        self.iface = None
+        self.worker_procs = []
+        self.tick_source = None
+        self.phase = "idle"  # idle -> fetching -> down -> up -> done
+        self.error = ""
+        self.fast_urls = []
+        self.rx_start = self.tx_start = None
+        self.elapsed = 0
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_border_width(24)
+        self.add(outer)
+
+        self.title_label = Gtk.Label(label="NETWORK SPEED TEST")
+        self.title_label.get_style_context().add_class("speedtest-title")
+        outer.pack_start(self.title_label, False, False, 0)
+
+        dial_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=48)
+        dial_row.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(dial_row, True, True, 0)
+        self.down_dial = common.SpeedDial("DOWNLOAD", "Mbps")
+        self.up_dial = common.SpeedDial("UPLOAD", "Mbps")
+        dial_row.pack_start(self.down_dial, False, False, 0)
+        dial_row.pack_start(self.up_dial, False, False, 0)
+
+        self.status_label = Gtk.Label(label="")
+        outer.pack_start(self.status_label, False, False, 0)
+
+        self.run_button = Gtk.Button(label="Run Again")
+        self.run_button.set_halign(Gtk.Align.CENTER)
+        self.run_button.connect("clicked", lambda _b: self.start_test())
+        self.run_button.set_no_show_all(True)
+        outer.pack_start(self.run_button, False, False, 0)
+
+        common.apply_dark_scrim_css()
+
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("destroy", self._on_destroy)
+        # Worker subprocesses each start their own session (see
+        # start_new_session=True in _start_phase()) specifically so
+        # os.killpg() can take out the whole dd|curl pipeline in one shot
+        # - but that same detachment means a bare SIGTERM/SIGINT to this
+        # process (closing it from a task manager, Ctrl+C from a terminal
+        # that launched it directly) would otherwise orphan them, left
+        # hammering the network in a `while true` loop with nothing left
+        # to ever stop them. GLib.unix_signal_add, not Python's own
+        # signal.signal(), because a raw Python handler only runs between
+        # bytecode instructions and can sit unfired while GLib's own C
+        # main loop blocks in poll() - this integrates with that loop
+        # directly instead. Routes to self.destroy() so both paths (a
+        # normal window close and a killed process) share the exact same
+        # cleanup in _on_destroy() below.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+
+    def _on_terminate_signal(self):
+        self.destroy()
+        return GLib.SOURCE_REMOVE
+
+    def _on_key_press(self, _widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.destroy()
+            return True
+        return False
+
+    def _on_destroy(self, _widget):
+        self._kill_workers()
+
+    def start_test(self):
+        self.run_button.hide()
+        self.status_label.set_text("")
+        self.down_dial.reset()
+        self.up_dial.reset()
+        self.phase = "fetching"
+        self.status_label.set_text("Fetching speed test endpoints...")
+        self.iface = detect_iface()
+        if not self.iface or read_bytes(self.iface, "rx") is None:
+            self._fail("No active network interface found.")
+            return
+        self.title_label.set_text(friendly_connection_name(self.iface).upper())
+        threading.Thread(target=self._fetch_urls_thread, daemon=True).start()
+
+    def _fetch_urls_thread(self):
+        try:
+            with urllib.request.urlopen(FAST_API_URL, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            urls = [t["url"] for t in data.get("targets", []) if t.get("url")]
+        except Exception:  # noqa: BLE001 - any failure here just means "couldn't fetch", not a specific recoverable case
+            urls = []
+        GLib.idle_add(self._on_urls_fetched, urls)
+
+    def _on_urls_fetched(self, urls):
+        if not urls:
+            self._fail("Failed to fetch speed test endpoints - check your connection.")
+            return GLib.SOURCE_REMOVE
+        self.fast_urls = urls
+        self._start_phase("down")
+        return GLib.SOURCE_REMOVE
+
+    def _fail(self, message):
+        self.error = message
+        self.status_label.set_markup(common.error_markup(message))
+        self.phase = "done"
+        self.run_button.show()
+
+    def _start_phase(self, direction):
+        self.phase = direction
+        self.elapsed = 0
+        self.status_label.set_text("Download in progress..." if direction == "down" else "Upload in progress...")
+        self._kill_workers()
+        for _ in range(PARALLEL_WORKERS):
+            proc = subprocess.Popen(
+                [WORKER, direction, *self.fast_urls],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            self.worker_procs.append(proc)
+        self.rx_start = read_bytes(self.iface, "rx")
+        self.tx_start = read_bytes(self.iface, "tx")
+        if self.tick_source is not None:
+            GLib.source_remove(self.tick_source)
+        self.tick_source = GLib.timeout_add(1000, self._tick)
+
+    def _tick(self):
+        rx_now = read_bytes(self.iface, "rx")
+        tx_now = read_bytes(self.iface, "tx")
+        if self.phase == "down" and rx_now is not None and self.rx_start is not None:
+            mbps = max(0.0, (rx_now - self.rx_start) * 8 / 1_000_000)
+            self.down_dial.set_value(mbps)
+            self.rx_start = rx_now
+        elif self.phase == "up" and tx_now is not None and self.tx_start is not None:
+            mbps = max(0.0, (tx_now - self.tx_start) * 8 / 1_000_000)
+            self.up_dial.set_value(mbps)
+            self.tx_start = tx_now
+
+        self.elapsed += 1
+        if self.elapsed >= DURATION_SECONDS:
+            if self.phase == "down":
+                self.down_dial.stop()
+                self._start_phase("up")
+                return GLib.SOURCE_REMOVE
+            self.up_dial.stop()
+            self._kill_workers()
+            self.phase = "done"
+            self.status_label.set_text("Speed test complete.")
+            self.run_button.show()
+            self.tick_source = None
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
+    def _kill_workers(self):
+        for proc in self.worker_procs:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except OSError:
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+        self.worker_procs = []
+
+
+def main():
+    win = SpeedTestWindow()
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    win.run_button.hide()
+    GLib.idle_add(win.start_test)
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

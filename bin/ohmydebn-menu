@@ -134,6 +134,22 @@ stop_persistent_picker() {
   PICKER_PID=""
 }
 
+# Captured once, here, before the picker (persistent or any later one-shot
+# fallback) ever appears - this is the window that will transiently
+# regain focus the moment the picker closes (its own close is deferred,
+# see ohmydebn-menu-picker's CLOSE_DELAY_MS comment), before whatever a
+# leaf pick actually launches has opened its own window. If a case arm
+# below launches one of the *-tiled scripts, that script's own
+# ohmydebn-launch-tiled call needs to know this ID so it doesn't mistake
+# the picker closing and this window transiently regaining focus for the
+# launched app appearing - see ohmydebn-launch-tiled's own comment on
+# OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN. Note this is NOT the picker's own
+# window - that's already excluded for free, since it's what
+# ohmydebn-launch-tiled's own PREV_WIN capture sees moments later while
+# the picker is still up.
+export OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN
+OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
+
 start_persistent_picker || true # non-fatal: get_picker_result below falls back to a one-shot spawn for the whole session if this didn't work
 
 trap 'rm -f "$MENU_JUMP_QUEUE_FILE"; stop_persistent_picker' EXIT
@@ -224,6 +240,66 @@ get_picker_result() {
   else
     rm -f "$result_file"
     MENU_PICKER_RESULT=$(/usr/share/ohmydebn/bin/ohmydebn-menu-picker "$options" "$breadcrumb_prefix")
+  fi
+}
+
+# show_other_apps_menu()'s own talk-to-the-persistent-picker call,
+# deliberately not folded into get_picker_result() above even though most
+# of its body is a copy of it: this asks the SAME running picker to show
+# "Other Apps" as a real level of the menu tree (mode=apps over the
+# 3-field request line ohmydebn-menu-picker's run_serve_mode() understands
+# - see its own docstring) instead of spawning ohmydebn-app-launcher as a
+# wholly separate one-shot process the way this used to work. That's what
+# makes Left-arrow/Escape-back-to-Apps possible from inside Other Apps:
+# cancelling out just replies empty, exactly like backing out of any other
+# submenu does, and show_other_apps_menu() below re-opens show_apps_menu
+# on that same empty result. A real app pick launches directly from
+# inside the picker itself (see ohmydebn-menu-picker's finish()) - the
+# non-empty desktop_id it replies with here is never inspected for
+# content, only for not-being-"" (see show_other_apps_menu()).
+#
+# Falls back to the original standalone launcher when the persistent
+# picker isn't running/responsive, matching every other call site's
+# one-shot-fallback convention - but that fallback can't distinguish "user
+# picked an app" from "user cancelled" (ohmydebn-app-launcher reports
+# neither back), so it's always treated as a non-empty/terminal result:
+# this whole ohmydebn-menu script ends afterward either way, exactly
+# matching this feature's pre-existing behavior before Other Apps became a
+# real submenu.
+get_apps_picker_result() {
+  if [[ -z "$PICKER_PID" ]] || ! kill -0 "$PICKER_PID" 2>/dev/null; then
+    /usr/share/ohmydebn/bin/ohmydebn-app-launcher
+    MENU_PICKER_RESULT="launched"
+    return
+  fi
+
+  if ! printf '%s\t%s\t%s\n' "Apps > Other Apps" "" "apps" >&"$PICKER_REQ_FD"; then
+    /usr/share/ohmydebn/bin/ohmydebn-app-launcher
+    MENU_PICKER_RESULT="launched"
+    return
+  fi
+
+  # Same backgrounded-read approach as get_picker_result() - see its own
+  # comment for why this can't just be a bare blocking `read` here.
+  local result_file
+  result_file=$(mktemp)
+  (
+    local line status=0
+    read -r -t 300 -u "$PICKER_RESP_FD" line || status=$?
+    printf '%s' "$line" >"$result_file"
+    exit "$status"
+  ) &
+  local read_pid=$!
+  local read_status=0
+  wait "$read_pid" || read_status=$?
+
+  if [[ $read_status -eq 0 ]]; then
+    MENU_PICKER_RESULT=$(<"$result_file")
+    rm -f "$result_file"
+  else
+    rm -f "$result_file"
+    /usr/share/ohmydebn/bin/ohmydebn-app-launcher
+    MENU_PICKER_RESULT="launched"
   fi
 }
 
@@ -343,18 +419,20 @@ menu() {
 }
 
 terminal() {
-  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn -e "$@"
+  local title="$1"
+  shift
+  /usr/share/ohmydebn/bin/ohmydebn-terminal --class OhMyDebn --title "$title" -e "$@"
 }
 
 present_terminal() {
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "$1"
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "$1" "$2"
 }
 
 install() {
   local label pkg
   printf -v label '%q' "Installing $1..."
   printf -v pkg '%q' "$2"
-  present_terminal "echo $label; sudo /usr/bin/apt -y install $pkg"
+  present_terminal "$1" "echo $label; sudo /usr/bin/apt -y install $pkg"
 }
 
 install_and_launch() {
@@ -362,7 +440,7 @@ install_and_launch() {
   printf -v label '%q' "Installing $1..."
   printf -v pkg '%q' "$2"
   printf -v launch '%q' "$3"
-  present_terminal "echo $label; sudo /usr/bin/apt -y install $pkg && setsid gtk-launch $launch"
+  present_terminal "$1" "echo $label; sudo /usr/bin/apt -y install $pkg && setsid gtk-launch $launch"
 }
 
 show_learn_menu() {
@@ -378,13 +456,31 @@ show_learn_menu() {
   esac
 }
 
+show_trigger_menu() {
+  menu "Trigger" "  Capture\n󰓄  Speed Test"
+  case "$MENU_RESULT" in
+  *Capture*) show_capture_menu ;;
+  *Speed*) show_speed_test_menu ;;
+  *) show_main_menu ;;
+  esac
+}
+
+show_speed_test_menu() {
+  menu "Speed Test" "󰓄  Network Speed Test\n  Disk Speed Test"
+  case "$MENU_RESULT" in
+  *Network*) /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-gui ;;
+  *Disk*) /usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-gui ;;
+  *) show_trigger_menu ;;
+  esac
+}
+
 show_capture_menu() {
   menu "Capture" "  Screenshot\n  Screenrecord\n󰃉  Color"
   case "$MENU_RESULT" in
   *Screenshot*) show_screenshot_menu ;;
   *Screenrecord*) show_screenrecord_menu ;;
   *Color*) /usr/bin/gcolor3 ;;
-  *) show_main_menu ;;
+  *) show_trigger_menu ;;
   esac
 }
 
@@ -408,98 +504,134 @@ show_screenrecord_menu() {
 }
 
 show_install_menu() {
-  menu "Install" "  Package\n  Web App\n  TUI\n  Style\n  Editor\n  Cybersecurity\n♫  Media\n󰒒  Utility\n  Virtualization\n  Containerization\n  Office Apps\n󰖂  VPN"
+  menu "Install" "  Package\n  Web App\n  TUI"
   case "$MENU_RESULT" in
-  *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
-  *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
-  *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-install ;;
-  *Style*) show_install_style_menu ;;
-  *Editor*) show_install_editor_menu ;;
-  *Cybersecurity*) show_install_cybersecurity_menu ;;
-  *Utility*) show_install_utility_menu ;;
-  *Media*) show_install_media_menu ;;
-  *Virtualization*) show_install_virtualization_menu ;;
-  *Containerization*) show_install_containerization_menu ;;
-  *Office*) show_install_office_menu ;;
-  *VPN*) show_install_vpn_menu ;;
+  *Package*) terminal "Install Package" /usr/share/ohmydebn/bin/ohmydebn-pkg-install ;;
+  *Web*) present_terminal "Install Web App" /usr/share/ohmydebn/bin/ohmydebn-webapp-install ;;
+  *TUI*) present_terminal "Install TUI App" /usr/share/ohmydebn/bin/ohmydebn-tui-install ;;
   *) show_main_menu ;;
   esac
 }
 
-show_install_office_menu() {
-  menu "Install" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord"
+show_office_menu() {
+  menu "Office" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord"
   case "$MENU_RESULT" in
-  *LibreOffice*) install "libreoffice" "libreoffice" ;;
-  *Calligra*) install "calligra" "calligra" ;;
-  *Gnumeric*) install "gnumeric" "gnumeric" ;;
-  *AbiWord*) install "abiword" "abiword" ;;
-  *) show_install_menu ;;
+  *LibreOffice*) /usr/share/ohmydebn/bin/ohmydebn-libreoffice ;;
+  *Calligra*) /usr/share/ohmydebn/bin/ohmydebn-calligra ;;
+  *Gnumeric*) /usr/share/ohmydebn/bin/ohmydebn-gnumeric ;;
+  *AbiWord*) /usr/share/ohmydebn/bin/ohmydebn-abiword ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_cybersecurity_menu() {
-  menu "Install" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark"
+show_cybersecurity_menu() {
+  menu "Cybersecurity" "  SO-CRATES\n  tcpdump\n  tshark\n  wireshark"
   case "$MENU_RESULT" in
   *SO-CRATES*) /usr/share/ohmydebn/bin/ohmydebn-socrates ;;
-  *tcpdump*) install "tcpdump" "tcpdump" ;;
-  *tshark*) install "tshark" "tshark" ;;
-  *wireshark*) install "wireshark" "wireshark" ;;
-  *) show_install_menu ;;
+  *tcpdump*) /usr/share/ohmydebn/bin/ohmydebn-tcpdump ;;
+  *tshark*) /usr/share/ohmydebn/bin/ohmydebn-tshark ;;
+  *wireshark*) /usr/share/ohmydebn/bin/ohmydebn-wireshark ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_utility_menu() {
-  menu "Install" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰒒  SSH Server"
+show_utility_menu() {
+  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server"
   case "$MENU_RESULT" in
-  *Deskflow*) install "Deskflow" "deskflow" ;;
+  *Deskflow*) /usr/share/ohmydebn/bin/ohmydebn-deskflow ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
-  *rclone*) install "rclone" "rclone" ;;
-  *SSH*) install "SSH Server" "openssh-server" ;;
-  *) show_install_menu ;;
+  *rclone*) /usr/share/ohmydebn/bin/ohmydebn-rclone ;;
+  *Magnifier*) present_terminal "Screen Magnifier" /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
+  *SSH*) /usr/share/ohmydebn/bin/ohmydebn-ssh-server ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_vpn_menu() {
-  menu "Install" "󰖂  Cloudflare Warp\n󰖂  Tailscale"
+show_vpn_menu() {
+  menu "VPN" "󰖂  Cloudflare Warp\n󰖂  Tailscale"
   case "$MENU_RESULT" in
   *Cloudflare*) /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp ;;
   *Tailscale*) /usr/share/ohmydebn/bin/ohmydebn-tailscale ;;
-  *) show_install_menu ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_media_menu() {
-  menu "Install" "  cliamp terminal music player\n  GIMP image editor\n  UxPlay AirPlay receiver"
+show_media_menu() {
+  menu "Media" "  Cava audio visualizer\n  cliamp terminal music player\n  UxPlay AirPlay receiver"
   case "$MENU_RESULT" in
-  *cliamp*) install "cliamp" "cliamp" ;;
-  *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
-  *UxPlay*) install "UxPlay AirPlay Receiver" "uxplay" ;;
-  *) show_install_menu ;;
+  *Cava*) /usr/share/ohmydebn/bin/ohmydebn-cava ;;
+  *cliamp*) /usr/share/ohmydebn/bin/ohmydebn-cliamp ;;
+  *UxPlay*) /usr/share/ohmydebn/bin/ohmydebn-uxplay ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_containerization_menu() {
-  menu "Install" "  Docker\n  Podman\n  Distrobox"
+# Apps groups every app-launching category (previously top-level Go-menu
+# entries in their own right) under one Go-menu entry, so the Go menu
+# itself stays short - everything else there (Install, Remove, Update,
+# System, ...) is a one-off action or tool, not "launch an app". A real,
+# ordinary static menu() call - only its own last item, Other Apps, is the
+# exception (see its own comment below).
+show_apps_menu() {
+  menu "Apps" "󱚤  AI\n󰖟  Browsers\n  Containers\n  Cybersecurity\n  Editors\n♫  Media\n  Office\n󰒒  Utility\n  Virtualization\n󰖂  VPN\n󰀻  Other Apps"
   case "$MENU_RESULT" in
-  *Docker*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-docker-install ;;
-  *Podman*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-podman-install ;;
-  *Distrobox*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-distrobox-install ;;
-  *) show_install_menu ;;
+  *AI*) show_ai_menu ;;
+  *Browsers*) show_browsers_menu ;;
+  *Containers*) show_containers_menu ;;
+  *Cybersecurity*) show_cybersecurity_menu ;;
+  *Editor*) show_editor_menu ;;
+  *Media*) show_media_menu ;;
+  *Office*) show_office_menu ;;
+  *Utility*) show_utility_menu ;;
+  *Virtualization*) show_virtualization_menu ;;
+  *VPN*) show_vpn_menu ;;
+  *Other*) show_other_apps_menu ;;
+  *) show_main_menu ;;
   esac
 }
 
-show_install_virtualization_menu() {
-  menu "Install" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)"
+# Other Apps, unlike every other show_*_menu here, never calls menu() -
+# there's no static "Title" "items" string to hand it (its content is
+# runtime-discovered .desktop entries, scanned live inside
+# ohmydebn-menu-picker itself - see get_apps_picker_result()'s own
+# comment), so it talks to the persistent picker directly instead. That
+# also means the menu-tree walk (bin/ohmydebn-menu-tree's _mt_walk(),
+# recursing into show_apps_menu's own "Other Apps" item above) can't find
+# a menu() call to parse here either - it warns ("no block for
+# show_other_apps_menu") and moves on rather than failing, which is
+# exactly the desired outcome: Other Apps stays out of the flattened
+# search tree, live-merged into the top-level Go-menu search instead (see
+# ohmydebn-menu-picker's load_leaves()/_matching_app_rows()).
+show_other_apps_menu() {
+  get_apps_picker_result
+  case "$MENU_PICKER_RESULT" in
+  "") show_apps_menu ;;
+  esac
+}
+
+show_containers_menu() {
+  menu "Containers" "  Docker\n  Podman\n  Distrobox"
+  case "$MENU_RESULT" in
+  *Docker*) /usr/share/ohmydebn/bin/ohmydebn-docker ;;
+  *Podman*) /usr/share/ohmydebn/bin/ohmydebn-podman ;;
+  *Distrobox*) /usr/share/ohmydebn/bin/ohmydebn-distrobox ;;
+  *) show_apps_menu ;;
+  esac
+}
+
+show_virtualization_menu() {
+  menu "Virtualization" "  Boxes (Simple)\n  Virtual Machine Manager (Advanced)\n  Virtual Machine Networking"
   case "$MENU_RESULT" in
   *Boxes*) /usr/share/ohmydebn/bin/ohmydebn-boxes ;;
   *Manager*) /usr/share/ohmydebn/bin/ohmydebn-virtmanager ;;
-  *) show_install_menu ;;
+  *Networking*) /usr/share/ohmydebn/bin/ohmydebn-virtmanager-passt-upgrade ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_browser_menu() {
-  menu "Browser" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+show_browsers_menu() {
+  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
   case "$MENU_RESULT" in
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
@@ -507,7 +639,7 @@ show_browser_menu() {
   *Firefox*) install "Firefox" "firefox-esr" ;;
   *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
   *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium-bin ;;
-  *) show_main_menu ;;
+  *) show_apps_menu ;;
   esac
 }
 
@@ -517,42 +649,34 @@ show_ai_menu() {
   # menu duplicating this same list.
   menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
-  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
+  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
-  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-pi ;;
+  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;
-  *) show_main_menu ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_editor_menu() {
-  menu "Install" "  VSCode\n  Antigravity\n  Emacs"
+show_editor_menu() {
+  menu "Editors" "  VSCode\n  Antigravity\n  Emacs\n  GIMP"
   case "$MENU_RESULT" in
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
-  *Emacs*) install "Emacs" "emacs" ;;
-  *) show_install_menu ;;
+  *Emacs*) /usr/share/ohmydebn/bin/ohmydebn-emacs ;;
+  *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;
+  *) show_apps_menu ;;
   esac
 }
 
-show_install_style_menu() {
-  menu "Install" "󰸌  Theme\n  Background"
-  case "$MENU_RESULT" in
-  *Theme*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-theme-install ;;
-  *Background*) nemo "$HOME/.config/ohmydebn/current/theme/backgrounds" ;;
-  *) show_install_menu ;;
-  esac
-}
 
 show_remove_menu() {
-  menu "Remove" "  Package\n  Web App\n  TUI\n󰸌  Theme"
+  menu "Remove" "  Package\n  Web App\n  TUI"
   case "$MENU_RESULT" in
-  *Package*) terminal /usr/share/ohmydebn/bin/ohmydebn-pkg-remove ;;
-  *Web*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-webapp-remove ;;
-  *TUI*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-tui-remove ;;
-  *Theme*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-theme-remove ;;
+  *Package*) terminal "Remove Package" /usr/share/ohmydebn/bin/ohmydebn-pkg-remove ;;
+  *Web*) present_terminal "Remove Web App" /usr/share/ohmydebn/bin/ohmydebn-webapp-remove ;;
+  *TUI*) present_terminal "Remove TUI App" /usr/share/ohmydebn/bin/ohmydebn-tui-remove ;;
   *) show_main_menu ;;
   esac
 }
@@ -570,7 +694,7 @@ show_update_menu() {
 show_update_password_menu() {
   menu "Update Password" "  User"
   case "$MENU_RESULT" in
-  *User*) present_terminal passwd ;;
+  *User*) present_terminal "Change Password" passwd ;;
   *) show_update_menu ;;
   esac
 }
@@ -593,7 +717,7 @@ show_main_menu() {
   # (bin/ohmydebn-menu-tree) - it's real, executed bash (passed as an
   # argument below), not a comment, so it can't silently drift out of
   # sync the way dead/unused data could.
-  local go_items="󰀻  Apps\n󰧑  Learn\n  Capture\n  Style\n󱚤  AI\n󰖟  Browser\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n󰍉  Screen Magnifier\n  System"
+  local go_items="󰀻  Apps\n󰧑  Learn\n  Trigger\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  About\n  Demo\n  System"
   menu "Go" "$go_items"
   go_to_menu "$MENU_RESULT"
 }
@@ -606,21 +730,30 @@ show_main_menu() {
 # every "${1,,}" case arm here only ever needs to match a same-level label.
 go_to_menu() {
   case "${1,,}" in
-  *apps*) /usr/share/ohmydebn/bin/ohmydebn-app-launcher ;;
+  *office*) show_office_menu ;;
+  *apps*) show_apps_menu ;;
+  *trigger*) show_trigger_menu ;;
   *learn*) show_learn_menu ;;
   *style*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
+  *container*) show_containers_menu ;;
   *ai*) show_ai_menu ;;
-  *browser*) show_browser_menu ;;
+  *browser*) show_browsers_menu ;;
   *capture*) show_capture_menu ;;
   *screenshot*) show_screenshot_menu ;;
   *screenrecord*) show_screenrecord_menu ;;
+  *speedtest*) show_speed_test_menu ;;
   *install*) show_install_menu ;;
+  *virtualization*) show_virtualization_menu ;;
+  *vpn*) show_vpn_menu ;;
+  *editor*) show_editor_menu ;;
+  *cybersecurity*) show_cybersecurity_menu ;;
+  *media*) show_media_menu ;;
+  *utility*) show_utility_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;
   *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui ;;
   *demo*) /usr/share/ohmydebn/bin/ohmydebn-demo-gui ;;
-  *magnifier*) present_terminal /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
   *system*) show_system_menu ;;
   esac
 }

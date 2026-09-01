@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for OpenCode, meant to run
+# inside an already-open terminal (via -e) rather than opening one of its
+# own - see ohmydebn-opencode, which wraps this in a terminal instead of
+# duplicating it.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-opencode-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+  mkdir -p ~/opencode-sessions && cd "$(mktemp -d ~/opencode-sessions/session-XXXXXX)"
+  exec /usr/bin/opencode-cli
+fi

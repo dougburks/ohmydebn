@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "openssh-server" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "SSH Server" /usr/share/ohmydebn/bin/ohmydebn-ssh-server-install
+fi
+
+if dpkg -s "openssh-server" >/dev/null 2>&1; then
+  # openssh-server is a background systemd service, not an interactive
+  # app - Debian's postinst already starts and enables it, so there's
+  # nothing to "launch" the way GUI/CLI tools get launched elsewhere in
+  # this menu. Showing this machine's address and the service's live
+  # status in a terminal is the closest useful equivalent: enough for the
+  # user to immediately connect from another machine, without them having
+  # to go look either up by hand. `systemctl status` pulls in a chunk of
+  # journal output that (a) triggers "some journal files were not opened
+  # due to insufficient permissions" for a non-root user and (b) is more
+  # than this really needs - `is-active` alone answers the one question
+  # that matters (is it actually running right now) with a single word
+  # and no journal access at all. No `exec bash` afterward either: unlike
+  # the CLI-tool wrappers elsewhere in this menu, there's no follow-up
+  # ssh-server command to keep working with here, so a plain "press Enter
+  # to close" (matching ohmydebn-show-done's own convention) fits better
+  # than leaving an interactive shell prompt behind.
+  IP=$(hostname -I | awk '{print $1}')
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "SSH Server" "echo 'Connect to this machine with:'; echo '  ssh $USER@$IP'; echo; echo -n 'SSH service status: '; systemctl is-active ssh; echo; echo 'Press Enter to close this window.'; read -r"
+fi

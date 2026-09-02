@@ -44,3 +44,5 @@ keybinding-custom 42 "SO-CRATES" "/usr/share/ohmydebn/bin/ohmydebn-socrates" "['
 keybinding-custom 43 "Cloudflare Warp" "/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp" "['<Ctrl><Alt>W']" "Press Ctrl + Alt + W to launch Cloudflare Warp"
 keybinding-custom 44 "Claude Code" "/usr/share/ohmydebn/bin/ohmydebn-claude-code" "['<Ctrl><Alt>C']" "Press Ctrl + Alt + C to launch Claude Code"
 keybinding-custom 45 "File Manager" "/usr/share/ohmydebn/bin/ohmydebn-file-manager-tiled" "['<Super>F']" "Press Super + F to open file manager"
+keybinding-custom 46 "herdr" "/usr/share/ohmydebn/bin/ohmydebn-herdr" "['<Ctrl><Super>Return']" "Press Ctrl + Super + Return to launch herdr"
+keybinding-custom 47 "tmux" "/usr/share/ohmydebn/bin/ohmydebn-tmux" "['<Super><Alt>Return']" "Press Super + Alt + Return to launch a tmux terminal"

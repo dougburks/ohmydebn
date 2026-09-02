@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# Opens a floating terminal running tmux, installing it first via
+# ohmydebn-tmux-install if it isn't already present - see
+# ohmydebn-tshark/ohmydebn-distrobox for the same on-demand-install shape.
+# "new-session -A -s main" attaches to the persistent "main" session if one
+# is already running - so closing and reopening this terminal returns to
+# wherever it was left - or creates it on first use.
+
+set -euo pipefail
+
+if ! dpkg -s "tmux" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "tmux" /usr/share/ohmydebn/bin/ohmydebn-tmux-install
+fi
+
+if dpkg -s "tmux" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "tmux" "tmux new-session -A -s main"
+fi

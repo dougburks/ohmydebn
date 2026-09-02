@@ -536,14 +536,16 @@ show_cybersecurity_menu() {
 }
 
 show_utility_menu() {
-  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server"
+  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n  herdr\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server\n  tmux"
   case "$MENU_RESULT" in
   *Deskflow*) /usr/share/ohmydebn/bin/ohmydebn-deskflow ;;
+  *herdr*) /usr/share/ohmydebn/bin/ohmydebn-herdr ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
   *rclone*) /usr/share/ohmydebn/bin/ohmydebn-rclone ;;
   *Magnifier*) present_terminal "Screen Magnifier" /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
   *SSH*) /usr/share/ohmydebn/bin/ohmydebn-ssh-server ;;
+  *tmux*) /usr/share/ohmydebn/bin/ohmydebn-tmux ;;
   *) show_apps_menu ;;
   esac
 }

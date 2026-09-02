@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "tmux" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "tmux is not currently installed."
+    echo
+    echo "Continuing will install it from your existing distro repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+
+    read -r
+  fi
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install tmux
+fi

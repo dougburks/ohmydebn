@@ -66,9 +66,15 @@ EOF
 # warning's detail lines are plain `echo`, not the mocked
 # ohmydebn-headline call, so they only show up here, not in $CALLS) - a
 # marker line separates the flag from that so both can be asserted on.
+# OHMYDEBN_CINNAMON_RESTART_NEEDED= clears whatever this var already is in
+# the ambient environment before the child bash starts - on a real OhMyDebn
+# desktop session it's commonly already exported to 1, and since the script
+# under test only ever sets it (never unsets it), an inherited 1 would leak
+# straight through and look like a false-positive restart flag on every
+# scenario that expects none.
 run_script() {
   local output
-  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash -c "
+  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED= bash -c "
     source '$MOCK_DIR/gtile-restart-patched.sh'
     echo \"GTILE_TEST_FLAG_MARKER:\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
   " 2>/dev/null)

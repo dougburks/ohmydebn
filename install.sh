@@ -60,7 +60,7 @@ if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -99,7 +99,7 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
   cat <<EOF
 Welcome to OhMyDebn!
 
-OhMyDebn is a debonair Linux desktop for power users. It gives you the stability of the Debian distro, the ease of use of the Cinnamon desktop, and the power of AI, containers, and virtualization.
+OhMyDebn is a debonair Linux desktop for power users. It gives you the stability of the Debian or Ubuntu distros, the ease of use of the Cinnamon desktop, and the power of AI, containers, and virtualization.
 
 Debonair strides bold,
 Elegance in every step,

@@ -18,6 +18,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO_ROOT/install/keybinding/keybinding.sh"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
+# Read straight from the script rather than hardcoding the date-stamped
+# marker name here too - keybinding.sh's KEYBINDING_STATE gets bumped every
+# time a hotkey changes, and a second hardcoded copy here would silently
+# fall out of sync (as happened when the marker was bumped to add the
+# herdr/tmux hotkeys but this test's copy wasn't updated to match).
+KEYBINDING_MARKER=$(grep -oP '(?<=KEYBINDING_STATE=\$STATE_DIR/)\S+' "$SCRIPT")
+
 echo "=== install/keybinding/keybinding.sh (restart flag) ==="
 
 setup_mocks() {
@@ -49,8 +56,14 @@ EOF
 # OHMYDEBN_CINNAMON_RESTART_NEEDED, which only propagates back to the
 # caller via `source`, matching how finalization/hotkeys.sh invokes it
 # for real. Sets RESTART_FLAG to "1" or "".
+# OHMYDEBN_CINNAMON_RESTART_NEEDED= clears whatever this var already is in
+# the ambient environment before the child bash starts - on a real OhMyDebn
+# desktop session it's commonly already exported to 1, and since the script
+# under test only ever sets it (never unsets it), an inherited 1 would leak
+# straight through and look like a false-positive restart flag on every
+# scenario that expects none.
 run_script() {
-  RESTART_FLAG=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash -c "
+  RESTART_FLAG=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED= bash -c "
     source '$MOCK_DIR/keybinding-patched.sh' >/dev/null 2>&1
     echo \"\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
   ")
@@ -66,7 +79,7 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_eq "first run, Cinnamon running: restart flagged" "1" "$RESTART_FLAG"
 assert_contains "first run: restart headline shown" "$CALLS" "Cinnamon will restart at the end of this update to apply hotkeys"
 assert_eq "first run: keybinding state marker written" "yes" \
-  "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/keybinding-20260828" ] && echo yes || echo no)"
+  "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER" ] && echo yes || echo no)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -80,7 +93,7 @@ SCRATCH_HOME=$(mktemp -d)
 MOCK_CINNAMON_RUNNING=false run_script
 assert_eq "first run, Cinnamon not running: no restart flag" "" "$RESTART_FLAG"
 assert_eq "first run, Cinnamon not running: keybinding state marker still written" "yes" \
-  "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/keybinding-20260828" ] && echo yes || echo no)"
+  "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER" ] && echo yes || echo no)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -90,7 +103,7 @@ mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
 mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
-touch "$SCRATCH_HOME/.local/state/ohmydebn-config/keybinding-20260828"
+touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
 MOCK_CINNAMON_RUNNING=true run_script
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "already run: no restart flag" "" "$RESTART_FLAG"

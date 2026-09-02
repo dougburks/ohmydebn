@@ -10,6 +10,14 @@
 # per package.
 #
 
+# Ubuntu carries no "chromium" apt package at all (unlike Debian/Kali/Mint) -
+# it only ships "chromium-browser", a transitional package whose postinst
+# installs the real thing as a strictly-confined snap. install/config/
+# chromium.sh accounts for the snap's different profile layout when seeding
+# the bundled extension.
+CHROMIUM_PACKAGE="chromium"
+[ "$ID" = "ubuntu" ] && CHROMIUM_PACKAGE="chromium-browser"
+
 PACKAGES=(
   # Per-app packages, one each, matching install/config/<app>.sh
   # (fastfetch is the exception - its theming lives entirely in
@@ -19,7 +27,7 @@ PACKAGES=(
   bat
   btop
   cava
-  chromium
+  "$CHROMIUM_PACKAGE"
   fastfetch
   gedit
   keepassxc

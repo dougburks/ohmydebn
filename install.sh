@@ -47,6 +47,11 @@ if [ -f "$OS_RELEASE" ]; then
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
     ;;
+  ubuntu)
+    case "$VERSION_CODENAME" in
+    noble | resolute) DISTRO_OK=true ;;
+    esac
+    ;;
   esac
 fi
 
@@ -55,7 +60,7 @@ if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7 and Kali Linux (Rolling).
+OhMyDebn is designed for Debian 13 and its derivatives like Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -123,7 +128,8 @@ EOF
   if [ -f $DEBIANSOURCES ] ||
     [ -f $PROXMOXSOURCES ] ||
     [ -f $MINTSOURCES ] ||
-    [ "$ID" = "kali" ]; then
+    [ "$ID" = "kali" ] ||
+    [ "$ID" = "ubuntu" ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that

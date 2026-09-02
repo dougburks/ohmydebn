@@ -2,10 +2,10 @@
 
 set -e
 
-echo "This will remove the optional apps that ship on the base Debian 13"
-echo "Cinnamon ISO (Firefox, LibreOffice, etc.) and install a curated set of"
-echo "power-user extras (Virtual Machine Manager, Brave, Claude Code, GIMP,"
-echo "OpenCode, Podman, and more)."
+echo "This will remove the optional apps that ship in your base distro"
+echo "(Firefox, LibreOffice, etc.) and install a curated set of"
+echo "power-user extras (Virtual Machine Manager, Brave, GIMP, Podman, and"
+echo "more)."
 echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read -r

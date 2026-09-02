@@ -15,13 +15,27 @@
 # install prompt, it doesn't skip Google's signing check. It's also still
 # user-removable from chrome://extensions, unlike a policy forcelist.
 
-if ! dpkg -s "chromium" >/dev/null 2>&1; then
-  exit 0
+# Ubuntu has no "chromium" apt package (see CHROMIUM_PACKAGE in
+# install/packaging/dependencies.sh) - it only ever gets chromium as a
+# strictly-confined snap, installed via the "chromium-browser" transitional
+# deb's postinst. A snap's confinement remaps $HOME inside its sandbox, so
+# Chromium's ExternalPrefLoader never sees ~/.config/chromium there; the
+# profile it actually reads lives under ~/snap/chromium/common/chromium
+# instead. Pre-creating that path before the snap's own first run works
+# because both Chromium's profile bootstrap and snapd's per-user directory
+# setup are additive - each fills in whatever's missing around existing
+# content rather than overwriting it. Verified manually on Ubuntu 24.04/26.04.
+if dpkg -s "chromium" >/dev/null 2>&1; then
+  CHROMIUM_PARENT=~/.config
+elif snap list chromium >/dev/null 2>&1; then
+  CHROMIUM_PARENT=~/snap/chromium/common
+else
+  return 0
 fi
 
-if [ ! -d ~/.config/chromium ]; then
+if [ ! -d "$CHROMIUM_PARENT/chromium" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring chromium"
-  mkdir -p ~/.config
-  cp -av /usr/share/ohmydebn/config/chromium ~/.config/
+  mkdir -p "$CHROMIUM_PARENT"
+  cp -av /usr/share/ohmydebn/config/chromium "$CHROMIUM_PARENT/"
   echo
 fi

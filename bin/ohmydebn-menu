@@ -536,16 +536,24 @@ show_cybersecurity_menu() {
 }
 
 show_utility_menu() {
-  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n  herdr\n↔  LocalSend\n  PowerShell\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server\n  tmux"
+  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server"
   case "$MENU_RESULT" in
   *Deskflow*) /usr/share/ohmydebn/bin/ohmydebn-deskflow ;;
-  *herdr*) /usr/share/ohmydebn/bin/ohmydebn-herdr ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
-  *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
   *rclone*) /usr/share/ohmydebn/bin/ohmydebn-rclone ;;
   *Magnifier*) present_terminal "Screen Magnifier" /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
   *SSH*) /usr/share/ohmydebn/bin/ohmydebn-ssh-server ;;
+  *) show_apps_menu ;;
+  esac
+}
+
+show_terminals_menu() {
+  menu "Terminals" "  herdr\n  PowerShell\n  tmux\n  zsh"
+  case "$MENU_RESULT" in
+  *herdr*) /usr/share/ohmydebn/bin/ohmydebn-herdr ;;
+  *PowerShell*) /usr/share/ohmydebn/bin/ohmydebn-powershell ;;
   *tmux*) /usr/share/ohmydebn/bin/ohmydebn-tmux ;;
+  *zsh*) /usr/share/ohmydebn/bin/ohmydebn-terminal ;;
   *) show_apps_menu ;;
   esac
 }
@@ -576,7 +584,7 @@ show_media_menu() {
 # ordinary static menu() call - only its own last item, Other Apps, is the
 # exception (see its own comment below).
 show_apps_menu() {
-  menu "Apps" "󱚤  AI\n󰖟  Browsers\n  Containers\n  Cybersecurity\n  Editors\n♫  Media\n  Office\n󰒒  Utility\n  Virtualization\n󰖂  VPN\n󰀻  Other Apps"
+  menu "Apps" "󱚤  AI\n󰖟  Browsers\n  Containers\n  Cybersecurity\n  Editors\n♫  Media\n  Office\n  Terminals\n󰒒  Utility\n  Virtualization\n󰖂  VPN\n󰀻  Other Apps"
   case "$MENU_RESULT" in
   *AI*) show_ai_menu ;;
   *Browsers*) show_browsers_menu ;;
@@ -585,6 +593,7 @@ show_apps_menu() {
   *Editor*) show_editor_menu ;;
   *Media*) show_media_menu ;;
   *Office*) show_office_menu ;;
+  *Terminals*) show_terminals_menu ;;
   *Utility*) show_utility_menu ;;
   *Virtualization*) show_virtualization_menu ;;
   *VPN*) show_vpn_menu ;;

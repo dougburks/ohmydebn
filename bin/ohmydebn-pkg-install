@@ -12,6 +12,14 @@ fzf_args=(
   --color 'pointer:green,marker:green'
 )
 
+# Standalone, on-demand, independent of install.sh/ohmydebn-update's own
+# flow - see ohmydebn-gestures-install's own comment for the general
+# reasoning. Matters even more here than for a single-package installer:
+# a stale index means the fzf search results themselves are stale (wrong
+# versions, missing brand-new packages) before the user has even picked
+# one to install.
+sudo /usr/bin/apt update
+
 pkg_names=$(apt list | awk -F/ '{print $1}' | sort -u | fzf "${fzf_args[@]}")
 
 if [[ -n "$pkg_names" ]]; then

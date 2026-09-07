@@ -7,10 +7,10 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-if ! dpkg -s "gimp" >/dev/null 2>&1; then
+if ! dpkg -s "tmux" >/dev/null 2>&1; then
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "GIMP is not currently installed."
+    echo "tmux is not currently installed."
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
@@ -20,5 +20,5 @@ if ! dpkg -s "gimp" >/dev/null 2>&1; then
   fi
 
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install gimp
+  sudo /usr/bin/apt -y install tmux
 fi

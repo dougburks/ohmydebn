@@ -991,6 +991,82 @@ done
 echo "  checked $CHECKED third-party-repo installers"
 
 echo
+echo "-- apt pin filename agrees between each installer and its own remove script (regression guard) --"
+# The check above only catches installers that write sources.list.d
+# themselves - it can't see code/google-chrome-stable/powershell, whose
+# repos are self-registered by the vendor's own postinst after a raw
+# `dpkg -i`, not by ohmydebn's script. Those three (and every other
+# pinned installer) are curated here instead, checking both that the
+# installer actually writes the expected preferences.d filename and that
+# its own -remove script cleans up that exact same filename - a rename in
+# either file without the other would otherwise leave a stale, orphaned
+# .pref behind on every future removal, invisible until someone goes
+# looking for it. brave-browser/brave-origin share one pin file (same
+# repo), so both map to the same filename here.
+PIN_FILE_OWNERS=(
+  "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
+  "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
+  "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
+  "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
+  "ohmydebn-tailscale-install:ohmydebn-tailscale-remove:tailscale.pref"
+  "ohmydebn-brave-browser-install:ohmydebn-brave-browser-remove:brave-browser-release.pref"
+  "ohmydebn-brave-origin-install:ohmydebn-brave-origin-remove:brave-browser-release.pref"
+  "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
+  "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
+  "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
+)
+for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
+  IFS=':' read -r INSTALLER REMOVER PREF <<<"$ENTRY"
+  if ! grep -qF "preferences.d/$PREF" "$REPO_ROOT/bin/$INSTALLER"; then
+    echo "  FAIL - $INSTALLER doesn't write preferences.d/$PREF"
+    FAIL=$((FAIL + 1))
+  elif ! grep -qF "preferences.d/$PREF" "$REPO_ROOT/bin/$REMOVER"; then
+    echo "  FAIL - $REMOVER doesn't clean up preferences.d/$PREF (installed by $INSTALLER)"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  $INSTALLER/$REMOVER agree on preferences.d/$PREF"
+  fi
+done
+
+echo
+echo "-- *-install scripts run apt update before apt install (regression guard) --"
+# A script that installs from a repo but never refreshes the index first
+# can fail (or silently install a stale version) whenever it's invoked
+# independently of install.sh/ohmydebn-update's own flow, which already
+# guarantees a recent apt update elsewhere - confirmed as a real, reported
+# failure for ohmydebn-opencode-install specifically (Super+A's on-demand
+# install path failed with a stale index until a manual `apt update`).
+# Two exemptions: ohmydebn-pkg-install-optional is a shared, batched
+# primitive invoked many times within a single run (dependencies.sh,
+# power-user.sh, and every on-demand script that uses it) - adding its own
+# apt update would multiply redundant network calls per run instead of
+# running once, so it relies by design on the same early update
+# install.sh's own flow already guarantees. ohmydebn-code-install never
+# actually calls apt install at all (a raw dpkg -i on a downloaded .deb) -
+# a plain string match would otherwise be fooled by its own comment
+# mentioning "apt install" in prose.
+INSTALL_APT_UPDATE_EXEMPT=("ohmydebn-pkg-install-optional" "ohmydebn-code-install")
+CHECKED=0
+for f in "$REPO_ROOT"/bin/*-install; do
+  name=$(basename "$f")
+  [[ " ${INSTALL_APT_UPDATE_EXEMPT[*]} " == *" $name "* ]] && continue
+  if grep -qE 'apt (-y )?install' "$f" 2>/dev/null; then
+    CHECKED=$((CHECKED + 1))
+    # /usr/bin/apt update specifically (the invocation style used
+    # everywhere in this codebase), not a bare "apt update" - a comment
+    # explaining *why* a script needs this (prose like `manual "apt
+    # update"`) would otherwise satisfy a looser match without the script
+    # actually calling it, exactly the false-negative this guard exists to
+    # prevent.
+    if ! grep -q '/usr/bin/apt update' "$f"; then
+      echo "  FAIL - $name calls apt install without apt update first"
+      FAIL=$((FAIL + 1))
+    fi
+  fi
+done
+echo "  checked $CHECKED apt-installing scripts"
+
+echo
 echo "-- config/tile-rules.json is valid JSON with a sane schema (regression guard) --"
 # gTile-OhMyDebn's auto-tile handler treats an unparseable/malformed rule
 # file as empty (no error, no tiling) - real, but silent, exactly the
@@ -1042,8 +1118,8 @@ TITLE_OWNERS=(
   "ohmydebn-pi:Pi"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
+  "ohmydebn-logo-gui:OhMyDebn Logo"
   "ohmydebn-btop-gui:btop"
-  "ohmydebn-terminal-left:OhMyDebn Terminal"
   "ohmydebn-update-gui:OhMyDebn Update"
   "ohmydebn-neovim:nvim"
   "ohmydebn-cava:cava"

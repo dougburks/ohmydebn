@@ -98,4 +98,13 @@ run_scenario "Kali rolling" "yes" \
 run_scenario "unrelated distro" "no" \
   "ID=fedora" "VERSION_CODENAME=41"
 
+run_scenario "Ubuntu 24.04 Noble" "yes" \
+  "ID=ubuntu" "VERSION_CODENAME=noble"
+
+run_scenario "Ubuntu 26.04 Resolute" "yes" \
+  "ID=ubuntu" "VERSION_CODENAME=resolute"
+
+run_scenario "Ubuntu jammy (unsupported release)" "no" \
+  "ID=ubuntu" "VERSION_CODENAME=jammy"
+
 test_summary

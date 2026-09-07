@@ -18,8 +18,8 @@ echo "=== install/packaging/power-user.sh ==="
 
 setup_mocks() {
   for name in ohmydebn-pkg-remove-all-optional ohmydebn-virtmanager-install \
-    ohmydebn-brave-origin-install ohmydebn-claude-code-install ohmydebn-gimp-install \
-    ohmydebn-opencode-install ohmydebn-podman-install ohmydebn-pkg-install-optional \
+    ohmydebn-brave-origin-install ohmydebn-gimp-install \
+    ohmydebn-podman-install ohmydebn-pkg-install-optional \
     ohmydebn-magnifier-enable; do
     mock_bin "$name" <<EOF
 #!/bin/bash
@@ -54,10 +54,12 @@ setup_mocks
 POWER_USER=true PATH="$(mock_path)" bash "$MOCK_DIR/power-user-patched.sh" >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "POWER_USER=true: removal runs with --skip-prompt" "$CALLS" "ohmydebn-pkg-remove-all-optional --skip-prompt"
-for name in ohmydebn-virtmanager-install ohmydebn-brave-origin-install ohmydebn-claude-code-install \
-  ohmydebn-gimp-install ohmydebn-opencode-install ohmydebn-podman-install; do
+for name in ohmydebn-virtmanager-install ohmydebn-brave-origin-install \
+  ohmydebn-gimp-install ohmydebn-podman-install; do
   assert_contains "POWER_USER=true: $name runs with --skip-prompt" "$CALLS" "$name --skip-prompt"
 done
+assert_not_contains "POWER_USER=true: claude-code is not installed" "$CALLS" "ohmydebn-claude-code-install"
+assert_not_contains "POWER_USER=true: opencode is not installed" "$CALLS" "ohmydebn-opencode-install"
 assert_contains "POWER_USER=true: keepassxc-minimal/rclone/etc batch install runs" "$CALLS" "ohmydebn-pkg-install-optional keepassxc-minimal"
 assert_contains "POWER_USER=true: magnifier gets enabled" "$CALLS" "ohmydebn-magnifier-enable"
 assert_contains "POWER_USER=true: iperf3 debconf preseed happens" "$CALLS" "debconf-set-selections"

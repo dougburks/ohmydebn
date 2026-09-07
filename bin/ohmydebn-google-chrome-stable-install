@@ -24,4 +24,13 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   curl -fSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o "$TEMP"
   sudo /usr/bin/dpkg -i "$TEMP"
   rm -f "$TEMP"
+
+  # Google Chrome's own postinst self-registers dl.google.com as an apt
+  # source (see /etc/apt/sources.list.d/google-chrome.sources) - same
+  # reasoning/pattern as ohmydebn-code-install's own pin: ohmydebn never
+  # creates that source file itself, so restricting it has to happen
+  # here instead. Confirmed via `apt-cache depends google-chrome-stable` -
+  # no same-repo dependency, just ordinary system libraries.
+  printf 'Package: *\nPin: origin "dl.google.com"\nPin-Priority: -1\n\nPackage: google-chrome-stable\nPin: origin "dl.google.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/google-chrome.pref >/dev/null
 fi

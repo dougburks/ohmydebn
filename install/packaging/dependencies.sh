@@ -79,4 +79,17 @@ PACKAGES=(
   starship
 )
 
+# Ubuntu carries no "chromium" apt package at all (unlike Debian/Kali/Mint) -
+# it only ships "chromium-browser", a transitional package whose postinst
+# installs the real thing as a strictly-confined snap. install/config/
+# chromium.sh accounts for the snap's different profile layout when seeding
+# the bundled extension. Swapped in here, after the array literal above,
+# rather than substituted into the array itself - tests/lib/extract-
+# packages.sh parses PACKAGES=( ... ) as plain text (no shell evaluation),
+# so a variable reference there would read as a literal, nonexistent
+# package name instead of "chromium".
+if [ "$ID" = "ubuntu" ]; then
+  PACKAGES=("${PACKAGES[@]/chromium/chromium-browser}")
+fi
+
 /usr/share/ohmydebn/bin/ohmydebn-pkg-install-optional "${PACKAGES[@]}"

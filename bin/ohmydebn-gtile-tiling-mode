@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# Echoes gTile-OhMyDebn's live "tiling-mode" setting (System Settings >
+# Extensions > gTile > Configure): "off", "rules", "traditional", or
+# "traditional-full". Defaults to "off" when the settings file doesn't
+# exist yet - a very fresh install before the extension's own defaults
+# file is seeded, or ohmydebn-gtile not installed at all - matching the
+# schema's own documented default and gTile.js's own handling of an
+# unset/unrecognized value. Shared by every OhMyDebn script that needs to
+# know whether it's safe to force its own tiling without fighting gTile's
+# own automatic system (see ohmydebn-launch-tiled and
+# ohmydebn-terminal-left) so this read only has to live in one place.
+
+set -uo pipefail
+
+GTILE_SETTINGS=~/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json
+jq -r '."tiling-mode".value // "off"' "$GTILE_SETTINGS" 2>/dev/null || echo "off"

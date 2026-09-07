@@ -11,11 +11,29 @@
 # Get the default browser
 DEFAULT_BROWSER=$(xdg-settings get default-web-browser)
 
-# Check if the default browser is Firefox or Chromium
+# Check if the default browser is Firefox, Chromium, or a Chromium-based
+# fork - all of these support --app= for a dedicated kiosk/app window with
+# no tabs, unlike a plain xdg-open which just opens a normal tab in
+# whatever's already running. Each fork is still a separate binary though,
+# so the desktop-id substring has to map to the right one rather than
+# lumping every Chromium-family browser into a literal `chromium` call:
+# Google Chrome's own .desktop file is "google-chrome.desktop" regardless
+# of the "-stable" package/binary suffix, and Brave's two variants
+# (brave-browser, brave-origin) are separate binaries too - both need
+# checking before their broader substring cousins ("chrome" / "brave") to
+# avoid matching the wrong one.
 if [[ $DEFAULT_BROWSER == *"firefox"* ]]; then
     firefox --kiosk "$1"
-elif [[ $DEFAULT_BROWSER == *"chromium"* ]] || [[ $DEFAULT_BROWSER == *"chrome"* ]]; then
+elif [[ $DEFAULT_BROWSER == *"chromium"* ]]; then
     chromium --app="$1"
+elif [[ $DEFAULT_BROWSER == *"chrome"* ]]; then
+    google-chrome-stable --app="$1"
+elif [[ $DEFAULT_BROWSER == *"brave-origin"* ]]; then
+    brave-origin --app="$1"
+elif [[ $DEFAULT_BROWSER == *"brave"* ]]; then
+    brave-browser --app="$1"
+elif [[ $DEFAULT_BROWSER == *"helium"* ]]; then
+    helium --app="$1"
 else
     # Fallback to xdg-open if browser is unsupported
     xdg-open "$1"

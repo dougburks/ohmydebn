@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+# Opens a floating terminal running herdr, installing it first via
+# ohmydebn-herdr-install if it isn't already present - see
+# ohmydebn-tshark/ohmydebn-distrobox for the same on-demand-install shape.
+
+set -euo pipefail
+
+if ! dpkg -s "herdr" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "herdr" /usr/share/ohmydebn/bin/ohmydebn-herdr-install
+fi
+
+if dpkg -s "herdr" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "herdr" "herdr"
+fi

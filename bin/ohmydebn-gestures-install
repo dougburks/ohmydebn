@@ -15,5 +15,10 @@ if ! dpkg -s "touchegg" >/dev/null 2>&1; then
   read -r
 fi
 
-# Install touchegg and dependency
+# Install touchegg and dependency. This runs standalone, on-demand
+# (Ctrl+Alt+G), independent of install.sh/ohmydebn-update's own flow, so
+# it can't rely on some other step having refreshed the apt index
+# recently - `apt update` first, not just before an install triggered as
+# part of that main flow.
+sudo /usr/bin/apt update
 sudo /usr/bin/apt -y install touchegg libpugixml1v5

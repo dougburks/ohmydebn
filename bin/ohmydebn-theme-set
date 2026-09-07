@@ -180,8 +180,31 @@ fi
 
 if [[ "$IS_LIGHT_MODE" == "true" ]]; then
   gsettings set org.x.apps.portal color-scheme "prefer-light"
+  # org.gnome.desktop.interface color-scheme drives the XDG Desktop Portal
+  # Settings backend (xdg-desktop-portal-gtk/-gnome) that sandboxed apps ask
+  # for dark/light instead of reading gsettings directly. Cinnamon never
+  # sets this GNOME schema on its own (it has its own parallel
+  # org.cinnamon.desktop.interface, set below via
+  # ohmydebn-theme-set-cinnamon), so without this a portal-mediated app
+  # stays on whatever "default" (light) was left over. Best-effort: the
+  # schema is virtually always present (gsettings-desktop-schemas is a base
+  # dependency of any GTK desktop) but isn't worth failing the whole theme
+  # switch over if it's somehow missing.
+  #
+  # Confirmed via `gdbus call ... org.freedesktop.portal.Settings.Read
+  # org.freedesktop.appearance color-scheme` that the portal itself reports
+  # the correct value once this is set. Ubuntu's snap-confined chromium
+  # (see install/config/mimetypes.sh) still renders light regardless,
+  # though - its GTK integration under --ozone-platform=x11 doesn't honor
+  # the portal's answer (verified: even pointing gtk-theme at a bundled
+  # dark theme it can actually load, like Yaru-dark, made no difference).
+  # That's a chromium/snap-side bug, not a sign this line is wrong - it's
+  # still correct and needed for every other portal-mediated app (other
+  # snaps, Flatpaks, libadwaita apps).
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-light" || true
 else
   gsettings set org.x.apps.portal color-scheme "prefer-dark"
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
 fi
 
 # Set new background

@@ -29,5 +29,13 @@ if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ] && command -v
   jq '.autoupdate = false' "$OPENCODE_CONFIG" >"${OPENCODE_CONFIG}.tmp" && mv "${OPENCODE_CONFIG}.tmp" "$OPENCODE_CONFIG"
 fi
 
-# Install the package
+# Install the package. This runs standalone, on-demand (via
+# ohmydebn-opencode-run when Super+A's default AI assistant is opencode
+# and it isn't installed yet), independent of install.sh/ohmydebn-update's
+# own flow - a stale apt index here isn't hypothetical, it's a real
+# reported failure ("apt install ohmydebn-opencode-cli" failing until a
+# manual "apt update") on a box where this had gone a while since the last
+# ohmydebn-update. See ohmydebn-gestures-install's own comment for the
+# general reasoning.
+sudo /usr/bin/apt update
 sudo /usr/bin/apt -y install ohmydebn-opencode-cli

@@ -4,3 +4,7 @@ __pycache__/
 # Generated at package-build time by ohmydebn-package-build, not source -
 # see build-package-ohmydebn.sh and bin/ohmydebn-menu-tree's _mt_cached_raw().
 /cache/
+
+# Claude Code's own local runtime state - not source, and not something
+# every contributor's personal git excludes can be assumed to cover.
+.claude/

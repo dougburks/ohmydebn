@@ -18,5 +18,11 @@ if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
+  # This runs standalone, on-demand (via ohmydebn-pi-run when Super+A's
+  # default AI assistant is Pi and it isn't installed yet), independent of
+  # install.sh/ohmydebn-update's own flow - see
+  # ohmydebn-gestures-install's/ohmydebn-opencode-install's own comments
+  # for why that means it needs its own `apt update` first.
+  sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install ohmydebn-pi-coding-agent
 fi

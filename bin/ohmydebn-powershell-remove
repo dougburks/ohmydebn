@@ -13,6 +13,7 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
+  sudo rm -f /etc/apt/preferences.d/powershell.pref
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y purge powershell packages-microsoft-prod
   sudo /usr/bin/apt -y autoremove

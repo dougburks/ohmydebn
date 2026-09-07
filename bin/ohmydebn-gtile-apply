@@ -4,11 +4,9 @@
 # given a grid as 6 positional args (cols rows colIndex rowIndex colSpan
 # rowSpan) - the same values keybinding-custom.txt's own "Tile with
 # gaps N ..." entries pass to that same DBus method. Shared by every
-# OhMyDebn script that launches a window pre-tiled
-# (ohmydebn-terminal-tiled, ohmydebn-launch-tiled, and
-# ohmydebn-logo-gui-tiled via ohmydebn-terminal-tiled's own
-# OHMYDEBN_TILE_GRID override) so the actual gdbus call only has to live
-# in one place.
+# OhMyDebn script that launches a window pre-tiled (ohmydebn-terminal-tiled
+# and ohmydebn-launch-tiled) so the actual gdbus call only has to live in
+# one place.
 #
 # gTile's TileFocusedWindow operates on whatever window currently has
 # focus, not one it's told about directly - has to be activated first.

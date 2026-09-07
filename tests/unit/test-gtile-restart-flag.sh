@@ -74,7 +74,7 @@ EOF
 # scenario that expects none.
 run_script() {
   local output
-  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED= bash -c "
+  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED='' bash -c "
     source '$MOCK_DIR/gtile-restart-patched.sh'
     echo \"GTILE_TEST_FLAG_MARKER:\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
   " 2>/dev/null)

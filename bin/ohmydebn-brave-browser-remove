@@ -16,6 +16,7 @@ else
   if ! dpkg -s "brave-origin" >/dev/null 2>&1; then
     sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
     sudo rm -f /etc/apt/sources.list.d/brave-browser-release.sources
+    sudo rm -f /etc/apt/preferences.d/brave-browser-release.pref
   fi
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y purge brave-browser

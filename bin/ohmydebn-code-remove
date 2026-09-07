@@ -15,6 +15,7 @@ else
   fi
   sudo rm -f /usr/share/keyrings/microsoft.gpg
   sudo rm -f /etc/apt/sources.list.d/vscode.sources
+  sudo rm -f /etc/apt/preferences.d/code.pref
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y purge code
   sudo /usr/bin/apt -y autoremove

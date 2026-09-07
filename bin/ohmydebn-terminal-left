@@ -1,15 +1,34 @@
 #!/bin/bash
 #
-# Opens a plain (untiled) terminal - gTile-OhMyDebn's own window-created
-# auto-tile handler tiles this window itself, matching wmClass
-# "Alacritty" + title "OhMyDebn Terminal" against
-# /usr/share/ohmydebn/config/tile-rules.json. The --title is new here
-# (the old ohmydebn-terminal-left-tiled passed "$@" straight through with
-# no title override) - needed to give this specific terminal a stable
-# identity distinct from any other plain terminal, since it's otherwise
-# indistinguishable by wmClass alone. Doesn't change anything visible -
-# terminal window titles aren't shown anywhere on this desktop's own UI.
+# Opens a plain terminal, pre-tiled to the left half only when gTile's
+# "tiling-mode" setting (System Settings > Extensions > gTile > Configure)
+# is "rules" - matching this script's actual behavior before this change:
+# the fixed "OhMyDebn Terminal" title used to exist purely so
+# config/tile-rules.json's window-created handler could match it
+# declaratively, and that handler only ever fires in "rules" mode anyway -
+# "off" never tiled this window at all, just less deliberately than the
+# explicit check below.
+#
+# No hardcoded title in either branch: alacritty's title is left to
+# behave normally (cwd/host/running program), so multiple instances are
+# distinguishable in the taskbar (window-list@cinnamon.org, enabled by
+# default - despite what this file used to claim about titles not being
+# shown anywhere) instead of every one reading "OhMyDebn Terminal". In
+# "rules" mode, ohmydebn-terminal-tiled tiles this by tracking the
+# launched alacritty's own PID, not its title, so there's no need for a
+# stable title to match against tile-rules.json at all - see that entry's
+# removal there.
+#
+# Deliberately not folded into ohmydebn-terminal-tiled itself: that
+# script's other caller (ohmydebn-demo-gui) is a fixed showcase window
+# that should keep always tiling, not gated on a setting.
 
 set -euo pipefail
 
-exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OhMyDebn Terminal' "$@"
+TILING_MODE=$(/usr/share/ohmydebn/bin/ohmydebn-gtile-tiling-mode)
+
+if [ "$TILING_MODE" = "rules" ]; then
+  OHMYDEBN_TILE_GRID="2 2 0 0 1 2" exec /usr/share/ohmydebn/bin/ohmydebn-terminal-tiled "$@"
+else
+  exec /usr/share/ohmydebn/bin/ohmydebn-terminal "$@"
+fi

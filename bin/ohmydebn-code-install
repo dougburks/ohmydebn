@@ -23,4 +23,24 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1
   fi
+
+  # VS Code's own postinst self-registers packages.microsoft.com/repos/code
+  # as an apt source (see /etc/apt/sources.list.d/vscode.sources) - unlike
+  # claude-code/brave/etc., ohmydebn never creates that source file
+  # itself, so it never had a natural place to also restrict it. A bare
+  # signed-by trusts the repo's key to sign anything, so without this a
+  # compromised or malicious upstream could ship a package under some
+  # other name and have apt prefer it on some later, completely unrelated
+  # `apt install`/upgrade. Confirmed via `apt-cache depends code` - no
+  # same-repo dependency like Brave's brave-keyring, just ordinary system
+  # libraries.
+  #
+  # packages.microsoft.com is also PowerShell's own repo origin (see
+  # ohmydebn-powershell-install) - a separate Package: powershell stanza
+  # there restricts it the same way, and apt resolves pins per-package (a
+  # specific Package: match always outranks a wildcard Package: * one,
+  # regardless of which .pref file either came from), so the two coexist
+  # fine on a machine with both installed.
+  printf 'Package: *\nPin: origin "packages.microsoft.com"\nPin-Priority: -1\n\nPackage: code\nPin: origin "packages.microsoft.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/code.pref >/dev/null
 fi

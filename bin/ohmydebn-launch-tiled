@@ -49,6 +49,34 @@ fi
 GRID=("$1" "$2" "$3" "$4" "$5" "$6")
 shift 7
 
+# gTile-OhMyDebn's "tiling-mode" setting (System Settings > Extensions >
+# gTile > Configure) promises "Off: nothing is tiled automatically - only
+# the manual 'Tile with gaps N' hotkeys apply" - a promise this script
+# used to ignore outright, always tiling regardless of that setting
+# (unlike tile-rules.json's own window-created handler, which already only
+# fires in "rules" mode). Reading the live value here restores that
+# promise for every caller of this script. Doesn't apply the same gate to
+# "traditional"/"traditional-full" either: those modes have gTile's own
+# separate binary-tree auto-placement running instead, which this
+# script's own forced grid would just fight with. Only in "rules" mode
+# does forcing this specific grid make sense - the whole reason this
+# script exists is for windows tile-rules.json's own title/wmClass
+# matching can't reliably catch (a raised, already-open single-instance
+# window never fires window-created at all, and an app-mode browser
+# window's title changes with whatever page is loaded) - so it's really a
+# manually-applied "rule" for cases the declarative one can't handle,
+# not a competing system.
+#
+TILING_MODE=$(/usr/share/ohmydebn/bin/ohmydebn-gtile-tiling-mode)
+if [ "$TILING_MODE" != "rules" ]; then
+  # Backgrounded and returns immediately, same as the tiling path below -
+  # callers rely on this script never blocking on the launched app's own
+  # lifetime (e.g. waiting here for a browser to be closed entirely would
+  # be very wrong for a hotkey/menu action).
+  "$@" &
+  exit 0
+fi
+
 PREV_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
 EXCLUDE_WIN="${OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN:-}"
 

@@ -63,7 +63,7 @@ EOF
 # straight through and look like a false-positive restart flag on every
 # scenario that expects none.
 run_script() {
-  RESTART_FLAG=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED= bash -c "
+  RESTART_FLAG=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED='' bash -c "
     source '$MOCK_DIR/keybinding-patched.sh' >/dev/null 2>&1
     echo \"\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
   ")

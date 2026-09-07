@@ -10,7 +10,7 @@ keybinding-custom 8 "X" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://
 keybinding-custom 9 "Alacritty" "/usr/share/ohmydebn/bin/ohmydebn-terminal-left" "['<Super>Return']" "Press Super + Enter for terminal (alacritty)"
 keybinding-custom 10 "Aether theme builder" "/usr/share/ohmydebn/bin/ohmydebn-aether" "['<Ctrl><Shift>A']" "Press Ctrl + Shift + A for Aether theme builder"
 keybinding-custom 11 "KeePassXC" "/usr/share/ohmydebn/bin/ohmydebn-keepass" "['<Ctrl><Shift>K']" "Press Ctrl + Shift + K for KeePassXC password manager"
-keybinding-custom 12 "OhMyDebn Logo" "/usr/share/ohmydebn/bin/ohmydebn-logo-gui-tiled" "['<Ctrl><Shift>O']" "Press Ctrl + Shift + O to show OhMyDebn logo"
+keybinding-custom 12 "OhMyDebn Logo" "/usr/share/ohmydebn/bin/ohmydebn-logo-gui" "['<Ctrl><Shift>O']" "Press Ctrl + Shift + O to show OhMyDebn logo"
 keybinding-custom 13 "fastfetch" "/usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui" "['<Ctrl><Shift>S']" "Press Ctrl + Shift + S to show fastfetch system summary"
 keybinding-custom 14 "Theme selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-carousel" "['<Ctrl><Super>T']" "Press Ctrl + Super + T to browse and change theme"
 keybinding-custom 15 "Background selector" "/usr/share/ohmydebn/bin/ohmydebn-theme-carousel" "['<Ctrl><Super>B']" "Press Ctrl + Super + B to browse and change theme or background (same as Ctrl + Super + T)"

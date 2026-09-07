@@ -16,6 +16,18 @@ if ! dpkg -s "powershell" >/dev/null 2>&1; then
   curl -fsSL -o "$TMPDIR/packages-microsoft-prod.deb" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
   sudo /usr/bin/dpkg -i "$TMPDIR/packages-microsoft-prod.deb"
   rm -rf "$TMPDIR"
+
+  # packages-microsoft-prod.deb self-registers packages.microsoft.com as
+  # an apt source (see /etc/apt/sources.list.d/microsoft-prod.list) - same
+  # reasoning/pattern as ohmydebn-code-install's own pin (that script
+  # shares this exact origin, since VS Code's repo also lives under
+  # packages.microsoft.com - see that file's own comment on why a shared
+  # origin across separate pin files is still safe). Confirmed via
+  # `apt-cache depends powershell` - no same-repo dependency, just
+  # ordinary system libraries.
+  printf 'Package: *\nPin: origin "packages.microsoft.com"\nPin-Priority: -1\n\nPackage: powershell\nPin: origin "packages.microsoft.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/powershell.pref >/dev/null
+
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install powershell
 fi

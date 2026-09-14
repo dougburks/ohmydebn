@@ -33,6 +33,24 @@ PACKAGES=(
   gvfs-backends
   libnotify-bin
 
+  # ohmydebn-menu's Setup > Bluetooth/Printers targets. Only Recommends
+  # of cinnamon-desktop-environment, and the batched install above runs
+  # with --no-install-recommends (see ohmydebn-pkg-install-optional) - so
+  # without naming them here, any install not seeded from the Debian
+  # Cinnamon ISO never got them and both menu entries were silent
+  # no-ops. Found in review. (Neither has a cinnamon-settings module to
+  # fall back to - Debian's Cinnamon ships no cs_bluetooth/cs_printers.)
+  blueman
+  system-config-printer
+
+  # VTE terminal-widget introspection data, for the terminal embedded in
+  # ohmydebn-update-gui's window (python3-gi + GTK3's own gir both ride
+  # in with cinnamon-desktop-environment already; this one doesn't).
+  # ohmydebn-update-gui falls back to the old alacritty flow whenever
+  # this isn't installed yet - i.e. exactly once, on the update that
+  # first brings it in.
+  gir1.2-vte-2.91
+
   # Dev toolchain
   gcc
   pkg-config

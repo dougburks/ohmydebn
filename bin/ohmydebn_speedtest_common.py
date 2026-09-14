@@ -24,6 +24,10 @@ from gi.repository import GLib, Gtk
 import cairo
 import math
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from ohmydebn_theme_colors import css_rgba, load_theme_colors  # noqa: E402
 
 # Full-scale latch points for the dials, smallest first - same stops
 # Omarchy's own overlay uses. The first stop is the base scale a fresh
@@ -31,55 +35,35 @@ import os
 # next stop up, so the needle/arc never quite pins at full deflection.
 SCALE_STOPS = [100, 250, 500, 1000, 2500, 5000, 10000]
 
-# Fixed, not theme-derived - Omarchy's own overlay makes the same choice
-# for its scrim and text ("onScrim"/"onScrimDim" in its own QML: a fixed
-# near-black background needs a fixed light palette on top of it, not
-# whatever a theme's foreground color happens to be, or legibility would
-# depend on luck). Its dial accent (the value arc, glow, and needle) is
-# the one color that IS theme-derived there, via its own Color.accent -
-# COLOR_ACCENT below matches that, not this fixed set.
-COLOR_BG = (0.04, 0.04, 0.05)
-COLOR_TRACK = (1, 1, 1, 0.14)
-COLOR_TICK_MINOR = (1, 1, 1, 0.12)
-COLOR_TICK_MAJOR = (1, 1, 1, 0.3)
-COLOR_TEXT = (1, 1, 1, 1)
-COLOR_TEXT_DIM = (1, 1, 1, 0.55)
+# Themed via the shared picker-colors palette (see
+# ohmydebn_theme_colors.py) - the same four keys ohmydebn-menu-picker and
+# ohmydebn-update-gui dress themselves in, read once at startup for the
+# same one-short-window-lifetime reason as ever. This used to be a fixed
+# near-black "onScrim" set copied from Omarchy's own overlay, on the
+# argument that an arbitrary theme foreground couldn't be trusted for
+# legibility against a fixed scrim - but with the background AND
+# foreground both coming from the same palette (a pair every theme
+# designs for contrast, since the whole picker UI depends on it), that
+# worry no longer applies, and ohmydebn-update-gui proved the fully
+# themed look. The dial accent (value arc, glow, needle) was
+# theme-derived (bg3) all along, matching Omarchy's own Color.accent; the
+# fixed alpha ramps on the foreground below preserve the original
+# overlay's tick/text hierarchy exactly. COLOR_ERROR stays fixed -
+# semantic, not decorative.
+_PALETTE = load_theme_colors()
+_FG = _PALETTE["fg0"][:3]
+COLOR_TRACK = (*_FG, 0.14)
+COLOR_TICK_MINOR = (*_FG, 0.12)
+COLOR_TICK_MAJOR = (*_FG, 0.3)
+COLOR_TEXT = (*_FG, 1)
+COLOR_TEXT_DIM = (*_FG, 0.55)
 COLOR_ERROR = (1, 0.42, 0.42, 1)
+COLOR_ACCENT = _PALETTE["bg3"][:3]
 
-
-def load_accent_color():
-    """The dial's value arc/glow/needle color - matches ohmydebn-menu-picker's
-    own "bg3" theme color (every ohmydebn theme's accent/border tone,
-    rewritten fresh on every theme change by ohmydebn-theme-set-picker),
-    the same way Omarchy's own overlay pulls its dial accent from its
-    Color.accent singleton rather than hardcoding one. Read once at
-    startup, not re-read live - either speed test window's lifetime (one
-    run) is far shorter than a theme change could plausibly land in the
-    middle of. Falls back to a fixed blue if the theme file is missing or
-    unreadable, matching ohmydebn-menu-picker's own DEFAULT_COLORS
-    fallback for the same "bg3" key."""
-    default = (0.40, 0.69, 1.0)
-    path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
-    try:
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key != "bg3" or not value:
-                    continue
-                hex_value = value.lstrip("#")
-                if len(hex_value) < 6:
-                    continue
-                return (
-                    int(hex_value[0:2], 16) / 255,
-                    int(hex_value[2:4], 16) / 255,
-                    int(hex_value[4:6], 16) / 255,
-                )
-    except OSError:
-        pass
-    return default
-
-
-COLOR_ACCENT = load_accent_color()
+# The dial's Cairo-drawn text (readout, unit, direction label) - the
+# same face the window CSS below and every other themed OhMyDebn GUI
+# uses; cairo's toy font API resolves it through fontconfig.
+FONT_FAMILY = "CaskaydiaMono Nerd Font"
 
 DIAL_START_DEG = 135
 DIAL_SWEEP_DEG = 270
@@ -220,14 +204,14 @@ class SpeedDial(Gtk.DrawingArea):
         # Center digital readout.
         opacity = 1.0 if (self.live or self.value > 0) else 0.5
         reading_text = format_reading(self.shown)
-        cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.select_font_face(FONT_FAMILY, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         cr.set_font_size(diameter * 0.16)
         extents = cr.text_extents(reading_text)
         cr.set_source_rgba(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2], opacity)
         cr.move_to(cx - extents.width / 2 - extents.x_bearing, cy - 4)
         cr.show_text(reading_text)
 
-        cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.select_font_face(FONT_FAMILY, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
         cr.set_font_size(diameter * 0.06)
         extents = cr.text_extents(self.unit)
         cr.set_source_rgba(COLOR_TEXT_DIM[0], COLOR_TEXT_DIM[1], COLOR_TEXT_DIM[2], opacity)
@@ -235,7 +219,7 @@ class SpeedDial(Gtk.DrawingArea):
         cr.show_text(self.unit)
 
         # Direction label, in the gap at the bottom of the scale.
-        cr.select_font_face("sans-serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.select_font_face(FONT_FAMILY, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         cr.set_font_size(diameter * 0.055)
         extents = cr.text_extents(self.label)
         cr.set_source_rgba(*COLOR_TEXT_DIM)
@@ -245,19 +229,20 @@ class SpeedDial(Gtk.DrawingArea):
         return False
 
 
-def apply_dark_scrim_css():
-    """Shared CSS for either speed test's window: near-black background,
-    dim-white labels, a dimmer bold uppercase title - the same fixed
-    "onScrim" palette Omarchy's own overlay uses (see COLOR_BG's own
-    comment for why fixed, not theme-derived, is the deliberate choice
-    here)."""
+def apply_theme_css():
+    """Shared CSS for either speed test's window: the current theme's
+    scrim behind the dials, its foreground for labels (dimmed for the
+    bold uppercase title), and the same CaskaydiaMono face at 12pt every
+    other themed OhMyDebn GUI uses - see the palette comment above for
+    the themed-vs-fixed history (this used to be apply_dark_scrim_css,
+    hardcoding Omarchy's near-black onScrim palette)."""
     from gi.repository import Gdk  # deferred: only this function needs Gdk.Screen
 
-    bg = ", ".join(str(round(c * 255)) for c in COLOR_BG)
     css = f"""
-    window {{ background-color: rgb({bg}); }}
-    label {{ color: rgba(255, 255, 255, 0.85); }}
-    .speedtest-title {{ font-weight: bold; letter-spacing: 2px; color: rgba(255, 255, 255, 0.55); }}
+    window {{ background-color: {css_rgba(_PALETTE["bg0"])}; }}
+    label {{ color: {css_rgba(_PALETTE["fg0"], 0.85)}; }}
+    .speedtest-title {{ font-weight: bold; letter-spacing: 2px; color: {css_rgba(_PALETTE["fg0"], 0.55)}; }}
+    * {{ font-family: "{FONT_FAMILY}"; font-size: 12pt; }}
     """.encode("utf-8")
     provider = Gtk.CssProvider()
     provider.load_from_data(css)
@@ -268,7 +253,7 @@ def apply_dark_scrim_css():
 
 def error_markup(message):
     """Wraps a status message in the shared urgent-red span color, for
-    Gtk.Label.set_markup() - the one color in this palette that isn't
-    plain white/dim-white, matching Omarchy's own onScrimUrgent."""
+    Gtk.Label.set_markup() - the one fixed, theme-independent color left
+    in this module's palette, matching Omarchy's own onScrimUrgent."""
     color = "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in COLOR_ERROR[:3]))
     return f'<span foreground="{color}">{GLib.markup_escape_text(message)}</span>'

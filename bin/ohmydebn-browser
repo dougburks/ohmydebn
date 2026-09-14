@@ -8,19 +8,164 @@
 # keybinding silently did nothing.
 #
 # xdg-open needs a URL/file argument to do anything useful, so it can't be
-# used bare here. gtk-launch instead takes a .desktop file id and launches
-# it correctly with no argument required, so: ask xdg-settings which
-# browser is the desktop-wide default, then hand its .desktop id to
-# gtk-launch. Falls back to x-www-browser (the Debian alternatives entry
-# point) or sensible-browser if xdg-settings/gtk-launch come back empty,
-# unavailable, or fail to launch.
+# used bare here. This used to hand the default browser's .desktop id to
+# gtk-launch instead, but gtk-launch goes through GIO/D-Bus activation, so
+# the browser process ends up spawned by the session bus rather than by
+# this script - detached from the process tree the keybinding started,
+# which threw off OhMyDebn's automatic tiling (ohmydebn-launch-tiled's
+# focus tracking and tile-rules matching both assume the launch is
+# attributable to the launcher). So instead: ask xdg-settings which
+# browser is the desktop-wide default, resolve its .desktop file across
+# the XDG data dirs ourselves, parse the Exec= line, and exec the binary
+# directly with no activation layer in between. Falls back to
+# x-www-browser (the Debian alternatives entry point) or sensible-browser
+# if any step of that comes back empty or unresolvable.
 
 set -uo pipefail
 
-if command -v xdg-settings >/dev/null 2>&1 && command -v gtk-launch >/dev/null 2>&1; then
+# A failed `exec` must fall through to the x-www-browser/sensible-browser
+# chain below instead of terminating the script (bash's default for a
+# non-interactive shell) - without this, an Exec binary that resolves via
+# command -v but can't actually run (wrong architecture, missing dynamic
+# loader) made Super+B silently do nothing, the exact failure mode this
+# script exists to prevent. Found in review.
+shopt -s execfail
+
+# Tokenizes an Exec= value into the global raw=() array using the XDG
+# spec's quoting rules (double quotes with backslash escapes; single
+# quotes too, matching GIO's g_shell_parse_argv, which some real .desktop
+# files rely on) WITHOUT any shell evaluation. This replaces an
+# eval-based split that let a crafted Exec= line run $(...) command
+# substitutions at parse time and choked outright on the unquoted '&' in
+# webapp-style URLs - here '$(...)', '$VAR', and '&' are all just
+# literal argument text, exactly as gtk-launch treated them. Returns 1
+# on malformed quoting (unterminated quote); the caller treats that as
+# "no Exec" and falls back.
+parse_exec_line() {
+  local line=$1 c token="" in_token=0 i=0 len=${1:+${#1}}
+  raw=()
+  while ((i < len)); do
+    c=${line:i:1}
+    case "$c" in
+    ' ' | $'\t')
+      if ((in_token)); then
+        raw+=("$token")
+        token=""
+        in_token=0
+      fi
+      ((i++)) || true
+      ;;
+    '"')
+      in_token=1
+      ((i++)) || true
+      while ((i < len)) && [[ ${line:i:1} != '"' ]]; do
+        if [[ ${line:i:1} == '\' ]] && ((i + 1 < len)); then
+          token+=${line:i+1:1}
+          ((i += 2)) || true
+        else
+          token+=${line:i:1}
+          ((i++)) || true
+        fi
+      done
+      ((i >= len)) && return 1 # unterminated double quote
+      ((i++)) || true          # past the closing quote
+      ;;
+    "'")
+      in_token=1
+      ((i++)) || true
+      while ((i < len)) && [[ ${line:i:1} != "'" ]]; do
+        token+=${line:i:1}
+        ((i++)) || true
+      done
+      ((i >= len)) && return 1 # unterminated single quote
+      ((i++)) || true
+      ;;
+    '\')
+      in_token=1
+      if ((i + 1 < len)); then
+        token+=${line:i+1:1}
+      fi
+      ((i += 2)) || true
+      ;;
+    *)
+      in_token=1
+      token+=$c
+      ((i++)) || true
+      ;;
+    esac
+  done
+  ((in_token)) && raw+=("$token")
+  return 0
+}
+
+# Resolve a .desktop id to its file, user dir first so overrides in
+# ~/.local/share/applications win - the same precedence gtk-launch used.
+# XDG_DATA_DIRS is honored so flatpak's exports dirs are searched too on
+# systems that add them.
+find_desktop_file() {
+  local id=$1 dir
+  local -a dirs
+  IFS=: read -r -a dirs <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+  for dir in "${dirs[@]}"; do
+    if [[ -n "$dir" && -f "$dir/applications/$id" ]]; then
+      echo "$dir/applications/$id"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if command -v xdg-settings >/dev/null 2>&1; then
   browser_desktop_id=$(xdg-settings get default-web-browser 2>/dev/null)
-  if [[ -n "$browser_desktop_id" ]] && gtk-launch "$browser_desktop_id" >/dev/null 2>&1; then
-    exit 0
+  if [[ -n "$browser_desktop_id" ]] && desktop_file=$(find_desktop_file "$browser_desktop_id"); then
+    # First Exec= line inside the [Desktop Entry] group only, so an
+    # Exec= belonging to a [Desktop Action ...] group (new-private-window
+    # and the like) can never be picked up instead of the main one.
+    # Parsed in pure bash - no awk/sed - so the only external command this
+    # path ever runs is the browser itself.
+    # `|| [[ -n "$line" ]]` keeps a final line that lacks a trailing
+    # newline (read returns nonzero but still fills $line), and the %$'\r'
+    # trim tolerates CRLF-terminated files - without either, the Exec=
+    # line was silently lost and Super+B fell back to x-www-browser
+    # despite a perfectly good default. Both found in review; gtk-launch
+    # handled both.
+    exec_line=""
+    in_entry=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line=${line%$'\r'}
+      case "$line" in
+        "[Desktop Entry]") in_entry=1 ;;
+        "["*) in_entry=0 ;;
+        Exec=*)
+          if [[ $in_entry -eq 1 ]]; then
+            exec_line=${line#Exec=}
+            break
+          fi
+          ;;
+      esac
+    done <"$desktop_file"
+    declare -a raw=() cmd=()
+    parse_exec_line "$exec_line" || raw=()
+    # We launch with no URL, so drop the spec's field-code tokens
+    # (%u/%U/%f/... would otherwise be passed literally) and flatpak's
+    # @@/@@u file-forwarding markers, which only bracket those codes.
+    # Within kept tokens, %% is the spec's escape for a literal '%', and
+    # any other embedded code (--homepage=%u) expands to nothing - the
+    # same result GIO's expansion produces with no URL to substitute,
+    # and the same %% handling ohmydebn-menu-picker's own
+    # _strip_exec_field_codes applies.
+    for arg in "${raw[@]}"; do
+      case "$arg" in
+        %[fFuUdDnNickvm] | @@ | @@u) continue ;;
+      esac
+      arg=${arg//'%%'/$'\x01'}
+      arg=${arg//%[fFuUdDnNickvm]/}
+      arg=${arg//$'\x01'/%}
+      cmd+=("$arg")
+    done
+    if [[ ${#cmd[@]} -gt 0 ]] && command -v "${cmd[0]}" >/dev/null 2>&1; then
+      exec "${cmd[@]}"
+    fi
   fi
 fi
 

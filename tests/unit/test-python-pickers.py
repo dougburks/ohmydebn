@@ -441,6 +441,111 @@ try:
         (cover.get_width(), cover.get_height()), (200, 150),
     )
 
+    # _cache_path/load_cover_pixbuf_cached: the on-disk persistence layer
+    # over load_cover_pixbuf, keyed by source path + mtime + size +
+    # CACHE_FORMAT_VERSION (see both functions' own docstrings). Isolated
+    # to a fixture subdir, same as every other CAROUSEL_CACHE_DIR-touching
+    # test below - never the real ~/.cache/ohmydebn/theme-carousel.
+    tc.CAROUSEL_CACHE_DIR = os.path.join(fixture, "carousel-cache")
+
+    check(
+        "_cache_path: None when the source file doesn't exist (no crash on a vanished symlink target)",
+        tc._cache_path(os.path.join(fixture, "does-not-exist.png"), 200, 150) is None,
+    )
+    check_eq(
+        "_cache_path: deterministic for identical (path, mtime, size)",
+        tc._cache_path(wide_src, 200, 150), tc._cache_path(wide_src, 200, 150),
+    )
+    check(
+        "_cache_path: different target size -> different cache key",
+        tc._cache_path(wide_src, 200, 150) != tc._cache_path(wide_src, 100, 75),
+    )
+
+    before_touch = tc._cache_path(wide_src, 200, 150)
+    # A real mtime bump (not the source content itself, doesn't matter which)
+    # - simulates a theme update replacing the file at this same path.
+    new_mtime_ns = os.stat(wide_src).st_mtime_ns + 1_000_000_000
+    os.utime(wide_src, ns=(new_mtime_ns, new_mtime_ns))
+    check(
+        "_cache_path: source mtime change -> different cache key (old entry silently orphaned, not served stale)",
+        tc._cache_path(wide_src, 200, 150) != before_touch,
+    )
+
+    check(
+        "load_cover_pixbuf_cached: cold call still returns a correctly-sized pixbuf",
+        (lambda p: (p.get_width(), p.get_height()))(tc.load_cover_pixbuf_cached(wide_src, 200, 150)) == (200, 150),
+    )
+    cache_file = tc._cache_path(wide_src, 200, 150)
+    check(
+        "load_cover_pixbuf_cached: cold call writes a real JPEG to CAROUSEL_CACHE_DIR",
+        cache_file is not None and os.path.isfile(cache_file),
+    )
+
+    # Proof the second call actually reads the cache rather than re-decoding
+    # - not just "same result", which a correct re-decode would also give -
+    # by poisoning load_cover_pixbuf itself so any call to it fails loudly.
+    # wide_src is deliberately left untouched: _cache_path needs a real
+    # os.stat() on the source to even compute the key (see its own
+    # docstring on why a vanished source just means "skip caching, not a
+    # cache hit"), so proving the warm path is really cache-only has to
+    # poison the decoder, not remove the source.
+    original_load_cover_pixbuf = tc.load_cover_pixbuf
+
+    def _poisoned_load_cover_pixbuf(*_a, **_kw):
+        raise AssertionError("load_cover_pixbuf_cached should not have re-decoded on a warm hit")
+
+    tc.load_cover_pixbuf = _poisoned_load_cover_pixbuf
+    try:
+        warm = tc.load_cover_pixbuf_cached(wide_src, 200, 150)
+        check_eq(
+            "load_cover_pixbuf_cached: warm call never touches load_cover_pixbuf (real cache hit, not a re-decode)",
+            (warm.get_width(), warm.get_height()), (200, 150),
+        )
+    finally:
+        tc.load_cover_pixbuf = original_load_cover_pixbuf
+
+    # A corrupt/truncated cache file (crash mid-write in a previous run,
+    # disk corruption, ...) must fall through to a fresh decode rather than
+    # propagate GdkPixbuf's decode error up to the caller - source is still
+    # present here, so the fallback path has a real image to re-derive from.
+    with open(cache_file, "wb") as f:
+        f.write(b"not a real jpeg")
+    recovered = tc.load_cover_pixbuf_cached(wide_src, 200, 150)
+    check_eq(
+        "load_cover_pixbuf_cached: a corrupt cache file falls through to a fresh decode instead of raising",
+        (recovered.get_width(), recovered.get_height()), (200, 150),
+    )
+    check(
+        "load_cover_pixbuf_cached: falling through after a corrupt cache file re-writes a valid one",
+        os.path.getsize(cache_file) > 100,  # the garbage write above was 16 bytes
+    )
+
+    # A failed cache write must not strand its mkstemp temp file: a full
+    # disk makes savev() raise for every wallpaper on every launch, and
+    # before this guard each attempt orphaned another .jpg temp file in
+    # CAROUSEL_CACHE_DIR with no eviction - compounding exactly when the
+    # likely cause (a full disk) means the space matters most. Found in
+    # review. savev is poisoned via a stub pixbuf, the same poisoning
+    # technique as the warm-hit proof above.
+    class _UnsavablePixbuf:
+        def savev(self, *_a, **_kw):
+            raise tc.GLib.Error("simulated full disk")
+
+    files_before = set(os.listdir(tc.CAROUSEL_CACHE_DIR))
+    tc.load_cover_pixbuf = lambda *_a, **_kw: _UnsavablePixbuf()
+    try:
+        result = tc.load_cover_pixbuf_cached(wide_src, 64, 48)  # fresh size -> cold cache key
+        check(
+            "load_cover_pixbuf_cached: a failed cache write still returns the decoded pixbuf",
+            isinstance(result, _UnsavablePixbuf),
+        )
+    finally:
+        tc.load_cover_pixbuf = original_load_cover_pixbuf
+    check_eq(
+        "load_cover_pixbuf_cached: a failed cache write leaves no orphaned temp files",
+        set(os.listdir(tc.CAROUSEL_CACHE_DIR)), files_before,
+    )
+
     check_eq("_hex_to_rgb: basic conversion", tc._hex_to_rgb("#e68e0d"), (230, 142, 13))
     check(
         "_relative_luminance: white is brighter than black",

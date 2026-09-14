@@ -62,9 +62,11 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
+import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import tomllib
 import warnings
@@ -74,6 +76,22 @@ USER_THEMES_DIR = os.path.expanduser("~/.config/ohmydebn/themes")
 SYSTEM_THEMES_DIR = "/usr/share/ohmydebn-themes"
 CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
 CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/background")
+
+# Persists load_cover_pixbuf's decoded-and-cropped output across separate
+# carousel launches (each Ctrl+Super+T is a fresh process - the in-memory
+# _pixbuf_cache below never survives one), the same ~/.cache/ohmydebn/
+# convention and mtime-keyed-hash/atomic-write pattern
+# ohmydebn-menu-picker's ICON_CACHE_DIR/decode_icon_pixbuf already use for
+# app icons. JPEG here, not that precedent's PNG - measured by hand against
+# this repo's real wallpapers: PNG averaged ~4.5MB per source image across
+# the 6 sizes actually used below, JPEG at quality 90 ~0.84MB, with no
+# visible quality loss on photographic wallpaper content (most of this
+# repo's original theme backgrounds are already JPEG). CACHE_FORMAT_VERSION
+# is folded into the key so a future change to load_cover_pixbuf's own
+# crop/scale math invalidates every existing entry on upgrade - the source
+# file's own mtime can't catch that, since the source itself didn't change.
+CAROUSEL_CACHE_DIR = os.path.expanduser("~/.cache/ohmydebn/theme-carousel")
+CACHE_FORMAT_VERSION = 1
 
 CARD_W, CARD_H = 900, 506
 SIDE_W, SIDE_H = 340, 191
@@ -420,6 +438,81 @@ def load_cover_pixbuf(path, target_w, target_h):
     return scaled.new_subpixbuf(x, y, min(target_w, new_w), min(target_h, new_h))
 
 
+def _cache_path(path, target_w, target_h):
+    """Cache key is a hash of the source file's own path, its current
+    mtime, the requested size, and CACHE_FORMAT_VERSION - not just the
+    path - so a theme update that replaces the file at that same path (or a
+    future change to load_cover_pixbuf's own crop/scale math) naturally
+    misses the cache and re-decodes, with no separate invalidation logic
+    needed: the old entry is simply never looked up again, just an orphaned
+    file under CAROUSEL_CACHE_DIR from then on - same tradeoff
+    ohmydebn-menu-picker's own icon cache already makes (no eviction there
+    either), acceptable here too since even every theme/background/size
+    combination this repo ships ever getting cached at once tops out
+    around 40-90MB of JPEGs, measured by hand.  Returns None (skip caching
+    entirely for this call) rather than raising when the source file
+    vanishes out from under a caller mid-decode - orphaned symlinks in a
+    user's backgrounds/ override dir aren't this function's problem to
+    solve, just something it shouldn't crash on."""
+    try:
+        mtime = os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+    key = hashlib.sha1(f"{path}:{mtime}:{target_w}:{target_h}:{CACHE_FORMAT_VERSION}".encode("utf-8")).hexdigest()
+    return os.path.join(CAROUSEL_CACHE_DIR, f"{key}.jpg")
+
+
+def load_cover_pixbuf_cached(path, target_w, target_h):
+    """load_cover_pixbuf(), but persisted to CAROUSEL_CACHE_DIR across
+    separate carousel launches - see the module-level comment above
+    CAROUSEL_CACHE_DIR for why (and why JPEG, not the icon cache's PNG).
+    A cache hit is just decoding an already-the-right-size JPEG instead of
+    cropping a full-resolution wallpaper - the same near-instant-vs-
+    100-400ms difference load_cover_pixbuf's own docstring measures for a
+    warm in-memory _pixbuf_cache entry, except now surviving process exit.
+
+    The write is best-effort and never allowed to block the caller on
+    failure (a full /home, a read-only ~/.cache, a decode succeeding but
+    savev() failing) - every caller here already needs today's real,
+    in-memory pixbuf back regardless of whether tomorrow's launch gets to
+    reuse it, so a cache-write failure degrades silently back to exactly
+    today's behavior (re-decode every launch) rather than raising.
+    mkstemp (not a fixed tmp name) because two threads racing to warm the
+    identical cache key - a synchronous render() and a prefetch thread both
+    reaching for the same neighbor, say - need genuinely distinct temp
+    files, not just distinct per-process ones; the loser's os.replace()
+    just overwrites with byte-identical content."""
+    cache_path = _cache_path(path, target_w, target_h)
+    if cache_path and os.path.exists(cache_path):
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file(cache_path)
+        except GLib.Error:
+            pass  # cache file corrupt/unreadable - fall through and re-decode/re-cache below
+    pixbuf = load_cover_pixbuf(path, target_w, target_h)
+    if cache_path:
+        try:
+            os.makedirs(CAROUSEL_CACHE_DIR, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=CAROUSEL_CACHE_DIR, suffix=".jpg")
+            os.close(fd)
+        except OSError:
+            return pixbuf  # can't even create the temp file - nothing to clean up
+        try:
+            pixbuf.savev(tmp, "jpeg", ["quality"], ["90"])
+            os.replace(tmp, cache_path)
+        except (GLib.Error, OSError):
+            # A failed savev()/replace() must not strand the mkstemp
+            # file: the key never gets a valid cache entry, so every
+            # later launch would orphan another temp file per wallpaper
+            # per size with no eviction - compounding exactly when the
+            # likely cause (a full disk) means the space matters most.
+            # Found in review.
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return pixbuf
+
+
 CSS = """
 #carousel-caption {
     /* Fully opaque, not translucent - a partial scrim (0.55 here,
@@ -735,8 +828,16 @@ class Carousel(Gtk.Window):
         # on-screen target ends up being (GdkPixbuf always decodes to native
         # resolution first). A cache hit, by contrast, costs nanoseconds.
         # Scoped to this process's lifetime (one carousel session) rather
-        # than time- or size-bounded - simplest thing that works, and this
-        # window is only ever open for seconds at a time.
+        # than time- or size-bounded - simplest thing that works for what
+        # this dict is actually for: letting a single session's own
+        # back-and-forth browsing (revisiting a theme you already passed)
+        # skip a redundant decode. It intentionally does NOT need to solve
+        # the separate problem of a *later, brand-new* launch starting
+        # cold - that's what CAROUSEL_CACHE_DIR/load_cover_pixbuf_cached
+        # solve instead, one layer down (see its own comment): a real file
+        # on disk that outlives this process, so even the very first
+        # decode of a session can come back near-instant once some earlier
+        # session already warmed it.
         self._pixbuf_cache = {}
         # Lets render() skip re-decoding widgets that provably didn't
         # change - e.g. Up/Down (background-only) navigation never touches
@@ -1279,7 +1380,7 @@ class Carousel(Gtk.Window):
     def _cover_pixbuf(self, path, w, h):
         key = ("cover", path, w, h)
         if key not in self._pixbuf_cache:
-            self._pixbuf_cache[key] = self._decode_pixbuf(load_cover_pixbuf, path, w, h)
+            self._pixbuf_cache[key] = self._decode_pixbuf(load_cover_pixbuf_cached, path, w, h)
         return self._pixbuf_cache[key]
 
     def _set_ring_image(self, image, target_slug, w, h, want_index, synchronous):
@@ -1316,7 +1417,19 @@ class Carousel(Gtk.Window):
         image.clear()
 
         def work():
-            pixbuf = self._decode_pixbuf(load_cover_pixbuf, path, w, h)
+            # Mirrors _schedule_prefetch's own generation check (self.index
+            # is a plain int attribute; reading it from off the main thread
+            # is the same safe, already-established pattern that function
+            # uses for self._prefetch_gen) - under rapid key-repeat, several
+            # of these threads can be in flight at once for rings that have
+            # already scrolled past by the time the OS actually schedules
+            # them. Bailing before paying for a decode whose result apply()
+            # would just discard anyway (via this same want_index check)
+            # saves real CPU exactly when there's the most decode work
+            # already competing for it.
+            if self.index != want_index:
+                return
+            pixbuf = self._decode_pixbuf(load_cover_pixbuf_cached, path, w, h)
 
             def apply():
                 self._pixbuf_cache[key] = pixbuf
@@ -1596,7 +1709,7 @@ class Carousel(Gtk.Window):
                 if key in self._pixbuf_cache:
                     continue
                 try:
-                    pixbuf = load_cover_pixbuf(path, w, h)
+                    pixbuf = load_cover_pixbuf_cached(path, w, h)
                 except Exception:
                     # Best-effort warmup only - a decode failure here just
                     # means we didn't get to skip it later; render() will

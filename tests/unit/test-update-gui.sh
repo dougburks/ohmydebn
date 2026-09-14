@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Thin wrapper so tests/run.sh's `tests/unit/*.sh` discovery picks up
+# test-update-gui.py - the real test logic lives there in plain Python,
+# not here (same reason test-speedtest-guis.sh exists).
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+python3 "$REPO_ROOT/tests/unit/test-update-gui.py"

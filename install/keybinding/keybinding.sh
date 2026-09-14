@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STATE_DIR=~/.local/state/ohmydebn-config
-KEYBINDING_STATE=$STATE_DIR/keybinding-20260902
+KEYBINDING_STATE=$STATE_DIR/keybinding-20260910
 
 if [ ! -f $KEYBINDING_STATE ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Updating hotkeys"
@@ -25,9 +25,17 @@ if [ ! -f $KEYBINDING_STATE ]; then
   # anyway, so neither line is actionable enough to justify showing on
   # every single default install.
   function keybinding-cinnamon() {
-    local CMD
+    local CMD SCHEMA
     echo "$4"
-    CMD="gsettings set org.cinnamon.desktop.keybindings.$1 $2 \"$3\""
+    # An empty first argument targets the root
+    # org.cinnamon.desktop.keybindings schema itself - some keys (e.g.
+    # looking-glass-keybinding) live there directly, not under a
+    # sub-schema like .wm or .media-keys.
+    SCHEMA="org.cinnamon.desktop.keybindings"
+    if [ -n "$1" ]; then
+      SCHEMA="$SCHEMA.$1"
+    fi
+    CMD="gsettings set $SCHEMA $2 \"$3\""
     eval "$CMD" >/dev/null 2>&1 || true
   }
 

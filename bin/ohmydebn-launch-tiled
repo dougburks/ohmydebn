@@ -4,10 +4,11 @@
 # window ends up active/focused afterward via ohmydebn-gtile-apply.
 # Generalizes the approach ohmydebn-browser-tiled originally used
 # (necessary because a browser launch can't be tracked by a fresh PID:
-# gtk-launch forks and detaches, and most browsers are single-instance -
-# "launching" one that's already running just raises its existing window
-# rather than starting a new process) to any command with the same
-# problem. Most of OhMyDebn's own app launchers go through at least one
+# even now that ohmydebn-browser execs the browser binary directly
+# instead of going through gtk-launch, most browsers are single-instance -
+# "launching" one that's already running just hands off to the existing
+# process and raises its window rather than keeping a new process alive)
+# to any command with the same problem. Most of OhMyDebn's own app launchers go through at least one
 # extra layer of indirection (a dpkg-installed check, a floating-terminal
 # helper, an app's own single-instance re-activation) before the real
 # window-owning process exists, so a PID

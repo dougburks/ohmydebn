@@ -13,10 +13,15 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
-  sudo rm -f /usr/share/keyrings/microsoft.gpg
-  sudo rm -f /etc/apt/sources.list.d/vscode.sources
-  sudo rm -f /etc/apt/preferences.d/code.pref
-  sudo /usr/bin/apt update
+  # Purge first so VS Code's own maintainer scripts clean up the apt
+  # source its postinst self-registered; the rm -f lines only catch
+  # leftovers, so this stays correct even if Microsoft renames the file
+  # again (they already went vscode.list -> vscode.sources once, and the
+  # same rename by Google is what broke ohmydebn-google-chrome-stable-remove).
   sudo /usr/bin/apt -y purge code
   sudo /usr/bin/apt -y autoremove
+  sudo rm -f /etc/apt/sources.list.d/vscode.list /etc/apt/sources.list.d/vscode.sources
+  sudo rm -f /usr/share/keyrings/microsoft.gpg
+  sudo rm -f /etc/apt/preferences.d/code.pref
+  sudo /usr/bin/apt update
 fi

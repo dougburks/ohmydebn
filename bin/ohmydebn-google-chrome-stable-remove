@@ -13,10 +13,13 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
-  sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+  # Purge first so Chrome's own maintainer scripts clean up the apt source
+  # its postinst self-registered; the rm -f lines only catch leftovers, so
+  # this stays correct even if Google renames the file again.
+  sudo /usr/bin/apt -y purge google-chrome-stable
+  sudo /usr/bin/apt -y autoremove
+  sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
   sudo rm -f /usr/share/keyrings/google-chrome.gpg
   sudo rm -f /etc/apt/preferences.d/google-chrome.pref
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y purge google-chrome-stable
-  sudo /usr/bin/apt -y autoremove
 fi

@@ -2,6 +2,17 @@
 
 for DIR in ohmydebn cinnamon/extensions/gTile@OhMyDebn; do
   FULL_DIR=~/.local/share/$DIR
+  # A symlink here is a deliberate override - typically a developer
+  # pointing the gTile extension at a local working copy so Cinnamon
+  # loads it instead of the packaged one in /usr/share (the user dir
+  # shadows the system dir). Removing it would silently swap the dev
+  # copy for the packaged one on every update, so leave it alone.
+  # ([ -d ] alone is true for a symlink to a directory, hence the
+  # explicit -L check first.)
+  if [ -L $FULL_DIR ]; then
+    echo "Leaving symlink $FULL_DIR in place (developer override)"
+    continue
+  fi
   if [ -d $FULL_DIR ]; then
     echo "Removing old directory $FULL_DIR"
     rm -rf $FULL_DIR

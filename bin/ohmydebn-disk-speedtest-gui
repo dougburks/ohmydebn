@@ -133,7 +133,7 @@ class SpeedTestWindow(Gtk.Window):
         self.run_button.set_no_show_all(True)
         outer.pack_start(self.run_button, False, False, 0)
 
-        common.apply_dark_scrim_css()
+        common.apply_theme_css()
 
         self.connect("key-press-event", self._on_key_press)
         self.connect("destroy", self._on_destroy)

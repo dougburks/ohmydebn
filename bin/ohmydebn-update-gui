@@ -1,3 +1,1235 @@
-#!/bin/bash
+#!/usr/bin/python3
+#
+# ohmydebn-update-gui: graphical front end for ohmydebn-update - launched
+# by Ctrl+Super+U, ohmydebn-menu's Update entry, and a click on
+# ohmydebn-update-check's "update available" notification (all three call
+# this same script; terminal/ssh users just run ohmydebn-update directly,
+# which is why there's no elaborate session detection here - every caller
+# of this script is already a GUI context).
+#
+# The window is dressed entirely in the live OhMyDebn theme: background,
+# surface, accent, and foreground all come from
+# ~/.config/ohmydebn/current/picker-colors (see load_theme_colors()) -
+# the same four-key palette file ohmydebn-menu-picker styles itself from
+# and ohmydebn-theme-set-picker rewrites on every theme change. An
+# animated Cairo progress ring, a live stage feed, and the full terminal
+# output hidden behind a "Show details" revealer, all drawn in those
+# colors, with the picker's own CaskaydiaMono face to match.
+#
+# The critical design decision, for something responsible for updating the
+# system: the pretty layer NEVER runs the update itself. The real
+# ohmydebn-update script runs unmodified (plus --yes, since the "Update
+# now" button IS that script's "Press Enter to continue" confirmation)
+# inside a pty owned by this process and displayed through an embedded VTE
+# terminal - so there is exactly one update code path, shared with the
+# terminal flow, and everything the GUI shows (stages, sudo prompts,
+# success/failure) is derived from watching that pty's byte stream, not
+# from reimplementing any apt logic. A GUI-side rendering bug therefore
+# can't change what the update does, and because apt keeps running in its
+# own process, even a crashed GUI thread wouldn't corrupt a package
+# operation any more than closing the old alacritty window would have -
+# less, in fact, since closing THIS window mid-update is intercepted with
+# a confirmation instead of silently SIGHUPing dpkg.
+#
+# The pty is created here (pty.openpty) rather than letting VTE spawn the
+# child, because this process needs to see the raw output bytes as they
+# arrive (VTE offers no clean "give me the stream" API - only screen-text
+# scraping): the same bytes are fed to the VTE widget for display AND to
+# StreamWatcher below, which picks out ohmydebn-headline stage banners and
+# sudo password prompts. The child gets the pty slave as its controlling
+# terminal (see _child_setup), which matters three ways: sudo prompts on
+# /dev/tty land in our stream even where a script redirects
+# stdout/stderr (ohmydebn-update's chronyc call does exactly that), sudo's
+# per-tty timestamp cache works normally across every sudo call in the
+# run, and interactive prompts (a dpkg conffile question) can actually be
+# answered by typing in the revealed terminal - keystrokes flow back via
+# VTE's "commit" signal into the pty master.
+#
+# sudo password prompts get a native GTK dialog instead of a bare revealed
+# terminal: the child runs with SUDO_PROMPT set to a distinctive marker
+# string, StreamWatcher spots it (even mid-line - prompts have no trailing
+# newline), and the password is written straight to the pty master, where
+# sudo - having disabled tty echo - reads it invisibly. A wrong password
+# just makes sudo print the marker again, which pops the dialog again.
+#
+# Fallbacks, mirroring what this script was before it grew a window: with
+# no display at all (hand-typed over ssh), exec ohmydebn-update; with a
+# display but no VTE introspection data yet (an existing install updating
+# from a version before gir1.2-vte-2.91 was a dependency - the update this
+# GUI runs is the very thing that installs it), exec the old
+# alacritty-based flow via ohmydebn-terminal + ohmydebn-update-pause.
 
-/usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OhMyDebn Update' -e /usr/share/ohmydebn/bin/ohmydebn-update-pause
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, GLib, Gtk, Pango
+
+# VTE may legitimately be missing on the first GUI-triggered update of an
+# older install (see header) - everything else must still import so main()
+# can choose the fallback, and so the unit tests can import this module's
+# pure logic on any box.
+try:
+    gi.require_version("Vte", "2.91")
+    from gi.repository import Vte
+
+    VTE_AVAILABLE = True
+except (ValueError, ImportError):
+    Vte = None
+    VTE_AVAILABLE = False
+
+import cairo  # noqa: E402
+import fcntl  # noqa: E402
+import functools  # noqa: E402
+import math  # noqa: E402
+import os  # noqa: E402
+import pty  # noqa: E402
+import re  # noqa: E402
+import signal  # noqa: E402
+import struct  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import termios  # noqa: E402
+import time  # noqa: E402
+import traceback  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+# The palette loader started life in this script and moved to the shared
+# module when the speed-test GUIs adopted the same theming.
+from ohmydebn_theme_colors import contrast_ratio, css_rgba, load_theme_colors  # noqa: E402
+
+RELEASE_NOTES_URL = "https://github.com/dougburks/ohmydebn/releases"
+
+THEME = load_theme_colors()
+
+# What sudo prints when it wants a password (via the SUDO_PROMPT
+# environment variable the child is spawned with). Doubles as the
+# detection marker for StreamWatcher AND as a human-readable prompt for
+# anyone watching the revealed terminal, so it has to read sensibly there
+# too. The trailing space is sudo prompt convention; detection matches on
+# the text without it.
+SUDO_PROMPT = "[OhMyDebn] sudo password: "
+SUDO_PROMPT_MARKER = SUDO_PROMPT.rstrip()
+
+# If the child produces no output for this long while still running,
+# surface a hint that it may be sitting on an interactive prompt the
+# stage view can't show (a dpkg conffile question, say). Downloads and
+# package installs all chatter constantly, so a long silence really is
+# unusual - but it's only ever a hint, never an auto-reveal, since a
+# false positive popping the terminal open would be more alarming than
+# helpful.
+STALL_SECONDS = 90
+
+# The exact confirmation line a pre---yes ohmydebn-update prints before
+# its blocking `read -r`. During the one transition update where this GUI
+# (from the new package/checkout) drives the OLD installed script - which
+# doesn't understand --yes - that read would otherwise hang forever
+# behind a collapsed terminal. The GUI's "Update Now" button already
+# collected exactly this consent, so it answers this prompt itself.
+# Matched verbatim, capital C and all: install.sh's own root/unsupported-
+# distro warnings say "Ctrl-c" (lowercase) and ask for consent the GUI
+# never showed, so those deliberately do NOT match - they stay manual,
+# via the stall hint + revealed terminal.
+LEGACY_ENTER_PROMPT = "Press Enter to continue or Ctrl-C to cancel."
+
+# install.sh's own consent prompts (unsupported distro, running as root,
+# first-install welcome) all end "...or Ctrl-c to cancel." - lowercase c,
+# deliberately distinct from LEGACY_ENTER_PROMPT's capital C above. These
+# ask for consent the Update Now button never collected, so they are
+# never auto-answered: the GUI reveals its terminal and asks the user to
+# respond there (see _on_consent_prompt). They reach the GUI at all
+# because ohmydebn-update runs install.sh WITHOUT --yes - forwarding it
+# would skip these warnings entirely, found in review.
+CONSENT_PROMPT_MARKER = "Ctrl-c to cancel"
+
+ANSI_RE = re.compile(r"\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-B])")
+
+
+def strip_ansi(text):
+    return ANSI_RE.sub("", text)
+
+
+def is_fence(line):
+    """A line of ohmydebn-headline's banner fence: all '#', at least 10 of
+    them (the real one is 68 wide - 10 keeps this from ever matching an
+    ordinary shell comment echoed into the log)."""
+    stripped = line.strip()
+    return len(stripped) >= 10 and set(stripped) == {"#"}
+
+
+class StreamWatcher:
+    """Incremental parser over the update's raw pty output. feed() takes
+    each decoded chunk as it arrives - chunks may split anywhere,
+    mid-line and mid-escape-sequence included, since ANSI stripping
+    happens per-line after reassembly - and returns a list of events:
+
+      ("stage", title)  - an ohmydebn-headline banner completed: the line
+                          between two ####-fences. Only the line
+                          IMMEDIATELY after a fence counts - headline
+                          always prints a blank line after its closing
+                          fence, and that blank resets the state, so
+                          ordinary output following a banner is never
+                          misread as a stage title.
+      ("sudo-prompt",)  - sudo printed SUDO_PROMPT_MARKER and is waiting
+                          for a password. Detected in the unterminated
+                          line tail too (prompts have no newline), and
+                          counted by occurrence so the same prompt never
+                          fires twice while more bytes trickle in - but a
+                          re-prompt after a wrong password (a new marker
+                          occurrence) fires again.
+      ("enter-prompt",) - a pre---yes ohmydebn-update printed its
+                          LEGACY_ENTER_PROMPT confirmation and is blocked
+                          on `read -r`. Completed lines only (the real
+                          prompt line ends in a newline - it comes from a
+                          heredoc cat, not an inline printf).
+      ("consent-prompt",) - install.sh printed one of its own
+                          CONSENT_PROMPT_MARKER warnings (unsupported
+                          distro / root / first install) and is blocked
+                          on `read -r`. Completed lines only, same as
+                          enter-prompt - and never auto-answered.
+
+    Pure logic, no GTK - covered directly by tests/unit/test-update-gui.py.
+    """
+
+    def __init__(self):
+        self._tail = ""
+        self._after_fence = False
+        self._markers_in_lines = 0
+        self._markers_seen = 0
+
+    def feed(self, text):
+        events = []
+        # \r shows up both as progress-bar redraw (apt/curl) and as part
+        # of \r\n from the pty's onlcr translation - either way, treating
+        # it as a line break is right for parsing (a redrawn progress
+        # line is just many short "lines", none of which match anything).
+        data = self._tail + text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = data.split("\n")
+        self._tail = lines.pop()
+
+        for line in lines:
+            line = strip_ansi(line)
+            self._markers_in_lines += line.count(SUDO_PROMPT_MARKER)
+            if LEGACY_ENTER_PROMPT in line:
+                events.append(("enter-prompt",))
+            elif CONSENT_PROMPT_MARKER in line:
+                events.append(("consent-prompt",))
+            if self._after_fence and line.strip() and not is_fence(line):
+                events.append(("stage", line.strip()))
+            self._after_fence = is_fence(line)
+
+        # Total marker occurrences ever seen = completed lines + the
+        # current tail. When the tail later completes into a line, its
+        # count migrates from the tail term to the lines term, so the
+        # total (and therefore _markers_seen) never double-counts.
+        total = self._markers_in_lines + strip_ansi(self._tail).count(SUDO_PROMPT_MARKER)
+        if total > self._markers_seen:
+            self._markers_seen = total
+            events.append(("sudo-prompt",))
+        return events
+
+
+def normalize_returncode(returncode):
+    """subprocess encodes "killed by signal N" as returncode -N; fold
+    that into the shell convention (128+N) so exit codes read the same
+    here as they would in a terminal."""
+    if returncode is None:
+        return 1
+    if returncode < 0:
+        return 128 - returncode
+    return returncode
+
+
+def resolve_dir():
+    """Same source-tree resolution ohmydebn-update itself uses: the
+    installed package's tree when the deb is present, the git-clone
+    location otherwise."""
+    installed = (
+        subprocess.run(
+            ["dpkg", "-s", "ohmydebn"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode
+        == 0
+    )
+    if installed:
+        return "/usr/share/ohmydebn"
+    return os.path.expanduser("~/.local/share/ohmydebn")
+
+
+def read_version(dir_):
+    """Current OhMyDebn version, straight from $DIR/VERSION (what
+    ohmydebn-version cats) - read directly rather than via that script so
+    a dev checkout reports its own VERSION, not the installed package's."""
+    try:
+        with open(os.path.join(dir_, "VERSION"), encoding="utf-8") as f:
+            version = f.read().strip()
+            return version or "unknown"
+    except OSError:
+        return "unknown"
+
+
+def guarded(default=None):
+    """Wraps a GTK/GLib callback so an unexpected exception logs a
+    traceback and returns `default` instead of unwinding into the C main
+    loop. The whole point of this window is that it must never crash while
+    apt is working underneath it - a cosmetic bug in a draw handler or a
+    parse hiccup should cost one log line, not the update's front end.
+    (The update itself would survive even that - it's a separate process -
+    but a vanished window mid-update is indistinguishable from disaster to
+    the person watching.)"""
+
+    def decorate(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception:  # noqa: BLE001 - deliberately catches everything; see docstring
+                traceback.print_exc()
+                return default
+
+        return wrapper
+
+    return decorate
+
+
+class ProgressRing(Gtk.DrawingArea):
+    """The window's centerpiece: a 170px Cairo ring. Idle: a dim track
+    with an accent up-arrow waiting in the middle. Running: two
+    counter-rotating accent arcs (one glowing, Omarchy-dial style - same
+    glow trick as ohmydebn_speedtest_common's SpeedDial) - deliberately
+    indeterminate, since apt exposes no honest overall percentage and a
+    fake one would be worse than none. The motion is honest instead: the
+    spin speed keys off real pty output (notify_activity), so apt
+    hammering the terminal visibly spins the ring up and a quiet moment
+    lets it coast, and every completed stage emits an expanding ripple
+    (add_ripple). Success: the arrow launches upward with a small
+    particle burst, then the ring sweeps closed into a drawn check mark.
+    Failure: a sober red ring and cross - no celebration.
+
+    Everything here is cosmetic, capped (at most 4 ripples, a fixed
+    14-particle burst), and runs under guarded() - a drawing bug costs a
+    frame, never the update."""
+
+    SIZE = 170
+    ACCENT = THEME["bg3"][:3]
+    RED = (1, 0.42, 0.42)  # semantic failure red, deliberately theme-independent
+    TRACK = (*THEME["fg0"][:3], 0.10)
+
+    def __init__(self):
+        super().__init__()
+        self.set_size_request(self.SIZE, self.SIZE)
+        self.state = "idle"  # idle -> running -> success | failure
+        self._angle = 0.0
+        self._closing = 0.0  # 0..1 sweep animation for the final ring
+        self._activity = 0.0  # decaying output-rate level driving spin speed
+        self._ripples = []  # each a 0..1 expansion progress
+        self._launch = 0.0  # 0..1 success arrow lift-off
+        self._burst = []  # success particles: (angle, speed) pairs
+        self.connect("draw", self._on_draw)
+        GLib.timeout_add(33, self._tick)
+
+    def set_state(self, state):
+        self.state = state
+        if state in ("success", "failure"):
+            self._closing = 0.0
+            self._ripples = []
+        if state == "success":
+            # Send the arrow off with a little burst before the ring
+            # closes into a check. Golden-angle spread rather than
+            # random(): evenly organic-looking, and deterministic.
+            self._launch = 0.0
+            self._burst = [(i * 2.399963, 1.3 + (i % 3) * 0.45) for i in range(14)]
+        self.queue_draw()
+
+    def notify_activity(self, nbytes):
+        """Called with each chunk of child output; the spin speed rides
+        this decaying level, so the ring doubles as an honest activity
+        meter (the one thing an indeterminate spinner can truthfully
+        show)."""
+        self._activity = min(2.0, self._activity + nbytes / 20000)
+
+    def add_ripple(self):
+        """One expanding, fading ring - emitted per completed stage."""
+        if len(self._ripples) < 4:
+            self._ripples.append(0.0)
+
+    @guarded(default=GLib.SOURCE_CONTINUE)
+    def _tick(self):
+        if self.state == "running":
+            self._angle += 0.03 + min(self._activity, 1.5) * 0.09
+            self._activity *= 0.94
+            self._ripples = [p + 0.025 for p in self._ripples if p < 1.0]
+            self.queue_draw()
+        elif self.state == "success":
+            if self._launch < 1.0 or self._closing < 1.0:
+                self._launch = min(1.0, self._launch + 0.045)
+                # The ring sweep starts partway into the launch, so the
+                # check arrives just as the burst fades.
+                self._closing = max(0.0, min(1.0, (self._launch - 0.35) / 0.65))
+                self.queue_draw()
+        elif self.state == "failure" and self._closing < 1.0:
+            self._closing = min(1.0, self._closing + 0.06)
+            self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    @guarded(default=False)
+    def _on_draw(self, _widget, cr):
+        w = self.get_allocated_width()
+        h = self.get_allocated_height()
+        cx, cy = w / 2, h / 2
+        radius = min(w, h) / 2 - 12
+        color = self.RED if self.state == "failure" else self.ACCENT
+
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+
+        # Stage ripples radiate outward beneath everything else.
+        for p in self._ripples:
+            cr.set_line_width(2.5)
+            cr.set_source_rgba(*self.ACCENT, (1.0 - p) * 0.35)
+            cr.arc(cx, cy, radius * (0.5 + p * 0.75), 0, 2 * math.pi)
+            cr.stroke()
+
+        cr.set_line_width(5)
+        cr.set_source_rgba(*self.TRACK)
+        cr.arc(cx, cy, radius, 0, 2 * math.pi)
+        cr.stroke()
+
+        if self.state == "running":
+            # Primary arc with the wide faint under-glow, plus a shorter
+            # counter-rotating inner arc - motion in both directions reads
+            # as "working" without pretending to be a percentage.
+            start = self._angle
+            cr.set_line_width(15)
+            cr.set_source_rgba(*color, 0.16)
+            cr.arc(cx, cy, radius, start, start + math.radians(100))
+            cr.stroke()
+            cr.set_line_width(5)
+            cr.set_source_rgba(*color, 1)
+            cr.arc(cx, cy, radius, start, start + math.radians(100))
+            cr.stroke()
+
+            inner_start = -self._angle * 1.6
+            cr.set_line_width(3)
+            cr.set_source_rgba(*color, 0.55)
+            cr.arc(cx, cy, radius - 12, inner_start, inner_start + math.radians(40))
+            cr.stroke()
+        elif self.state in ("success", "failure"):
+            cr.set_line_width(15)
+            cr.set_source_rgba(*color, 0.16)
+            cr.arc(cx, cy, radius, -math.pi / 2, -math.pi / 2 + 2 * math.pi * self._closing)
+            cr.stroke()
+            cr.set_line_width(5)
+            cr.set_source_rgba(*color, 1)
+            cr.arc(cx, cy, radius, -math.pi / 2, -math.pi / 2 + 2 * math.pi * self._closing)
+            cr.stroke()
+
+        # Center glyph. All three are plain stroked paths scaled off the
+        # ring radius, so they stay proportioned at any size.
+        cr.set_line_width(5)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        glyph = radius * 0.42
+        if self.state in ("idle", "running"):
+            pulse = 0.75 + 0.25 * math.sin(self._angle * 2) if self.state == "running" else 0.9
+            cr.set_source_rgba(*color, pulse)
+            # Up arrow: shaft plus chevron head.
+            cr.move_to(cx, cy + glyph)
+            cr.line_to(cx, cy - glyph)
+            cr.stroke()
+            cr.move_to(cx - glyph * 0.7, cy - glyph * 0.25)
+            cr.line_to(cx, cy - glyph)
+            cr.line_to(cx + glyph * 0.7, cy - glyph * 0.25)
+            cr.stroke()
+        elif self.state == "success":
+            # Lift-off: the burst flies outward while the arrow shoots up
+            # and fades, then the check draws in with the closing ring.
+            if self._launch < 1.0:
+                for angle, speed in self._burst:
+                    dist = radius * 0.2 + radius * speed * self._launch
+                    cr.set_source_rgba(*color, (1.0 - self._launch) * 0.8)
+                    cr.arc(cx + dist * math.cos(angle), cy + dist * math.sin(angle), 2.5, 0, 2 * math.pi)
+                    cr.fill()
+            arrow_alpha = max(0.0, 1.0 - self._launch * 1.6)
+            if arrow_alpha > 0:
+                lift = (self._launch**2) * radius * 1.1
+                cr.set_source_rgba(*color, arrow_alpha)
+                cr.move_to(cx, cy - lift + glyph)
+                cr.line_to(cx, cy - lift - glyph)
+                cr.stroke()
+                cr.move_to(cx - glyph * 0.7, cy - lift - glyph * 0.25)
+                cr.line_to(cx, cy - lift - glyph)
+                cr.line_to(cx + glyph * 0.7, cy - lift - glyph * 0.25)
+                cr.stroke()
+            if self._closing > 0:
+                cr.set_source_rgba(*color, self._closing)
+                cr.move_to(cx - glyph, cy + glyph * 0.1)
+                cr.line_to(cx - glyph * 0.25, cy + glyph * 0.75)
+                cr.line_to(cx + glyph, cy - glyph * 0.6)
+                cr.stroke()
+        else:
+            cr.set_source_rgba(*color, self._closing)
+            cr.move_to(cx - glyph * 0.7, cy - glyph * 0.7)
+            cr.line_to(cx + glyph * 0.7, cy + glyph * 0.7)
+            cr.stroke()
+            cr.move_to(cx + glyph * 0.7, cy - glyph * 0.7)
+            cr.line_to(cx - glyph * 0.7, cy + glyph * 0.7)
+            cr.stroke()
+        return False
+
+
+class UpdateWindow(Gtk.Window):
+    # Minimum height of the terminal page, in pixels.
+    TERMINAL_MIN_HEIGHT = 320
+
+    # The card's designed width - the initial window size, and what the
+    # window returns to when the details pane collapses. Restored
+    # explicitly there rather than shrinking to the natural minimum: the
+    # wrapping labels can compress far below this, so a bare
+    # "natural size" resize squeezed the card into a sliver.
+    CARD_WIDTH = 560
+
+    def __init__(self, dir_):
+        super().__init__(title="OhMyDebn Update")
+        self.dir = dir_
+        # Decorated (unlike the overlay-style speed-test/picker windows):
+        # this is a long-running, app-like window, and the alacritty
+        # window it replaced had a title bar too (OhMyDebn ships
+        # decorations = "Full") - minimize/drag/close should stay
+        # discoverable through the normal Muffin title bar. Its close
+        # button routes through the same delete-event guard as any other
+        # close attempt, so mid-update it still confirms before aborting.
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_default_size(self.CARD_WIDTH, -1)
+
+        self.proc = None
+        self.master = None
+        self.master_watch = None
+        self.poll_source = None
+        self.watcher = StreamWatcher()
+        self.stages_done = []
+        self.current_stage = None
+        self.last_output = time.monotonic()
+        self.password_attempts = 0
+        self.last_password_prompt = None
+        self.aborting = False
+        self.finished = False
+
+        self._build_ui()
+        self._apply_css()
+
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("delete-event", self._on_delete_event)
+        self.connect("destroy", self._on_destroy)
+        # Same reasoning as the speed-test GUIs' signal handling: a plain
+        # Python signal handler can sit unfired while GLib's C main loop
+        # blocks in poll(), so route SIGTERM/SIGINT through GLib. Unlike
+        # the speed tests, though, dying here mid-run should take the
+        # child down too (killing the GUI is the "close the terminal"
+        # gesture) - _on_destroy handles that.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+
+    # ---------- UI construction ----------
+
+    def _build_ui(self):
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        outer.set_border_width(28)
+        self.add(outer)
+
+        # No in-card heading: the Muffin title bar already says
+        # "OhMyDebn Update", so the version line leads the card.
+        self.version_label = Gtk.Label(label=f"Current version {read_version(self.dir)}")
+        self.version_label.get_style_context().add_class("dim")
+        outer.pack_start(self.version_label, False, False, 0)
+
+        self.ring = ProgressRing()
+        self.ring.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(self.ring, False, False, 6)
+
+        # halign CENTER on the wrapped labels keeps them a readable
+        # column instead of spanning the full window width when a tiling
+        # mode ("scrollable"/"traditional") stretches this window into a
+        # tall half-screen tile.
+        self.status_label = Gtk.Label(label="")
+        self.status_label.set_line_wrap(True)
+        self.status_label.set_justify(Gtk.Justification.CENTER)
+        self.status_label.set_max_width_chars(56)
+        self.status_label.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(self.status_label, False, False, 0)
+
+        self.hint_label = Gtk.Label(label="")
+        self.hint_label.get_style_context().add_class("hint")
+        self.hint_label.set_line_wrap(True)
+        self.hint_label.set_justify(Gtk.Justification.CENTER)
+        self.hint_label.set_max_width_chars(56)
+        self.hint_label.set_halign(Gtk.Align.CENTER)
+        self.hint_label.set_no_show_all(True)
+        outer.pack_start(self.hint_label, False, False, 0)
+
+        # Pre-flight warning - the same message ohmydebn-update prints
+        # before its "Press Enter to continue", since Update now stands in
+        # for that Enter.
+        self.warning_label = Gtk.Label(
+            label="This checks for updates to the base OS packages and OhMyDebn"
+            " components.\n\nIf the update is interrupted your machine may be left"
+            " in an inconsistent state, so make sure you have stable power and"
+            " Internet access before continuing."
+        )
+        self.warning_label.get_style_context().add_class("dim")
+        self.warning_label.set_line_wrap(True)
+        self.warning_label.set_justify(Gtk.Justification.CENTER)
+        self.warning_label.set_max_width_chars(56)
+        self.warning_label.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(self.warning_label, False, False, 0)
+
+        self.notes_link = Gtk.LinkButton.new_with_label(RELEASE_NOTES_URL, "Release notes")
+        self.notes_link.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(self.notes_link, False, False, 0)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        buttons.set_halign(Gtk.Align.CENTER)
+        outer.pack_start(buttons, False, False, 0)
+
+        self.start_button = Gtk.Button(label="Update Now")
+        self.start_button.get_style_context().add_class("suggested-action")
+        self.start_button.connect("clicked", self._on_start_clicked)
+        buttons.pack_start(self.start_button, False, False, 0)
+
+        self.details_button = Gtk.Button(label="Show details")
+        self.details_button.connect("clicked", self._on_details_clicked)
+        self.details_button.set_no_show_all(True)
+        buttons.pack_start(self.details_button, False, False, 0)
+
+        self.close_button = Gtk.Button(label="Close")
+        self.close_button.connect("clicked", lambda _b: self.close())
+        buttons.pack_start(self.close_button, False, False, 0)
+
+        # The bottom panel, below the buttons: hidden entirely until the
+        # update starts (so the pre-flight card is tight, with no dead
+        # gap), then revealed as a two-page stack the Details button
+        # flips - the stage checklist by default, the full terminal on
+        # demand. Both pages exist (and the terminal renders every byte)
+        # from the moment the update starts; the button just chooses
+        # which one is on top.
+        self.revealer = Gtk.Revealer()
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.revealer.set_transition_duration(200)
+        outer.pack_start(self.revealer, True, True, 0)
+
+        self.panel_stack = Gtk.Stack()
+        self.panel_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.panel_stack.set_transition_duration(200)
+        # Per-page sizing (not the max of both pages, a Stack's default),
+        # animated between pages - the checklist page is shorter than the
+        # terminal page.
+        self.panel_stack.set_hhomogeneous(False)
+        self.panel_stack.set_vhomogeneous(False)
+        self.panel_stack.set_interpolate_size(True)
+        self.revealer.add(self.panel_stack)
+
+        # Page one - the stage checklist: every finished stage, dim with
+        # a check, then the current one in accent. Rebuilt wholesale on
+        # each stage change (a few dozen labels at worst, cheap), fixed
+        # at a modest height that scrolls and auto-follows the newest
+        # stage, and expands to fill the spare space a tall/tiled window
+        # provides.
+        self.stage_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.stage_box.set_halign(Gtk.Align.CENTER)
+        self.stage_scroller = Gtk.ScrolledWindow()
+        self.stage_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.stage_scroller.set_min_content_height(200)
+        self.stage_scroller.add(self.stage_box)
+        self.panel_stack.add_named(self.stage_scroller, "stages")
+
+        # Page two - the terminal.
+        self.terminal = Vte.Terminal()
+        # Same face and size as the window chrome (and as
+        # ohmydebn-menu-picker's own 12pt) - VTE doesn't take CSS fonts,
+        # so it needs its own explicit Pango description.
+        terminal_font = Pango.FontDescription("CaskaydiaMono Nerd Font 12")
+        self.terminal.set_font(terminal_font)
+        self.terminal.set_scrollback_lines(20000)
+        self.terminal.set_scroll_on_output(True)
+        self.terminal.set_size(100, 22)
+        # Theme's foreground on its solid surface color (bg1, not the
+        # scrim bg0 - its alpha byte means nothing to VTE, which wants an
+        # opaque backdrop under scrollback text).
+        fg = Gdk.RGBA(*THEME["fg0"][:3], 1.0)
+        bg = Gdk.RGBA(*THEME["bg1"][:3], 1.0)
+        self.terminal.set_colors(fg, bg, None)
+        self.terminal.connect("commit", self._on_terminal_commit)
+        self.terminal.connect("char-size-changed", lambda *_a: self._sync_winsize())
+        self.terminal.connect("size-allocate", lambda *_a: self._sync_winsize())
+
+        # VTE scrolls itself; the scrollbar rides its adjustment BESIDE
+        # it in a plain box (gnome-terminal's own arrangement) rather
+        # than wrapping it in a GtkScrolledWindow - GTK's overlay
+        # scrollbars draw on top of the content there, colliding with
+        # the last characters of long lines (found live on a Mint VM,
+        # whose theme keeps the overlay style prominent).
+        term_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        term_box.pack_start(self.terminal, True, True, 0)
+        term_scrollbar = Gtk.Scrollbar(
+            orientation=Gtk.Orientation.VERTICAL, adjustment=self.terminal.get_vadjustment()
+        )
+        term_box.pack_start(term_scrollbar, False, False, 0)
+
+        # Showing the details must widen the window enough for real
+        # terminal lines: ohmydebn-headline's banner fences are 68 '#'
+        # wide, and at the card's narrow natural width every fence wrapped
+        # onto two lines. 80 columns (the classic terminal width, with
+        # room past the banner) measured from the terminal's own font
+        # metrics rather than a magic pixel count, so a future face/size
+        # change keeps fitting. Computed here but applied only while the
+        # terminal page is showing (see _set_details_revealed): a width
+        # request propagates up through the stack and revealer even when
+        # this page isn't the visible one, so setting it permanently
+        # widened the compact card at launch too - found live back when
+        # the terminal lived directly in the revealer. The height request
+        # is constant; only the width toggles.
+        metrics = self.terminal.get_pango_context().get_metrics(terminal_font, None)
+        char_px = metrics.get_approximate_char_width() / Pango.SCALE
+        self.details_min_width = math.ceil(char_px * 80)
+        self.terminal.set_size_request(-1, self.TERMINAL_MIN_HEIGHT)
+        self.panel_stack.add_named(term_box, "terminal")
+
+    def _apply_css(self):
+        # The whole chrome derives from the theme's four palette keys, in
+        # the same roles ohmydebn-menu-picker gives them: bg0 window
+        # scrim behind everything, bg1 for raised surfaces (buttons, the
+        # terminal), bg3 as the accent (border, current stage, primary
+        # button, link), fg0 for text with dimmed variants at reduced
+        # alpha. The 2px bg3 window border and CaskaydiaMono face are the
+        # picker's own look, so this window reads as the same family.
+        # Failure red stays fixed - it's a semantic color, not a theme
+        # one.
+        accent = css_rgba(THEME["bg3"])
+        fg = THEME["fg0"]
+        # Text on the accent-filled primary button: bg1 or fg0, whichever
+        # actually contrasts more against bg3 - Tokyo Night's light-blue
+        # accent needs the dark bg1, a theme with a dark accent needs
+        # fg0, and no single fixed pick works across themes. Set on the
+        # button's label node explicitly, not just the button: the global
+        # `label` color rule below matches the label directly and would
+        # otherwise silently override the button's own color (exactly the
+        # bug found live on Tokyo Night).
+        on_accent = css_rgba(
+            max((THEME["bg1"], THEME["fg0"]), key=lambda c: contrast_ratio(c, THEME["bg3"]))
+        )
+        css = f"""
+        window {{ background-color: {css_rgba(THEME["bg0"])}; border: 2px solid {accent}; }}
+        label {{ color: {css_rgba(fg)}; }}
+        .dim {{ color: {css_rgba(fg, 0.45)}; }}
+        .hint {{ color: {css_rgba(fg, 0.40)}; font-size: 90%; }}
+        .stage-done {{ color: {css_rgba(fg, 0.35)}; }}
+        .stage-current {{ color: {accent}; }}
+        button {{ background-image: none; background-color: {css_rgba(THEME["bg1"])};
+                  color: {css_rgba(fg, 0.9)}; border: 1px solid {css_rgba(THEME["bg3"], 0.6)};
+                  border-radius: 0; padding: 8px 22px; }}
+        entry {{ border-radius: 0; }}
+        button:hover {{ background-color: {css_rgba(THEME["bg3"], 0.25)}; }}
+        button.suggested-action {{ background-color: {accent}; color: {on_accent};
+                                   border-color: transparent; font-weight: bold; }}
+        button.suggested-action label {{ color: {on_accent}; }}
+        button.link {{ background-color: transparent; border-color: transparent;
+                       color: {accent}; padding: 2px; }}
+        button.link label {{ color: {accent}; }}
+        scrollbar button {{ background-color: transparent; border: none;
+                            padding: 0; min-width: 14px; min-height: 14px; }}
+        * {{ font-family: "CaskaydiaMono Nerd Font"; font-size: 12pt; }}
+        """.encode("utf-8")
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    # ---------- window-level events ----------
+
+    @guarded(default=False)
+    def _on_key_press(self, _widget, event):
+        # Escape asks-or-closes exactly like the window's close path, but
+        # only while the terminal isn't focused - a revealed terminal owns
+        # the keyboard (Escape is a real terminal key apt dialogs use).
+        if event.keyval == Gdk.KEY_Escape and not self.terminal.has_focus():
+            self.close()
+            return True
+        return False
+
+    @guarded(default=True)  # on a handler bug, refuse the close - never drop apt on the floor
+    def _on_delete_event(self, _widget, _event):
+        if not self._running():
+            return False
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            text="Update in progress",
+            secondary_text="Interrupting the update may leave your machine in an"
+            " inconsistent state. Abort anyway?",
+        )
+        dialog.add_button("Keep updating", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Abort update", Gtk.ResponseType.ACCEPT)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        response = dialog.run()
+        dialog.destroy()
+        if response == Gtk.ResponseType.ACCEPT:
+            self._abort()
+        return True  # never close immediately; an abort closes via _finish
+
+    def _on_terminate_signal(self):
+        # Being SIGTERMed is the "terminal window closed" gesture of the
+        # pre-GUI flow: take the child down with us rather than orphaning
+        # a sudo apt behind a window that no longer exists.
+        self.destroy()
+        return GLib.SOURCE_REMOVE
+
+    @guarded()
+    def _on_destroy(self, _widget):
+        self._kill_child(signal.SIGHUP)
+
+    # ---------- starting the update ----------
+
+    @guarded()
+    def _on_start_clicked(self, _button):
+        self.start_button.set_sensitive(False)
+        try:
+            self._spawn_update()
+        except OSError as exc:
+            # Couldn't even start (script missing, pty exhaustion...) -
+            # fail visibly but keep the window alive.
+            self.start_button.set_sensitive(True)
+            self._set_status_error(f"Could not start the update: {exc}")
+            return
+        self.start_button.hide()
+        self.warning_label.hide()
+        self.notes_link.hide()
+        self.close_button.hide()
+        self.details_button.show()
+        self.revealer.set_reveal_child(True)  # the checklist page, until Details flips it
+        self.ring.set_state("running")
+        self.status_label.set_text("Updating - this can take a while.")
+        self.poll_source = GLib.timeout_add(1000, self._poll_child)
+        GLib.timeout_add_seconds(5, self._check_stalled)
+
+    def _spawn_update(self):
+        self.master, slave = pty.openpty()
+        os.set_blocking(self.master, False)
+
+        env = dict(os.environ)
+        env["SUDO_PROMPT"] = SUDO_PROMPT
+        env["TERM"] = "xterm-256color"
+
+        def _child_setup():
+            # New session + make the pty slave the controlling terminal,
+            # so /dev/tty works in the child (sudo prompts through it -
+            # see the header for everything that hangs off this). The
+            # ioctl targets the inherited slave fd (passed via pass_fds)
+            # rather than assuming fd 0 is already the pty, so this
+            # doesn't depend on the order subprocess performs its dup2s
+            # relative to preexec_fn.
+            os.setsid()
+            fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
+        self.proc = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
+            [os.path.join(self.dir, "bin", "ohmydebn-update"), "--yes"],
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            preexec_fn=_child_setup,
+            pass_fds=(slave,),
+            env=env,
+            close_fds=True,
+        )
+        os.close(slave)
+        self.last_output = time.monotonic()
+        self._sync_winsize()
+        self.master_watch = GLib.unix_fd_add_full(
+            GLib.PRIORITY_DEFAULT,
+            self.master,
+            GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR,
+            self._on_master_ready,
+        )
+
+    def _running(self):
+        return self.proc is not None and self.proc.poll() is None and not self.finished
+
+    # ---------- pty plumbing ----------
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_master_ready(self, _fd, condition):
+        if condition & GLib.IOCondition.IN:
+            if not self._drain_master():
+                self.master_watch = None
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+        # HUP/ERR with nothing readable: the child side is gone. The poll
+        # timer owns declaring the update finished (the process may take a
+        # beat longer than its pty), so just stop watching.
+        self.master_watch = None
+        return GLib.SOURCE_REMOVE
+
+    def _drain_master(self):
+        """Reads everything currently available, feeds display and
+        parser. Returns False once the pty reports EOF/EIO (all slave fds
+        closed - the child and everything it spawned are done with it)."""
+        while True:
+            try:
+                data = os.read(self.master, 65536)
+            except BlockingIOError:
+                return True
+            except OSError:
+                return False  # EIO: pty closed down
+            if not data:
+                return False
+            self.last_output = time.monotonic()
+            self.terminal.feed(data)
+            self.ring.notify_activity(len(data))
+            for event in self.watcher.feed(data.decode("utf-8", errors="replace")):
+                if event[0] == "stage":
+                    self._on_stage(event[1])
+                elif event[0] == "sudo-prompt":
+                    self._on_sudo_prompt()
+                elif event[0] == "enter-prompt":
+                    self._on_enter_prompt()
+                elif event[0] == "consent-prompt":
+                    self._on_consent_prompt()
+
+    @guarded()
+    def _on_terminal_commit(self, _terminal, text, _size):
+        # Keystrokes typed into the revealed terminal -> the child's tty.
+        # This is what makes an unexpected interactive prompt (dpkg
+        # conffile question) answerable instead of a hang.
+        self._write_master(text.encode("utf-8"))
+
+    def _write_master(self, data):
+        if self.master is None:
+            return
+        try:
+            os.write(self.master, data)
+        except OSError:
+            pass  # child already gone; nothing useful to do with the keystroke
+
+    @guarded()
+    def _sync_winsize(self):
+        # Keep the child's idea of its terminal size in step with the VTE
+        # widget, so apt's progress bar draws at the right width; the
+        # TIOCSWINSZ ioctl also delivers SIGWINCH to the foreground
+        # process group for us.
+        if self.master is None:
+            return
+        rows = self.terminal.get_row_count()
+        cols = self.terminal.get_column_count()
+        try:
+            fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        except OSError:
+            pass
+
+    # ---------- stream events ----------
+    # Each handler is guarded individually: they're dispatched from
+    # _on_master_ready, whose own guard defaults to SOURCE_REMOVE - so an
+    # exception escaping a handler wouldn't just lose one event, it would
+    # permanently unregister the pty watch (frozen terminal, sudo prompts
+    # never detected again). Guarded here, a handler bug costs its one
+    # event and the stream keeps flowing.
+
+    @guarded()
+    def _on_stage(self, title):
+        if self.current_stage is not None:
+            self.stages_done.append(self.current_stage)
+        self.current_stage = title
+        self.ring.add_ripple()
+        self._rebuild_stage_box()
+
+    def _rebuild_stage_box(self):
+        for child in self.stage_box.get_children():
+            self.stage_box.remove(child)
+        # Rows left-align inside the centered box (halign START) - a tall
+        # feed of individually centered rows reads as a zigzag.
+        for done in self.stages_done:
+            label = Gtk.Label(label=f"✓  {done}")
+            label.get_style_context().add_class("stage-done")
+            label.set_ellipsize(Pango.EllipsizeMode.END)
+            label.set_max_width_chars(52)
+            label.set_halign(Gtk.Align.START)
+            self.stage_box.pack_start(label, False, False, 0)
+        if self.current_stage:
+            label = Gtk.Label(label=f"•  {self.current_stage}")
+            label.get_style_context().add_class("stage-current")
+            label.set_ellipsize(Pango.EllipsizeMode.END)
+            label.set_max_width_chars(52)
+            label.set_halign(Gtk.Align.START)
+            self.stage_box.pack_start(label, False, False, 0)
+        self.stage_box.show_all()
+
+        # Keep the newest stage in view once the history outgrows the
+        # feed's allocation - deferred to idle so the freshly added row
+        # has been allocated (the adjustment's upper bound doesn't know
+        # about it until then).
+        @guarded(default=GLib.SOURCE_REMOVE)
+        def scroll_to_newest():
+            adjustment = self.stage_scroller.get_vadjustment()
+            adjustment.set_value(adjustment.get_upper() - adjustment.get_page_size())
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(scroll_to_newest)
+
+    @guarded()
+    def _on_enter_prompt(self):
+        # See LEGACY_ENTER_PROMPT: an old, pre---yes ohmydebn-update is
+        # blocked on the confirmation the Update Now button already gave.
+        if not self.aborting:
+            self._write_master(b"\n")
+
+    @guarded()
+    def _on_consent_prompt(self):
+        # See CONSENT_PROMPT_MARKER: install.sh is asking for a consent
+        # the Update Now button never covered (unsupported distro,
+        # running as root). Never auto-answered - surface the terminal so
+        # the person can read the warning and press Enter or Ctrl-c
+        # there themselves.
+        if self.aborting:
+            return
+        self._set_details_revealed(True)
+        self.status_label.set_text(
+            "The update needs your confirmation - answer in the terminal below."
+        )
+
+    @guarded()
+    def _on_sudo_prompt(self):
+        # An abort in progress can surface one more sudo prompt before
+        # the escalation below lands (sudo catching the SIGINT is exactly
+        # how the script survives long enough to reach its next sudo) -
+        # don't stack a second password dialog on top of "Aborting...".
+        if self.aborting:
+            return
+        # A wrong password makes sudo re-prompt within a breath; a prompt
+        # arriving much later is a NEW sudo authentication (its timestamp
+        # cache expires mid-run on long updates), not a retry - reset the
+        # counter so a fresh prompt isn't mislabeled "That password
+        # didn't work".
+        now = time.monotonic()
+        if self.last_password_prompt is None or now - self.last_password_prompt > 30:
+            self.password_attempts = 0
+        self.last_password_prompt = now
+        self.password_attempts += 1
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.OTHER,
+            text="Administrator password required",
+            secondary_text=(
+                "That password didn't work - try again."
+                if self.password_attempts > 1
+                else "The update needs your password to install packages."
+            ),
+        )
+        dialog.add_button("Cancel update", Gtk.ResponseType.CANCEL)
+        ok = dialog.add_button("Continue", Gtk.ResponseType.OK)
+        ok.get_style_context().add_class("suggested-action")
+        entry = Gtk.Entry()
+        entry.set_visibility(False)
+        entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        entry.set_activates_default(True)
+        # Breathing room between the field and the dialog edges - the
+        # content area itself packs children flush to its sides.
+        entry.set_margin_start(24)
+        entry.set_margin_end(24)
+        box = dialog.get_content_area()
+        box.set_spacing(8)
+        box.pack_end(entry, False, False, 8)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.show_all()
+        entry.grab_focus()
+        response = dialog.run()
+        password = entry.get_text()
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            # sudo reads this from the tty with echo disabled, so nothing
+            # appears in the terminal - held only long enough to write.
+            self._write_master(password.encode("utf-8") + b"\n")
+        else:
+            self._abort()
+
+    @guarded(default=GLib.SOURCE_CONTINUE)
+    def _check_stalled(self):
+        if not self._running():
+            return GLib.SOURCE_REMOVE
+        stalled = time.monotonic() - self.last_output > STALL_SECONDS
+        if stalled and not self._details_shown() and not self.aborting:
+            self.hint_label.set_text(
+                "No output for a while - the update may be waiting for input."
+                " Click Show details to check."
+            )
+            self.hint_label.show()
+        else:
+            self.hint_label.hide()
+        return GLib.SOURCE_CONTINUE
+
+    # ---------- finishing ----------
+
+    @guarded(default=GLib.SOURCE_CONTINUE)
+    def _poll_child(self):
+        # A 1s poll on the process itself, rather than trusting pty EOF
+        # alone to signal the end: a stray daemon started by the install
+        # could keep a slave fd open long after ohmydebn-update exited,
+        # and the reverse (EOF while the child still runs a beat longer)
+        # is routine. The process's exit is the ground truth.
+        if self.proc.poll() is None:
+            return GLib.SOURCE_CONTINUE
+        self._drain_master()
+        self._finish(normalize_returncode(self.proc.returncode))
+        return GLib.SOURCE_REMOVE
+
+    def _finish(self, exit_code):
+        self.finished = True
+        if self.poll_source is not None:
+            GLib.source_remove(self.poll_source)
+            self.poll_source = None
+        self.hint_label.hide()
+        self.version_label.set_text(f"Current version {read_version(self.dir)}")
+        if self.aborting:
+            self.ring.set_state("failure")
+            self.status_label.set_text("Update aborted.")
+        elif exit_code == 0:
+            self.ring.set_state("success")
+            if self.current_stage is not None:
+                self.stages_done.append(self.current_stage)
+                self.current_stage = None
+                self._rebuild_stage_box()
+            self.status_label.set_text("Update complete - you're up to date.")
+        else:
+            self.ring.set_state("failure")
+            self._set_status_error(
+                f"The update did not finish cleanly (exit code {exit_code})."
+                " The details below show what happened."
+            )
+            # Failure is the one moment the terminal reveals itself: the
+            # real error is in there, and hiding it behind a click when
+            # something's actually wrong helps no one.
+            self._set_details_revealed(True)
+        self.close_button.show()
+
+    def _set_status_error(self, message):
+        self.status_label.set_markup(
+            '<span foreground="#ff6b6b">{}</span>'.format(GLib.markup_escape_text(message))
+        )
+
+    def _abort(self):
+        # SIGINT to the child's process group first - the same Ctrl-C the
+        # terminal flow would deliver, which apt handles as gracefully as
+        # an interrupt can be handled. But SIGINT alone is NOT enough:
+        # sudo catches it and exits normally rather than dying from the
+        # signal, and bash's cooperative-SIGINT rule ("the foreground
+        # child handled it, keep running") lets the script march on to
+        # its next command - the chronyc line's `|| true` even swallows
+        # the failure outright. Seen live: canceling the password dialog
+        # killed only the prompt and the update continued anyway. So a
+        # grace period after SIGINT, then SIGTERM, then SIGKILL - each
+        # escalation skipped automatically if the child is already gone.
+        # _poll_child sees the exit and routes to _finish with aborting
+        # set.
+        if self.aborting:
+            return
+        self.aborting = True
+        self.status_label.set_text("Aborting update...")
+        self._kill_child(signal.SIGINT)
+        GLib.timeout_add(2000, self._make_escalation(signal.SIGTERM))
+        GLib.timeout_add(6000, self._make_escalation(signal.SIGKILL))
+
+    def _make_escalation(self, sig):
+        @guarded(default=GLib.SOURCE_REMOVE)
+        def escalate():
+            if self.proc is not None and self.proc.poll() is None:
+                self._kill_child(sig)
+            return GLib.SOURCE_REMOVE
+
+        return escalate
+
+    def _kill_child(self, sig):
+        if self.proc is None or self.proc.poll() is not None:
+            return
+        try:
+            os.killpg(os.getpgid(self.proc.pid), sig)
+        except OSError:
+            try:
+                self.proc.terminate()
+            except OSError:
+                pass
+
+    # ---------- details toggle ----------
+
+    @guarded()
+    def _on_details_clicked(self, _button):
+        self._set_details_revealed(not self._details_shown())
+
+    def _details_shown(self):
+        return (
+            self.revealer.get_reveal_child()
+            and self.panel_stack.get_visible_child_name() == "terminal"
+        )
+
+    def _set_details_revealed(self, revealed):
+        # Flips the bottom panel between its two pages; the panel itself
+        # stays revealed from the moment the update starts. Also called
+        # with True from the failure path, which is why it re-asserts
+        # set_reveal_child rather than assuming the start path ran.
+        self.revealer.set_reveal_child(True)
+        if revealed:
+            self.terminal.set_size_request(self.details_min_width, self.TERMINAL_MIN_HEIGHT)
+            self.panel_stack.set_visible_child_name("terminal")
+        else:
+            self.panel_stack.set_visible_child_name("stages")
+        self.details_button.set_label("Hide details" if revealed else "Show details")
+        if revealed:
+            self.hint_label.hide()
+            self.terminal.grab_focus()
+        else:
+            # GTK never hands back the size the terminal page forced on
+            # the window (it's both taller and wider than the checklist
+            # page); once the crossfade has finished, drop the 80-column
+            # width request (see its comment in _build_ui) and return to
+            # the designed card width at natural height.
+            @guarded(default=GLib.SOURCE_REMOVE)
+            def shrink_back():
+                self.terminal.set_size_request(-1, self.TERMINAL_MIN_HEIGHT)
+                self.resize(self.CARD_WIDTH, 1)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(self.panel_stack.get_transition_duration() + 50, shrink_back)
+
+
+def main():
+    dir_ = resolve_dir()
+
+    # Hand-typed over ssh / from a console: no window is possible, and the
+    # terminal updater is exactly what such a caller wants anyway.
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        os.execv(os.path.join(dir_, "bin", "ohmydebn-update"), ["ohmydebn-update"])
+
+    # Display but no VTE typelib yet: this install predates the GUI's
+    # dependency (which the update itself will install) - run the exact
+    # pre-GUI flow this script used to be. Note the literal
+    # "--title", "OhMyDebn Update" pair: tile-rules.json floats this
+    # fallback window into the same right-half tile it always used.
+    if not VTE_AVAILABLE:
+        os.execv(
+            os.path.join(dir_, "bin", "ohmydebn-terminal"),
+            [
+                "ohmydebn-terminal",
+                "--title", "OhMyDebn Update",
+                "-e",
+                os.path.join(dir_, "bin", "ohmydebn-update-pause"),
+            ],
+        )
+
+    win = UpdateWindow(dir_)
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

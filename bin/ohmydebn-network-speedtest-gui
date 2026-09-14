@@ -2,8 +2,8 @@
 #
 # Graphical network speed test - a GTK/Cairo recreation of Omarchy's own
 # QML speed-test overlay (~/git/omarchy's shell/Ui/SpeedTestOverlay.qml,
-# the "Quattro" checkout): two open 270-degree dials side by side on a
-# near-black scrim, a glowing accent value arc, a needle that fades
+# the "Quattro" checkout): two open 270-degree dials side by side on the
+# current theme's scrim, a glowing accent value arc, a needle that fades
 # toward the pivot, and a big digital readout in the middle of each - see
 # ohmydebn_speedtest_common.py, shared with ohmydebn-disk-speedtest-gui,
 # for the dial widget itself and the theme-accent color it uses. That
@@ -134,7 +134,7 @@ class SpeedTestWindow(Gtk.Window):
         self.run_button.set_no_show_all(True)
         outer.pack_start(self.run_button, False, False, 0)
 
-        common.apply_dark_scrim_css()
+        common.apply_theme_css()
 
         self.connect("key-press-event", self._on_key_press)
         self.connect("destroy", self._on_destroy)

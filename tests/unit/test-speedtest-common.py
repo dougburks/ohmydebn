@@ -2,8 +2,8 @@
 #
 # Pure-logic regression tests for bin/ohmydebn_speedtest_common.py, shared
 # by ohmydebn-network-speedtest-gui and ohmydebn-disk-speedtest-gui: dial
-# auto-scaling, the digital-readout number format, and the theme-accent
-# color loader. Deliberately excludes anything that needs a real X
+# auto-scaling, the digital-readout number format, and the theme-palette
+# derivation. Deliberately excludes anything that needs a real X
 # display (SpeedDial's Cairo drawing) - importing the module itself is
 # safe with no DISPLAY set, the same way test-python-pickers.py's own
 # header comment already established for ohmydebn-menu-picker: gi/Gtk/Gdk
@@ -12,7 +12,6 @@
 
 import os
 import sys
-import tempfile
 from importlib.machinery import SourceFileLoader
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -92,46 +91,23 @@ check_eq("format_reading: 10 and up drops to a grouped integer", st.format_readi
 check_eq("format_reading: thousands get a grouping comma", st.format_reading(1234.4), "1,234")
 check_eq("format_reading: rounds to the nearest integer, not truncates", st.format_reading(1234.6), "1,235")
 
-# load_accent_color(): reads ~/.config/ohmydebn/current/picker-colors'
-# "bg3" field, the same accent/border color ohmydebn-menu-picker's own
-# load_theme_colors() reads from the same file - redirects HOME for the
-# duration of the test rather than monkeypatching a path constant, the
-# same technique test-python-pickers.py uses for that same file.
-old_home = os.environ.get("HOME")
-fake_home = tempfile.mkdtemp(prefix="ohmydebn-test-home-")
-try:
-    os.environ["HOME"] = fake_home
-    colors_dir = os.path.join(fake_home, ".config", "ohmydebn", "current")
-    os.makedirs(colors_dir)
-    picker_colors_path = os.path.join(colors_dir, "picker-colors")
-
-    with open(picker_colors_path, "w", encoding="utf-8") as f:
-        f.write("bg0=#2e3440F2\nbg1=#2e3440\nbg3=#81a1c1F2\nfg0=#d8dee9\n")
-    check_eq(
-        "load_accent_color: parses bg3's hex into a 0-1 float RGB tuple, ignoring the alpha suffix",
-        st.load_accent_color(),
-        (0x81 / 255, 0xA1 / 255, 0xC1 / 255),
-    )
-
-    with open(picker_colors_path, "w", encoding="utf-8") as f:
-        f.write("bg0=#2e3440\nfg0=#d8dee9\n")
-    check_eq(
-        "load_accent_color: falls back to the default blue when bg3 is missing from the file",
-        st.load_accent_color(),
-        (0.40, 0.69, 1.0),
-    )
-
-    os.remove(picker_colors_path)
-    check_eq(
-        "load_accent_color: falls back to the default blue when the file doesn't exist at all",
-        st.load_accent_color(),
-        (0.40, 0.69, 1.0),
-    )
-finally:
-    if old_home is None:
-        del os.environ["HOME"]
-    else:
-        os.environ["HOME"] = old_home
+# Palette wiring: reading/parsing picker-colors now lives in the shared
+# ohmydebn_theme_colors module (covered by its own tests in
+# test-theme-colors.py - the old load_accent_color() here is gone). What's
+# left to pin down here is the derivation: every foreground-role color
+# shares fg0's RGB with only the alpha varying (the original Omarchy
+# overlay's tick/text hierarchy), the accent is a bare RGB triple the
+# Cairo code can splat with its own alphas, and the error red stays
+# fixed and theme-independent.
+check_eq("palette: track shares the foreground RGB", st.COLOR_TRACK[:3], st.COLOR_TEXT[:3])
+check_eq("palette: minor ticks share the foreground RGB", st.COLOR_TICK_MINOR[:3], st.COLOR_TEXT[:3])
+check_eq("palette: major ticks share the foreground RGB", st.COLOR_TICK_MAJOR[:3], st.COLOR_TEXT[:3])
+check("palette: dim text is dimmer than full text", st.COLOR_TEXT_DIM[3] < st.COLOR_TEXT[3])
+check_eq("palette: error red is fixed, not theme-derived", st.COLOR_ERROR, (1, 0.42, 0.42, 1))
+check(
+    "palette: accent is an RGB triple of 0-1 floats",
+    len(st.COLOR_ACCENT) == 3 and all(0 <= c <= 1 for c in st.COLOR_ACCENT),
+)
 
 # SpeedDial(): a bare construction (no draw, no display needed) still
 # needs a real label/unit and starting state - regression guard for the

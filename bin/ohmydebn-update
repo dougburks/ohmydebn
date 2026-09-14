@@ -2,6 +2,26 @@
 
 set -e
 
+# --yes: skip the "Press Enter to continue" confirmation below. Used by
+# ohmydebn-update-gui, whose "Update Now" button - shown alongside this
+# same warning text - IS the confirmation, so a second stdin prompt here
+# would just hang a process that has no keyboard-owning terminal.
+# Deliberately NOT forwarded to install.sh: its own prompts are
+# different consents (unsupported-distro and running-as-root warnings)
+# that the button never covered, and forwarding --yes would silently
+# skip them - found in review. On a supported-distro, non-root system
+# (every normal update) install.sh prompts for nothing anyway; where its
+# warnings do fire under the GUI, ohmydebn-update-gui detects them and
+# reveals its terminal so they can be answered for real.
+ASSUME_YES=false
+for arg in "$@"; do
+  case $arg in
+  --yes)
+    ASSUME_YES=true
+    ;;
+  esac
+done
+
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   DIR=/usr/share/ohmydebn
 else
@@ -12,21 +32,23 @@ VERSION=$($DIR/bin/ohmydebn-version)
 
 $DIR/bin/ohmydebn-headline "OhMyDebn Update - current OhMyDebn version: $VERSION"
 
-cat <<EOF
+if [ "$ASSUME_YES" = false ]; then
+  cat <<EOF
 Continuing will check for any updates for the
-base Debian OS packages and OhMyDebn components.
+base OS packages and OhMyDebn components.
 
 You can check the OhMyDebn release notes here:
 https://github.com/dougburks/ohmydebn/releases
 
 If this update is interrupted, then your machine may be left in an
-inconsistent state so please make sure you have stable power and 
+inconsistent state so please make sure you have stable power and
 Internet access before continuing.
 
 Press Enter to continue or Ctrl-C to cancel.
 EOF
 
-read -r
+  read -r
+fi
 
 # Update time
 sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true

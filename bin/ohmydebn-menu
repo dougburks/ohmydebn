@@ -728,10 +728,10 @@ show_system_menu() {
   menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown"
   case "$MENU_RESULT" in
   *Lock*) cinnamon-screensaver-command -l ;;
-  *Suspend*) systemctl suspend ;;
+  *Suspend*) /usr/share/ohmydebn/bin/ohmydebn-power suspend ;;
   *Relaunch*) /usr/bin/cinnamon --replace & ;;
-  *Restart*) systemctl reboot ;;
-  *Shutdown*) systemctl poweroff ;;
+  *Restart*) /usr/share/ohmydebn/bin/ohmydebn-power reboot ;;
+  *Shutdown*) /usr/share/ohmydebn/bin/ohmydebn-power poweroff ;;
   *) back_to show_main_menu ;;
   esac
 }

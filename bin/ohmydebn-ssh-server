@@ -23,6 +23,13 @@ if dpkg -s "openssh-server" >/dev/null 2>&1; then
   # ssh-server command to keep working with here, so a plain "press Enter
   # to close" (matching ohmydebn-show-done's own convention) fits better
   # than leaving an interactive shell prompt behind.
+  #
+  # `systemctl is-active` only exists under systemd; on Devuan (sysvinit
+  # or OpenRC, no systemd) the closest single-line equivalent is
+  # `service ssh status`. Branch on /run/systemd/system - the documented
+  # systemd-as-init signal (sd_booted(3)) - inside the command string, since
+  # it runs in the spawned terminal rather than here.
   IP=$(hostname -I | awk '{print $1}')
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "SSH Server" "echo 'Connect to this machine with:'; echo '  ssh $USER@$IP'; echo; echo -n 'SSH service status: '; systemctl is-active ssh; echo; echo 'Press Enter to close this window.'; read -r"
+  STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active ssh; else service ssh status; fi"
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "SSH Server" "echo 'Connect to this machine with:'; echo '  ssh $USER@$IP'; echo; echo -n 'SSH service status: '; $STATUS_CMD; echo; echo 'Press Enter to close this window.'; read -r"
 fi

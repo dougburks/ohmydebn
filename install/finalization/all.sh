@@ -16,4 +16,5 @@ source $OHMYDEBN_INSTALL/finalization/updates.sh
 source $OHMYDEBN_INSTALL/finalization/gtile-restart-flag.sh
 source $OHMYDEBN_INSTALL/finalization/hotkeys.sh
 source $OHMYDEBN_INSTALL/finalization/lightdm.sh
+source $OHMYDEBN_INSTALL/finalization/slim.sh
 source $OHMYDEBN_INSTALL/finalization/finale.sh

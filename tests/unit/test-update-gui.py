@@ -129,18 +129,19 @@ check_eq(
     ],
 )
 
-# The legacy "Press Enter" confirmation of a pre---yes ohmydebn-update
-# (which the GUI answers itself - see LEGACY_ENTER_PROMPT's comment)
-# emits an enter-prompt event - but ONLY that exact line. install.sh's
-# root/unsupported-distro warnings ("Ctrl-c", lowercase) ask for consent
-# the GUI never showed, and ohmydebn-update-pause's "Press Enter to close
-# this window" would re-fire pointlessly - neither may match.
+# Nothing is auto-answered any more (see the CONSENT_PROMPT_MARKER
+# comment in the GUI): the stock "Press Enter to continue or Ctrl-C to
+# cancel." line - ohmydebn-update's own, and the identical prompt of some
+# fifty ohmydebn-*-install/-remove scripts - must emit NO event, and so
+# must ohmydebn-update-pause's "Press Enter to close this window".
 w = gui.StreamWatcher()
 check_eq(
-    "legacy Press Enter prompt emits enter-prompt",
+    "stock capital-C Press Enter prompt emits nothing (no auto-answer)",
     w.feed("Press Enter to continue or Ctrl-C to cancel.\n"),
-    [("enter-prompt",)],
+    [],
 )
+check("the retired auto-answer marker is gone", not hasattr(gui, "LEGACY_ENTER_PROMPT"))
+check("the retired auto-answer handler is gone", not hasattr(gui.UpdateWindow, "_on_enter_prompt"))
 w = gui.StreamWatcher()
 check_eq(
     "update-pause's close-window prompt does NOT match",
@@ -149,10 +150,9 @@ check_eq(
 )
 
 # install.sh's own consent prompts (lowercase "Ctrl-c") emit a
-# consent-prompt event - surfaced to the user, never auto-answered - and
-# must NOT read as the auto-answered legacy enter-prompt. Both real
-# install.sh prompt shapes are covered: the warning form ("Press Enter if
-# you are sure...") and the first-install welcome form.
+# consent-prompt event - surfaced to the user, never auto-answered. Both
+# real install.sh prompt shapes are covered: the warning form ("Press
+# Enter if you are sure...") and the first-install welcome form.
 w = gui.StreamWatcher()
 check_eq(
     "install.sh root/distro warning emits consent-prompt",
@@ -161,15 +161,15 @@ check_eq(
 )
 w = gui.StreamWatcher()
 check_eq(
-    "install.sh welcome prompt emits consent-prompt, not enter-prompt",
+    "install.sh welcome prompt emits consent-prompt",
     w.feed("Press Enter to continue or Ctrl-c to cancel.\n"),
     [("consent-prompt",)],
 )
 w = gui.StreamWatcher()
 check_eq(
-    "legacy capital-C prompt still emits enter-prompt, not consent-prompt",
+    "capital-C prompt does not read as a consent prompt either",
     w.feed("Press Enter to continue or Ctrl-C to cancel.\n"),
-    [("enter-prompt",)],
+    [],
 )
 
 # is_fence: the real 68-char fence and a short 10-char one match; an
@@ -218,5 +218,22 @@ check_eq("guarded: exception becomes the declared default", boom(), "fallback")
 check_eq("guarded: wrapped function actually ran", len(calls), 1)
 
 print()
+
+# --- abort escalation plan (see ABORT_ESCALATION's comment) ---
+# The child's process group includes apt and dpkg. SIGINT (apt's graceful
+# interrupt) first, SIGTERM after a grace period, and NEVER SIGKILL - a
+# killed dpkg mid-configure is the inconsistent state the abort dialog
+# warns about. Pinned here so a future "make abort faster" change can't
+# quietly reintroduce it.
+import signal as _signal  # noqa: E402
+
+plan = list(gui.ABORT_ESCALATION)
+check_eq("abort plan: opens with SIGINT immediately", plan[0], (0, _signal.SIGINT))
+check_eq("abort plan: escalates to SIGTERM after a grace period", plan[1][1], _signal.SIGTERM)
+check("abort plan: grace period is positive", plan[1][0] > 0)
+check("abort plan: never SIGKILLs apt/dpkg", all(sig != _signal.SIGKILL for _d, sig in plan))
+check("abort plan: delays are ascending", all(a[0] < b[0] for a, b in zip(plan, plan[1:])))
+check("abort plan: patience wait comes after the last signal", gui.ABORT_PATIENCE_MS > plan[-1][0])
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

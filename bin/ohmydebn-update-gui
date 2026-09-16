@@ -121,27 +121,40 @@ SUDO_PROMPT_MARKER = SUDO_PROMPT.rstrip()
 # helpful.
 STALL_SECONDS = 90
 
-# The exact confirmation line a pre---yes ohmydebn-update prints before
-# its blocking `read -r`. During the one transition update where this GUI
-# (from the new package/checkout) drives the OLD installed script - which
-# doesn't understand --yes - that read would otherwise hang forever
-# behind a collapsed terminal. The GUI's "Update Now" button already
-# collected exactly this consent, so it answers this prompt itself.
-# Matched verbatim, capital C and all: install.sh's own root/unsupported-
-# distro warnings say "Ctrl-c" (lowercase) and ask for consent the GUI
-# never showed, so those deliberately do NOT match - they stay manual,
-# via the stall hint + revealed terminal.
-LEGACY_ENTER_PROMPT = "Press Enter to continue or Ctrl-C to cancel."
-
 # install.sh's own consent prompts (unsupported distro, running as root,
-# first-install welcome) all end "...or Ctrl-c to cancel." - lowercase c,
-# deliberately distinct from LEGACY_ENTER_PROMPT's capital C above. These
-# ask for consent the Update Now button never collected, so they are
-# never auto-answered: the GUI reveals its terminal and asks the user to
-# respond there (see _on_consent_prompt). They reach the GUI at all
-# because ohmydebn-update runs install.sh WITHOUT --yes - forwarding it
-# would skip these warnings entirely, found in review.
+# first-install welcome) all end "...or Ctrl-c to cancel." - lowercase c
+# (tests/consistency.sh pins that spelling). These ask for consent the
+# Update Now button never collected, so they are never auto-answered: the
+# GUI reveals its terminal and asks the user to respond there (see
+# _on_consent_prompt). They reach the GUI at all because ohmydebn-update
+# runs install.sh WITHOUT --yes - forwarding it would skip these warnings
+# entirely, found in review.
+#
+# Nothing is ever auto-answered any more. This GUI used to press Enter on
+# ohmydebn-update's own "Press Enter to continue or Ctrl-C to cancel."
+# line, for a transition where a new GUI drove an old script that lacked
+# --yes - but GUI and script ship in the same package (--yes arrived with
+# the current GUI in 4.7.0), so that never happens, while the matched
+# phrase is the stock prompt of some fifty ohmydebn-*-install/-remove
+# scripts. Retired in review; an unexpected prompt now surfaces through
+# the stall hint and the revealed terminal like any other.
 CONSENT_PROMPT_MARKER = "Ctrl-c to cancel"
+
+# How an abort proceeds: (delay ms, signal) sent to the child's whole
+# process group, in order, each skipped if the child is already gone.
+# SIGINT is the Ctrl-C the terminal flow would deliver, which apt handles
+# as gracefully as an interrupt can be - but alone it's not enough: sudo
+# catches it and exits normally, and bash's cooperative-SIGINT rule lets
+# the script march on to its next command (seen live: cancelling the
+# password dialog killed only the prompt and the update carried on). So
+# SIGTERM follows after a grace period. Deliberately NO SIGKILL: the
+# group includes apt and dpkg, and killing dpkg mid-configure is exactly
+# the inconsistent state the abort dialog warns about. If the child is
+# still running after ABORT_PATIENCE_MS, apt is finishing a package - the
+# GUI says so and waits for it (see _abort); the window closes when the
+# process really exits.
+ABORT_ESCALATION = ((0, signal.SIGINT), (2000, signal.SIGTERM))
+ABORT_PATIENCE_MS = 8000
 
 ANSI_RE = re.compile(r"\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-B])")
 
@@ -178,16 +191,13 @@ class StreamWatcher:
                           fires twice while more bytes trickle in - but a
                           re-prompt after a wrong password (a new marker
                           occurrence) fires again.
-      ("enter-prompt",) - a pre---yes ohmydebn-update printed its
-                          LEGACY_ENTER_PROMPT confirmation and is blocked
-                          on `read -r`. Completed lines only (the real
-                          prompt line ends in a newline - it comes from a
-                          heredoc cat, not an inline printf).
       ("consent-prompt",) - install.sh printed one of its own
                           CONSENT_PROMPT_MARKER warnings (unsupported
                           distro / root / first install) and is blocked
-                          on `read -r`. Completed lines only, same as
-                          enter-prompt - and never auto-answered.
+                          on `read -r`. Completed lines only (the real
+                          prompt line ends in a newline - it comes from a
+                          heredoc cat, not an inline printf) - and never
+                          auto-answered.
 
     Pure logic, no GTK - covered directly by tests/unit/test-update-gui.py.
     """
@@ -211,9 +221,7 @@ class StreamWatcher:
         for line in lines:
             line = strip_ansi(line)
             self._markers_in_lines += line.count(SUDO_PROMPT_MARKER)
-            if LEGACY_ENTER_PROMPT in line:
-                events.append(("enter-prompt",))
-            elif CONSENT_PROMPT_MARKER in line:
+            if CONSENT_PROMPT_MARKER in line:
                 events.append(("consent-prompt",))
             if self._after_fence and line.strip() and not is_fence(line):
                 events.append(("stage", line.strip()))
@@ -892,8 +900,6 @@ class UpdateWindow(Gtk.Window):
                     self._on_stage(event[1])
                 elif event[0] == "sudo-prompt":
                     self._on_sudo_prompt()
-                elif event[0] == "enter-prompt":
-                    self._on_enter_prompt()
                 elif event[0] == "consent-prompt":
                     self._on_consent_prompt()
 
@@ -975,13 +981,6 @@ class UpdateWindow(Gtk.Window):
             return GLib.SOURCE_REMOVE
 
         GLib.idle_add(scroll_to_newest)
-
-    @guarded()
-    def _on_enter_prompt(self):
-        # See LEGACY_ENTER_PROMPT: an old, pre---yes ohmydebn-update is
-        # blocked on the confirmation the Update Now button already gave.
-        if not self.aborting:
-            self._write_master(b"\n")
 
     @guarded()
     def _on_consent_prompt(self):
@@ -1118,26 +1117,32 @@ class UpdateWindow(Gtk.Window):
         )
 
     def _abort(self):
-        # SIGINT to the child's process group first - the same Ctrl-C the
-        # terminal flow would deliver, which apt handles as gracefully as
-        # an interrupt can be handled. But SIGINT alone is NOT enough:
-        # sudo catches it and exits normally rather than dying from the
-        # signal, and bash's cooperative-SIGINT rule ("the foreground
-        # child handled it, keep running") lets the script march on to
-        # its next command - the chronyc line's `|| true` even swallows
-        # the failure outright. Seen live: canceling the password dialog
-        # killed only the prompt and the update continued anyway. So a
-        # grace period after SIGINT, then SIGTERM, then SIGKILL - each
-        # escalation skipped automatically if the child is already gone.
-        # _poll_child sees the exit and routes to _finish with aborting
-        # set.
+        # See ABORT_ESCALATION for the signal plan and why it stops at
+        # SIGTERM. _poll_child sees the exit and routes to _finish with
+        # aborting set.
         if self.aborting:
             return
         self.aborting = True
         self.status_label.set_text("Aborting update...")
-        self._kill_child(signal.SIGINT)
-        GLib.timeout_add(2000, self._make_escalation(signal.SIGTERM))
-        GLib.timeout_add(6000, self._make_escalation(signal.SIGKILL))
+        for delay_ms, sig in ABORT_ESCALATION:
+            if delay_ms == 0:
+                self._kill_child(sig)
+            else:
+                GLib.timeout_add(delay_ms, self._make_escalation(sig))
+        GLib.timeout_add(ABORT_PATIENCE_MS, self._on_abort_patience)
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_abort_patience(self):
+        # Still running after every signal in the plan: apt/dpkg is
+        # finishing the package it was in the middle of, which is the one
+        # thing an abort must not cut short. Say so instead of forcing it.
+        if self._running():
+            self.status_label.set_text(
+                "Still stopping - apt is finishing the current package."
+                " This window will close on its own when it's done."
+            )
+            self._set_details_revealed(True)
+        return GLib.SOURCE_REMOVE
 
     def _make_escalation(self, sig):
         @guarded(default=GLib.SOURCE_REMOVE)

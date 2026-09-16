@@ -1192,6 +1192,23 @@ for HELPER in ohmydebn-update ohmydebn-update-pause ohmydebn-terminal; do
     FAIL=$((FAIL + 1))
   fi
 done
+# The GUI recognizes install.sh's consent prompts (unsupported distro,
+# root, first-install welcome) by their lowercase "Ctrl-c to cancel"
+# wording, revealing its terminal so the user can answer them - see
+# CONSENT_PROMPT_MARKER in bin/ohmydebn-update-gui. The rest of the repo
+# spells the same prompt "Ctrl-C"; if install.sh's were ever "fixed" to
+# match, the GUI would stop surfacing them and an update under the GUI
+# would silently sit on an invisible prompt. Pin both sides.
+CONSENT_MARKER=$(grep -oP '^CONSENT_PROMPT_MARKER = "\K[^"]+' "$REPO_ROOT/bin/ohmydebn-update-gui")
+if [[ -z "$CONSENT_MARKER" ]]; then
+  echo "  FAIL - bin/ohmydebn-update-gui no longer defines CONSENT_PROMPT_MARKER"
+  FAIL=$((FAIL + 1))
+elif ! grep -qF "$CONSENT_MARKER" "$REPO_ROOT/install.sh"; then
+  echo "  FAIL - install.sh's consent prompts no longer contain \"$CONSENT_MARKER\" (the GUI can't surface them)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  install.sh's consent prompts match the GUI's marker \"$CONSENT_MARKER\""
+fi
 
 # Same idea for the GUI apps' install-presentation window, whose title
 # comes from ohmydebn-launch-floating-terminal-with-presentation's own

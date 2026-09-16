@@ -101,6 +101,29 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
 
     result_holder = {}
 
+    def gtile_auto_tiling_active():
+        """True when the live gTile@OhMyDebn extension is enabled with a
+        tiling mode other than "off" - read from the same spice settings
+        file Cinnamon does. OHMYDEBN_TEST_GTILE_SETTINGS overrides the
+        path so the skip branch itself can be exercised."""
+        import json
+        path = os.environ.get(
+            "OHMYDEBN_TEST_GTILE_SETTINGS",
+            os.path.expanduser("~/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"),
+        )
+        try:
+            with open(path) as fp:
+                mode = json.load(fp).get("tiling-mode", {}).get("value", "off")
+        except (OSError, ValueError):
+            return False
+        if mode == "off":
+            return False
+        enabled = subprocess.run(
+            ["gsettings", "get", "org.cinnamon", "enabled-extensions"],
+            capture_output=True, text=True, check=False,
+        ).stdout
+        return "gTile@OhMyDebn" in enabled
+
     def run_dialog():
         result_holder["clicked"] = guard.show_dialog("Test dialog title", "Test dialog body\nline two", ["Cancel", "Apply"])
 
@@ -159,7 +182,16 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
                 ((x, y, w, h) for x, y, w, h in rects if x <= center_x < x + w and y <= center_y < y + h),
                 None,
             )
-            if mon:
+            if mon and gtile_auto_tiling_active():
+                # gTile's automatic tiling modes place every "interesting"
+                # new window - and Cinnamon counts an app-less dialog like
+                # this one as interesting - so under Traditional/Scrollable
+                # tiling the dialog lands wherever the tiling tree puts it
+                # (only centered by luck, when the tree happens to be
+                # empty). That's the desktop's configuration, not a guard
+                # bug: skip the placement check rather than fail on it.
+                print("  (skip - gTile automatic tiling is on; window placement is tiling's, not GTK's)")
+            elif mon:
                 mon_x, mon_y, mon_w, mon_h = mon
                 # A loose tolerance (10% of the monitor's size) - this is
                 # checking real window-manager placement, not GTK's exact

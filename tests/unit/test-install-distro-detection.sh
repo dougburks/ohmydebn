@@ -95,6 +95,12 @@ run_scenario "Debian trixie" "yes" \
 run_scenario "Kali rolling" "yes" \
   "ID=kali" "VERSION_CODENAME=kali-rolling"
 
+run_scenario "Devuan 6 Excalibur" "yes" \
+  "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=excalibur"
+
+run_scenario "Devuan 5 Daedalus (unsupported release)" "no" \
+  "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=daedalus"
+
 run_scenario "unrelated distro" "no" \
   "ID=fedora" "VERSION_CODENAME=41"
 

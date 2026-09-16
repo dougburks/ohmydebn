@@ -34,6 +34,11 @@ if [ -f "$OS_RELEASE" ]; then
   debian)
     [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
+  devuan)
+    # Devuan 6 "excalibur" tracks Debian 13 "trixie" (ID_LIKE=debian) but
+    # ships its own merged repos and no systemd.
+    [ "$VERSION_CODENAME" = "excalibur" ] && DISTRO_OK=true
+    ;;
   linuxmint)
     # LMDE (Debian-based) sets DEBIAN_CODENAME; regular Mint (Ubuntu-based)
     # sets UBUNTU_CODENAME instead - both report ID=linuxmint, so both need
@@ -60,7 +65,7 @@ if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Devuan 6, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -129,10 +134,14 @@ EOF
     [ -f $PROXMOXSOURCES ] ||
     [ -f $MINTSOURCES ] ||
     [ "$ID" = "kali" ] ||
-    [ "$ID" = "ubuntu" ]; then
+    [ "$ID" = "ubuntu" ] ||
+    [ "$ID" = "devuan" ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
-    # Some Debian installation methods have a broken APT configuration so try to work around that
+    # Some Debian installation methods have a broken APT configuration so try to work around that.
+    # Devuan is excluded above: its sources.list points at deb.devuan.org (no
+    # "debian.org" match), and replacing it with Debian's repos would pull
+    # systemd back in and break the system.
     SOURCESLIST=/etc/apt/sources.list
     if ! grep -q "debian.org" $SOURCESLIST >/dev/null 2>&1; then
       echo "$SOURCESLIST does not have any debian.org references."
@@ -142,8 +151,8 @@ EOF
       fi
       # Reaching this point already guarantees $DEBIANSOURCES and
       # $MINTSOURCES don't exist (the outer if above checks both, plus
-      # $PROXMOXSOURCES and Kali, before ever entering this else branch),
-      # so no need to re-check either here.
+      # $PROXMOXSOURCES, Kali, Ubuntu, and Devuan, before ever entering this
+      # else branch), so no need to re-check either here.
       echo "Creating $DEBIANSOURCES and adding the following:"
       cat <<EOF | sudo tee -a $DEBIANSOURCES
 Types: deb

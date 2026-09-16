@@ -235,5 +235,82 @@ check("abort plan: never SIGKILLs apt/dpkg", all(sig != _signal.SIGKILL for _d, 
 check("abort plan: delays are ascending", all(a[0] < b[0] for a, b in zip(plan, plan[1:])))
 check("abort plan: patience wait comes after the last signal", gui.ABORT_PATIENCE_MS > plan[-1][0])
 
+
+# --- single instance: the lock and the "present yourself" poke ---
+# Exercised against a real second process, since that's the whole point:
+# the lock must be held across processes, a stale lock file with no
+# flock behind it must be taken over, and the holder must actually
+# receive the SIGUSR1 that asks it to present its window.
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+import signal as _sig  # noqa: E402
+
+GUI_PATH = os.path.join(BIN, "ohmydebn-update-gui")
+with tempfile.TemporaryDirectory() as tmp:
+    lock_path = os.path.join(tmp, "instance.lock")
+
+    fd, holder = gui.acquire_instance_lock(lock_path)
+    check("lock: first acquire succeeds", fd is not None and holder is None)
+    with open(lock_path, encoding="utf-8") as f:
+        check_eq("lock: holder pid recorded", f.read().strip(), str(os.getpid()))
+
+    # A second PROCESS trying the same lock must be refused and told our pid.
+    # Same SourceFileLoader trick as load() above - the script has no .py
+    # extension, so a spec-based import finds no loader for it.
+    probe = (
+        "from importlib.machinery import SourceFileLoader\n"
+        f"gui = SourceFileLoader('gui', {GUI_PATH!r}).load_module()\n"
+        f"fd, holder = gui.acquire_instance_lock({lock_path!r})\n"
+        "print('acquired' if fd is not None else f'held-by {holder}')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=False)
+    check_eq("lock: a second process is refused and learns the holder's pid",
+             result.stdout.strip(), f"held-by {os.getpid()}")
+
+    # Same-process re-acquire is also refused (flock is per open file description).
+    fd2, holder2 = gui.acquire_instance_lock(lock_path)
+    check("lock: re-acquire while held is refused", fd2 is None and holder2 == os.getpid())
+
+    # Releasing (closing the fd) frees it; a stale file with a dead pid and
+    # no flock is simply taken over.
+    os.close(fd)
+    with open(lock_path, "w", encoding="utf-8") as f:
+        f.write("999999999\n")
+    fd3, holder3 = gui.acquire_instance_lock(lock_path)
+    check("lock: stale lock file (no flock, dead pid) is taken over", fd3 is not None and holder3 is None)
+    os.close(fd3)
+
+    # present_existing_instance: the holder really gets SIGUSR1. A helper
+    # process installs a handler that exits 42 on SIGUSR1, and we poke it.
+    waiter = subprocess.Popen(
+        [sys.executable, "-c",
+         "import signal, sys, time\n"
+         "signal.signal(signal.SIGUSR1, lambda *_: sys.exit(42))\n"
+         "print('ready', flush=True)\n"
+         "time.sleep(10)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    waiter.stdout.readline()  # wait for 'ready' so the handler is installed
+    check("present: signal delivered to a live holder", gui.present_existing_instance(waiter.pid))
+    check_eq("present: the holder received SIGUSR1", waiter.wait(timeout=5), 42)
+    check("present: no pid means nothing to poke", not gui.present_existing_instance(None))
+    check("present: a dead pid is reported as not delivered", not gui.present_existing_instance(999999999))
+
+# instance_lock_path honors XDG_RUNTIME_DIR and falls back to /tmp.
+saved = os.environ.get("XDG_RUNTIME_DIR")
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["XDG_RUNTIME_DIR"] = tmp
+        check_eq("lock path: under XDG_RUNTIME_DIR, per uid",
+                 gui.instance_lock_path(), os.path.join(tmp, f"ohmydebn-update-gui-{os.getuid()}.lock"))
+    os.environ["XDG_RUNTIME_DIR"] = "/definitely/not/a/dir"
+    check_eq("lock path: falls back to /tmp when the runtime dir is unusable",
+             gui.instance_lock_path(), f"/tmp/ohmydebn-update-gui-{os.getuid()}.lock")
+finally:
+    if saved is None:
+        os.environ.pop("XDG_RUNTIME_DIR", None)
+    else:
+        os.environ["XDG_RUNTIME_DIR"] = saved
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

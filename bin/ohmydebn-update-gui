@@ -303,6 +303,62 @@ def guarded(default=None):
     return decorate
 
 
+# ---------- single instance ----------
+# Ctrl+Super+U, the menu entry and the update notification all launch
+# this script, and nothing else stopped a second window from starting a
+# second update on top of a running one - apt's own lock only covers the
+# package layer, not the config layer that follows it. One lock file per
+# user, held (flock) for the window's whole lifetime: a later launch finds
+# it held, pokes the holder with SIGUSR1 so it presents its window, and
+# exits. flock (not the file's mere existence) is what decides - a lock
+# file left behind by a crash or a logout carries no flock, so it's
+# simply taken over. The holder's pid is written into the file only so
+# the second launch knows whom to signal. Kept as plain functions with
+# no GTK in them so tests/unit/test-update-gui.py can exercise them
+# against a real second process.
+
+
+def instance_lock_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime_dir or not os.path.isdir(runtime_dir):
+        runtime_dir = "/tmp"
+    return os.path.join(runtime_dir, f"ohmydebn-update-gui-{os.getuid()}.lock")
+
+
+def acquire_instance_lock(path):
+    """Tries to become THE instance. Returns (fd, None) on success - keep
+    fd open for as long as the instance lives, closing it releases the
+    lock - or (None, holder_pid) when another live process holds it
+    (holder_pid may be None if its pid couldn't be read)."""
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        holder = None
+        try:
+            with open(path, encoding="utf-8") as f:
+                holder = int(f.read().strip() or 0) or None
+        except (OSError, ValueError):
+            holder = None
+        os.close(fd)
+        return None, holder
+    os.ftruncate(fd, 0)
+    os.write(fd, f"{os.getpid()}\n".encode("utf-8"))
+    return fd, None
+
+
+def present_existing_instance(pid):
+    """Asks the running instance to bring its window forward. True if the
+    signal was delivered."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except OSError:
+        return False
+    return True
+
+
 class ProgressRing(Gtk.DrawingArea):
     """The window's centerpiece: a 170px Cairo ring. Idle: a dim track
     with an accent up-arrow waiting in the middle. Running: two
@@ -538,6 +594,10 @@ class UpdateWindow(Gtk.Window):
         # gesture) - _on_destroy handles that.
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+        # A second launch of this script found our instance lock held and
+        # sent SIGUSR1 (see present_existing_instance): bring this window
+        # forward instead of letting a second update start.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_present_signal)
 
     # ---------- UI construction ----------
 
@@ -786,6 +846,11 @@ class UpdateWindow(Gtk.Window):
         if response == Gtk.ResponseType.ACCEPT:
             self._abort()
         return True  # never close immediately; an abort closes via _finish
+
+    @guarded(default=GLib.SOURCE_CONTINUE)
+    def _on_present_signal(self):
+        self.present()
+        return GLib.SOURCE_CONTINUE
 
     def _on_terminate_signal(self):
         # Being SIGTERMed is the "terminal window closed" gesture of the
@@ -1230,10 +1295,21 @@ def main():
             ],
         )
 
+    # One window per user - see acquire_instance_lock. The fd is held in
+    # a name that lives as long as main() does; the lock dies with it.
+    lock_fd, holder = acquire_instance_lock(instance_lock_path())
+    if lock_fd is None:
+        if present_existing_instance(holder):
+            print("ohmydebn-update-gui is already running - bringing its window forward.")
+        else:
+            print("ohmydebn-update-gui is already running.")
+        return
+
     win = UpdateWindow(dir_)
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()
+    os.close(lock_fd)
 
 
 if __name__ == "__main__":

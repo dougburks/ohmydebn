@@ -276,6 +276,8 @@ def main():
     # re-parsed by a shell - so this only ever adds a confirmation gate in
     # front of Aether's own handling, it doesn't change what Aether does
     # with an approved link.
+    # Same stock-themes root ohmydebn-aether exports - see its comment.
+    os.environ.setdefault("OMARCHY_PATH", os.path.expanduser("~/.local/share/omarchy"))
     os.execv(AETHER_BIN, [AETHER_BIN, "--handle-url", forward_url])
     return 1  # unreachable if execv succeeds
 

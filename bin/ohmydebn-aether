@@ -7,4 +7,10 @@
 
 set -euo pipefail
 
+# Aether >= 4.29.9 lists stock Omarchy themes from $OMARCHY_PATH/themes
+# (default /usr/share/omarchy/themes) rather than ~/.local/share/omarchy/
+# themes, which is where install/config/theme.sh symlinks OhMyDebn's stock
+# themes. Point it at the parent of that symlink so the list stays full.
+export OMARCHY_PATH="$HOME/.local/share/omarchy"
+
 exec /usr/share/aether/aether

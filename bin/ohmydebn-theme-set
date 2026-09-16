@@ -2,8 +2,14 @@
 set -euo pipefail
 
 # ohmydebn-theme-set: Set a theme, specified by its name.
-# Usage: ohmydebn-theme-set [--background <arg>] <theme-name>
+# Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>
 #   <arg> can be "random" or a number (1-based index)
+#   --keep-background leaves the current background in place instead of
+#   picking one from the new theme (the `omarchy` shim uses this for
+#   Aether's "set this exact wallpaper, then activate the theme" sequence).
+#   If the current image doesn't survive the switch (it lived inside the
+#   old theme's own copy), a background from the new theme is picked as
+#   usual.
 
 # What a theme installed with `ohmydebn-theme-install <git-url>` may not ship,
 # because these run code rather than just carry color. Neovim loads a theme's
@@ -82,23 +88,35 @@ report_ignored_theme_files() {
 }
 
 BG_ARG=""
+KEEP_BACKGROUND=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --background)
     if [[ $# -lt 2 ]]; then
-      echo "Usage: ohmydebn-theme-set [--background <arg>] <theme-name>" >&2
+      echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>" >&2
       exit 1
     fi
     BG_ARG="$2"
     shift 2
+    ;;
+  --keep-background)
+    KEEP_BACKGROUND=true
+    shift
     ;;
   *) break ;;
   esac
 done
 
 if [[ -z "${1:-}" ]]; then
-  echo "Usage: ohmydebn-theme-set [--background <arg>] <theme-name>" >&2
+  echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>" >&2
   exit 1
+fi
+
+# Resolved now, before the theme switch below replaces current/theme - a
+# background living in there (the usual case) is gone afterwards.
+KEPT_BACKGROUND=""
+if [[ "$KEEP_BACKGROUND" == true ]]; then
+  KEPT_BACKGROUND=$(readlink -f -- "$HOME/.config/ohmydebn/current/background" 2>/dev/null) || true
 fi
 
 # Remove all old symlinks from themes dir except aether
@@ -208,7 +226,9 @@ else
 fi
 
 # Set new background
-if [[ -n "$BG_ARG" ]]; then
+if [[ "$KEEP_BACKGROUND" == true && -n "$KEPT_BACKGROUND" && -f "$KEPT_BACKGROUND" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$KEPT_BACKGROUND"
+elif [[ -n "$BG_ARG" ]]; then
   /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --background "$BG_ARG"
 else
   /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next

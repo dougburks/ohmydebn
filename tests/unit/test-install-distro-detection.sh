@@ -101,6 +101,12 @@ run_scenario "Devuan 6 Excalibur" "yes" \
 run_scenario "Devuan 5 Daedalus (unsupported release)" "no" \
   "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=daedalus"
 
+run_scenario "LCOS 0.5 (Devuan excalibur-based, ID=lcos)" "yes" \
+  "ID=lcos" 'ID_LIKE="devuan debian"' "VERSION_CODENAME=excalibur"
+
+run_scenario "LCOS on an older Devuan base (unsupported release)" "no" \
+  "ID=lcos" 'ID_LIKE="devuan debian"' "VERSION_CODENAME=daedalus"
+
 run_scenario "unrelated distro" "no" \
   "ID=fedora" "VERSION_CODENAME=41"
 

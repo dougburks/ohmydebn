@@ -3,6 +3,7 @@
   { "wmClass": "Alacritty", "titleRegex": "^Claude Code$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Alacritty", "titleRegex": "^OpenCode$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Alacritty", "titleRegex": "^Pi$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^Codex$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn fastfetch$", "grid": [2, 2, 1, 0, 1, 1] },
   { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Logo$", "grid": [2, 2, 1, 0, 1, 1] },
   { "wmClass": "Alacritty", "titleRegex": "^btop$", "grid": [2, 2, 1, 1, 1, 1] },

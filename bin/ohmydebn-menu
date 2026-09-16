@@ -658,11 +658,12 @@ show_ai_menu() {
   # Picking any of these also makes it ohmydebn-ai's (Super+A's) default -
   # see ohmydebn-ai-set-default - so there's no separate "set default AI"
   # menu duplicating this same list.
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Codex*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default codex; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;

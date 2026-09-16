@@ -61,6 +61,16 @@ EOF
   touch $PI_ALIAS_STATE
 fi
 
+CODEX_ALIAS_STATE=~/.local/state/ohmydebn-config/codex-alias
+if [ ! -f $CODEX_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Codex (OpenAI) CLI coding agent, run in the current terminal
+alias codex='/usr/share/ohmydebn/bin/ohmydebn-codex-cli'
+EOF
+  touch $CODEX_ALIAS_STATE
+fi
+
 OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias
 if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
   sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc

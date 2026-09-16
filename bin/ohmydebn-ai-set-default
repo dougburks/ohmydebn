@@ -4,14 +4,14 @@
 # should launch. Called by bin/ohmydebn-menu's show_ai_menu on every
 # pick, so choosing an AI tool there doubles as making it the default - no
 # separate settings UI to keep in sync with that list.
-# Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|pi|vscode|antigravity>
+# Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|codex|pi|vscode|antigravity>
 
 set -euo pipefail
 
 case "${1:-}" in
-opencode | claude-code | chatgpt | pi | vscode | antigravity) ;;
+opencode | claude-code | chatgpt | codex | pi | vscode | antigravity) ;;
 *)
-  echo "Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|pi|vscode|antigravity>" >&2
+  echo "Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|codex|pi|vscode|antigravity>" >&2
   exit 1
   ;;
 esac

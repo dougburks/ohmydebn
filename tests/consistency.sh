@@ -660,6 +660,7 @@ declare -A AI_ARM_TO_DEFAULT_NAME=(
   [OpenCode]=opencode
   [Claude]=claude-code
   [ChatGPT]=chatgpt
+  [Codex]=codex
   [Pi]=pi
   [Antigravity]=antigravity
   [VSCode]=vscode
@@ -1139,6 +1140,7 @@ TITLE_OWNERS=(
   "ohmydebn-claude-code:Claude Code"
   "ohmydebn-opencode:OpenCode"
   "ohmydebn-pi:Pi"
+  "ohmydebn-codex:Codex"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
   "ohmydebn-logo-gui:OhMyDebn Logo"

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
+  echo
+  echo "Codex is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove Codex."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge ohmydebn-codex-cli
+  sudo /usr/bin/apt -y autoremove
+fi

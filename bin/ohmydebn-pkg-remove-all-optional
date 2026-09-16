@@ -77,10 +77,14 @@ for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudf
   fi
 done
 
-# Pi doesn't fit the loop above - its dpkg package name
-# (ohmydebn-pi-coding-agent) isn't the same string as its remove script's
-# ohmydebn-pi-remove (the loop assumes both are the same $PACKAGE, true
-# for every other entry there but not for Pi's short script name).
+# Pi and Codex don't fit the loop above - their dpkg package names
+# (ohmydebn-pi-coding-agent, ohmydebn-codex-cli) aren't the same string as
+# their remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove (the loop
+# assumes both are the same $PACKAGE, true for every other entry there but
+# not for these two short script names).
 if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
+fi
+if dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-codex-remove --skip-prompt
 fi

@@ -312,5 +312,68 @@ finally:
     else:
         os.environ["XDG_RUNTIME_DIR"] = saved
 
+
+# --- pre-flight release check: parsing, ordering, wording, and the fetch ---
+check_eq("parse_latest_tag: strips the v prefix", gui.parse_latest_tag('{"tag_name": "v4.8.0"}'), "4.8.0")
+check_eq("parse_latest_tag: bare tag passes through", gui.parse_latest_tag('{"tag_name": "4.8.0"}'), "4.8.0")
+check("parse_latest_tag: missing tag_name is None", gui.parse_latest_tag('{"name": "x"}') is None)
+check("parse_latest_tag: empty tag is None", gui.parse_latest_tag('{"tag_name": "  "}') is None)
+check("parse_latest_tag: invalid JSON is None", gui.parse_latest_tag("<html>rate limited</html>") is None)
+check("parse_latest_tag: non-object JSON is None", gui.parse_latest_tag("[1, 2]") is None)
+
+check("version_key: 4.8.0 > 4.7.0", gui.version_key("4.8.0") > gui.version_key("4.7.0"))
+check("version_key: 4.10.0 > 4.9.0 (numeric, not lexical)", gui.version_key("4.10.0") > gui.version_key("4.9.0"))
+check("version_key: equal versions compare equal", gui.version_key("4.8.0") == gui.version_key("4.8.0"))
+check("version_key: a -rc1 suffix sorts after the bare version (as sort -V does)",
+      gui.version_key("4.8.0-rc1") > gui.version_key("4.8.0"))
+check("version_key: 5.0.0 > 4.99.99", gui.version_key("5.0.0") > gui.version_key("4.99.99"))
+
+check_eq("preflight: newer release -> available",
+         gui.preflight_message("4.7.0", "4.8.0"), ("OhMyDebn 4.8.0 is available.", "available"))
+check_eq("preflight: same release -> current, and says OS packages still update",
+         gui.preflight_message("4.8.0", "4.8.0")[1], "current")
+check("preflight: same release wording mentions OS packages",
+      "OS packages" in gui.preflight_message("4.8.0", "4.8.0")[0])
+check_eq("preflight: dev build ahead of the release -> ahead",
+         gui.preflight_message("4.9.0", "4.8.0")[1], "ahead")
+check_eq("preflight: fetch failed -> unknown, update still offered",
+         gui.preflight_message("4.8.0", None)[1], "unknown")
+check_eq("preflight: unknown current version -> unknown",
+         gui.preflight_message("unknown", "4.8.0")[1], "unknown")
+
+# fetch_latest_release against a local HTTP server: a good answer, a
+# non-JSON answer (GitHub's rate-limit HTML), and a refused connection.
+import http.server  # noqa: E402
+import socket  # noqa: E402
+import threading  # noqa: E402
+
+
+class _Releases(http.server.BaseHTTPRequestHandler):
+    payload = b'{"tag_name": "v4.8.0"}'
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(self.payload)
+
+    def log_message(self, *_args):
+        pass
+
+
+server = http.server.HTTPServer(("127.0.0.1", 0), _Releases)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+base = f"http://127.0.0.1:{server.server_port}"
+check_eq("fetch: parses a good release answer", gui.fetch_latest_release(base + "/latest", timeout=3), "4.8.0")
+_Releases.payload = b"<html>API rate limit exceeded</html>"
+check("fetch: a non-JSON answer is None", gui.fetch_latest_release(base + "/latest", timeout=3) is None)
+server.shutdown()
+server.server_close()
+with socket.socket() as probe_sock:
+    probe_sock.bind(("127.0.0.1", 0))
+    closed_port = probe_sock.getsockname()[1]
+check("fetch: a refused connection is None, not an exception",
+      gui.fetch_latest_release(f"http://127.0.0.1:{closed_port}/latest", timeout=3) is None)
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

@@ -82,6 +82,7 @@ except (ValueError, ImportError):
 import cairo  # noqa: E402
 import fcntl  # noqa: E402
 import functools  # noqa: E402
+import json  # noqa: E402
 import math  # noqa: E402
 import os  # noqa: E402
 import pty  # noqa: E402
@@ -91,8 +92,11 @@ import struct  # noqa: E402
 import subprocess  # noqa: E402
 import sys  # noqa: E402
 import termios  # noqa: E402
+import threading  # noqa: E402
 import time  # noqa: E402
 import traceback  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 # The palette loader started life in this script and moved to the shared
@@ -100,6 +104,9 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from ohmydebn_theme_colors import contrast_ratio, css_rgba, load_theme_colors  # noqa: E402
 
 RELEASE_NOTES_URL = "https://github.com/dougburks/ohmydebn/releases"
+# Same endpoint ohmydebn-update-check polls for its notification.
+RELEASES_API_URL = "https://api.github.com/repos/dougburks/ohmydebn/releases/latest"
+PREFLIGHT_TIMEOUT_S = 6
 
 THEME = load_theme_colors()
 
@@ -301,6 +308,62 @@ def guarded(default=None):
         return wrapper
 
     return decorate
+
+
+# ---------- pre-flight release check ----------
+# The card used to show only the current version and a release-notes
+# link, so a user couldn't tell whether a multi-minute run would bring a
+# new OhMyDebn or not. The window now asks GitHub for the latest release
+# in a background thread (never blocking the UI, never gating the update
+# - an offline answer just says so) and shows the verdict on the card.
+# Pure functions here; the thread and label live in UpdateWindow.
+
+
+def parse_latest_tag(payload):
+    """The release tag from the GitHub 'latest release' JSON, without a
+    leading 'v'. None for anything malformed."""
+    try:
+        tag = json.loads(payload).get("tag_name")
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(tag, str) or not tag.strip():
+        return None
+    tag = tag.strip()
+    return tag[1:] if tag.startswith("v") else tag
+
+
+def version_key(version):
+    """Sort key matching `sort -V` for the shapes OhMyDebn uses (4.8.0,
+    4.10.0, 4.8.0-rc1): numeric parts compare as numbers, a suffixed
+    version sorts after its bare form."""
+    parts = []
+    for part in re.split(r"[.-]", version.strip()):
+        parts.append((0, int(part)) if part.isdigit() else (1, part))
+    return tuple(parts)
+
+
+def preflight_message(current, latest):
+    """What the card says about `latest` (None when the check failed)
+    relative to `current`. Returns (text, kind) with kind one of
+    'available', 'current', 'ahead', 'unknown'."""
+    if not latest or not current or current == "unknown":
+        return ("Couldn't check for a newer OhMyDebn release - the update will still run.", "unknown")
+    if version_key(latest) > version_key(current):
+        return (f"OhMyDebn {latest} is available.", "available")
+    if version_key(latest) == version_key(current):
+        return (f"OhMyDebn {current} is the latest release - the update will still refresh OS packages.", "current")
+    return (f"OhMyDebn {current} is newer than the latest release ({latest}).", "ahead")
+
+
+def fetch_latest_release(url=RELEASES_API_URL, timeout=PREFLIGHT_TIMEOUT_S):
+    """The latest release tag, or None on any network/parse failure. Run
+    off the main thread - it blocks for up to `timeout` seconds."""
+    request = urllib.request.Request(url, headers={"User-Agent": "ohmydebn-update-gui"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https URL
+            return parse_latest_tag(response.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
 
 
 # ---------- single instance ----------
@@ -582,6 +645,7 @@ class UpdateWindow(Gtk.Window):
 
         self._build_ui()
         self._apply_css()
+        self._start_preflight_check()
 
         self.connect("key-press-event", self._on_key_press)
         self.connect("delete-event", self._on_delete_event)
@@ -611,6 +675,17 @@ class UpdateWindow(Gtk.Window):
         self.version_label = Gtk.Label(label=f"Current version {read_version(self.dir)}")
         self.version_label.get_style_context().add_class("dim")
         outer.pack_start(self.version_label, False, False, 0)
+
+        # Filled in by the background release check (see
+        # _start_preflight_check); hidden until it answers, and again once
+        # the update starts, since the running view has its own status.
+        self.preflight_label = Gtk.Label(label="")
+        self.preflight_label.set_line_wrap(True)
+        self.preflight_label.set_justify(Gtk.Justification.CENTER)
+        self.preflight_label.set_max_width_chars(56)
+        self.preflight_label.set_halign(Gtk.Align.CENTER)
+        self.preflight_label.set_no_show_all(True)
+        outer.pack_start(self.preflight_label, False, False, 0)
 
         self.ring = ProgressRing()
         self.ring.set_halign(Gtk.Align.CENTER)
@@ -877,6 +952,7 @@ class UpdateWindow(Gtk.Window):
             self._set_status_error(f"Could not start the update: {exc}")
             return
         self.start_button.hide()
+        self.preflight_label.hide()
         self.warning_label.hide()
         self.notes_link.hide()
         self.close_button.hide()
@@ -886,6 +962,29 @@ class UpdateWindow(Gtk.Window):
         self.status_label.set_text("Updating - this can take a while.")
         self.poll_source = GLib.timeout_add(1000, self._poll_child)
         GLib.timeout_add_seconds(5, self._check_stalled)
+
+    def _start_preflight_check(self):
+        def worker():
+            latest = fetch_latest_release()
+            GLib.idle_add(self._on_preflight_result, latest)
+
+        threading.Thread(target=worker, name="preflight-release-check", daemon=True).start()
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_preflight_result(self, latest):
+        # Back on the main loop. Only the pre-flight card shows this - if
+        # the user already clicked Update Now, the running view owns the
+        # status and this answer is moot.
+        if self.proc is not None:
+            return GLib.SOURCE_REMOVE
+        text, kind = preflight_message(read_version(self.dir), latest)
+        self.preflight_label.set_text(text)
+        style = self.preflight_label.get_style_context()
+        for cls in ("stage-current", "dim", "hint"):
+            style.remove_class(cls)
+        style.add_class("stage-current" if kind == "available" else "dim")
+        self.preflight_label.show()
+        return GLib.SOURCE_REMOVE
 
     def _spawn_update(self):
         self.master, slave = pty.openpty()

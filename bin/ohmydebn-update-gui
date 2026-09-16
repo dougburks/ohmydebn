@@ -1267,7 +1267,8 @@ class UpdateWindow(Gtk.Window):
             self.ring.set_state("failure")
             self._set_status_error(
                 f"The update did not finish cleanly (exit code {exit_code})."
-                " The details below show what happened."
+                " The details below show what happened, and the full log is at"
+                " ~/.local/state/ohmydebn-logs/update-latest.log"
             )
             # Failure is the one moment the terminal reveals itself: the
             # real error is in there, and hiding it behind a click when

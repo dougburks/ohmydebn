@@ -51,6 +51,17 @@ PACKAGES=(
   # first brings it in.
   gir1.2-vte-2.91
 
+  # Wnck introspection data, for ohmydebn-menu-picker's window-switcher
+  # mode (Ctrl+Alt+Tab) - it imports Wnck at startup, so without this the
+  # picker fails outright and every menu, plus ohmydebn-update, dies with
+  # "Namespace Wnck not available". Cinnamon itself only depends on the
+  # libwnck-3-0 library, not this typelib; the Debian and Mint Cinnamon
+  # images happen to carry it via orca (a Recommends of
+  # cinnamon-desktop-environment), which is why it looked pre-installed
+  # everywhere until a --no-install-recommends install on a non-Cinnamon
+  # base (LCOS/Devuan XFCE) surfaced the gap.
+  gir1.2-wnck-3.0
+
   # Dev toolchain
   gcc
   pkg-config

@@ -490,9 +490,10 @@ _SWITCHABLE_WINDOW_TYPES = (Wnck.WindowType.NORMAL, Wnck.WindowType.DIALOG, Wnck
 
 def load_windows():
     """Enumerates open windows the way rofi's `-show window` did for
-    ohmydebn-window-switcher - Wnck (already installed; Cinnamon
-    itself depends on it) gives window listing/activation/icons directly,
-    no wmctrl/xdotool parsing needed.
+    ohmydebn-window-switcher - Wnck (gir1.2-wnck-3.0, installed by
+    install/packaging/dependencies.sh; Cinnamon only depends on the
+    libwnck library, not this typelib) gives window listing/activation/
+    icons directly, no wmctrl/xdotool parsing needed.
 
     get_windows_stacked() is bottom-to-top; reversing it approximates a
     most-recently-used order for free (raising a window moves it to the

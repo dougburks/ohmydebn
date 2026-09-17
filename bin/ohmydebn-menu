@@ -694,9 +694,10 @@ show_remove_menu() {
 }
 
 show_update_menu() {
-  menu "Update" "  OhMyDebn\n  Password\n  Timezone"
+  menu "Update" "  OhMyDebn\n  Doctor\n  Password\n  Timezone"
   case "$MENU_RESULT" in
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
+  *Doctor*) /usr/share/ohmydebn/bin/ohmydebn-doctor-gui ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
   *) show_main_menu ;;

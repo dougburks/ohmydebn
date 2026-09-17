@@ -1146,6 +1146,7 @@ TITLE_OWNERS=(
   "ohmydebn-logo-gui:OhMyDebn Logo"
   "ohmydebn-btop-gui:btop"
   "ohmydebn-update-gui:OhMyDebn Update"
+  "ohmydebn-doctor-gui:OhMyDebn Doctor"
   "ohmydebn-neovim:nvim"
   "ohmydebn-cava:cava"
 )

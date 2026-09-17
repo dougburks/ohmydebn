@@ -8,6 +8,7 @@
   { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Logo$", "grid": [2, 2, 1, 0, 1, 1] },
   { "wmClass": "Alacritty", "titleRegex": "^btop$", "grid": [2, 2, 1, 1, 1, 1] },
   { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Update$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "Alacritty", "titleRegex": "^OhMyDebn Doctor$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Alacritty", "titleRegex": "^nvim$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Alacritty", "titleRegex": "^cava$", "grid": [2, 2, 1, 1, 1, 1] },
   { "wmClass": "OhMyDebn", "titleRegex": "^SO-CRATES$", "grid": [2, 2, 1, 0, 1, 2] },

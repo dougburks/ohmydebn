@@ -1,0 +1,235 @@
+#!/bin/bash
+set -uo pipefail
+
+# ohmydebn-doctor: read-only self-check of an OhMyDebn installation.
+#
+# Prints one line per check (ok / FAIL / skip) grouped by area, then a
+# summary, and exits 1 if anything failed. Changes nothing. Meant for two
+# audiences: end-to-end testing of a fresh install in a VM (run it after
+# install.sh finishes, in a terminal inside the Cinnamon session, once per
+# supported distro), and support - the checks are the questions a "my
+# install is weird" conversation asks first, so users can paste the
+# output. Everything it asserts is a fact the install/config layer
+# establishes: packages, apt sources, state markers, the gTile extension
+# and its settings, the theme, the login session default, the systemd
+# timer (or its absence without systemd), the AI wrappers and skill links,
+# the custom keybindings, the Aether/omarchy compatibility layer, and the
+# tools other scripts rely on.
+#
+# For the unit test, OHMYDEBN_DOCTOR_SYSROOT prefixes every absolute
+# system path (/usr/share/ohmydebn, /etc, /run/systemd/system, ...) and
+# the external commands (dpkg, gsettings, update-alternatives, systemctl,
+# apt-cache, python3) come from PATH - tests/unit/test-doctor.sh.
+
+SYSROOT="${OHMYDEBN_DOCTOR_SYSROOT:-}"
+OHMYDEBN="$SYSROOT/usr/share/ohmydebn"
+CONFIG="$HOME/.config/ohmydebn"
+STATE="$HOME/.local/state"
+
+OK=0
+FAILED=0
+SKIPPED=0
+FAILURES=()
+
+ok() { OK=$((OK + 1)); echo "  ok - $1"; }
+fail() { FAILED=$((FAILED + 1)); FAILURES+=("$1"); echo "  FAIL - $1${2:+ ($2)}"; }
+skip() { SKIPPED=$((SKIPPED + 1)); echo "  skip - $1${2:+ ($2)}"; }
+section() { echo; echo "== $1 =="; }
+# check <desc> <command...>: ok if the command succeeds, FAIL otherwise.
+check() { local desc="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$desc"; else fail "$desc"; fi; }
+
+has_session_bus() { gsettings list-schemas >/dev/null 2>&1; }
+gs() { gsettings get "$@" 2>/dev/null; }
+is_systemd() { [ -d "$SYSROOT/run/systemd/system" ]; }
+
+echo "OhMyDebn doctor - $(date '+%Y-%m-%d %H:%M')"
+echo "user: $(id -un)  home: $HOME  desktop: ${XDG_CURRENT_DESKTOP:-none}  display: ${DISPLAY:-none}"
+
+# ---------------------------------------------------------------- distro
+section "Distro"
+OS_RELEASE="$SYSROOT/etc/os-release"
+if [ -f "$OS_RELEASE" ]; then
+  # shellcheck disable=SC1090
+  . "$OS_RELEASE"
+  echo "  ${PRETTY_NAME:-unknown} (ID=${ID:-?} codename=${VERSION_CODENAME:-?})"
+  DISTRO_OK=false
+  case "${ID:-}" in
+  debian) [ "${VERSION_CODENAME:-}" = trixie ] && DISTRO_OK=true ;;
+  devuan | lcos) [ "${VERSION_CODENAME:-}" = excalibur ] && DISTRO_OK=true ;;
+  linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
+  kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
+  ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
+  esac
+  if [ "$DISTRO_OK" = true ]; then ok "supported distro"; else fail "supported distro" "install.sh would warn: unsupported"; fi
+else
+  fail "/etc/os-release present"
+fi
+if is_systemd; then echo "  init: systemd"; else echo "  init: not systemd (Devuan/LCOS-style)"; fi
+
+# -------------------------------------------------------------- packages
+section "Packages"
+if dpkg -s ohmydebn >/dev/null 2>&1; then
+  ok "ohmydebn package installed"
+  PKG_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn 2>/dev/null || echo "?")
+  TREE_VERSION=$(cat "$OHMYDEBN/VERSION" 2>/dev/null || echo "?")
+  if [ "$PKG_VERSION" = "$TREE_VERSION" ]; then ok "package version matches /usr/share/ohmydebn/VERSION ($TREE_VERSION)"; else fail "package version matches VERSION file" "dpkg $PKG_VERSION vs file $TREE_VERSION"; fi
+else
+  fail "ohmydebn package installed"
+fi
+check "ohmydebn-gtile package installed" dpkg -s ohmydebn-gtile
+check "ohmydebn-themes package installed" dpkg -s ohmydebn-themes
+check "apt source for packages.ohmydebn.org present" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
+check "ohmydebn repo keyring present" test -s "$SYSROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
+CANDIDATE=$(apt-cache policy ohmydebn 2>/dev/null | sed -n 's/^ *Candidate: *//p' | head -1)
+if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "(none)" ]; then ok "apt knows a candidate ohmydebn ($CANDIDATE)"; else fail "apt knows a candidate ohmydebn" "run: sudo apt update"; fi
+
+DEPS_FILE="$OHMYDEBN/install/packaging/dependencies.sh"
+if [ -f "$DEPS_FILE" ]; then
+  MISSING=()
+  while IFS= read -r pkg; do
+    [ -z "$pkg" ] && continue
+    dpkg -s "$pkg" >/dev/null 2>&1 || MISSING+=("$pkg")
+  done < <(sed -n '/^PACKAGES=(/,/^)/p' "$DEPS_FILE" | grep -v '^PACKAGES=(\|^)' | sed 's/#.*//' | tr -s ' \t' '\n' | grep -v '^\s*$')
+  if [ ${#MISSING[@]} -eq 0 ]; then ok "every package in dependencies.sh is installed"; else fail "every package in dependencies.sh is installed" "missing: ${MISSING[*]}"; fi
+else
+  fail "dependencies.sh present in the installed tree"
+fi
+
+# ----------------------------------------------------------- install state
+section "Install state"
+check "installation-complete marker (~/.local/state/ohmydebn)" test -f "$STATE/ohmydebn"
+MARKERS=$(ls "$STATE/ohmydebn-config" 2>/dev/null | wc -l)
+if [ "$MARKERS" -gt 0 ]; then ok "config state markers present ($MARKERS)"; else fail "config state markers present" "none under ~/.local/state/ohmydebn-config"; fi
+LATEST_LOG="$STATE/ohmydebn-logs/update-latest.log"
+if [ -e "$LATEST_LOG" ]; then echo "  latest update log: $(readlink -f "$LATEST_LOG")"; else echo "  (no update log yet - none until the first ohmydebn-update)"; fi
+
+# ---------------------------------------------------------------- session
+section "Login session"
+if [ "${XDG_CURRENT_DESKTOP:-}" = "X-Cinnamon" ]; then ok "running inside a Cinnamon session"; else skip "running inside a Cinnamon session" "XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-unset}; desktop checks below may skip"; fi
+DM=$(cat "$SYSROOT/etc/X11/default-display-manager" 2>/dev/null || echo "none")
+echo "  display manager: $DM"
+XSM=$(update-alternatives --query x-session-manager 2>/dev/null | sed -n 's/^Value: //p')
+case "$DM" in
+*/slim)
+  if [ "$XSM" = "/usr/bin/cinnamon-session" ]; then ok "SLiM: x-session-manager alternative is cinnamon-session"; else fail "SLiM: x-session-manager alternative is cinnamon-session" "is: ${XSM:-unset}"; fi
+  ;;
+*/lightdm)
+  check "LightDM: OhMyDebn user-session drop-in present" test -f "$SYSROOT/etc/lightdm/lightdm.conf.d/50-ohmydebn-session.conf"
+  if [ -n "$XSM" ]; then
+    if [ "$XSM" = "/usr/bin/cinnamon-session" ]; then ok "x-session-manager alternative is cinnamon-session"; else fail "x-session-manager alternative is cinnamon-session" "is: $XSM"; fi
+  fi
+  ;;
+*) skip "display manager session default" "no SLiM/LightDM-specific check for $DM" ;;
+esac
+
+# --------------------------------------------------------------- cinnamon
+section "Cinnamon and gTile"
+check "gTile@OhMyDebn extension files installed" test -f "$SYSROOT/usr/share/cinnamon/extensions/gTile@OhMyDebn/metadata.json"
+if has_session_bus; then
+  if gs org.cinnamon enabled-extensions | grep -q "gTile@OhMyDebn"; then ok "gTile@OhMyDebn enabled in Cinnamon"; else fail "gTile@OhMyDebn enabled in Cinnamon"; fi
+else
+  skip "gTile@OhMyDebn enabled in Cinnamon" "no session bus for gsettings"
+fi
+SPICE="$HOME/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
+if [ -f "$SPICE" ]; then
+  ok "gTile settings file present"
+  if grep -qE '"(default|value)": *"(true|false)"' "$SPICE"; then fail "gTile checkbox settings are real booleans" "quoted \"true\"/\"false\" found - a string \"false\" is truthy"; else ok "gTile checkbox settings are real booleans"; fi
+else
+  fail "gTile settings file present" "$SPICE"
+fi
+
+# ------------------------------------------------------------------ theme
+section "Theme"
+THEME_NAME=$(cat "$CONFIG/current/theme.name" 2>/dev/null || true)
+if [ -n "$THEME_NAME" ]; then ok "a theme is set ($THEME_NAME)"; else fail "a theme is set" "no ~/.config/ohmydebn/current/theme.name"; fi
+if [ -n "$THEME_NAME" ]; then
+  if [ -d "$SYSROOT/usr/share/ohmydebn-themes/$THEME_NAME" ] || [ -d "$CONFIG/themes/$THEME_NAME" ]; then ok "theme directory exists"; else fail "theme directory exists" "$THEME_NAME not in /usr/share/ohmydebn-themes or ~/.config/ohmydebn/themes"; fi
+fi
+check "current theme colors.toml has an accent" grep -qE '^\s*accent\s*=' "$CONFIG/current/theme/colors.toml"
+PICKER="$CONFIG/current/picker-colors"
+if [ -f "$PICKER" ] && [ "$(grep -cE '^(bg0|bg1|bg3|fg0)=' "$PICKER")" -eq 4 ]; then ok "picker-colors has bg0/bg1/bg3/fg0"; else fail "picker-colors has bg0/bg1/bg3/fg0" "$PICKER"; fi
+BG_LINK="$CONFIG/current/background"
+if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
+
+# ---------------------------------------------------------- init / timers
+section "Init system"
+if is_systemd; then
+  if systemctl --user is-enabled ohmydebn-update-check.timer >/dev/null 2>&1; then ok "update-check user timer enabled"; else fail "update-check user timer enabled" "systemctl --user is-enabled ohmydebn-update-check.timer"; fi
+else
+  skip "update-check user timer" "no systemd - the timer is deliberately not installed"
+  check "elogind's loginctl present for the power menu" command -v loginctl
+fi
+check "ohmydebn-power wrapper present" test -x "$OHMYDEBN/bin/ohmydebn-power"
+
+# --------------------------------------------------------------------- AI
+section "AI tools"
+SKILL_SRC="/usr/share/ohmydebn/config/ohmydebn-skill"
+for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
+  if [ "$(readlink "$HOME/$d/ohmydebn" 2>/dev/null)" = "$SKILL_SRC" ]; then ok "skill link ~/$d/ohmydebn"; else fail "skill link ~/$d/ohmydebn" "missing or not -> $SKILL_SRC"; fi
+done
+DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "(unset - opencode)")
+case "$DEFAULT_AI" in
+opencode | claude-code | chatgpt | codex | pi | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
+*) fail "default AI is valid" "$DEFAULT_AI" ;;
+esac
+for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-pi-cli; do
+  check "wrapper $w executable" test -x "$OHMYDEBN/bin/$w"
+done
+if [ -f "$HOME/.zshrc" ]; then
+  for a in c pi codex claude a; do
+    if grep -qE "^alias $a=" "$HOME/.zshrc"; then ok "zsh alias '$a' present"; else fail "zsh alias '$a' present"; fi
+  done
+else
+  skip "zsh aliases" "no ~/.zshrc"
+fi
+
+# ------------------------------------------------------------ keybindings
+section "Custom keybindings"
+KB_FILE="$OHMYDEBN/install/keybinding/keybinding-custom.txt"
+if [ ! -f "$KB_FILE" ]; then
+  fail "keybinding-custom.txt present in the installed tree"
+elif ! has_session_bus; then
+  skip "custom keybindings match keybinding-custom.txt" "no session bus for gsettings"
+else
+  EXPECTED=$(grep -c '^keybinding-custom' "$KB_FILE")
+  LISTED=$(gs org.cinnamon.desktop.keybindings custom-list | grep -o "'custom-[0-9]*'" | wc -l)
+  if [ "$LISTED" -ge "$EXPECTED" ]; then ok "custom-list has all $EXPECTED OhMyDebn keybindings ($LISTED listed)"; else fail "custom-list has all $EXPECTED OhMyDebn keybindings" "$LISTED listed"; fi
+  WRONG=()
+  while IFS= read -r line; do
+    n=$(echo "$line" | awk '{print $2}')
+    want=$(echo "$line" | sed -E 's/^keybinding-custom [0-9]+ "[^"]*" "([^"]*)".*/\1/')
+    got=$(gs "org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$n/" command | sed -E "s/^'(.*)'$/\1/")
+    [ "$got" = "$want" ] || WRONG+=("custom-$n")
+  done < <(grep '^keybinding-custom' "$KB_FILE")
+  if [ ${#WRONG[@]} -eq 0 ]; then ok "every custom keybinding runs the command keybinding-custom.txt says"; else fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"; fi
+fi
+
+# ---------------------------------------------------------- aether/omarchy
+section "Aether / Omarchy compatibility"
+# The tildes in these three labels are descriptive, not paths to expand.
+# shellcheck disable=SC2088
+check "~/.config/omarchy -> ~/.config/ohmydebn" test "$(readlink "$HOME/.config/omarchy" 2>/dev/null)" = "$HOME/.config/ohmydebn"
+# shellcheck disable=SC2088
+check "~/.local/share/omarchy/themes -> /usr/share/ohmydebn-themes" test "$(readlink "$HOME/.local/share/omarchy/themes" 2>/dev/null)" = "/usr/share/ohmydebn-themes"
+# shellcheck disable=SC2088
+check "~/.local/state/omarchy/current -> ~/.config/ohmydebn/current" test "$(readlink "$HOME/.local/state/omarchy/current" 2>/dev/null)" = "$HOME/.config/ohmydebn/current"
+check "omarchy CLI shim present (Aether >= 4.29.9)" test -x "$OHMYDEBN/bin/omarchy"
+
+# ------------------------------------------------------------------ tools
+section "Tools other scripts rely on"
+for t in toilet ttfx alacritty gdbus notify-send script flock; do
+  check "$t on PATH" command -v "$t"
+done
+check "python3 GTK/VTE typelibs importable (update GUI)" python3 -c 'import gi; gi.require_version("Gtk", "3.0"); gi.require_version("Vte", "2.91")'
+check "python3 Wnck typelib importable (menu picker)" python3 -c 'import gi; gi.require_version("Wnck", "3.0")'
+
+# ---------------------------------------------------------------- summary
+echo
+echo "== Summary =="
+echo "  $OK ok, $FAILED failed, $SKIPPED skipped"
+if [ "$FAILED" -gt 0 ]; then
+  echo "  failed:"
+  for f in "${FAILURES[@]}"; do echo "    - $f"; done
+  exit 1
+fi
+exit 0

@@ -1,5 +1,23 @@
 #!/bin/bash
 
+# The animated logo (Ctrl+Shift+... via ohmydebn-logo-gui, and the menu).
+# Colored from the current theme: ohmydebn-theme-logo-colors shapes the
+# theme's colors.toml into ttfx's rain palette and final gradient, so the
+# logo settles into the theme's own hues instead of ttfx's stock blue -
+# and falls back to that stock palette when no theme is set.
+
 /usr/share/ohmydebn/bin/ohmydebn-logo-generate
-toilet -f mono12 "$(cat ~/.config/ohmydebn/branding/name.txt)" | /usr/bin/ttfx rain
+
+RAIN_COLORS=""
+GRADIENT_STOPS=""
+while IFS='=' read -r key value; do
+  case "$key" in
+  rain) RAIN_COLORS="$value" ;;
+  gradient) GRADIENT_STOPS="$value" ;;
+  esac
+done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
+
+# shellcheck disable=SC2086 # the color lists are deliberately word-split
+toilet -f mono12 "$(cat ~/.config/ohmydebn/branding/name.txt)" |
+  /usr/bin/ttfx rain --rain-colors $RAIN_COLORS --final-gradient-stops $GRADIENT_STOPS
 read -r

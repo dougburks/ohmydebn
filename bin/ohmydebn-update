@@ -58,6 +58,25 @@ else
   DIR=~/.local/share/ohmydebn
 fi
 
+# One update at a time per user. The menu, Ctrl+Super+U, the update
+# notification and a terminal can all start this, and apt's own lock only
+# serializes the package layer - two config layers interleaving is
+# exactly the inconsistent state the warning below describes. Taken here,
+# inside the logging wrapper (so the wrapper's re-exec doesn't contend
+# with itself), and held on fd 9 for the rest of the run, install.sh
+# included. Per user rather than system-wide: the config layer is
+# per-user, and apt already serializes the shared part.
+LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+[ -d "$LOCK_DIR" ] || LOCK_DIR=/tmp
+LOCK_FILE="$LOCK_DIR/ohmydebn-update-$(id -u).lock"
+exec 9>>"$LOCK_FILE"
+if ! flock -n 9; then
+  $DIR/bin/ohmydebn-headline "Another OhMyDebn update is already running"
+  echo "Started by process $(cat "$LOCK_FILE" 2>/dev/null || echo '?'). Let it finish before starting another."
+  exit 1
+fi
+echo "$$" >"$LOCK_FILE"
+
 VERSION=$($DIR/bin/ohmydebn-version)
 
 $DIR/bin/ohmydebn-headline "OhMyDebn Update - current OhMyDebn version: $VERSION"
@@ -87,10 +106,31 @@ fi
 # Update time
 sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
-# Update the ohmydebn package first to get the latest code
+# Update the ohmydebn package first to get the latest code. Both steps
+# are checked explicitly: under set -e a failing first member of an
+# `a && b` list doesn't stop the script, so a failed refresh used to skip
+# the self-update silently and carry on running the OLD install.sh as if
+# nothing had happened. And `apt update` itself exits 0 even when every
+# source is unreachable (it only warns), so the refresh runs with
+# APT::Update::Error-Mode=any, which turns any failed source into a real
+# error - confirmed against an unreachable scratch source. That does mean
+# a dead third-party repo in sources.list.d blocks the update until it's
+# fixed or removed; apt names it in the output above the message, and a
+# broken source is worth knowing about rather than papering over.
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
-  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install ohmydebn
+  if ! sudo /usr/bin/apt -o APT::Update::Error-Mode=any update; then
+    $DIR/bin/ohmydebn-headline "Could not refresh the package lists - update stopped"
+    echo "Nothing has been changed. Check your Internet connection and the apt output"
+    echo "above (a repository that failed to download is named there), then run"
+    echo "ohmydebn-update again."
+    exit 1
+  fi
+  if ! sudo /usr/bin/apt -y install ohmydebn; then
+    $DIR/bin/ohmydebn-headline "Could not install the latest ohmydebn package - update stopped"
+    echo "See the apt output above, then run ohmydebn-update again."
+    exit 1
+  fi
 fi
 
 bash $DIR/install.sh

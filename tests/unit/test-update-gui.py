@@ -375,5 +375,16 @@ with socket.socket() as probe_sock:
 check("fetch: a refused connection is None, not an exception",
       gui.fetch_latest_release(f"http://127.0.0.1:{closed_port}/latest", timeout=3) is None)
 
+
+# --- success status: a reboot-notice stage changes the final line ---
+check_eq("success_message: plain run says up to date",
+         gui.success_message(["Installing any available package updates", "OhMyDebn update complete - version: 4.8.0"]),
+         "Update complete - you're up to date.")
+check_eq("success_message: a reboot-notice stage asks for a reboot",
+         gui.success_message(["OhMyDebn update complete - version: 4.8.0", gui.REBOOT_HEADLINE]),
+         "Update complete - reboot when convenient to finish it.")
+check_eq("success_message: no stages at all still reads as up to date", gui.success_message([]),
+         "Update complete - you're up to date.")
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

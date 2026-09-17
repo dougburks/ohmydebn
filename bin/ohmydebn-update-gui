@@ -245,6 +245,20 @@ class StreamWatcher:
         return events
 
 
+# finalization/reboot-notice.sh's headline, which the stage parser turns
+# into an ordinary stage; the success status keys off it so a GUI user -
+# whose terminal is collapsed - still learns a reboot is due.
+REBOOT_HEADLINE = "A reboot is needed to finish this update"
+
+
+def success_message(stages):
+    """The final status line for a clean exit, given every stage title
+    seen during the run."""
+    if any(stage.startswith(REBOOT_HEADLINE) for stage in stages):
+        return "Update complete - reboot when convenient to finish it."
+    return "Update complete - you're up to date."
+
+
 def normalize_returncode(returncode):
     """subprocess encodes "killed by signal N" as returncode -N; fold
     that into the shell convention (128+N) so exit codes read the same
@@ -1262,7 +1276,7 @@ class UpdateWindow(Gtk.Window):
                 self.stages_done.append(self.current_stage)
                 self.current_stage = None
                 self._rebuild_stage_box()
-            self.status_label.set_text("Update complete - you're up to date.")
+            self.status_label.set_text(success_message(self.stages_done))
         else:
             self.ring.set_state("failure")
             self._set_status_error(

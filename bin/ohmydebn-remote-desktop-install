@@ -26,6 +26,13 @@ if getent group ssl-cert >/dev/null && id xrdp >/dev/null 2>&1; then
   sudo adduser xrdp ssl-cert
 fi
 
+# Enforce the same one-graphical-session-per-user policy before xrdp-sesman can
+# reconnect an already-running XRDP session. ~/.xsession is only evaluated when
+# a new desktop starts, not when sesman reconnects to an existing display.
+if [ -f /etc/pam.d/xrdp-sesman ] && ! grep -Fq 'ohmydebn-xrdp-session-guard' /etc/pam.d/xrdp-sesman; then
+  sudo sed -i '/^@include common-account/a account  requisite pam_exec.so quiet /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard' /etc/pam.d/xrdp-sesman
+fi
+
 cat >"$HOME/.xsession" <<'EOF'
 #!/bin/sh
 # OhMyDebn Cinnamon session for XRDP

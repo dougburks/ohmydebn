@@ -1,0 +1,44 @@
+#!/bin/bash
+# PAM guard for xrdp-sesman: enforce one graphical session per user.
+#
+# XRDP reconnects to existing sessions before ~/.xsession is run, so the
+# shared-user guard in ~/.xsession cannot prevent reconnects. This PAM hook runs
+# during authentication/account setup and rejects XRDP logins for users who
+# already own a local graphical seat session.
+
+set -euo pipefail
+
+USER_TO_CHECK=${PAM_USER:-${USER:-}}
+if [[ -z "$USER_TO_CHECK" ]]; then
+  exit 0
+fi
+
+# Emergency/admin override. PAM's pam_env can set this if a site really wants
+# the old shared-user behavior.
+if [[ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" == "1" ]]; then
+  exit 0
+fi
+
+if ! command -v loginctl >/dev/null 2>&1; then
+  exit 0
+fi
+
+while read -r sid _uid name seat _tty _class _remote; do
+  [[ "$name" == "$USER_TO_CHECK" ]] || continue
+  [[ -n "$seat" && "$seat" != "-" ]] || continue
+
+  class=$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)
+  state=$(loginctl show-session "$sid" -p State --value 2>/dev/null || true)
+  type=$(loginctl show-session "$sid" -p Type --value 2>/dev/null || true)
+
+  [[ "$class" == "user" ]] || continue
+  [[ "$state" != "closing" ]] || continue
+  [[ "$type" == "x11" || "$type" == "wayland" ]] || continue
+
+  logger -t ohmydebn-xrdp-session-guard \
+    "Rejecting XRDP login for '$USER_TO_CHECK': local graphical session '$sid' is active on '$seat'"
+  echo "OhMyDebn XRDP: user '$USER_TO_CHECK' already has a local graphical session ($sid on $seat). Log out locally or use a separate XRDP user." >&2
+  exit 1
+done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
+
+exit 0

@@ -441,6 +441,80 @@ try:
         (cover.get_width(), cover.get_height()), (200, 150),
     )
 
+    # _master_pixbuf: one real decode per source file, smaller sizes derived
+    # from it, a larger request upgrading it - counted through the
+    # _decode_at_scale seam. This is what keeps a cold-cache render() from
+    # decoding one wallpaper five times over (see the comment above
+    # MASTER_LIMIT in the carousel).
+    decodes = []
+    real_decode = tc._decode_at_scale
+    tc._decode_at_scale = lambda path, w, h: (decodes.append((os.path.basename(path), w, h)), real_decode(path, w, h))[1]
+    tc._masters.clear()
+    first = tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: first request decodes once", len(decodes), 1)
+    smaller = tc.load_cover_pixbuf(wide_src, 100, 75)
+    check_eq("master: a smaller request derives from the master - no second decode", len(decodes), 1)
+    check_eq("master: derived cover is exactly the requested size", (smaller.get_width(), smaller.get_height()), (100, 75))
+    same = tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: repeating the original size still no decode", len(decodes), 1)
+    check_eq("master: same-size result matches the first", (same.get_width(), same.get_height()), (first.get_width(), first.get_height()))
+    bigger = tc.load_cover_pixbuf(wide_src, 400, 300)
+    check_eq("master: a larger request decodes afresh at the larger scale", len(decodes), 2)
+    check_eq("master: the upgrade decoded at the larger scale, not the old one", decodes[-1][1] >= 400 * 2, True)
+    check_eq("master: larger cover is exactly the requested size", (bigger.get_width(), bigger.get_height()), (400, 300))
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: after the upgrade, the original size derives from the new master - no decode", len(decodes), 2)
+    bumped = os.stat(wide_src).st_mtime_ns + 2_000_000_000
+    os.utime(wide_src, ns=(bumped, bumped))
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: a changed source mtime invalidates the master (decodes again)", len(decodes), 3)
+    # Eviction: only MASTER_LIMIT most-recent files are held.
+    saved_limit = tc.MASTER_LIMIT
+    tc.MASTER_LIMIT = 2
+    tc._masters.clear(); decodes.clear()
+    extra = []
+    for i in range(3):
+        pth = os.path.join(fixture, f"evict-{i}.png")
+        tc.GdkPixbuf.Pixbuf.new(tc.GdkPixbuf.Colorspace.RGB, False, 8, 40, 20).savev(pth, "png", [], [])
+        extra.append(pth)
+        tc.load_cover_pixbuf(pth, 20, 10)
+    check_eq("master: held masters capped at MASTER_LIMIT", len(tc._masters), 2)
+    check("master: the oldest file was the one evicted", extra[0] not in tc._masters and extra[2] in tc._masters)
+    tc.load_cover_pixbuf(extra[0], 20, 10)
+    check_eq("master: an evicted file decodes again when asked for", len(decodes), 4)
+    tc.MASTER_LIMIT = saved_limit
+    # MASTER_MIN_TARGET (the card size, once a Carousel exists): a small
+    # first request decodes at least that large, so the ring-0/card
+    # requests that follow derive instead of upgrading.
+    tc._masters.clear(); decodes.clear()
+    tc.MASTER_MIN_TARGET = (200, 150)
+    tiny = tc.load_cover_pixbuf(wide_src, 40, 30)
+    check_eq("master floor: a tiny request still returns the tiny size", (tiny.get_width(), tiny.get_height()), (40, 30))
+    check("master floor: ...but decoded at least at the card scale", decodes[-1][1] >= 200)
+    tc.load_cover_pixbuf(wide_src, 100, 75)
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master floor: ring-0 and card sized requests then derive - still one decode", len(decodes), 1)
+    # min_target: the per-call floor the background threads use (the
+    # screen size) - a thumbnail request decodes that large, and every
+    # later request up to it, the backdrop included, derives.
+    tc._masters.clear(); decodes.clear()
+    tc.MASTER_MIN_TARGET = (200, 150)
+    ring = tc.load_cover_pixbuf(wide_src, 40, 30, min_target=(400, 100))
+    check_eq("hybrid floor: ring request returns the ring size", (ring.get_width(), ring.get_height()), (40, 30))
+    check("hybrid floor: ...decoded at the screen-sized floor, above the card floor", decodes[-1][1] >= 400)
+    # (Requests that fit inside the floor in BOTH dimensions, as the real
+    # card does inside the screen - a taller-than-source request like
+    # 200x150 on this 400x100 fixture legitimately needs a bigger master.)
+    tc.load_cover_pixbuf(wide_src, 200, 50)
+    tc.load_cover_pixbuf(wide_src, 400, 100)
+    check_eq("hybrid floor: card and backdrop then derive - still one decode", len(decodes), 1)
+    check("hybrid floor: cached loader accepts the floor too",
+          tc.load_cover_pixbuf_cached(wide_src, 40, 30, (400, 100)).get_width() == 40)
+    check_eq("hybrid floor: via the cached loader, still no new decode", len(decodes), 1)
+    tc.MASTER_MIN_TARGET = None
+    tc._decode_at_scale = real_decode
+    tc._masters.clear()
+
     # _cache_path/load_cover_pixbuf_cached: the on-disk persistence layer
     # over load_cover_pixbuf, keyed by source path + mtime + size +
     # CACHE_FORMAT_VERSION (see both functions' own docstrings). Isolated

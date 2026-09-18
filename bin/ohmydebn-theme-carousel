@@ -62,6 +62,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
+import collections
 import hashlib
 import os
 import subprocess
@@ -398,7 +399,7 @@ def get_monitor_geometry():
     return monitor.get_geometry()
 
 
-def load_cover_pixbuf(path, target_w, target_h):
+def load_cover_pixbuf(path, target_w, target_h, min_target=None):
     """Scale-and-crop to fill target_w x target_h exactly, like CSS
     background-size:cover - avoids distorting the image, unlike a plain
     stretch-to-fit scale.
@@ -430,12 +431,100 @@ def load_cover_pixbuf(path, target_w, target_h):
     _fmt, src_w, src_h = GdkPixbuf.Pixbuf.get_file_info(path)
     scale = max(target_w / src_w, target_h / src_h)
     new_w, new_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
-    scaled = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, new_w, new_h, False)
+    master = _master_pixbuf(path, scale, src_w, src_h, min_target)
+    if master.get_width() == new_w and master.get_height() == new_h:
+        scaled = master
+    else:
+        scaled = master.scale_simple(new_w, new_h, GdkPixbuf.InterpType.BILINEAR)
     x = max(0, (new_w - target_w) // 2)
     y = max(0, (new_h - target_h) // 2)
     x = min(x, new_w - target_w)
     y = min(y, new_h - target_h)
     return scaled.new_subpixbuf(x, y, min(target_w, new_w), min(target_h, new_h))
+
+
+# One decode per source file, not one per requested size. A single
+# render() plus its prefetch asks for the same wallpaper at up to five
+# sizes (full-screen backdrop, card, three neighbor rings), and profiling
+# a cold cache showed decode dominating: on the repo's largest JPEG,
+# new_from_file_at_scale costs 72-136ms at ANY of those sizes (libjpeg's
+# shrink-on-load only goes so far), while scaling an already-decoded
+# pixbuf down costs 4-14ms. So decodes go through here: each path keeps
+# its most recent decode at the LARGEST scale asked for so far, and any
+# request at that scale or smaller derives from it by scale_simple in
+# load_cover_pixbuf. A request larger than the master (the user navigates
+# onto a theme whose preview had only been decoded at ring size) decodes
+# afresh at the larger scale and replaces it - so far rings never pay for
+# a full-screen decode they may never need, and nothing is ever decoded
+# twice at the same or smaller size. Bounded to MASTER_LIMIT entries (a
+# full-screen master is ~13MB), oldest out; keyed on mtime like the disk
+# cache so a replaced file isn't served from its predecessor's pixels.
+# Per-path locks make concurrent requests for one file (a synchronous
+# render() and a prefetch thread) share one decode instead of racing two.
+# Requests usually arrive smallest first: a theme shows up in the far
+# rings at thumbnail size, then at ring-0 size, then as the card, then as
+# the full-screen backdrop as the user browses onto it - and a master
+# sized for the first request would be upgraded (re-decoded) at each of
+# those steps, saving nothing. So a first decode is done at no smaller
+# than a floor: MASTER_MIN_TARGET (the card size, set by Carousel.__init__)
+# for decodes on the main thread, where the user is waiting for the first
+# paint - on the largest wallpaper that's ~99ms instead of ~72ms for a far
+# ring, but the ring-0 and card requests that follow when it's visited
+# (most are - browsing is sequential) derive for free instead of costing
+# 72ms + 99ms more. Background decodes (the prefetch thread, the outer
+# rings' async fill) pass min_target=(screen) instead: nobody is waiting
+# on them, and a full-screen master (~136ms vs ~99ms there) means even
+# the backdrop derives when the theme reaches the centre - one decode
+# per theme, total. Measured cold: a full-screen floor everywhere cut
+# decodes 45 -> 28 but cost ~200ms on first paint; the hybrid keeps the
+# first paint and takes most of the decode saving.
+MASTER_LIMIT = 8
+MASTER_MIN_TARGET = None  # (w, h) or None - the main-thread floor
+_masters = collections.OrderedDict()  # path -> (mtime_ns, scale, pixbuf)
+_masters_lock = threading.Lock()
+_master_decode_locks = {}
+
+
+def _decode_at_scale(path, width, height):
+    """The one real decode call - a seam the unit test counts."""
+    return GdkPixbuf.Pixbuf.new_from_file_at_scale(path, width, height, False)
+
+
+def _master_pixbuf(path, scale, src_w, src_h, min_target=None):
+    """The decoded pixbuf for `path` at a scale >= `scale` (see the
+    comment above) - decoding only when nothing that large is held.
+    min_target overrides MASTER_MIN_TARGET as the decode floor."""
+    mtime = os.stat(path).st_mtime_ns
+
+    def cached():
+        entry = _masters.get(path)
+        if entry and entry[0] == mtime and entry[1] >= scale - 1e-9:
+            _masters.move_to_end(path)
+            return entry[2]
+        return None
+
+    with _masters_lock:
+        pixbuf = cached()
+        if pixbuf is not None:
+            return pixbuf
+        lock = _master_decode_locks.setdefault(path, threading.Lock())
+    with lock:
+        with _masters_lock:
+            pixbuf = cached()
+        if pixbuf is not None:
+            return pixbuf
+        decode_scale = scale
+        floor = min_target or MASTER_MIN_TARGET
+        if floor:
+            decode_scale = max(decode_scale, floor[0] / src_w, floor[1] / src_h)
+        new_w, new_h = max(1, round(src_w * decode_scale)), max(1, round(src_h * decode_scale))
+        pixbuf = _decode_at_scale(path, new_w, new_h)
+        with _masters_lock:
+            _masters[path] = (mtime, decode_scale, pixbuf)
+            _masters.move_to_end(path)
+            while len(_masters) > MASTER_LIMIT:
+                _masters.popitem(last=False)
+        return pixbuf
 
 
 def _cache_path(path, target_w, target_h):
@@ -462,7 +551,7 @@ def _cache_path(path, target_w, target_h):
     return os.path.join(CAROUSEL_CACHE_DIR, f"{key}.jpg")
 
 
-def load_cover_pixbuf_cached(path, target_w, target_h):
+def load_cover_pixbuf_cached(path, target_w, target_h, min_target=None):
     """load_cover_pixbuf(), but persisted to CAROUSEL_CACHE_DIR across
     separate carousel launches - see the module-level comment above
     CAROUSEL_CACHE_DIR for why (and why JPEG, not the icon cache's PNG).
@@ -488,7 +577,7 @@ def load_cover_pixbuf_cached(path, target_w, target_h):
             return GdkPixbuf.Pixbuf.new_from_file(cache_path)
         except GLib.Error:
             pass  # cache file corrupt/unreadable - fall through and re-decode/re-cache below
-    pixbuf = load_cover_pixbuf(path, target_w, target_h)
+    pixbuf = load_cover_pixbuf(path, target_w, target_h, min_target)
     if cache_path:
         try:
             os.makedirs(CAROUSEL_CACHE_DIR, exist_ok=True)
@@ -850,7 +939,13 @@ class Carousel(Gtk.Window):
         # of its work if it's fallen behind - see _schedule_prefetch().
         self._prefetch_gen = 0
 
+        # Queried once: the pointer-position round trip behind it measured
+        # ~5ms, which was being paid again on every render() - a sizeable
+        # share of a warm-cache keypress (14-40ms). The window is sized
+        # and fullscreened for this monitor, so it's the right one for the
+        # whole session.
         geo = get_monitor_geometry()
+        self._geo = geo
         self.set_default_size(geo.width, geo.height)
 
         # Shrink (never grow) the card/thumbnail sizes to whatever fits this
@@ -861,6 +956,8 @@ class Carousel(Gtk.Window):
         available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
         scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
         self.card_w, self.card_h = round(CARD_W * scale), round(CARD_H * scale)
+        global MASTER_MIN_TARGET
+        MASTER_MIN_TARGET = (self.card_w, self.card_h)
         # One (w, h) pair per RING_SPECS entry, same order (index 0 = the
         # +-1 ring closest to the card) - render()'s theme_changed block
         # indexes this the same way it indexes self.left_images/
@@ -1429,7 +1526,10 @@ class Carousel(Gtk.Window):
             # already competing for it.
             if self.index != want_index:
                 return
-            pixbuf = self._decode_pixbuf(load_cover_pixbuf_cached, path, w, h)
+            # Background decode: floor at the screen size (see
+            # MASTER_MIN_TARGET's comment) so the whole theme is ready if
+            # the user browses onto it.
+            pixbuf = self._decode_pixbuf(load_cover_pixbuf_cached, path, w, h, (self._geo.width, self._geo.height))
 
             def apply():
                 self._pixbuf_cache[key] = pixbuf
@@ -1445,7 +1545,7 @@ class Carousel(Gtk.Window):
         threading.Thread(target=work, daemon=True).start()
 
     @staticmethod
-    def _decode_pixbuf(loader, path, w, h):
+    def _decode_pixbuf(loader, path, w, h, min_target=None):
         """list_backgrounds_for_theme() doesn't filter by extension (see
         its own docstring - it has to match ohmydebn-theme-bg-next's own
         unfiltered enumeration so index N means the same file on both
@@ -1460,7 +1560,7 @@ class Carousel(Gtk.Window):
         exactly once, not a crash, and never re-attempts the same failing
         decode on every subsequent keypress."""
         try:
-            return loader(path, w, h)
+            return loader(path, w, h, min_target)
         except Exception:
             return None
 
@@ -1532,7 +1632,7 @@ class Carousel(Gtk.Window):
         if n == 0:
             return GLib.SOURCE_REMOVE
         slug = self.slugs[self.index]
-        geo = get_monitor_geometry()
+        geo = self._geo
 
         # Up/Down (background-only) navigation never changes self.index, so
         # the adjacent-theme thumbnails below are guaranteed identical to
@@ -1693,14 +1793,17 @@ class Carousel(Gtk.Window):
                     neighbor_bg_path = neighbor_backgrounds[0] if neighbor_backgrounds else (
                         first_background(neighbor_slug) or preview_image(neighbor_slug)
                     )
+                    # Largest size first: the card then derives from the
+                    # full-screen master instead of costing its own decode
+                    # (see MASTER_MIN_TARGET's comment).
                     if neighbor_bg_path:
-                        targets.append((neighbor_bg_path, card_w, card_h))
                         targets.append((neighbor_bg_path, geo_w, geo_h))
+                        targets.append((neighbor_bg_path, card_w, card_h))
             bg_n = len(backgrounds)
             if bg_n > 1:
                 for neighbor_bg in ((bg_index - 1) % bg_n, (bg_index + 1) % bg_n):
-                    targets.append((backgrounds[neighbor_bg], card_w, card_h))
                     targets.append((backgrounds[neighbor_bg], geo_w, geo_h))
+                    targets.append((backgrounds[neighbor_bg], card_w, card_h))
 
             for path, w, h in targets:
                 if generation != self._prefetch_gen:
@@ -1709,7 +1812,7 @@ class Carousel(Gtk.Window):
                 if key in self._pixbuf_cache:
                     continue
                 try:
-                    pixbuf = load_cover_pixbuf_cached(path, w, h)
+                    pixbuf = load_cover_pixbuf_cached(path, w, h, (geo_w, geo_h))
                 except Exception:
                     # Best-effort warmup only - a decode failure here just
                     # means we didn't get to skip it later; render() will

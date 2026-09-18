@@ -114,21 +114,35 @@ sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 # are checked explicitly: under set -e a failing first member of an
 # `a && b` list doesn't stop the script, so a failed refresh used to skip
 # the self-update silently and carry on running the OLD install.sh as if
-# nothing had happened. And `apt update` itself exits 0 even when every
-# source is unreachable (it only warns), so the refresh runs with
-# APT::Update::Error-Mode=any, which turns any failed source into a real
-# error - confirmed against an unreachable scratch source. That does mean
-# a dead third-party repo in sources.list.d blocks the update until it's
-# fixed or removed; apt names it in the output above the message, and a
-# broken source is worth knowing about rather than papering over.
+# nothing had happened. And `apt update` itself exits 0 even when a
+# source is unreachable (it only warns), so its output is inspected: the
+# one source this step actually needs is OhMyDebn's own
+# (packages.ohmydebn.org) - if THAT failed to refresh, or apt itself
+# failed, the update stops before changing anything. Any OTHER source
+# that failed (a third-party repo that's down or gone) is named in a
+# warning and the update continues, exactly as apt itself does; a
+# strict any-source-fails mode was tried first and would have let one
+# dead vendor repo block every OhMyDebn update. LC_ALL=C so apt's
+# "Err:"/"Failed to fetch" lines are matchable in any locale.
+OHMYDEBN_REPO_HOST="packages.ohmydebn.org"
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
-  if ! sudo /usr/bin/apt -o APT::Update::Error-Mode=any update; then
-    $DIR/bin/ohmydebn-headline "Could not refresh the package lists - update stopped"
+  APT_UPDATE_OUT=$(mktemp)
+  sudo /usr/bin/env LC_ALL=C /usr/bin/apt update 2>&1 | tee "$APT_UPDATE_OUT"
+  APT_UPDATE_STATUS=${PIPESTATUS[0]}
+  FAILED_SOURCES=$(grep -E '^(Err:|W: Failed to fetch )' "$APT_UPDATE_OUT" | grep -oE 'https?://[^ ]+' | sort -u || true)
+  rm -f "$APT_UPDATE_OUT"
+  if [ "$APT_UPDATE_STATUS" -ne 0 ] || grep -q "$OHMYDEBN_REPO_HOST" <<<"$FAILED_SOURCES"; then
+    $DIR/bin/ohmydebn-headline "Could not refresh the OhMyDebn package repository - update stopped"
     echo "Nothing has been changed. Check your Internet connection and the apt output"
-    echo "above (a repository that failed to download is named there), then run"
-    echo "ohmydebn-update again."
+    echo "above, then run ohmydebn-update again."
     exit 1
+  fi
+  if [ -n "$FAILED_SOURCES" ]; then
+    $DIR/bin/ohmydebn-headline "Some package repositories could not be refreshed - continuing"
+    echo "These sources failed and were skipped (their packages won't update this run):"
+    printf '  %s\n' $FAILED_SOURCES
+    echo "If one of them is no longer needed, remove it from /etc/apt/sources.list.d/."
   fi
   if ! sudo /usr/bin/apt -y install ohmydebn; then
     $DIR/bin/ohmydebn-headline "Could not install the latest ohmydebn package - update stopped"

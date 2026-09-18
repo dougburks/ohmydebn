@@ -2,12 +2,13 @@
 #
 # Unit tests for two guards in bin/ohmydebn-update:
 #
-#  - the self-update refresh: `apt update` runs with
-#    APT::Update::Error-Mode=any (plain `apt update` exits 0 even when
-#    every source is unreachable), and a failed refresh or a failed
-#    `apt install ohmydebn` stops the run with a message BEFORE
-#    install.sh - it used to be skipped silently by set -e's and-list
-#    rule and the old install.sh ran anyway.
+#  - the self-update refresh: plain `apt update` exits 0 even when a
+#    source is unreachable, so its output is inspected. OhMyDebn's own
+#    repository failing (or apt itself failing) stops the run BEFORE
+#    install.sh with a message - it used to be skipped silently by set -e's
+#    and-list rule and the old install.sh ran anyway. Any OTHER source
+#    failing is only warned about, so a dead third-party repo can't block
+#    OhMyDebn updates. A failed `apt install ohmydebn` stops the run too.
 #  - the per-user flock: a second ohmydebn-update while one is running
 #    exits 1 with a message and never reaches install.sh.
 #
@@ -38,7 +39,11 @@ EOF2
 #!/bin/bash
 mock_log "sudo $*"
 case "$*" in
-*"apt "*" update"* | *"apt update"*) exit "${MOCK_APT_UPDATE_EXIT:-0}" ;;
+*"apt update"*)
+  # Canned `apt update` output (C locale shapes): MOCK_APT_OUTPUT, else
+  # every source Hit.
+  printf '%b\n' "${MOCK_APT_OUTPUT:-Hit:1 https://deb.debian.org/debian trixie InRelease\nHit:2 https://packages.ohmydebn.org trixie InRelease\nReading package lists...}"
+  exit "${MOCK_APT_UPDATE_EXIT:-0}" ;;
 *"apt -y install ohmydebn"*) exit "${MOCK_APT_INSTALL_EXIT:-0}" ;;
 esac
 exit 0
@@ -74,20 +79,40 @@ run_update() {
 setup
 run_update
 assert_eq "happy path: exits 0" "0" "$STATUS"
-assert_contains "happy path: refresh runs in strict error mode" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -o APT::Update::Error-Mode=any update"
+assert_contains "happy path: refresh runs apt update in the C locale (parseable output)" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/env LC_ALL=C /usr/bin/apt update"
+assert_not_contains "happy path: no warning when every source refreshed" "$OUTPUT" "could not be refreshed"
 assert_contains "happy path: self-update installs ohmydebn" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install ohmydebn"
 assert_contains "happy path: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh"
 assert_eq "happy path: lock file records this run's pid and is left in place" "yes" "$([ -s "$RUNTIME/ohmydebn-update-$(id -u).lock" ] && echo yes || echo no)"
 mock_cleanup
 
-# --- a failed refresh stops the run before anything changes ---
+# --- apt update itself failing (lock held, broken sources file) stops the run ---
 setup
 run_update MOCK_APT_UPDATE_EXIT=100
-assert_eq "refresh failure: non-zero exit" "1" "$STATUS"
-assert_contains "refresh failure: explains and names the next step" "$OUTPUT" "Could not refresh the package lists - update stopped"
-assert_contains "refresh failure: says nothing changed" "$OUTPUT" "Nothing has been changed"
-assert_not_contains "refresh failure: no apt install attempted" "$(cat "$MOCK_CALLS")" "apt -y install ohmydebn"
-assert_not_contains "refresh failure: install.sh NOT run (the old silent-skip bug)" "$(cat "$MOCK_CALLS")" "install.sh"
+assert_eq "apt failure: non-zero exit" "1" "$STATUS"
+assert_contains "apt failure: explains and names the next step" "$OUTPUT" "Could not refresh the OhMyDebn package repository - update stopped"
+assert_contains "apt failure: says nothing changed" "$OUTPUT" "Nothing has been changed"
+assert_not_contains "apt failure: no apt install attempted" "$(cat "$MOCK_CALLS")" "apt -y install ohmydebn"
+assert_not_contains "apt failure: install.sh NOT run (the old silent-skip bug)" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- OhMyDebn's own repo unreachable (apt exits 0, only warns): stops the run ---
+setup
+run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://packages.ohmydebn.org trixie InRelease\n  Could not resolve host: packages.ohmydebn.org\nW: Failed to fetch https://packages.ohmydebn.org/dists/trixie/InRelease  Could not resolve host\nW: Some index files failed to download. They have been ignored, or old ones used instead.'
+assert_eq "ohmydebn repo down: non-zero exit even though apt itself exited 0" "1" "$STATUS"
+assert_contains "ohmydebn repo down: names the OhMyDebn repository" "$OUTPUT" "Could not refresh the OhMyDebn package repository - update stopped"
+assert_not_contains "ohmydebn repo down: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- a third-party repo unreachable, OhMyDebn's fine: warn and continue ---
+setup
+run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://brave-browser-apt-release.s3.brave.com stable InRelease\n  Could not connect to brave-browser-apt-release.s3.brave.com:443\nHit:3 https://packages.ohmydebn.org trixie InRelease\nW: Failed to fetch https://brave-browser-apt-release.s3.brave.com/dists/stable/InRelease  Could not connect\nW: Some index files failed to download. They have been ignored, or old ones used instead.'
+assert_eq "third-party repo down: exits 0" "0" "$STATUS"
+assert_contains "third-party repo down: warns, naming the failed source" "$OUTPUT" "Some package repositories could not be refreshed - continuing"
+assert_contains "third-party repo down: the failed URL is listed" "$OUTPUT" "https://brave-browser-apt-release.s3.brave.com"
+assert_not_contains "third-party repo down: OhMyDebn's own repo is not listed as failed" "$OUTPUT" "  https://packages.ohmydebn.org"
+assert_contains "third-party repo down: self-update still runs" "$(cat "$MOCK_CALLS")" "apt -y install ohmydebn"
+assert_contains "third-party repo down: install.sh still runs" "$(cat "$MOCK_CALLS")" "install.sh"
 mock_cleanup
 
 # --- a failed self-update install stops the run too ---

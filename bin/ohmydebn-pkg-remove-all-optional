@@ -69,8 +69,13 @@ fi
 sudo /usr/bin/apt -y autoremove
 
 # Apps with their own dedicated ohmydebn-<package>-remove script for
-# repo/keyring/config cleanup beyond a plain apt purge.
-for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudflare-warp code \
+# repo/keyring/config cleanup beyond a plain apt purge. Not brave-origin:
+# it's the default browser (install/packaging/browser.sh), not an optional
+# app, so it stays for the same reason Chromium never appeared here when it
+# was the default - and the power-user flow, which runs this first, would
+# otherwise purge it only for its own ohmydebn-brave-origin-install to put
+# it straight back a moment later.
+for PACKAGE in antigravity brave-browser chatgpt claude-code cloudflare-warp code \
   google-chrome-stable helium-bin powershell simplescreenrecorder tailscale; do
   if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
     "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt

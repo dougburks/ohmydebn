@@ -321,6 +321,49 @@ finally:
     shutil.rmtree(fake_home)
 
 print()
+# flatten_lines(): menu_tree_flatten's rows once per process (every
+# menu-level reload used to spawn bash for them again), read straight from
+# the shipped cache on a real install and via run_menu_tree otherwise.
+print("=== ohmydebn-menu-picker flatten_lines ===")
+import tempfile as _tf
+_saved_menu_file, _saved_shipped, _saved_run = mp.MENU_FILE, mp.SHIPPED_FLATTEN_CACHE, mp.run_menu_tree
+_tree_calls = []
+mp.run_menu_tree = lambda call: (_tree_calls.append(call), ["Install > Media > GIMP\tohmydebn-gimp", "Apps > AI > Codex\tohmydebn-codex"])[1]
+mp._flatten_memo.clear()
+mp.MENU_FILE = "/not/the/installed/ohmydebn-menu"
+rows = mp.load_leaves("")
+check_eq("flatten: a non-installed MENU_FILE goes through run_menu_tree", len(_tree_calls), 1)
+check_eq("flatten: rows come back as (display, breadcrumb)", rows[0], ("Install > Media > GIMP", "Install > Media > GIMP"))
+mp.load_leaves("Install")
+mp.load_leaves("Apps")
+check_eq("flatten: later levels reuse the memo - still one bash spawn", len(_tree_calls), 1)
+check_eq("flatten: per-level scoping still applied on top of the memo",
+         mp.load_leaves("Apps"), [("AI > Codex", "Apps > AI > Codex")])
+mp._flatten_memo.clear()
+mp.load_leaves("")
+check_eq("flatten: clearing the memo spawns again", len(_tree_calls), 2)
+
+# Installed path + shipped cache: read directly, no bash; PATH rows dropped.
+with _tf.TemporaryDirectory() as _d:
+    shipped = os.path.join(_d, "menu-tree-flatten.tsv")
+    with open(shipped, "w", encoding="utf-8") as f:
+        f.write("PATH\tshow_install_menu\tInstall\nInstall > Media > GIMP\tohmydebn-gimp\n\nStyle > Theme\tohmydebn-theme-carousel\n")
+    mp.SHIPPED_FLATTEN_CACHE = shipped
+    mp.MENU_FILE = mp.OHMYDEBN_BIN + "/ohmydebn-menu"
+    mp.run_menu_tree = lambda call: (_ for _ in ()).throw(AssertionError("bash spawned despite the shipped cache"))
+    mp._flatten_memo.clear()
+    check_eq("flatten: installed MENU_FILE reads the shipped cache without bash (PATH rows dropped, blanks skipped)",
+             mp.flatten_lines(), ["Install > Media > GIMP\tohmydebn-gimp", "Style > Theme\tohmydebn-theme-carousel"])
+    check_eq("flatten: load_leaves on top of it scopes as usual",
+             mp.load_leaves("Style"), [("Theme", "Style > Theme")])
+    # Shipped cache missing (a dev install with it deleted): back to bash.
+    os.remove(shipped)
+    mp.run_menu_tree = lambda call: (_tree_calls.append(call), ["X > Y\tz"])[1]
+    mp._flatten_memo.clear()
+    check_eq("flatten: no shipped cache falls back to run_menu_tree", mp.flatten_lines(), ["X > Y\tz"])
+mp.MENU_FILE, mp.SHIPPED_FLATTEN_CACHE, mp.run_menu_tree = _saved_menu_file, _saved_shipped, _saved_run
+mp._flatten_memo.clear()
+
 print("=== ohmydebn-theme-carousel (pure logic) ===")
 # Formerly two separate scripts/hotkeys/menu entries (this one for themes,
 # ohmydebn-theme-bg-carousel for backgrounds within the current theme) -

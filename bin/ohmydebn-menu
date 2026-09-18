@@ -6,6 +6,13 @@ export PATH="/usr/share/ohmydebn/bin:$PATH"
 
 source /usr/share/ohmydebn/bin/ohmydebn-menu-tree
 
+# show_*_menu function -> its breadcrumb, filled from menu_tree_paths on
+# menu()'s first call and reused for every later level in this process:
+# that lookup is a bash+awk subprocess (~7ms) and its answer can't change
+# while this script runs.
+declare -A MENU_BREADCRUMB_OF=()
+MENU_BREADCRUMBS_LOADED=""
+
 # Set to true when going directly to a submenu, so we can exit directly
 DIRECT_ACCESS=false
 
@@ -387,7 +394,15 @@ menu() {
   local caller="${FUNCNAME[1]:-}"
   local breadcrumb_prefix=""
   if [[ -n "$caller" ]]; then
-    breadcrumb_prefix=$(menu_tree_paths "${BASH_SOURCE[0]}" | awk -F'\t' -v f="$caller" '$1==f{print $2; exit}')
+    if [[ -z "$MENU_BREADCRUMBS_LOADED" ]]; then
+      local func crumb
+      # First match wins, as the old `awk ... exit` did.
+      while IFS=$'\t' read -r func crumb; do
+        [[ -v MENU_BREADCRUMB_OF["$func"] ]] || MENU_BREADCRUMB_OF["$func"]="$crumb"
+      done < <(menu_tree_paths "${BASH_SOURCE[0]}")
+      MENU_BREADCRUMBS_LOADED=1
+    fi
+    breadcrumb_prefix="${MENU_BREADCRUMB_OF[$caller]:-}"
   fi
 
   get_picker_result "$options" "$breadcrumb_prefix"

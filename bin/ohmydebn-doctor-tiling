@@ -1,0 +1,294 @@
+#!/bin/bash
+set -uo pipefail
+
+# ohmydebn-doctor-tiling: exercises gTile-OhMyDebn's automatic tiling
+# modes on the live desktop and checks what actually happens - the wiring
+# to Muffin that the extension's own unit tests (pure tree math) can't
+# reach. Opt-in only: `ohmydebn-doctor --exercise-tiling`, or this script
+# directly. Unlike ohmydebn-doctor it DOES change things while it runs -
+# it switches to an empty workspace, cycles the tiling mode, opens and
+# closes terminal windows - and puts everything back on exit (trap).
+#
+# Six windows per mode, not two or three: the capped "Traditional (3
+# windows)" mode discards its tree when window 4 opens, and the bug that
+# motivated this only showed on the SECOND round - closing 6, 5 and 4,
+# then 3, must expand 2 into 3's space (windows 1-3 were still wired to
+# the discarded tree). So every mode opens six, then closes them in the
+# order that exercised that path, asserting the survivors' geometry after
+# each step.
+#
+# Geometry is checked by REGION, not pixels: a window is classified as
+# full / left-half / right-half / top-right / bottom-right / ... from its
+# size and centre as fractions of the screen, with tolerances that absorb
+# window gaps, decorations and a panel. classify_region and
+# mode_cycle_steps are pure and unit-tested (tests/unit/
+# test-doctor-tiling.sh); the live sequence can only be proven in a real
+# session, which is what the per-distro VMs are for.
+
+TITLE_PREFIX="ohmydebn-doctor-tiling"
+SETTLE="${OHMYDEBN_DOCTOR_TILING_SETTLE:-1.2}"
+MODES=(off rules traditional traditional-full scrollable)
+SPICE="$HOME/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
+DBUS=(gdbus call --session --dest org.gTile.Control --object-path /org/gTile/Control --method)
+
+# ---------------------------------------------------------- pure helpers
+
+# classify_region x y w h screenW screenH -> one of
+#   full left-half right-half top-left top-right bottom-left bottom-right
+#   top-half bottom-half other
+classify_region() {
+  local x=$1 y=$2 w=$3 h=$4 sw=$5 sh=$6
+  # Integer permille to stay in bash arithmetic.
+  local wf=$((w * 1000 / sw)) hf=$((h * 1000 / sh))
+  local cx=$(((x + w / 2) * 1000 / sw)) cy=$(((y + h / 2) * 1000 / sh))
+  local wide=false halfwide=false tall=false halftall=false
+  ((wf >= 800)) && wide=true
+  ((wf >= 350 && wf <= 650)) && halfwide=true
+  ((hf >= 700)) && tall=true
+  ((hf >= 300 && hf <= 600)) && halftall=true
+  if $wide && $tall; then echo full; return; fi
+  if $halfwide && $tall; then
+    if ((cx < 500)); then echo left-half; else echo right-half; fi
+    return
+  fi
+  if $wide && $halftall; then
+    if ((cy < 500)); then echo top-half; else echo bottom-half; fi
+    return
+  fi
+  if $halfwide && $halftall; then
+    if ((cy < 500)); then
+      if ((cx < 500)); then echo top-left; else echo top-right; fi
+    else
+      if ((cx < 500)); then echo bottom-left; else echo bottom-right; fi
+    fi
+    return
+  fi
+  echo other
+}
+
+# mode_cycle_steps <current> <target> -> how many CycleTilingMode(1) calls
+# move from current to target through the extension's own cycle order.
+mode_cycle_steps() {
+  local cur=-1 tgt=-1 i
+  for i in "${!MODES[@]}"; do
+    [ "${MODES[$i]}" = "$1" ] && cur=$i
+    [ "${MODES[$i]}" = "$2" ] && tgt=$i
+  done
+  if ((cur < 0 || tgt < 0)); then echo -1; return; fi
+  echo $(((tgt - cur + ${#MODES[@]}) % ${#MODES[@]}))
+}
+
+# overlaps x1 y1 w1 h1 x2 y2 w2 h2 -> 0 if the two rectangles overlap
+overlaps() {
+  (($1 < $5 + $7 && $5 < $1 + $3 && $2 < $6 + $8 && $6 < $2 + $4))
+}
+
+# Sourced for its functions only (the unit test).
+[ "${OHMYDEBN_DOCTOR_TILING_LIB:-}" = "1" ] && return 0 2>/dev/null
+
+# -------------------------------------------------------------- reporting
+OK=0; FAILED=0; SKIPPED=0; FAILURES=()
+ok() { OK=$((OK + 1)); echo "  ok - $1"; }
+fail() { FAILED=$((FAILED + 1)); FAILURES+=("$1"); echo "  FAIL - $1${2:+ ($2)}"; }
+skip() { SKIPPED=$((SKIPPED + 1)); echo "  skip - $1${2:+ ($2)}"; }
+section() { echo; echo "== $1 =="; }
+finish() {
+  echo; echo "== Tiling exercise summary =="
+  echo "  $OK ok, $FAILED failed, $SKIPPED skipped"
+  if ((FAILED > 0)); then echo "  failed:"; for f in "${FAILURES[@]}"; do echo "    - $f"; done; fi
+  ((FAILED == 0))
+}
+
+# ---------------------------------------------------------- preconditions
+echo "OhMyDebn tiling exercise - $(date '+%Y-%m-%d %H:%M')"
+if [ -z "${DISPLAY:-}" ] || [ "${XDG_CURRENT_DESKTOP:-}" != "X-Cinnamon" ]; then
+  skip "tiling exercise" "needs a Cinnamon session with a display"; finish; exit $?
+fi
+for t in xdotool xprop gdbus alacritty python3; do
+  command -v "$t" >/dev/null 2>&1 || { skip "tiling exercise" "$t not found"; finish; exit $?; }
+done
+if ! gsettings get org.cinnamon enabled-extensions 2>/dev/null | grep -q gTile@OhMyDebn; then
+  skip "tiling exercise" "gTile@OhMyDebn is not enabled"; finish; exit $?
+fi
+[ -f "$SPICE" ] || { skip "tiling exercise" "no gTile settings file at $SPICE"; finish; exit $?; }
+
+read -r SW SH < <(xdotool getdisplaygeometry)
+NUM_DESKTOPS=$(xdotool get_num_desktops)
+ORIG_DESKTOP=$(xdotool get_desktop)
+EMPTY_DESKTOP=""
+for ((d = 0; d < NUM_DESKTOPS; d++)); do
+  if [ "$(xdotool search --desktop "$d" --onlyvisible --name '' 2>/dev/null | wc -l)" -eq 0 ]; then EMPTY_DESKTOP=$d; break; fi
+done
+if [ -z "$EMPTY_DESKTOP" ]; then
+  skip "tiling exercise" "no empty workspace to run on - close windows on one workspace and retry"; finish; exit $?
+fi
+
+current_mode() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tiling-mode"]["value"])' "$SPICE" 2>/dev/null; }
+ORIG_MODE=$(current_mode)
+if [ -z "$ORIG_MODE" ]; then skip "tiling exercise" "couldn't read the current tiling mode"; finish; exit $?; fi
+echo "screen ${SW}x${SH}, workspace $EMPTY_DESKTOP (was $ORIG_DESKTOP), mode $ORIG_MODE (restored afterwards)"
+
+# ----------------------------------------------------------- window plumbing
+declare -A PIDS=()
+
+set_mode() {
+  local target=$1 steps cur i
+  cur=$(current_mode)
+  steps=$(mode_cycle_steps "$cur" "$target")
+  if ((steps < 0)); then fail "switch to mode $target" "unknown mode (current: $cur)"; return 1; fi
+  for ((i = 0; i < steps; i++)); do "${DBUS[@]}" org.gTile.Control.CycleTilingMode 1 >/dev/null 2>&1; sleep 0.3; done
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ "$(current_mode)" = "$target" ] && break; sleep 0.3; done
+  if [ "$(current_mode)" = "$target" ]; then ok "switched to mode $target"; return 0; fi
+  fail "switch to mode $target" "extension reports $(current_mode)"; return 1
+}
+
+win_id() { xdotool search --name "^$TITLE_PREFIX-$1\$" 2>/dev/null | head -1; }
+# "Visible" means present and not minimized. Muffin keeps minimized X11
+# windows mapped (xdotool's --onlyvisible still lists them - confirmed
+# live), so minimization is read from _NET_WM_STATE's HIDDEN flag instead.
+win_visible() {
+  local id
+  id=$(win_id "$1"); [ -n "$id" ] || return 1
+  ! xprop -id "$id" _NET_WM_STATE 2>/dev/null | grep -q _NET_WM_STATE_HIDDEN
+}
+
+open_window() {
+  local n=$1 title=${2:-$TITLE_PREFIX-$1} i
+  alacritty --title "$title" -e sleep 900 >/dev/null 2>&1 &
+  PIDS[$n]=$!
+  for i in $(seq 1 50); do [ -n "$(xdotool search --name "^$title\$" 2>/dev/null | head -1)" ] && break; sleep 0.1; done
+  sleep "$SETTLE"
+}
+
+close_window() {
+  local n=$1 i
+  [ -n "${PIDS[$n]:-}" ] && kill "${PIDS[$n]}" 2>/dev/null
+  unset "PIDS[$n]"
+  for i in $(seq 1 50); do [ -z "$(win_id "$n")" ] && break; sleep 0.1; done
+  sleep "$SETTLE"
+}
+
+close_all() { local n; for n in "${!PIDS[@]}"; do close_window "$n"; done; }
+
+# geometry <title-suffix or full title> -> "x y w h" or nothing
+geometry() {
+  local id
+  id=$(xdotool search --name "^$1\$" 2>/dev/null | head -1)
+  [ -n "$id" ] || return 1
+  xdotool getwindowgeometry --shell "$id" 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} /^WIDTH=/{w=$2} /^HEIGHT=/{h=$2} END{print x, y, w, h}'
+}
+
+# expect <label> <window n> <region>
+expect() {
+  local label=$1 n=$2 want=$3 g region
+  g=$(geometry "$TITLE_PREFIX-$n") || { fail "$label: window $n is $want" "window not found"; return; }
+  # shellcheck disable=SC2086
+  region=$(classify_region $g "$SW" "$SH")
+  if [ "$region" = "$want" ]; then ok "$label: window $n is $want"; else fail "$label: window $n is $want" "is $region: $g"; fi
+}
+
+expect_visible_count() {
+  local label=$1 want=$2 got=0 n
+  for n in 1 2 3 4 5 6; do win_visible "$n" && got=$((got + 1)); done
+  if ((got == want)); then ok "$label: $want windows visible"; else fail "$label: $want windows visible" "$got visible"; fi
+}
+
+expect_no_overlaps() {
+  local label=$1 a b ga gb bad=0
+  for a in 1 2 3 4 5 6; do
+    for b in 2 3 4 5 6; do
+      ((b > a)) || continue
+      ga=$(geometry "$TITLE_PREFIX-$a") || continue; gb=$(geometry "$TITLE_PREFIX-$b") || continue
+      # shellcheck disable=SC2086
+      if overlaps $ga $gb; then bad=$((bad + 1)); fi
+    done
+  done
+  if ((bad == 0)); then ok "$label: no two windows overlap"; else fail "$label: no two windows overlap" "$bad overlapping pairs"; fi
+}
+
+restore() {
+  close_all
+  set_mode "$ORIG_MODE" >/dev/null 2>&1 || true
+  xdotool set_desktop "$ORIG_DESKTOP" 2>/dev/null || true
+}
+trap restore EXIT
+
+xdotool set_desktop "$EMPTY_DESKTOP"; sleep 0.5
+
+# ---------------------------------------------------- Traditional (3 windows)
+section "Traditional tiling (3 windows), six windows"
+if set_mode traditional; then
+  open_window 1; expect "open 1" 1 full
+  open_window 2; expect "open 2" 1 left-half; expect "open 2" 2 right-half
+  open_window 3; expect "open 3" 2 top-right; expect "open 3" 3 bottom-right
+  open_window 4; expect "open 4 (cap hit: fresh tree)" 4 full
+  open_window 5; expect "open 5" 4 left-half; expect "open 5" 5 right-half
+  open_window 6; expect "open 6" 5 top-right; expect "open 6" 6 bottom-right
+  close_window 6; expect "close 6" 5 right-half
+  close_window 5; expect "close 5" 4 full
+  close_window 4
+  # The second-round bug: 1-3 belong to the discarded tree but must still rebalance.
+  close_window 3; expect "close 3 (discarded-tree rebalance)" 2 right-half; expect "close 3" 1 left-half
+  close_window 2; expect "close 2" 1 full
+  close_window 1
+fi
+
+# ------------------------------------------------- Traditional (unlimited)
+section "Traditional tiling (unlimited), six windows"
+if set_mode traditional-full; then
+  for n in 1 2 3 4 5 6; do open_window "$n"; done
+  expect "open 6" 1 left-half
+  expect "open 6" 2 top-right
+  expect_visible_count "open 6" 6
+  expect_no_overlaps "open 6"
+  for n in 6 5 4 3; do close_window "$n"; done
+  expect "close down to 2" 1 left-half; expect "close down to 2" 2 right-half
+  close_window 2; expect "close 2" 1 full
+  close_window 1
+fi
+
+# ------------------------------------------------------------ Scrollable
+section "Scrollable tiling, six windows"
+if set_mode scrollable; then
+  open_window 1; expect "open 1 (lone window fills the screen)" 1 full
+  open_window 2; expect "open 2" 1 left-half; expect "open 2" 2 right-half
+  for n in 3 4 5 6; do open_window "$n"; done
+  expect_visible_count "open 6 (viewport shows two columns)" 2
+  expect "open 6 (newest column in view)" 6 right-half
+  "${DBUS[@]}" org.gTile.Control.FocusColumnLeft >/dev/null 2>&1; sleep "$SETTLE"
+  expect_visible_count "FocusColumnLeft" 2
+  for n in 6 5 4 3; do close_window "$n"; done
+  expect_visible_count "close down to 2" 2
+  close_window 2; expect "close 2 (lone window expands)" 1 full
+  close_window 1
+fi
+
+# ------------------------------------------------------------- Rule-based
+section "Rule-based tiling"
+if set_mode rules; then
+  # tile-rules.json places an Alacritty window titled "cliamp" in the bottom-right quarter.
+  open_window 1 cliamp
+  g=$(geometry cliamp) || g=""
+  if [ -n "$g" ]; then
+    # shellcheck disable=SC2086
+    region=$(classify_region $g "$SW" "$SH")
+    if [ "$region" = bottom-right ]; then ok "rules: a window matching the cliamp rule lands bottom-right"; else fail "rules: a window matching the cliamp rule lands bottom-right" "is $region: $g"; fi
+  else
+    fail "rules: a window matching the cliamp rule lands bottom-right" "window not found"
+  fi
+  close_window 1
+fi
+
+# --------------------------------------------------------- DBus tiling
+section "DBus TileFocusedWindow"
+if set_mode off; then
+  open_window 1
+  id=$(win_id 1); [ -n "$id" ] && xdotool windowactivate --sync "$id" 2>/dev/null; sleep 0.3
+  "${DBUS[@]}" org.gTile.Control.TileFocusedWindow 2 1 0 0 1 1 >/dev/null 2>&1; sleep "$SETTLE"
+  expect "TileFocusedWindow 2 1 0 0 1 1" 1 left-half
+  "${DBUS[@]}" org.gTile.Control.TileFocusedWindow 2 2 1 1 1 1 >/dev/null 2>&1; sleep "$SETTLE"
+  expect "TileFocusedWindow 2 2 1 1 1 1" 1 bottom-right
+  close_window 1
+fi
+
+finish

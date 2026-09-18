@@ -21,6 +21,19 @@ set -uo pipefail
 # the external commands (dpkg, gsettings, update-alternatives, systemctl,
 # apt-cache, python3) come from PATH - tests/unit/test-doctor.sh.
 
+# --exercise-tiling: after the read-only checks, also run
+# ohmydebn-doctor-tiling, which DOES change things while it runs (an empty
+# workspace, the tiling mode, six terminal windows per mode - all restored
+# afterwards). Opt-in for that reason.
+EXERCISE_TILING=false
+for arg in "$@"; do
+  case "$arg" in
+  --exercise-tiling) EXERCISE_TILING=true ;;
+  -h | --help) echo "Usage: ohmydebn-doctor [--exercise-tiling]"; exit 0 ;;
+  *) echo "Usage: ohmydebn-doctor [--exercise-tiling]" >&2; exit 2 ;;
+  esac
+done
+
 SYSROOT="${OHMYDEBN_DOCTOR_SYSROOT:-}"
 OHMYDEBN="$SYSROOT/usr/share/ohmydebn"
 CONFIG="$HOME/.config/ohmydebn"
@@ -230,6 +243,10 @@ echo "  $OK ok, $FAILED failed, $SKIPPED skipped"
 if [ "$FAILED" -gt 0 ]; then
   echo "  failed:"
   for f in "${FAILURES[@]}"; do echo "    - $f"; done
-  exit 1
 fi
-exit 0
+TILING_STATUS=0
+if [ "$EXERCISE_TILING" = true ]; then
+  echo
+  "$OHMYDEBN/bin/ohmydebn-doctor-tiling" || TILING_STATUS=$?
+fi
+[ "$FAILED" -eq 0 ] && [ "$TILING_STATUS" -eq 0 ]

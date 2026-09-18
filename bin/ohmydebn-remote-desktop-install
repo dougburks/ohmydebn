@@ -43,6 +43,30 @@ export XDG_SESSION_TYPE=x11
 export DESKTOP_SESSION=cinnamon
 export XDG_CURRENT_DESKTOP=X-Cinnamon
 
+# Model B: one graphical session per user. Running a local Cinnamon desktop and
+# an XRDP Cinnamon desktop for the same user at the same time creates conflicts
+# across DBus names, Secret Service/keyring, portals, and snap cgroups. Refuse
+# the XRDP desktop when this same user already owns a local seat session. Use a
+# separate user for XRDP, or log out locally first.
+if [ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" != "1" ] && command -v loginctl >/dev/null 2>&1; then
+  for sid in $(loginctl list-sessions --no-legend 2>/dev/null | awk -v user="$USER" '$3 == user {print $1}'); do
+    [ "$sid" = "${XDG_SESSION_ID:-}" ] && continue
+    seat=$(loginctl show-session "$sid" -p Seat --value 2>/dev/null || true)
+    state=$(loginctl show-session "$sid" -p State --value 2>/dev/null || true)
+    class=$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)
+    if [ -n "$seat" ] && [ "$seat" != "-" ] && [ "$class" = "user" ] && [ "$state" != "closing" ]; then
+      msg="OhMyDebn XRDP: user '$USER' already has a local graphical session ($sid on $seat). Log out locally or use a separate XRDP user."
+      echo "$msg" >&2
+      if command -v xmessage >/dev/null 2>&1; then
+        xmessage -center -timeout 30 "$msg" || true
+      else
+        sleep 10
+      fi
+      exit 1
+    fi
+  done
+fi
+
 exec dbus-run-session -- sh -c '
   if command -v gnome-keyring-daemon >/dev/null 2>&1; then
     keyring_dir="${XDG_RUNTIME_DIR:-/tmp}/keyring-xrdp-${DISPLAY#:}"

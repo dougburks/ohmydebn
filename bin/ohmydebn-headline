@@ -11,26 +11,35 @@ else
   TEXT="$1"
 fi
 
-# A timestamp line inside the banner, so an update log answers "which
-# stage took the time" at a glance: wall clock, plus elapsed since the run
-# started when the caller exported OHMYDEBN_RUN_START (install.sh and
-# ohmydebn-update do; a headline printed on its own just shows the clock).
-# It goes BETWEEN the title and the closing fence on purpose:
-# ohmydebn-update-gui's stage parser takes the line immediately after a
-# fence as the stage title and ignores what follows until the next fence,
-# so the title stays clean and the stamp is never mistaken for a stage.
-STAMP=$(date '+%H:%M:%S')
+# Stage timeline, written beside the update logs rather than into the
+# banner (a timestamp line in every banner was tried and found distracting):
+# when the caller exported OHMYDEBN_RUN_START (install.sh and
+# ohmydebn-update both do), each headline appends one line -
+# "HH:MM:SS  +mm:ss  <title>", the clock and the elapsed time since the run
+# began - to ~/.local/state/ohmydebn-logs/stages-<run start>.log, with
+# stages-latest.log pointing at the current run. Each line marks when that
+# stage STARTED, so the gap to the next line is what it took. The newest
+# ten runs are kept. A headline printed on its own (no run start) writes
+# nothing. Best-effort: a failure to write never affects the banner.
 if [[ "${OHMYDEBN_RUN_START:-}" =~ ^[0-9]+$ ]]; then
+  STAGE_LOG_DIR="$HOME/.local/state/ohmydebn-logs"
+  STAGE_LOG="$STAGE_LOG_DIR/stages-$OHMYDEBN_RUN_START.log"
   ELAPSED=$((EPOCHSECONDS - OHMYDEBN_RUN_START))
   ((ELAPSED < 0)) && ELAPSED=0
-  STAMP=$(printf '%s  +%02d:%02d' "$STAMP" $((ELAPSED / 60)) $((ELAPSED % 60)))
+  if mkdir -p "$STAGE_LOG_DIR" 2>/dev/null; then
+    if [[ ! -e "$STAGE_LOG" ]]; then
+      # First headline of this run: rotate, and point "latest" here.
+      ls -1t "$STAGE_LOG_DIR"/stages-[0-9]*.log 2>/dev/null | tail -n +10 | xargs -r rm -f --
+      ln -sfn "$STAGE_LOG" "$STAGE_LOG_DIR/stages-latest.log" 2>/dev/null || true
+    fi
+    printf '%s  +%02d:%02d  %s\n' "$(date '+%H:%M:%S')" $((ELAPSED / 60)) $((ELAPSED % 60)) "$TEXT" >>"$STAGE_LOG" 2>/dev/null || true
+  fi
 fi
 
 echo
 cat <<EOF2
 ####################################################################
 $TEXT
-$STAMP
 ####################################################################
 EOF2
 echo

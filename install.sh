@@ -2,9 +2,10 @@
 
 set -e
 
-# When this run began - ohmydebn-headline prints elapsed time against it
-# inside every banner, so a log shows which stage took the time. Inherited
-# unchanged when ohmydebn-update (which sets it first) runs this script.
+# When this run began - ohmydebn-headline appends each stage with its
+# elapsed time to the stage timeline (~/.local/state/ohmydebn-logs/stages-*),
+# so a run shows which stage took the time. Inherited unchanged when
+# ohmydebn-update (which sets it first) runs this script.
 export OHMYDEBN_RUN_START="${OHMYDEBN_RUN_START:-$EPOCHSECONDS}"
 
 # Parse command line arguments

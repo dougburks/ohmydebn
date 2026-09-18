@@ -2,6 +2,12 @@
   "brave": {
     "origin": {
       "free_tier_accepted": true
+    },
+    "p3a": {
+      "notice_acknowledged": true
     }
+  },
+  "user_experience_metrics": {
+    "reporting_enabled": false
   }
 }

@@ -34,16 +34,31 @@ fi
 # OhMyDebn's seed, whichever way the package arrived - but only for a user
 # who has never run it: an existing profile is theirs and is never
 # overwritten. Used to be gated on the package being absent instead, which
-# skipped it entirely on a distro that ships Brave Origin. Two files:
-#   Default/Preferences - follow the system light/dark theme, no
-#     content-setting exceptions.
-#   Local State - brave.origin.free_tier_accepted, the record Brave Origin
-#     writes when the user picks "Proceed with Origin for free on Linux" in
-#     its first-launch dialog (it's free on Linux; buying it is optional
-#     support for Brave). Brave's own --skip-origin-startup-dialog switch
-#     sets exactly this pref, so seeding it means no launch path - Super+B,
-#     a clicked link, the Cinnamon menu - ever shows that dialog, not just
-#     ohmydebn-brave-origin, which passes the switch.
+# skipped it entirely on a distro that ships Brave Origin. The seed is the
+# state Brave writes after a user has been through its first launch, with
+# the questions answered the way OhMyDebn sets things up anyway:
+#   First Run - Chromium's first-run sentinel (an empty file). Present, so
+#     Brave doesn't open its welcome tour (brave://welcome: make default
+#     browser, choose theme, send diagnostic reports) - the tour is gated
+#     on first run alone. OhMyDebn already made it the default browser
+#     (install/config/mimetypes.sh); the theme is left at Brave's default,
+#     which follows the system light/dark setting.
+#   Default/Preferences - follow the system GTK theme, no content-setting
+#     exceptions, welcome page marked as seen.
+#   Local State -
+#     brave.origin.free_tier_accepted: the record Brave Origin writes when
+#       the user picks "Proceed with Origin for free on Linux" in its
+#       startup dialog (it's free on Linux; buying it is optional support
+#       for Brave). Brave's own --skip-origin-startup-dialog switch sets
+#       exactly this pref, so seeding it means no launch path - Super+B, a
+#       clicked link, the Cinnamon menu - ever shows that dialog, not just
+#       ohmydebn-brave-origin, which passes the switch.
+#     user_experience_metrics.reporting_enabled: false - the tour's
+#       "send diagnostic reports" question, answered no.
+#     brave.p3a.notice_acknowledged: the tour also acknowledges Brave's
+#       privacy-preserving-analytics notice; without this Brave shows it as
+#       an infobar on the first tab instead. The analytics setting itself
+#       is left at Brave's default (brave://settings/privacy).
 if dpkg -s "brave-origin" >/dev/null 2>&1 && [ ! -d ~/.config/BraveSoftware/Brave-Origin ]; then
   mkdir -p ~/.config/BraveSoftware
   cp -av /usr/share/ohmydebn/config/BraveSoftware/Brave-Origin ~/.config/BraveSoftware/

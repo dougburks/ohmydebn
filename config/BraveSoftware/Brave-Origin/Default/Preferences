@@ -1,4 +1,7 @@
 {
+  "brave": {
+    "has_seen_brave_welcome_page": true
+  },
   "extensions": {
     "theme": {
       "id": "",

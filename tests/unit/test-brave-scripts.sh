@@ -143,7 +143,15 @@ mock_cleanup
 # --skip-origin-startup-dialog persists; see ohmydebn-brave-origin-install)
 assert_eq "shipped seed: Local State pre-accepts the Linux free tier" "True" \
   "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["brave"]["origin"]["free_tier_accepted"])' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Local State" 2>&1)"
-assert_eq "shipped seed: Default/Preferences is valid JSON" "ok" \
-  "$(python3 -c 'import json,sys; json.load(open(sys.argv[1])); print("ok")' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Default/Preferences" 2>&1)"
+assert_eq "shipped seed: Local State answers the tour's diagnostic-reports question with no" "False" \
+  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["user_experience_metrics"]["reporting_enabled"])' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Local State" 2>&1)"
+assert_eq "shipped seed: Local State acknowledges the P3A notice (no infobar on the first tab)" "True" \
+  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["brave"]["p3a"]["notice_acknowledged"])' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Local State" 2>&1)"
+assert_eq "shipped seed: Default/Preferences marks the welcome tour as seen" "True" \
+  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["brave"]["has_seen_brave_welcome_page"])' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Default/Preferences" 2>&1)"
+# The tour is gated on Chromium's first-run sentinel alone - an empty
+# "First Run" file in the profile root is what keeps it from opening.
+assert_eq "shipped seed: First Run sentinel present and empty" "yes" \
+  "$([ -f "$REPO_ROOT/config/BraveSoftware/Brave-Origin/First Run" ] && [ ! -s "$REPO_ROOT/config/BraveSoftware/Brave-Origin/First Run" ] && echo yes || echo no)"
 
 test_summary

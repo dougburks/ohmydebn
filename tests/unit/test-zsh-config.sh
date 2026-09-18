@@ -58,6 +58,9 @@ assert_eq "fresh install: ai-cli-alias state marker written" "yes" \
 # `export PATH=...` block on every fresh install.
 PATH_EXPORT_COUNT=$(grep -Fc "export PATH=\"$MOCK_BIN:\$PATH\"" "$SCRATCH_HOME/.zshrc")
 assert_eq "fresh install: PATH export block appears exactly once" "1" "$PATH_EXPORT_COUNT"
+assert_eq "fresh install: .xsessionrc is POSIX-sh syntax" "yes" \
+  "$(sh -n "$SCRATCH_HOME/.xsessionrc" >/dev/null 2>&1 && echo yes || echo no)"
+assert_not_contains "fresh install: .xsessionrc avoids Bash-only [[" "$(cat "$SCRATCH_HOME/.xsessionrc")" "[["
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -88,6 +91,32 @@ PI_COUNT=$(grep -Fc "alias pi='$MOCK_BIN/ohmydebn-pi-cli'" "$SCRATCH_HOME/.zshrc
 assert_eq "pre-existing install: pi alias appended exactly once" "1" "$PI_COUNT"
 AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
 assert_eq "pre-existing install: a alias appended exactly once" "1" "$AI_CLI_COUNT"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 2b: a pre-existing ~/.xsessionrc from an older OhMyDebn install
+# contains a Bash-only [[ ... ]] PATH block. zsh.sh must migrate it to a
+# POSIX-sh block so /etc/X11/Xsession can source it successfully under XRDP.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+touch "$SCRATCH_HOME/.local/state/ohmydebn-config/zshrc-20260116"
+cat >"$SCRATCH_HOME/.zshrc" <<'EOF'
+# Aliases
+EOF
+cat >"$SCRATCH_HOME/.xsessionrc" <<EOF
+# Update PATH to include OhMyDebn binaries
+if ! [[ "\$PATH" =~ "$MOCK_BIN:" ]]; then
+  export PATH="$MOCK_BIN:\$PATH"
+fi
+EOF
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/zsh-patched.sh" >/dev/null 2>&1
+XSESSIONRC_CONTENT=$(cat "$SCRATCH_HOME/.xsessionrc")
+assert_not_contains "old xsessionrc migration: Bash-only [[ removed" "$XSESSIONRC_CONTENT" "[["
+assert_contains "old xsessionrc migration: POSIX case guard added" "$XSESSIONRC_CONTENT" 'case ":$PATH:" in'
+assert_eq "old xsessionrc migration: migrated file is POSIX-sh syntax" "yes" \
+  "$(sh -n "$SCRATCH_HOME/.xsessionrc" >/dev/null 2>&1 && echo yes || echo no)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "xrdp" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-install
+fi
+
+if dpkg -s "xrdp" >/dev/null 2>&1; then
+  # XRDP is a background systemd service, not an interactive app. Show the
+  # address and a compact service health check, matching the SSH Server menu
+  # entry's behavior.
+  IP=$(hostname -I | awk '{print $1}')
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Remote Desktop" "echo 'Connect to this machine with Remmina/RDP:'; echo '  $IP:3389'; echo; echo -n 'XRDP service status: '; systemctl is-active xrdp; echo; echo 'Press Enter to close this window.'; read -r"
+fi

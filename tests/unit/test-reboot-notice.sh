@@ -52,7 +52,7 @@ run_notice
 assert_eq "newer kernel: exits 0" "0" "$EXIT_CODE"
 assert_contains "newer kernel: headline shown" "$(cat "$MOCK_CALLS")" "ohmydebn-headline A reboot is needed to finish this update"
 assert_contains "newer kernel: names both versions" "$OUTPUT" "A newer kernel (6.12.107+deb13-amd64) is installed, but 6.12.105+deb13-amd64 is still running."
-assert_contains "newer kernel: says nothing is broken meanwhile" "$OUTPUT" "Reboot when it's convenient"
+assert_contains "newer kernel: says nothing is broken meanwhile, because of the kernel" "$OUTPUT" "Reboot when it's convenient - nothing is broken until then, the new kernel just isn't in use yet."
 assert_contains "newer kernel: desktop notification sent under a display" "$(cat "$MOCK_CALLS")" "notify-send OhMyDebn Update A reboot is needed"
 mock_cleanup
 
@@ -82,6 +82,10 @@ run_notice
 assert_contains "marker+pkgs: headline shown" "$(cat "$MOCK_CALLS")" "ohmydebn-headline A reboot is needed"
 assert_contains "marker+pkgs: lists the packages, de-duplicated" "$OUTPUT" "These packages asked for a reboot: libc6 linux-image-6.12.107 "
 assert_not_contains "marker+pkgs: no kernel line when the kernel is current" "$OUTPUT" "A newer kernel"
+# The closing line must not blame a kernel that isn't the reason - libc6
+# asked, so it's about running programs keeping the old version loaded.
+assert_not_contains "marker+pkgs: closing line doesn't mention a new kernel" "$OUTPUT" "new kernel"
+assert_contains "marker+pkgs: closing line explains the package case" "$OUTPUT" "programs that are already running just keep using the old versions of those packages."
 mock_cleanup
 
 setup "6.12.107+deb13-amd64" "6.12.107+deb13-amd64"
@@ -97,6 +101,7 @@ run_notice
 assert_contains "both: kernel reason present" "$OUTPUT" "A newer kernel"
 assert_contains "both: marker reason present" "$OUTPUT" "flagged that a reboot is required"
 assert_eq "both: exactly one headline" "1" "$(grep -c ohmydebn-headline "$MOCK_CALLS")"
+assert_contains "both: closing line uses the kernel wording" "$OUTPUT" "the new kernel just isn't in use yet."
 mock_cleanup
 
 # --- no display: notice printed, but no notify-send attempted ---

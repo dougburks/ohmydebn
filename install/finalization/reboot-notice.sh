@@ -48,7 +48,15 @@ if [ -n "$REBOOT_REASON" ]; then
   echo
   /usr/share/ohmydebn/bin/ohmydebn-headline "$REBOOT_HEADLINE"
   echo "$REBOOT_REASON"
-  echo "Reboot when it's convenient - nothing is broken until then, the new kernel just isn't in use yet."
+  # Why nothing is broken meanwhile depends on which signal fired: a new
+  # kernel just isn't running yet, while a package that asked for a reboot
+  # (libc6, say) is already installed - programs that were running before
+  # the update simply keep its old version loaded until they restart.
+  if [[ "$REBOOT_REASON" == *"A newer kernel"* ]]; then
+    echo "Reboot when it's convenient - nothing is broken until then, the new kernel just isn't in use yet."
+  else
+    echo "Reboot when it's convenient - nothing is broken until then, programs that are already running just keep using the old versions of those packages."
+  fi
   if [ -n "${DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
     notify-send "OhMyDebn Update" "$REBOOT_HEADLINE. $REBOOT_REASON" -t 0 2>/dev/null || true
   fi

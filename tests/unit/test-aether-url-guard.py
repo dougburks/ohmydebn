@@ -91,6 +91,22 @@ check_eq("external_theme= alone is a valid payload", outcome[0], "confirm")
 outcome = guard.build_confirmation(f"aether://apply?wallpaper=https://{KNOWN_HOST}/x.jpg")
 check_eq("wallpaper= alone is a valid payload", outcome[0], "confirm")
 
+# Aether needs the `omarchy` shim in /usr/share/ohmydebn/bin on PATH to
+# apply anything; the guard puts it there before exec'ing Aether, since a
+# browser-launched handler inherits whatever PATH the session gave the
+# browser (on Raspberry Pi OS, one without it).
+check_eq("PATH: bin dir is prepended when absent",
+         guard.ensure_ohmydebn_bin_on_path("/usr/local/bin:/usr/bin"),
+         "/usr/share/ohmydebn/bin:/usr/local/bin:/usr/bin")
+check_eq("PATH: left alone when already present, wherever it sits",
+         guard.ensure_ohmydebn_bin_on_path("/usr/bin:/usr/share/ohmydebn/bin:/bin"),
+         "/usr/bin:/usr/share/ohmydebn/bin:/bin")
+check_eq("PATH: a prefix that merely starts the same isn't a match",
+         guard.ensure_ohmydebn_bin_on_path("/usr/share/ohmydebn/bin-old:/usr/bin"),
+         "/usr/share/ohmydebn/bin:/usr/share/ohmydebn/bin-old:/usr/bin")
+check_eq("PATH: empty PATH becomes just the bin dir",
+         guard.ensure_ohmydebn_bin_on_path(""), "/usr/share/ohmydebn/bin")
+
 print()
 print("=== ohmydebn-aether-url-guard show_dialog() (real GTK, needs a display) ===")
 

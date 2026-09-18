@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# The logo takes its colors from the theme at render time
+# (ohmydebn-theme-logo-colors), so there's no config to regenerate here -
+# this only refreshes an already-open logo window (ohmydebn-logo-gui) in
+# place, rather than leaving it settled in the old theme's colors until
+# closed and reopened. Signal the PID directly instead of pkill - see
+# ohmydebn-fastfetch-pause for why, and ohmydebn-logo for the matching
+# SIGUSR2 trap. The /proc/*/cmdline check guards against a stale pidfile
+# pointing at a PID that's since exited and been reused by an unrelated
+# process.
+LOGO_PID_FILE=~/.cache/ohmydebn/logo.pid
+if [ -f "$LOGO_PID_FILE" ]; then
+  LOGO_PID=$(cat "$LOGO_PID_FILE")
+  if grep -aq "ohmydebn-logo" "/proc/$LOGO_PID/cmdline" 2>/dev/null; then
+    kill -SIGUSR2 "$LOGO_PID" 2>/dev/null || true
+  fi
+fi

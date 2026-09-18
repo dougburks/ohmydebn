@@ -5,19 +5,48 @@
 # theme's colors.toml into ttfx's rain palette and final gradient, so the
 # logo settles into the theme's own hues instead of ttfx's stock blue -
 # and falls back to that stock palette when no theme is set.
+#
+# Re-renders on SIGUSR2, so ohmydebn-theme-set-logo can refresh an
+# already-open window after a theme change instead of leaving it settled
+# in the old theme's colors - the animation simply plays again in the new
+# ones. Same hot-reload convention as ohmydebn-fastfetch-pause (see there
+# for why a pidfile and a direct `kill`, not pkill). A signal that lands
+# mid-animation is held until ttfx finishes, and several in a row (the
+# theme carousel) collapse into one replay.
+
+PID_FILE=~/.cache/ohmydebn/logo.pid
+mkdir -p "$(dirname "$PID_FILE")"
+echo $$ >"$PID_FILE"
+trap 'rm -f "$PID_FILE"' EXIT
 
 /usr/share/ohmydebn/bin/ohmydebn-logo-generate
 
-RAIN_COLORS=""
-GRADIENT_STOPS=""
-while IFS='=' read -r key value; do
-  case "$key" in
-  rain) RAIN_COLORS="$value" ;;
-  gradient) GRADIENT_STOPS="$value" ;;
-  esac
-done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
+render() {
+  local rain_colors="" gradient_stops="" key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+    rain) rain_colors="$value" ;;
+    gradient) gradient_stops="$value" ;;
+    esac
+  done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
 
-# shellcheck disable=SC2086 # the color lists are deliberately word-split
-toilet -f mono12 "$(cat ~/.config/ohmydebn/branding/name.txt)" |
-  /usr/bin/ttfx rain --rain-colors $RAIN_COLORS --final-gradient-stops $GRADIENT_STOPS
-read -r
+  clear
+  # shellcheck disable=SC2086 # the color lists are deliberately word-split
+  toilet -f mono12 "$(cat ~/.config/ohmydebn/branding/name.txt)" |
+    /usr/bin/ttfx rain --rain-colors $rain_colors --final-gradient-stops $gradient_stops
+}
+
+trap render USR2
+
+render
+
+# Any key closes the window. Polled in short reads rather than one blocking
+# `read -r`: a trapped signal interrupts a blocking read, which would have
+# closed the window on the very theme change meant to refresh it. A read
+# that fails for any reason other than its timeout (status > 128) is
+# end-of-file - no terminal at all - and closes the window as the plain
+# read did, instead of spinning.
+while :; do
+  read -t 0.5 -n 1 -s && break
+  [ $? -gt 128 ] || break
+done

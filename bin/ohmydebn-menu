@@ -657,7 +657,7 @@ show_virtualization_menu() {
 }
 
 show_browsers_menu() {
-  menu "Browsers" "󰖟  Brave Origin (installed by default)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
   case "$MENU_RESULT" in
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;

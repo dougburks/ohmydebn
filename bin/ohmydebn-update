@@ -13,6 +13,10 @@ set -e
 # (every normal update) install.sh prompts for nothing anyway; where its
 # warnings do fire under the GUI, ohmydebn-update-gui detects them and
 # reveals its terminal so they can be answered for real.
+# See install.sh's own OHMYDEBN_RUN_START comment - set here first so the
+# self-update step below is timed too (install.sh keeps this value).
+export OHMYDEBN_RUN_START="${OHMYDEBN_RUN_START:-$EPOCHSECONDS}"
+
 ASSUME_YES=false
 for arg in "$@"; do
   case $arg in

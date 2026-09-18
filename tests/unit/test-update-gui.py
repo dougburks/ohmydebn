@@ -386,5 +386,16 @@ check_eq("success_message: a reboot-notice stage asks for a reboot",
 check_eq("success_message: no stages at all still reads as up to date", gui.success_message([]),
          "Update complete - you're up to date.")
 
+
+# --- the real ohmydebn-headline output (title + timestamp line inside the
+# banner) still parses as exactly one stage, titled by the title line only ---
+import subprocess as _sp  # noqa: E402
+real_banner = _sp.run([os.path.join(BIN, "ohmydebn-headline"), "Configuring Alacritty"],
+                      capture_output=True, text=True, check=False, env={**os.environ, "OHMYDEBN_RUN_START": str(int(__import__("time").time()) - 61)}).stdout
+w = gui.StreamWatcher()
+check_eq("real banner: one stage event, the bare title (the timestamp line is not a stage)",
+         w.feed(real_banner), [("stage", "Configuring Alacritty")])
+check("real banner: contains an elapsed stamp", "+01:0" in real_banner)
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

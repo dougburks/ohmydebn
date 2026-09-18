@@ -11,10 +11,26 @@ else
   TEXT="$1"
 fi
 
+# A timestamp line inside the banner, so an update log answers "which
+# stage took the time" at a glance: wall clock, plus elapsed since the run
+# started when the caller exported OHMYDEBN_RUN_START (install.sh and
+# ohmydebn-update do; a headline printed on its own just shows the clock).
+# It goes BETWEEN the title and the closing fence on purpose:
+# ohmydebn-update-gui's stage parser takes the line immediately after a
+# fence as the stage title and ignores what follows until the next fence,
+# so the title stays clean and the stamp is never mistaken for a stage.
+STAMP=$(date '+%H:%M:%S')
+if [[ "${OHMYDEBN_RUN_START:-}" =~ ^[0-9]+$ ]]; then
+  ELAPSED=$((EPOCHSECONDS - OHMYDEBN_RUN_START))
+  ((ELAPSED < 0)) && ELAPSED=0
+  STAMP=$(printf '%s  +%02d:%02d' "$STAMP" $((ELAPSED / 60)) $((ELAPSED % 60)))
+fi
+
 echo
-cat <<EOF
+cat <<EOF2
 ####################################################################
 $TEXT
+$STAMP
 ####################################################################
-EOF
+EOF2
 echo

@@ -2,6 +2,11 @@
 
 set -e
 
+# When this run began - ohmydebn-headline prints elapsed time against it
+# inside every banner, so a log shows which stage took the time. Inherited
+# unchanged when ohmydebn-update (which sets it first) runs this script.
+export OHMYDEBN_RUN_START="${OHMYDEBN_RUN_START:-$EPOCHSECONDS}"
+
 # Parse command line arguments
 POWER_USER=false
 ASSUME_YES=false
@@ -9,6 +14,18 @@ for arg in "$@"; do
   case $arg in
   --power-user)
     POWER_USER=true
+    shift
+    ;;
+  --skip-upgrade)
+    # Skips finalization's full system upgrade (apt full-upgrade of every
+    # package) - the one stage that isn't installing OhMyDebn itself. For
+    # test VMs and anyone who knowingly wants a faster first install;
+    # ohmydebn-update does that upgrade on its next run. Deliberately not
+    # the default: a fresh ISO can be months behind on security fixes and
+    # nothing else on a new install applies them. Exported, since the
+    # stage that honors it (install/finalization/updates.sh) is sourced
+    # from ohmydebn.sh further down.
+    export OHMYDEBN_SKIP_UPGRADE=1
     shift
     ;;
   --yes)

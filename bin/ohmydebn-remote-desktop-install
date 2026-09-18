@@ -29,12 +29,30 @@ fi
 cat >"$HOME/.xsession" <<'EOF'
 #!/bin/sh
 # OhMyDebn Cinnamon session for XRDP
+#
+# XRDP needs its own session bus so Cinnamon's org.gnome.SessionManager name
+# does not collide with an already-running local Cinnamon login for the same
+# user. That private bus also needs its own Secret Service provider; otherwise
+# browser-login CLIs such as gh, Chrome, and xdg-desktop-portal hang trying to
+# activate org.freedesktop.secrets on a bus where gnome-keyring only discovers
+# the other desktop's daemon.
+
 unset DBUS_SESSION_BUS_ADDRESS
 unset SESSION_MANAGER
 export XDG_SESSION_TYPE=x11
 export DESKTOP_SESSION=cinnamon
 export XDG_CURRENT_DESKTOP=X-Cinnamon
-exec dbus-run-session -- cinnamon-session-cinnamon
+
+exec dbus-run-session -- sh -c '
+  if command -v gnome-keyring-daemon >/dev/null 2>&1; then
+    keyring_dir="${XDG_RUNTIME_DIR:-/tmp}/keyring-xrdp-${DISPLAY#:}"
+    mkdir -p "$keyring_dir"
+    chmod 700 "$keyring_dir"
+    eval "$(gnome-keyring-daemon --start --components=secrets,pkcs11 --control-directory="$keyring_dir")" || true
+  fi
+
+  exec cinnamon-session-cinnamon
+'
 EOF
 chmod 755 "$HOME/.xsession"
 

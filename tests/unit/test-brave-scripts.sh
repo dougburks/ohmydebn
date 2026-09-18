@@ -25,6 +25,7 @@ setup() {
   mkdir -p "$ROOT/etc/apt/sources.list.d" "$ROOT/etc/apt/preferences.d" "$ROOT/usr/share/keyrings" "$H" \
     "$ROOT/usr/share/ohmydebn/config/BraveSoftware/Brave-Origin/Default"
   echo '{"seed": true}' >"$ROOT/usr/share/ohmydebn/config/BraveSoftware/Brave-Origin/Default/Preferences"
+  echo '{"local": true}' >"$ROOT/usr/share/ohmydebn/config/BraveSoftware/Brave-Origin/Local State"
   mock_bin dpkg <<'EOF2'
 #!/bin/bash
 [[ "$1" == "-s" && " ${MOCK_INSTALLED:-} " == *" $2 "* ]] && exit 0
@@ -73,6 +74,7 @@ assert_eq "LCOS: no duplicate source added beside the distro's brave.list" "no" 
 assert_eq "LCOS: no pin written either" "no" "$([ -e "$ROOT/etc/apt/preferences.d/brave-browser-release.pref" ] && echo yes || echo no)"
 assert_not_contains "LCOS: nothing installed or fetched" "$(cat "$MOCK_CALLS")" "apt"
 assert_eq "LCOS: profile seeded for a user who never ran Brave" '{"seed": true}' "$(cat "$H/.config/BraveSoftware/Brave-Origin/Default/Preferences" 2>/dev/null)"
+assert_eq "LCOS: Local State seeded alongside the profile" '{"local": true}' "$(cat "$H/.config/BraveSoftware/Brave-Origin/Local State" 2>/dev/null)"
 mock_cleanup
 
 # --- installed with an existing profile: the profile is the user's, never overwritten ---
@@ -135,5 +137,13 @@ assert_eq "helper: is-configured true when any source (deb822 too) names the hos
 assert_eq "helper: is-ours false when only a foreign source exists" "1" "$(run "$BIN/ohmydebn-brave-repo" is-ours >/dev/null 2>&1; echo $?)"
 assert_eq "helper: unknown verb exits 1 with usage" "1" "$(run "$BIN/ohmydebn-brave-repo" frobnicate >/dev/null 2>&1; echo $?)"
 mock_cleanup
+
+# --- the shipped seed itself: Brave Origin's free-tier acceptance is what keeps its first-launch dialog away ---
+# (brave.origin.free_tier_accepted in Local State - the pref
+# --skip-origin-startup-dialog persists; see ohmydebn-brave-origin-install)
+assert_eq "shipped seed: Local State pre-accepts the Linux free tier" "True" \
+  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["brave"]["origin"]["free_tier_accepted"])' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Local State" 2>&1)"
+assert_eq "shipped seed: Default/Preferences is valid JSON" "ok" \
+  "$(python3 -c 'import json,sys; json.load(open(sys.argv[1])); print("ok")' "$REPO_ROOT/config/BraveSoftware/Brave-Origin/Default/Preferences" 2>&1)"
 
 test_summary

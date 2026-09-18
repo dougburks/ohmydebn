@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+# Ubuntu carries no "chromium" apt package at all (unlike Debian/Kali/Mint) -
+# it only ships "chromium-browser", a transitional package whose postinst
+# installs the real thing as a strictly-confined snap. install/config/
+# chromium.sh (sourced below) accounts for the snap's different profile
+# layout when seeding the bundled extension.
+CHROMIUM_PACKAGE=chromium
+if [ -f /etc/os-release ] && grep -qxE 'ID="?ubuntu"?' /etc/os-release; then
+  CHROMIUM_PACKAGE=chromium-browser
+fi
+
+if ! dpkg -s "$CHROMIUM_PACKAGE" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Chromium is not currently installed."
+    echo
+    echo "Continuing will install it from your distribution's repositories."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # --no-install-recommends, as when Chromium was part of the default
+  # install (via ohmydebn-pkg-install-optional): its one Recommends,
+  # chromium-sandbox, isn't needed on a kernel with user namespaces.
+  sudo /usr/bin/apt -y --no-install-recommends install "$CHROMIUM_PACKAGE"
+fi
+
+# uBlock Origin Lite for a profile that doesn't exist yet - the same step
+# the install layer applies (and a no-op for an existing profile).
+source /usr/share/ohmydebn/install/config/chromium.sh

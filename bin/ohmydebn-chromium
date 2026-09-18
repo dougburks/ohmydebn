@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Two package names (Ubuntu's chromium-browser deb is a stub that installs
+# the snap - see ohmydebn-chromium-install) but one snap name, so the
+# installed check and the launch both go by what's actually runnable.
+# Deliberately no wmClass tile rule for Chromium's own window in
+# config/tile-rules.json (unlike Brave Origin's): installs from before
+# Brave Origin became the default still have Chromium as their everyday
+# browser, and its windows shouldn't start tiling differently on them.
+if ! dpkg -s "chromium" >/dev/null 2>&1 && ! snap list chromium >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Chromium" /usr/share/ohmydebn/bin/ohmydebn-chromium-install
+fi
+
+if dpkg -s "chromium" >/dev/null 2>&1; then
+  /usr/bin/chromium
+elif snap list chromium >/dev/null 2>&1; then
+  /snap/bin/chromium
+fi

@@ -189,8 +189,13 @@ for f in "$REPO_ROOT"/install/config/*.sh; do
   name=$(grep -m1 -oP '(?<=dpkg -s ")[^"]+' "$f" || true)
   [[ -z "$name" ]] && continue
   CHECKED=$((CHECKED + 1))
-  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name"; then
-    echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh"
+  # A config script for an optional package (chromium.sh, now that Brave
+  # Origin is the default browser) is guarded on a name no install list
+  # carries; its dedicated bin/ohmydebn-<package>-install script vouches
+  # for the name instead.
+  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name" &&
+    [[ ! -x "$REPO_ROOT/bin/ohmydebn-$name-install" ]]; then
+    echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh, and has no bin/ohmydebn-$name-install"
     FAIL=$((FAIL + 1))
   fi
 done
@@ -1221,6 +1226,7 @@ PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-antigravity:Antigravity"
   "ohmydebn-brave-origin:Brave Origin"
   "ohmydebn-brave-browser:Brave Browser"
+  "ohmydebn-chromium:Chromium"
 )
 for ENTRY in "${PRESENTATION_TITLE_OWNERS[@]}"; do
   LAUNCHER="${ENTRY%%:*}"

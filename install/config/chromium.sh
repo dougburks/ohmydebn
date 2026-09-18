@@ -15,16 +15,22 @@
 # install prompt, it doesn't skip Google's signing check. It's also still
 # user-removable from chrome://extensions, unlike a policy forcelist.
 
-# Ubuntu has no "chromium" apt package (see CHROMIUM_PACKAGE in
-# install/packaging/dependencies.sh) - it only ever gets chromium as a
-# strictly-confined snap, installed via the "chromium-browser" transitional
-# deb's postinst. A snap's confinement remaps $HOME inside its sandbox, so
-# Chromium's ExternalPrefLoader never sees ~/.config/chromium there; the
-# profile it actually reads lives under ~/snap/chromium/common/chromium
-# instead. Pre-creating that path before the snap's own first run works
-# because both Chromium's profile bootstrap and snapd's per-user directory
-# setup are additive - each fills in whatever's missing around existing
-# content rather than overwriting it. Verified manually on Ubuntu 24.04/26.04.
+# Chromium is no longer installed by default (Brave Origin is - see
+# install/packaging/browser.sh), so this is a no-op unless it's present:
+# from an install before that switch, from browser.sh's fallback, or from
+# bin/ohmydebn-chromium-install (which sources this file to seed a fresh
+# profile the same way).
+#
+# Ubuntu has no "chromium" apt package (see bin/ohmydebn-chromium-install) -
+# it only ever gets chromium as a strictly-confined snap, installed via the
+# "chromium-browser" transitional deb's postinst. A snap's confinement
+# remaps $HOME inside its sandbox, so Chromium's ExternalPrefLoader never
+# sees ~/.config/chromium there; the profile it actually reads lives under
+# ~/snap/chromium/common/chromium instead. Pre-creating that path before
+# the snap's own first run works because both Chromium's profile bootstrap
+# and snapd's per-user directory setup are additive - each fills in
+# whatever's missing around existing content rather than overwriting it.
+# Verified manually on Ubuntu 24.04/26.04.
 if dpkg -s "chromium" >/dev/null 2>&1; then
   CHROMIUM_PARENT=~/.config
 elif snap list chromium >/dev/null 2>&1; then

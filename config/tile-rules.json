@@ -17,6 +17,7 @@
   { "wmClass": "OhMyDebn", "titleRegex": "^Antigravity$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Brave Origin$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Brave Browser$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^Chromium$", "grid": [2, 2, 1, 0, 1, 2] },
 
   { "wmClass": "code", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Antigravity", "grid": [2, 2, 1, 0, 1, 2] },

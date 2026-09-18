@@ -48,9 +48,19 @@ if [ -n "$GTILE_INSTALLED_VERSION" ] && gsettings get org.cinnamon enabled-exten
   GTILE_LAST_RESTARTED_VERSION=""
   [ -f "$GTILE_RESTART_STATE" ] && GTILE_LAST_RESTARTED_VERSION=$(cat "$GTILE_RESTART_STATE")
   if [ "$GTILE_INSTALLED_VERSION" != "$GTILE_LAST_RESTARTED_VERSION" ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update for gtile"
     mkdir -p ~/.local/state/ohmydebn-config
     echo "$GTILE_INSTALLED_VERSION" > "$GTILE_RESTART_STATE"
-    export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
+    # Only a live Cinnamon session has anything to restart. Under another
+    # desktop (XFCE on an LCOS/Devuan base, say - the extension can still
+    # be enabled in gsettings there) the upgraded extension simply loads
+    # fresh at the next Cinnamon login, so the version is recorded above
+    # either way (no restart is owed for it later) but nothing is
+    # announced: finale.sh checks the same thing and wouldn't restart, so
+    # telling the user Cinnamon "will restart" would be wrong. Same gate
+    # install/keybinding/keybinding.sh uses.
+    if pgrep -x cinnamon >/dev/null; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update for gtile"
+      export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
+    fi
   fi
 fi

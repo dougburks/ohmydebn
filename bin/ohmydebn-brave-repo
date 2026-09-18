@@ -1,0 +1,62 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-brave-repo: the one place Brave's apt repository is set up and
+# torn down, shared by ohmydebn-brave-origin-install/-remove and
+# ohmydebn-brave-browser-install/-remove (both packages come from the same
+# repository, so the two pairs used to carry identical copies of this).
+#
+#   is-configured   exit 0 if ANY apt source already references Brave's
+#                   repository host - ours, or a distro's (LCOS ships
+#                   Brave Origin via its own brave.list)
+#   is-ours         exit 0 if OhMyDebn's own sources file is present
+#   ensure          add keyring + sources + pin, unless is-configured -
+#                   adding a second source for the same repository makes
+#                   apt warn "configured multiple times" on every refresh
+#   remove          delete OhMyDebn's keyring, sources file and pin
+#
+# The pin limits Brave's repository to Brave's own packages, so nothing
+# else on the system can be pulled from it. A distro's pre-existing source
+# is left exactly as found - its updates keep flowing through it.
+
+BRAVE_REPO_HOST="brave-browser-apt-release.s3.brave.com"
+APT_ETC=/etc/apt
+KEYRING=/usr/share/keyrings/brave-browser-archive-keyring.gpg
+SOURCES="$APT_ETC/sources.list.d/brave-browser-release.sources"
+PREF="$APT_ETC/preferences.d/brave-browser-release.pref"
+
+is_configured() {
+  # Plain 0/1: grep reports 2 when e.g. sources.list itself doesn't exist,
+  # which callers must not mistake for anything but "not configured".
+  if grep -rqs "$BRAVE_REPO_HOST" "$APT_ETC/sources.list" "$APT_ETC/sources.list.d" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+case "${1:-}" in
+is-configured)
+  is_configured
+  ;;
+is-ours)
+  [ -f "$SOURCES" ]
+  ;;
+ensure)
+  if is_configured; then
+    echo "Brave's package repository is already configured on this system - leaving it as it is."
+    exit 0
+  fi
+  sudo mkdir -p "$(dirname "$KEYRING")" "$(dirname "$SOURCES")" "$(dirname "$PREF")"
+  sudo curl -fsSLo "$KEYRING" "https://$BRAVE_REPO_HOST/brave-browser-archive-keyring.gpg"
+  sudo curl -fsSLo "$SOURCES" "https://$BRAVE_REPO_HOST/brave-browser.sources"
+  printf 'Package: *\nPin: origin "%s"\nPin-Priority: -1\n\nPackage: brave-browser brave-origin brave-keyring\nPin: origin "%s"\nPin-Priority: 500\n' "$BRAVE_REPO_HOST" "$BRAVE_REPO_HOST" |
+    sudo tee "$PREF" >/dev/null
+  ;;
+remove)
+  sudo rm -f "$KEYRING" "$SOURCES" "$PREF"
+  ;;
+*)
+  echo "Usage: ohmydebn-brave-repo is-configured|is-ours|ensure|remove" >&2
+  exit 1
+  ;;
+esac

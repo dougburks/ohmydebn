@@ -5,6 +5,13 @@ set -euo pipefail
 if ! dpkg -s "brave-origin" >/dev/null 2>&1; then
   echo
   echo "Brave Origin is not currently installed."
+elif ! /usr/share/ohmydebn/bin/ohmydebn-brave-repo is-ours; then
+  # Present, but not from a repository OhMyDebn set up - a distro that
+  # ships it (LCOS) installed it, and its default browser isn't OhMyDebn's
+  # to purge.
+  echo
+  echo "Brave Origin was installed by your distribution, not by OhMyDebn, so OhMyDebn won't remove it."
+  echo "If you really want it gone: sudo apt purge brave-origin"
 else
   if [ "${1:-}" != "--skip-prompt" ]; then
     echo
@@ -13,10 +20,10 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
+  # The repository is shared with the other Brave variant - only take it
+  # away when that one isn't installed either.
   if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
-    sudo rm -f /usr/share/keyrings/brave-browser-archive-keyring.gpg
-    sudo rm -f /etc/apt/sources.list.d/brave-browser-release.sources
-    sudo rm -f /etc/apt/preferences.d/brave-browser-release.pref
+    /usr/share/ohmydebn/bin/ohmydebn-brave-repo remove
   fi
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y purge brave-origin

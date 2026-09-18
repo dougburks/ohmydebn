@@ -1033,8 +1033,9 @@ PIN_FILE_OWNERS=(
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
   "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
   "ohmydebn-tailscale-install:ohmydebn-tailscale-remove:tailscale.pref"
-  "ohmydebn-brave-browser-install:ohmydebn-brave-browser-remove:brave-browser-release.pref"
-  "ohmydebn-brave-origin-install:ohmydebn-brave-origin-remove:brave-browser-release.pref"
+  # Both Brave variants share one repository, set up and torn down by the
+  # same helper - so writer and cleaner are the one script.
+  "ohmydebn-brave-repo:ohmydebn-brave-repo:brave-browser-release.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
   "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"

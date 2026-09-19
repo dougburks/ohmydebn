@@ -13,8 +13,11 @@ if [[ -z "$USER_TO_CHECK" ]]; then
   exit 0
 fi
 
-# Emergency/admin override. PAM's pam_env can set this if a site really wants
-# the old shared-user behavior.
+# Emergency/admin override for a site that really wants shared-user
+# sessions. pam_exec's child inherits xrdp-sesman's own environment, so set
+# it there - under systemd, a drop-in for xrdp-sesman.service with
+# Environment=OHMYDEBN_XRDP_ALLOW_SHARED_USER=1 - and export the same
+# variable for ~/.xsession's matching check.
 if [[ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" == "1" ]]; then
   exit 0
 fi

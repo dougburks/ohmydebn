@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Same paths as ohmydebn-remote-desktop-install, variables for the tests.
+PAM_FILE=/etc/pam.d/xrdp-sesman
+SYSTEMD_DIR=/run/systemd/system
+XSESSION=~/.xsession
+XSESSION_MARKER="# OhMyDebn Cinnamon session for XRDP"
+
+if ! dpkg -s "xrdp" >/dev/null 2>&1; then
+  echo
+  echo "Remote Desktop (XRDP) is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove XRDP, its PAM session guard, and the ~/.xsession OhMyDebn wrote for it."
+    echo "Firewall rules you added for port 3389 are left as they are."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+
+  # Undo the install script's edits before the package goes: the PAM line
+  # (so the conffile is back to the package's own content) and ~/.xsession -
+  # only if it's ours; a user's own file was never touched on the way in.
+  if [ -f "$PAM_FILE" ] && grep -Fq 'ohmydebn-xrdp-session-guard' "$PAM_FILE"; then
+    sudo sed -i '/ohmydebn-xrdp-session-guard/d' "$PAM_FILE"
+  fi
+  if [ -f "$XSESSION" ] && grep -Fq "$XSESSION_MARKER" "$XSESSION"; then
+    rm -f "$XSESSION"
+  fi
+
+  if [ -d "$SYSTEMD_DIR" ]; then
+    sudo systemctl disable --now xrdp xrdp-sesman || true
+  else
+    sudo service xrdp stop || true
+  fi
+  sudo /usr/bin/apt -y purge xrdp xorgxrdp
+  sudo /usr/bin/apt -y autoremove
+
+  # The xrdp user (and with it its ssl-cert membership) went with the purge.
+  if command -v ufw >/dev/null 2>&1; then
+    echo
+    echo "Any firewall rule you added for port 3389 is still in place - to remove it:"
+    echo "  sudo ufw status numbered   (find the rule's number)"
+    echo "  sudo ufw delete <number>"
+  fi
+fi

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# If not installed, then offer to install it
+if ! dpkg -s "remmina" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop Client" /usr/share/ohmydebn/bin/ohmydebn-remmina-install
+fi
+
+# If installed, run it
+if dpkg -s "remmina" >/dev/null 2>&1; then
+  /usr/bin/remmina
+fi

@@ -31,5 +31,5 @@ if dpkg -s "openssh-server" >/dev/null 2>&1; then
   # it runs in the spawned terminal rather than here.
   IP=$(hostname -I | awk '{print $1}')
   STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active ssh; else service ssh status; fi"
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "SSH Server" "echo 'Connect to this machine with:'; echo '  ssh $USER@$IP'; echo; echo -n 'SSH service status: '; $STATUS_CMD; echo; echo 'Press Enter to close this window.'; read -r"
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "SSH Server" "echo 'Connect to this machine with:'; echo '  ssh $USER@$IP'; echo; echo -n 'SSH service status: '; $STATUS_CMD; echo; /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 22 'SSH Server'; echo; echo 'Press Enter to close this window.'; read -r"
 fi

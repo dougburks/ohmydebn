@@ -1,0 +1,39 @@
+# OhMyDebn: one graphical session per user, for XRDP logins.
+#
+# Sourced by /etc/X11/Xsession (under /bin/sh with `set -e` - every
+# command here is guarded) for every X login; does nothing unless xrdp
+# started this session. Running a user's Cinnamon desktop locally and
+# over XRDP at the same time breaks in several ways at once (one session
+# manager name on the shared user bus, keyring, portals), so when the
+# same user already has a local graphical session the remote one is
+# refused with a message instead of starting half-broken. Installed by
+# ohmydebn-remote-desktop-server-install, removed by ohmydebn-remote-desktop-
+# remove. OHMYDEBN_XRDP_ALLOW_SHARED_USER=1 in /etc/environment lifts the
+# check for a site that wants shared-user sessions anyway.
+#
+# "Started by xrdp" means two things at once: xrdp's XRDP_SESSION variable
+# (set to the session's own pid) is present, AND logind says this session
+# has no seat. The variable alone isn't enough - a later step of Xsession
+# copies every session variable into the systemd user manager, which
+# outlives the remote session, so a local login after a remote logout
+# inherits XRDP_SESSION and would be refused as if it were remote (seen
+# live). A local login always has a seat; an XRDP one never does.
+ohmydebn_xrdp_session() {
+  [ -n "${XRDP_SESSION:-}" ] || return 1
+  if [ -n "${XDG_SESSION_ID:-}" ] && command -v loginctl >/dev/null 2>&1; then
+    ohmydebn_seat=$(loginctl show-session "$XDG_SESSION_ID" -p Seat --value 2>/dev/null) || ohmydebn_seat=""
+    [ -z "$ohmydebn_seat" ] || [ "$ohmydebn_seat" = "-" ] || return 1
+  fi
+  return 0
+}
+
+if ohmydebn_xrdp_session && [ -x /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard ]; then
+  if ! OHMYDEBN_XRDP_REFUSAL=$(/usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard); then
+    if command -v xmessage >/dev/null 2>&1; then
+      xmessage -center -timeout 30 "$OHMYDEBN_XRDP_REFUSAL" || true
+    else
+      sleep 10
+    fi
+    exit 1
+  fi
+fi

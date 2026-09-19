@@ -1,0 +1,77 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+# Paths as variables so tests/unit/test-remote-desktop.sh can point them at
+# scratch locations. /run/systemd/system is the documented systemd-as-init
+# signal (sd_booted(3)) - absent on Devuan/LCOS, where the package's own
+# init script is driven through `service` instead.
+SYSTEMD_DIR=/run/systemd/system
+XSESSION_D=/etc/X11/Xsession.d
+GUARD_SRC=/usr/share/ohmydebn/config/xrdp/45ohmydebn-xrdp-session-guard
+
+if ! dpkg -s "xrdp" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Remote Desktop (XRDP) is not currently installed."
+    echo
+    echo "Continuing will install xrdp and xorgxrdp from your existing distro repo"
+    echo "and start the RDP service. The firewall stays closed to it until you"
+    echo "allow port 3389 - from one address or range, or from anywhere."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+
+    read -r
+  fi
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install xrdp xorgxrdp
+fi
+
+# TLS. Debian's xrdp package points the daemon at the system's self-signed
+# "snakeoil" certificate and key, but the key lives in /etc/ssl/private,
+# readable only by group ssl-cert, and the package doesn't put its xrdp
+# user in that group - xrdp.ini itself documents this step. Without it the
+# daemon can't offer TLS and modern clients won't connect.
+if getent group ssl-cert >/dev/null && id xrdp >/dev/null 2>&1 &&
+  ! id -nG xrdp | tr ' ' '\n' | grep -qx ssl-cert; then
+  sudo adduser xrdp ssl-cert
+fi
+
+# One graphical session per user. Running a user's Cinnamon desktop
+# locally and over XRDP at once breaks (one session-manager name on the
+# shared user bus, keyring, portals), so a drop-in in Xsession.d - a
+# directory OhMyDebn can own a file in, no other package's file edited -
+# refuses the remote session with a message when that user already has a
+# local one. Only XRDP sessions are affected (xrdp exports XRDP_SESSION),
+# and every user on the machine is covered: the remote session itself is
+# the distro's default Cinnamon session on the user's normal session bus,
+# where xrdp's own PAM setup already starts the keyring, so no per-user
+# ~/.xsession is needed (and none is written - a user's own stays theirs).
+sudo install -m 644 "$GUARD_SRC" "$XSESSION_D/45ohmydebn-xrdp-session-guard"
+
+if [ -d "$SYSTEMD_DIR" ]; then
+  sudo systemctl enable --now xrdp
+  sudo systemctl restart xrdp xrdp-sesman
+else
+  # Devuan/LCOS: the package's init script is already enabled by its
+  # postinst; a restart picks up the group change above.
+  sudo service xrdp restart
+fi
+
+# No firewall rule is added - see ohmydebn-firewall-hint.
+IP=$(hostname -I | awk '{print $1}')
+echo
+echo "XRDP is running. Connect with Remmina or any RDP client to:"
+echo "  $IP:3389"
+echo
+/usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 "Remote Desktop Server"
+echo
+echo "Log in as a user who isn't logged into the local desktop - a separate user is simplest."
+echo "A user new to OhMyDebn gets its desktop by running the installer once in their session:"
+echo "  bash /usr/share/ohmydebn/install.sh"

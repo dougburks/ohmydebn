@@ -124,6 +124,9 @@ mock_cleanup
 setup
 MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
 assert_contains "launcher, not installed: install presented" "$(cat "$MOCK_CALLS")" "ohmydebn-launch-floating-terminal-with-presentation Remote Desktop Server $MOCK_BIN/ohmydebn-remote-desktop-server-install"
+# The installer already printed the address and guidance; a status window
+# right after it would show the same text twice (seen live).
+assert_eq "launcher, not installed: no status window after the installer" "1" "$(grep -c floating-terminal "$MOCK_CALLS")"
 mock_cleanup
 setup
 MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null

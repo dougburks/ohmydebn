@@ -6,9 +6,13 @@ set -euo pipefail
 # is there but OhMyDebn's session guard isn't (xrdp installed by hand, or
 # before this entry existed): the installer is idempotent and only adds
 # what's missing, so this is how the configuration reaches such a system.
+# The installer ends by printing the address and firewall guidance itself,
+# so after it has run this is done - the status window below would only
+# repeat that same text in a second window.
 GUARD=/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard
 if ! dpkg -s "xrdp" >/dev/null 2>&1 || [ ! -f "$GUARD" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop Server" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-server-install
+  exit 0
 fi
 
 if dpkg -s "xrdp" >/dev/null 2>&1; then

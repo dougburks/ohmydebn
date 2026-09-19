@@ -11,10 +11,9 @@ fi
 # scratch locations. /run/systemd/system is the documented systemd-as-init
 # signal (sd_booted(3)) - absent on Devuan/LCOS, where the package's own
 # init script is driven through `service` instead.
-PAM_FILE=/etc/pam.d/xrdp-sesman
 SYSTEMD_DIR=/run/systemd/system
-XSESSION=~/.xsession
-XSESSION_MARKER="# OhMyDebn Cinnamon session for XRDP"
+XSESSION_D=/etc/X11/Xsession.d
+GUARD_SRC=/usr/share/ohmydebn/config/xrdp/45ohmydebn-xrdp-session-guard
 
 if ! dpkg -s "xrdp" >/dev/null 2>&1; then
   if [ "$SKIP_PROMPT" = false ]; then
@@ -44,92 +43,24 @@ if getent group ssl-cert >/dev/null && id xrdp >/dev/null 2>&1 &&
   sudo adduser xrdp ssl-cert
 fi
 
-# One graphical session per user, enforced where it can't be bypassed.
-# ~/.xsession below refuses a new XRDP desktop when the same user already
-# has a local one, but xrdp-sesman reconnects to an existing XRDP session
-# without ever running ~/.xsession, so a PAM account hook makes the same
-# check on every login. This edits a dpkg conffile: a future xrdp upgrade
-# that changes that file will ask about the local modification (keep it;
-# ohmydebn-remote-desktop-remove takes the line out again). PAM has no
-# drop-in directory, so there's no cleaner place for it.
-if [ -f "$PAM_FILE" ] && ! grep -Fq 'ohmydebn-xrdp-session-guard' "$PAM_FILE"; then
-  sudo sed -i '/^@include common-account/a account  requisite pam_exec.so quiet /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard' "$PAM_FILE"
-fi
-
-# ~/.xsession is what Xsession runs when no session is named - XRDP's
-# startwm.sh, and equally a plain `startx` or a "Default X session" pick at
-# the login screen. A user who already has one wrote it for a reason, so
-# it's left alone (and used by XRDP as is); only a file OhMyDebn wrote is
-# ever overwritten.
-if [ -f "$XSESSION" ] && ! grep -Fq "$XSESSION_MARKER" "$XSESSION"; then
-  echo
-  echo "Leaving your existing ~/.xsession alone - XRDP will run it as your remote session."
-  echo "To use OhMyDebn's Cinnamon session for XRDP instead, move it aside and run this again."
-else
-  cat >"$XSESSION" <<'XSESSION_EOF'
-#!/bin/sh
-# OhMyDebn Cinnamon session for XRDP
-#
-# XRDP needs its own session bus so Cinnamon's org.gnome.SessionManager name
-# does not collide with an already-running local Cinnamon login for the same
-# user. That private bus also needs its own Secret Service provider; otherwise
-# browser-login CLIs such as gh, Chrome, and xdg-desktop-portal hang trying to
-# activate org.freedesktop.secrets on a bus where gnome-keyring only discovers
-# the other desktop's daemon.
-
-unset DBUS_SESSION_BUS_ADDRESS
-unset SESSION_MANAGER
-export XDG_SESSION_TYPE=x11
-export DESKTOP_SESSION=cinnamon
-export XDG_CURRENT_DESKTOP=X-Cinnamon
-
-# One graphical session per user. Running a local Cinnamon desktop and an
-# XRDP Cinnamon desktop for the same user at the same time creates conflicts
-# across DBus names, Secret Service/keyring, portals, and snap cgroups. Refuse
-# the XRDP desktop when this same user already owns a local seat session. Use a
-# separate user for XRDP, or log out locally first.
-if [ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" != "1" ] && command -v loginctl >/dev/null 2>&1; then
-  for sid in $(loginctl list-sessions --no-legend 2>/dev/null | awk -v user="$USER" '$3 == user {print $1}'); do
-    [ "$sid" = "${XDG_SESSION_ID:-}" ] && continue
-    seat=$(loginctl show-session "$sid" -p Seat --value 2>/dev/null || true)
-    state=$(loginctl show-session "$sid" -p State --value 2>/dev/null || true)
-    class=$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)
-    if [ -n "$seat" ] && [ "$seat" != "-" ] && [ "$class" = "user" ] && [ "$state" != "closing" ]; then
-      msg="OhMyDebn XRDP: user '$USER' already has a local graphical session ($sid on $seat). Log out locally or use a separate XRDP user."
-      echo "$msg" >&2
-      if command -v xmessage >/dev/null 2>&1; then
-        xmessage -center -timeout 30 "$msg" || true
-      else
-        sleep 10
-      fi
-      exit 1
-    fi
-  done
-fi
-
-exec dbus-run-session -- sh -c '
-  if command -v gnome-keyring-daemon >/dev/null 2>&1; then
-    keyring_dir="${XDG_RUNTIME_DIR:-/tmp}/keyring-xrdp-${DISPLAY#:}"
-    mkdir -p "$keyring_dir"
-    chmod 700 "$keyring_dir"
-    eval "$(gnome-keyring-daemon --start --components=secrets,pkcs11 --control-directory="$keyring_dir")" || true
-  fi
-
-  exec cinnamon-session-cinnamon
-'
-XSESSION_EOF
-  chmod 755 "$XSESSION"
-fi
-
-# The PATH block in ~/.xsessionrc is kept POSIX by install/config/zsh.sh on
-# every update, so nothing to do for it here.
+# One graphical session per user. Running a user's Cinnamon desktop
+# locally and over XRDP at once breaks (one session-manager name on the
+# shared user bus, keyring, portals), so a drop-in in Xsession.d - a
+# directory OhMyDebn can own a file in, no other package's file edited -
+# refuses the remote session with a message when that user already has a
+# local one. Only XRDP sessions are affected (xrdp exports XRDP_SESSION=1),
+# and every user on the machine is covered: the remote session itself is
+# the distro's default Cinnamon session on the user's normal session bus,
+# where xrdp's own PAM setup already starts the keyring, so no per-user
+# ~/.xsession is needed (and none is written - a user's own stays theirs).
+sudo install -m 644 "$GUARD_SRC" "$XSESSION_D/45ohmydebn-xrdp-session-guard"
 
 if [ -d "$SYSTEMD_DIR" ]; then
   sudo systemctl enable --now xrdp
   sudo systemctl restart xrdp xrdp-sesman
 else
   # Devuan/LCOS: the package's init script is already enabled by its
-  # postinst; a restart picks up the PAM and group changes above.
+  # postinst; a restart picks up the group change above.
   sudo service xrdp restart
 fi
 
@@ -142,3 +73,5 @@ echo
 /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 "Remote Desktop"
 echo
 echo "Log in as a user who isn't logged into the local desktop - a separate user is simplest."
+echo "A user new to OhMyDebn gets its desktop by running the installer once in their session:"
+echo "  bash /usr/share/ohmydebn/install.sh"

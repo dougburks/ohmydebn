@@ -1,0 +1,23 @@
+# OhMyDebn: one graphical session per user, for XRDP logins.
+#
+# Sourced by /etc/X11/Xsession (under /bin/sh with `set -e` - every
+# command here is guarded) for every X login; does nothing unless xrdp
+# started this session (it exports XRDP_SESSION=1). Running a user's
+# Cinnamon desktop locally and over XRDP at the same time breaks in
+# several ways at once (one session manager name on the shared user bus,
+# keyring, portals), so when the same user already has a local graphical
+# session the remote one is refused with a message instead of starting
+# half-broken. Installed by ohmydebn-remote-desktop-install, removed by
+# ohmydebn-remote-desktop-remove. OHMYDEBN_XRDP_ALLOW_SHARED_USER=1 in
+# /etc/environment lifts the check for a site that wants shared-user
+# sessions anyway.
+if [ "${XRDP_SESSION:-}" = "1" ] && [ -x /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard ]; then
+  if ! OHMYDEBN_XRDP_REFUSAL=$(/usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard); then
+    if command -v xmessage >/dev/null 2>&1; then
+      xmessage -center -timeout 30 "$OHMYDEBN_XRDP_REFUSAL" || true
+    else
+      sleep 10
+    fi
+    exit 1
+  fi
+fi

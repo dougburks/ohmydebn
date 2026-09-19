@@ -1,12 +1,13 @@
 #!/bin/bash
 #
 # Unit tests for the Remote Desktop (XRDP) scripts: ohmydebn-remote-desktop
-# (menu launcher), -install, -remove, ohmydebn-xrdp-session-guard (the PAM
-# hook) and ohmydebn-firewall-hint. The PAM file, systemd signal directory
-# and ~/.xsession are sed-patched/HOME'd into a scratch root; sudo runs its
-# command for real against those paths except apt/systemctl/service/adduser,
-# which are only logged; dpkg answers from MOCK_INSTALLED; loginctl answers
-# from a session table the guard tests write.
+# (menu launcher), -install, -remove, ohmydebn-xrdp-session-guard with its
+# Xsession.d drop-in (config/xrdp/), and ohmydebn-firewall-hint. The
+# Xsession.d directory and systemd signal directory are sed-patched into a
+# scratch root; sudo runs its command for real against those paths except
+# apt/systemctl/service/adduser, which are only logged; dpkg answers from
+# MOCK_INSTALLED; loginctl answers from a session table the guard tests
+# write.
 
 set -uo pipefail
 
@@ -18,8 +19,7 @@ echo "=== ohmydebn-remote-desktop / -install / -remove / ohmydebn-xrdp-session-g
 setup() {
   mock_init
   ROOT="$MOCK_DIR/root"; H="$MOCK_DIR/home"
-  mkdir -p "$ROOT/etc/pam.d" "$H"
-  printf '#%%PAM-1.0\n@include common-auth\n@include common-account\n@include common-session\n' >"$ROOT/etc/pam.d/xrdp-sesman"
+  mkdir -p "$ROOT/etc/X11/Xsession.d" "$H"
   [ "${MOCK_SYSTEMD:-true}" = true ] && mkdir -p "$ROOT/run/systemd/system"
   mock_bin dpkg <<'EOF2'
 #!/bin/bash
@@ -61,11 +61,11 @@ echo "$name \$*" >>"\$MOCK_CALLS"
 EOF2
   done
   for script in ohmydebn-remote-desktop ohmydebn-remote-desktop-install ohmydebn-remote-desktop-remove ohmydebn-xrdp-session-guard ohmydebn-firewall-hint; do
-    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^PAM_FILE=.*#PAM_FILE=$ROOT/etc/pam.d/xrdp-sesman#; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#" \
+    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
       "$REPO_ROOT/bin/$script" >"$MOCK_BIN/$script"
     chmod +x "$MOCK_BIN/$script"
   done
-  PAM="$ROOT/etc/pam.d/xrdp-sesman"
+  DROPIN="$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard"
 }
 run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" bash "$@" </dev/null 2>&1; }
 
@@ -75,10 +75,9 @@ OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-p
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "fresh: installs xrdp and xorgxrdp" "$CALLS" "sudo /usr/bin/apt -y install xrdp xorgxrdp"
 assert_contains "fresh: xrdp user added to ssl-cert for the TLS key" "$CALLS" "sudo adduser xrdp ssl-cert"
-assert_eq "fresh: PAM guard inserted right after common-account" "@include common-account
-account  requisite pam_exec.so quiet $MOCK_BIN/ohmydebn-xrdp-session-guard" "$(sed -n '/common-account/,+1p' "$PAM")"
-assert_eq "fresh: ~/.xsession written with OhMyDebn's marker" "yes" "$(grep -Fq '# OhMyDebn Cinnamon session for XRDP' "$H/.xsession" && echo yes || echo no)"
-assert_eq "fresh: ~/.xsession is executable POSIX sh" "yes" "$([ -x "$H/.xsession" ] && sh -n "$H/.xsession" && echo yes || echo no)"
+assert_eq "fresh: Xsession.d drop-in installed, world-readable, identical to the shipped file" "yes" \
+  "$([ "$(stat -c %a "$DROPIN")" = 644 ] && cmp -s "$DROPIN" "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" && echo yes || echo no)"
+assert_eq "fresh: no ~/.xsession written" "no" "$([ -e "$H/.xsession" ] && echo yes || echo no)"
 assert_contains "fresh: service enabled under systemd" "$CALLS" "sudo systemctl enable --now xrdp"
 assert_not_contains "fresh: no firewall rule added" "$CALLS" "ufw allow"
 assert_contains "fresh: firewall guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop'"
@@ -88,23 +87,21 @@ mock_cleanup
 # --- install again, everything already in place: idempotent ---
 setup
 run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
-cp "$H/.xsession" "$MOCK_DIR/xsession-first"
 : >"$MOCK_CALLS"
 OUT=$(MOCK_INSTALLED="xrdp" MOCK_XRDP_GROUPS="xrdp ssl-cert" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "rerun: no apt" "$CALLS" "apt"
 assert_not_contains "rerun: adduser skipped when already a member" "$CALLS" "adduser"
-assert_eq "rerun: PAM guard line present exactly once" "1" "$(grep -c ohmydebn-xrdp-session-guard "$PAM")"
-assert_eq "rerun: our ~/.xsession rewritten identically" "yes" "$(cmp -s "$H/.xsession" "$MOCK_DIR/xsession-first" && echo yes || echo no)"
+assert_eq "rerun: drop-in still the shipped file" "yes" "$(cmp -s "$DROPIN" "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" && echo yes || echo no)"
+assert_contains "rerun: tells a new user how to get their OhMyDebn desktop" "$OUT" "bash /usr/share/ohmydebn/install.sh"
 mock_cleanup
 
-# --- install with the user's own ~/.xsession: left alone ---
+# --- install with the user's own ~/.xsession: not our business, untouched ---
 setup
 printf '#!/bin/sh\nexec startxfce4\n' >"$H/.xsession"
-OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt)
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
 assert_eq "own xsession: file untouched" "#!/bin/sh
 exec startxfce4" "$(cat "$H/.xsession")"
-assert_contains "own xsession: user told it's being left alone" "$OUT" "Leaving your existing ~/.xsession alone"
 mock_cleanup
 
 # --- install without systemd (Devuan/LCOS): service, not systemctl ---
@@ -136,24 +133,20 @@ assert_contains "launcher, installed: status command branches on systemd" "$CALL
 assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop'"
 mock_cleanup
 
-# --- remove: PAM line out, our ~/.xsession gone, service stopped, purged; firewall left alone ---
+# --- remove: drop-in gone, service stopped, purged; firewall left alone ---
 setup
 run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
 : >"$MOCK_CALLS"
 OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-remove" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
-assert_eq "remove: PAM file back to the package's content" "#%PAM-1.0
-@include common-auth
-@include common-account
-@include common-session" "$(cat "$PAM")"
-assert_eq "remove: our ~/.xsession removed" "no" "$([ -e "$H/.xsession" ] && echo yes || echo no)"
+assert_eq "remove: Xsession.d drop-in removed" "no" "$([ -e "$DROPIN" ] && echo yes || echo no)"
 assert_contains "remove: service disabled" "$CALLS" "sudo systemctl disable --now xrdp xrdp-sesman"
 assert_contains "remove: packages purged" "$CALLS" "sudo /usr/bin/apt -y purge xrdp xorgxrdp"
 assert_not_contains "remove: no ufw change" "$CALLS" "ufw delete"
 assert_contains "remove: user told how to drop their own rule" "$OUT" "sudo ufw delete"
 mock_cleanup
 
-# --- remove with the user's own ~/.xsession: kept ---
+# --- remove with the user's own ~/.xsession: never ours, kept ---
 setup
 printf '#!/bin/sh\nexec startxfce4\n' >"$H/.xsession"
 MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-remove" --skip-prompt >/dev/null
@@ -167,7 +160,7 @@ assert_contains "remove, not installed: message" "$OUT" "not currently installed
 assert_eq "remove, not installed: nothing run" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
-# --- the PAM guard: loginctl answers from a table the test writes ---
+# --- the session guard: loginctl answers from a table the test writes ---
 setup_guard() {
   setup
   mkdir -p "$MOCK_DIR/sessions"
@@ -188,11 +181,12 @@ EOF2
 session() { # sid seat class state type
   printf 'Class=%s\nState=%s\nType=%s\n' "$3" "$4" "$5" >"$MOCK_DIR/sessions/$1"
 }
-run_guard() { PAM_USER="$1" PATH="$(mock_path)" MOCK_SESSION_TABLE="$MOCK_SESSION_TABLE" OHMYDEBN_XRDP_ALLOW_SHARED_USER="${2:-}" bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" </dev/null >/dev/null 2>&1; echo $?; }
+run_guard() { USER="$1" PATH="$(mock_path)" MOCK_SESSION_TABLE="$MOCK_SESSION_TABLE" OHMYDEBN_XRDP_ALLOW_SHARED_USER="${2:-}" bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" </dev/null >"$MOCK_DIR/guard-out" 2>/dev/null; echo $?; }
 
 setup_guard
 printf '2 1000 alice seat0 tty7\n' >"$MOCK_SESSION_TABLE"; session 2 seat0 user active x11
 assert_eq "guard: user with a local x11 seat session is rejected" "1" "$(run_guard alice)"
+assert_contains "guard: reason printed for the drop-in to show" "$(cat "$MOCK_DIR/guard-out")" "user 'alice' is already logged into the local desktop (session 2 on seat0)"
 assert_contains "guard: rejection logged" "$(cat "$MOCK_CALLS")" "logger -t ohmydebn-xrdp-session-guard"
 assert_eq "guard: a different user is allowed" "0" "$(run_guard bob)"
 assert_eq "guard: override allows the same user" "0" "$(run_guard alice 1)"
@@ -212,7 +206,37 @@ mock_cleanup
 setup_guard
 : >"$MOCK_SESSION_TABLE"
 assert_eq "guard: no sessions at all -> allowed" "0" "$(run_guard alice)"
-assert_eq "guard: no PAM_USER -> allowed (nothing to check)" "0" "$(PATH="$(mock_path)" bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" </dev/null >/dev/null 2>&1; echo $?)"
+assert_eq "guard: no user at all -> allowed (nothing to check)" "0" "$(env -i PATH="$(mock_path)" MOCK_SESSION_TABLE="$MOCK_SESSION_TABLE" /bin/bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" </dev/null >/dev/null 2>&1; echo $?)"
+mock_cleanup
+
+# --- the Xsession.d drop-in, sourced the way Xsession does (sh, set -e) ---
+# The guard binary path inside it is patched to a stub whose verdict the
+# test sets; the drop-in must end the session (exit 1) only for an XRDP
+# session with a refusal, and must not disturb a local login at all.
+setup_dropin() {
+  setup
+  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" >"$MOCK_DIR/dropin"
+  mock_bin ohmydebn-xrdp-session-guard <<'EOF2'
+#!/bin/bash
+[[ -n "${MOCK_REFUSE:-}" ]] && { echo "refused: $MOCK_REFUSE"; exit 1; }
+exit 0
+EOF2
+  # Logged straight to $MOCK_CALLS: the drop-in runs under dash, which
+  # doesn't pass bash's exported mock_log function on to this stub.
+  mock_bin xmessage <<'EOF2'
+#!/bin/bash
+echo "xmessage $*" >>"$MOCK_CALLS"
+EOF2
+}
+run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
+
+setup_dropin
+assert_eq "drop-in, XRDP session refused: session ends before startup, message shown" "" "$(run_dropin 1 "local desktop busy")"
+assert_contains "drop-in, XRDP session refused: xmessage carries the guard's reason" "$(cat "$MOCK_CALLS")" "xmessage -center -timeout 30 refused: local desktop busy"
+assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 1 "")"
+assert_eq "drop-in, local login (no XRDP_SESSION): guard not even consulted" "reached-startup" "$(run_dropin "" "local desktop busy")"
+rm "$MOCK_BIN/ohmydebn-xrdp-session-guard"
+assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 1 "x")"
 mock_cleanup
 
 # --- firewall hint: two commands, restrictive first; silent without ufw ---

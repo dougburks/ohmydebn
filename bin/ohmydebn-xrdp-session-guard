@@ -1,10 +1,10 @@
 #!/bin/bash
-# PAM guard for xrdp-sesman: enforce one graphical session per user.
-#
-# XRDP reconnects to existing sessions before ~/.xsession is run, so the
-# shared-user guard in ~/.xsession cannot prevent reconnects. This PAM hook runs
-# during authentication/account setup and rejects XRDP logins for users who
-# already own a local graphical seat session.
+# One graphical session per user: exit 1 (with the reason on stdout, and
+# in the system log) when the user already owns a local graphical seat
+# session, 0 otherwise. Run from /etc/X11/Xsession.d/45ohmydebn-xrdp-
+# session-guard (config/xrdp/) at the start of every XRDP session - see
+# there for why. The user comes from USER (PAM_USER is honored too, so a
+# PAM hook could call this the same way).
 
 set -euo pipefail
 
@@ -13,11 +13,8 @@ if [[ -z "$USER_TO_CHECK" ]]; then
   exit 0
 fi
 
-# Emergency/admin override for a site that really wants shared-user
-# sessions. pam_exec's child inherits xrdp-sesman's own environment, so set
-# it there - under systemd, a drop-in for xrdp-sesman.service with
-# Environment=OHMYDEBN_XRDP_ALLOW_SHARED_USER=1 - and export the same
-# variable for ~/.xsession's matching check.
+# Override for a site that really wants shared-user sessions: set it in
+# /etc/environment, which xrdp-sesman's PAM stack loads into the session.
 if [[ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" == "1" ]]; then
   exit 0
 fi
@@ -26,7 +23,10 @@ if ! command -v loginctl >/dev/null 2>&1; then
   exit 0
 fi
 
-while read -r sid _uid name seat _tty _class _remote; do
+# Columns: SESSION UID USER SEAT ... on every systemd/elogind version
+# (later ones add more after SEAT); a remote session has no seat ("-" or
+# empty), which is what separates a local desktop from another XRDP one.
+while read -r sid _uid name seat _rest; do
   [[ "$name" == "$USER_TO_CHECK" ]] || continue
   [[ -n "$seat" && "$seat" != "-" ]] || continue
 
@@ -39,8 +39,8 @@ while read -r sid _uid name seat _tty _class _remote; do
   [[ "$type" == "x11" || "$type" == "wayland" ]] || continue
 
   logger -t ohmydebn-xrdp-session-guard \
-    "Rejecting XRDP login for '$USER_TO_CHECK': local graphical session '$sid' is active on '$seat'"
-  echo "OhMyDebn XRDP: user '$USER_TO_CHECK' already has a local graphical session ($sid on $seat). Log out locally or use a separate XRDP user." >&2
+    "Refusing XRDP session for '$USER_TO_CHECK': local graphical session '$sid' is active on '$seat'" || true
+  echo "OhMyDebn: user '$USER_TO_CHECK' is already logged into the local desktop (session $sid on $seat), so this remote session can't start. Log out locally first, or use a separate user for remote desktop."
   exit 1
 done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
 

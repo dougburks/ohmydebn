@@ -233,8 +233,14 @@ EOF2
 #!/bin/bash
 echo "xmessage $*" >>"$MOCK_CALLS"
 EOF2
+  mock_bin loginctl <<'EOF2'
+#!/bin/bash
+[[ "$1" == show-session && "$4" == Seat ]] && { echo "${MOCK_SEAT:-}"; exit 0; }
+exit 1
+EOF2
 }
-run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
+# loginctl here answers only show-session -p Seat, from MOCK_SEAT.
+run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" XDG_SESSION_ID="${3:-}" MOCK_SEAT="${4:-}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
 
 setup_dropin
 # xrdp sets XRDP_SESSION to the session's pid, not to 1 - the drop-in
@@ -244,6 +250,12 @@ assert_eq "drop-in, XRDP session refused: session ends before startup, message s
 assert_contains "drop-in, XRDP session refused: xmessage carries the guard's reason" "$(cat "$MOCK_CALLS")" "xmessage -center -timeout 30 refused: local desktop busy"
 assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 23440 "")"
 assert_eq "drop-in, local login (no XRDP_SESSION): guard not even consulted" "reached-startup" "$(run_dropin "" "local desktop busy")"
+# The variable alone isn't trusted: a local login (session on seat0) that
+# inherited XRDP_SESSION from the systemd user environment after a remote
+# logout must not be refused (seen live); a remote one (no seat) still is.
+assert_eq "drop-in, leaked XRDP_SESSION in a seated local login: not refused" "reached-startup" "$(run_dropin 23440 "local desktop busy" 12 seat0)"
+assert_eq "drop-in, XRDP_SESSION and a seatless session: refused" "" "$(run_dropin 23440 "local desktop busy" c10 "")"
+assert_eq "drop-in, XRDP_SESSION and a seatless session (logind prints -): refused" "" "$(run_dropin 23440 "local desktop busy" c10 -)"
 rm "$MOCK_BIN/ohmydebn-xrdp-session-guard"
 assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 23440 "x")"
 mock_cleanup

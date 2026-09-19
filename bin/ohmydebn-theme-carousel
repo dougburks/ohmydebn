@@ -93,6 +93,13 @@ CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/backgro
 # crop/scale math invalidates every existing entry on upgrade - the source
 # file's own mtime can't catch that, since the source itself didn't change.
 CAROUSEL_CACHE_DIR = os.path.expanduser("~/.cache/ohmydebn/theme-carousel")
+# Size cap for that directory. The shipped themes sit around 30-90MB, but
+# a large custom wallpaper collection multiplies out (card + backdrop +
+# three ring sizes + two thumbnail sizes per image) with nothing else
+# ever pruning it. Checked after each cache write, on the decode thread:
+# oldest files first (by mtime - the file just written is the newest) until
+# under the cap. Best-effort like the write itself.
+CAROUSEL_CACHE_MAX_BYTES = 200 * 1024 * 1024
 CACHE_FORMAT_VERSION = 1
 
 CARD_W, CARD_H = 900, 506
@@ -609,7 +616,39 @@ def load_cover_pixbuf_cached(path, target_w, target_h, min_target=None):
                 os.unlink(tmp)
             except OSError:
                 pass
+        else:
+            _evict_cache(cache_path)
     return pixbuf
+
+
+def _evict_cache(keep_path):
+    """Trim CAROUSEL_CACHE_DIR to CAROUSEL_CACHE_MAX_BYTES, oldest files
+    first; keep_path (the file just written) is never removed. Any
+    failure just leaves the cache as it is."""
+    try:
+        entries = []
+        total = 0
+        with os.scandir(CAROUSEL_CACHE_DIR) as it:
+            for entry in it:
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+                st = entry.stat(follow_symlinks=False)
+                entries.append((st.st_mtime_ns, st.st_size, entry.path))
+                total += st.st_size
+        if total <= CAROUSEL_CACHE_MAX_BYTES:
+            return
+        for _mtime, size, path in sorted(entries):
+            if total <= CAROUSEL_CACHE_MAX_BYTES:
+                return
+            if path == keep_path:
+                continue
+            try:
+                os.unlink(path)
+                total -= size
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 CSS = """

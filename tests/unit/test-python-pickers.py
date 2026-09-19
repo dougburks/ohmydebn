@@ -663,6 +663,32 @@ try:
         set(os.listdir(tc.CAROUSEL_CACHE_DIR)), files_before,
     )
 
+    # _evict_cache: a size cap on CAROUSEL_CACHE_DIR, oldest first, applied
+    # after each write - the file just written survives even when it alone
+    # exceeds the cap, and nothing runs while the directory is under it.
+    evict_dir = os.path.join(fixture, "carousel-evict")
+    os.makedirs(evict_dir)
+    saved_dir, saved_cap = tc.CAROUSEL_CACHE_DIR, tc.CAROUSEL_CACHE_MAX_BYTES
+    tc.CAROUSEL_CACHE_DIR = evict_dir
+    for i, name in enumerate(("old.jpg", "mid.jpg", "new.jpg")):
+        pth = os.path.join(evict_dir, name)
+        with open(pth, "wb") as f:
+            f.write(b"x" * 100)
+        os.utime(pth, ns=(1_000_000_000 * (i + 1), 1_000_000_000 * (i + 1)))
+    tc.CAROUSEL_CACHE_MAX_BYTES = 1000
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: under the cap, nothing removed", sorted(os.listdir(evict_dir)), ["mid.jpg", "new.jpg", "old.jpg"])
+    tc.CAROUSEL_CACHE_MAX_BYTES = 250
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: over the cap, the oldest goes first and only as far as needed", sorted(os.listdir(evict_dir)), ["mid.jpg", "new.jpg"])
+    tc.CAROUSEL_CACHE_MAX_BYTES = 50
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: the file just written is kept even when it alone exceeds the cap", os.listdir(evict_dir), ["new.jpg"])
+    tc.CAROUSEL_CACHE_DIR = os.path.join(fixture, "no-such-cache-dir")
+    tc._evict_cache("whatever")
+    check("_evict_cache: a missing cache directory is not an error", True)
+    tc.CAROUSEL_CACHE_DIR, tc.CAROUSEL_CACHE_MAX_BYTES = saved_dir, saved_cap
+
     check_eq("_hex_to_rgb: basic conversion", tc._hex_to_rgb("#e68e0d"), (230, 142, 13))
     check(
         "_relative_luminance: white is brighter than black",

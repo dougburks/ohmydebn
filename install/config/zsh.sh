@@ -18,28 +18,22 @@ if [ ! -f $ZSHRC_STATE ]; then
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
-  touch "$FILE"
-
-  # ~/.xsessionrc is sourced by /etc/X11/Xsession under /bin/sh, notably for
-  # XRDP sessions. Older OhMyDebn installs appended a Bash/Zsh-only [[ ... ]]
-  # PATH block there, which makes remote desktop sessions exit right after
-  # login. Migrate that old block out before appending the POSIX-sh version.
-  python3 - "$FILE" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1]).expanduser()
-content = path.read_text()
-old_block = '''
-# Update PATH to include OhMyDebn binaries
-if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
-  export PATH="/usr/share/ohmydebn/bin:$PATH"
-fi
-'''
-for candidate in (old_block, old_block.lstrip('\n')):
-    content = content.replace(candidate, '\n')
-path.write_text(content)
-PY
+  # ~/.xsessionrc is sourced by /etc/X11/Xsession under /bin/sh (dash on
+  # Debian), for every X login and for XRDP sessions alike. The PATH block
+  # OhMyDebn used to append was Bash syntax (`[[ ... ]]`), which dash
+  # reports as "[[: not found" in ~/.xsession-errors on every login. Not
+  # fatal - it sits in an `if` condition, so Xsession's `set -e` doesn't
+  # trip, and the negated not-found status still exports PATH - but noise
+  # with a real error's shape. Convert an old block in place (once: the
+  # grep keeps untouched files untouched) to the POSIX form appended below.
+  if grep -Fq 'if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then' "$FILE" 2>/dev/null; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH block in $FILE to POSIX sh syntax"
+    sed -i '\#^if ! \[\[ "\$PATH" =~ "/usr/share/ohmydebn/bin:" \]\]; then$#,/^fi$/c\
+case ":$PATH:" in\
+  *:/usr/share/ohmydebn/bin:*) ;;\
+  *) export PATH="/usr/share/ohmydebn/bin:$PATH" ;;\
+esac' "$FILE"
+  fi
 
   if ! grep -F '# Update PATH to include OhMyDebn binaries' "$FILE" >/dev/null 2>&1; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"

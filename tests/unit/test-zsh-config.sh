@@ -123,6 +123,14 @@ assert_not_contains "old xsessionrc migration: Bash-only [[ removed" "$XSESSIONR
 assert_contains "old xsessionrc migration: POSIX case guard added" "$XSESSIONRC_CONTENT" 'case ":$PATH:" in'
 assert_eq "old xsessionrc migration: migrated file is POSIX-sh syntax" "yes" \
   "$(sh -n "$SCRATCH_HOME/.xsessionrc" >/dev/null 2>&1 && echo yes || echo no)"
+assert_eq "old xsessionrc migration: converted in place, not appended twice" "1" \
+  "$(grep -c '# Update PATH to include OhMyDebn binaries' "$SCRATCH_HOME/.xsessionrc")"
+# A second run finds nothing to convert and nothing to append: the file is
+# not rewritten (its mtime is the tell - a rewrite would touch it).
+touch -d '2020-01-01' "$SCRATCH_HOME/.xsessionrc"
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/zsh-patched.sh" >/dev/null 2>&1
+assert_eq "old xsessionrc migration: already-migrated file left untouched on the next run" "2020-01-01" \
+  "$(date -r "$SCRATCH_HOME/.xsessionrc" +%F)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

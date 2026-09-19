@@ -110,7 +110,7 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "rerun: no apt" "$CALLS" "apt"
 assert_not_contains "rerun: adduser skipped when already a member" "$CALLS" "adduser"
 assert_eq "rerun: drop-in still the shipped file" "yes" "$(cmp -s "$DROPIN" "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" && echo yes || echo no)"
-assert_contains "rerun: tells a new user how to get their OhMyDebn desktop" "$OUT" "bash /usr/share/ohmydebn/install.sh"
+assert_contains "rerun: closing advice is log out locally first, not a separate user" "$OUT" "log out of the local desktop before connecting"
 mock_cleanup
 
 # --- install with the user's own ~/.xsession: not our business, untouched ---
@@ -207,12 +207,15 @@ EOF2
 session() { # sid seat class state type
   printf 'Class=%s\nState=%s\nType=%s\n' "$3" "$4" "$5" >"$MOCK_DIR/sessions/$1"
 }
-run_guard() { USER="$1" PATH="$(mock_path)" MOCK_SESSION_TABLE="$MOCK_SESSION_TABLE" OHMYDEBN_XRDP_ALLOW_SHARED_USER="${2:-}" bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" </dev/null >"$MOCK_DIR/guard-out" 2>/dev/null; echo $?; }
+# run_guard <user> [override] [mode] [current session id]
+run_guard() { USER="$1" PATH="$(mock_path)" MOCK_SESSION_TABLE="$MOCK_SESSION_TABLE" OHMYDEBN_XRDP_ALLOW_SHARED_USER="${2:-}" XDG_SESSION_ID="${4:-}" bash "$MOCK_BIN/ohmydebn-xrdp-session-guard" ${3:+"$3"} </dev/null >"$MOCK_DIR/guard-out" 2>/dev/null; echo $?; }
 
 setup_guard
 printf '2 1000 alice seat0 tty7\n' >"$MOCK_SESSION_TABLE"; session 2 seat0 user active x11
 assert_eq "guard: user with a local x11 seat session is rejected" "1" "$(run_guard alice)"
-assert_contains "guard: reason printed for the drop-in to show" "$(cat "$MOCK_DIR/guard-out")" "user 'alice' is already logged into the local desktop (session 2 on seat0)"
+assert_contains "guard: reason printed for the drop-in to show" "$(cat "$MOCK_DIR/guard-out")" "user 'alice' is still logged into the local desktop (session 2 on seat0)"
+assert_eq "guard: explicit remote mode is the same check" "1" "$(run_guard alice "" remote)"
+assert_eq "guard: local mode - a seated session isn't a remote one, so a local login is fine" "0" "$(run_guard alice "" local)"
 assert_contains "guard: rejection logged" "$(cat "$MOCK_CALLS")" "logger -t ohmydebn-xrdp-session-guard"
 assert_eq "guard: a different user is allowed" "0" "$(run_guard bob)"
 assert_eq "guard: override allows the same user" "0" "$(run_guard alice 1)"
@@ -221,7 +224,22 @@ mock_cleanup
 setup_guard
 printf '5 1000 alice - -\n7 1000 alice seat0 tty7\n' >"$MOCK_SESSION_TABLE"
 session 5 - user active x11; session 7 seat0 user closing x11
-assert_eq "guard: an existing remote session (no seat) and a closing local one don't block" "0" "$(run_guard alice)"
+assert_eq "guard, remote: an existing remote session (no seat) and a closing local one don't block" "0" "$(run_guard alice)"
+# The reverse direction: a local login while that remote session (5) is
+# still open is refused, naming the session and how to end it.
+assert_eq "guard, local: an open remote session refuses the local login" "1" "$(run_guard alice "" local 9)"
+assert_contains "guard, local: message names the remote session and the way out" "$(cat "$MOCK_DIR/guard-out")" "loginctl terminate-session 5"
+assert_eq "guard, local: the remote session being this very session doesn't count" "0" "$(run_guard alice "" local 5)"
+assert_eq "guard, local: override allows it" "0" "$(run_guard alice 1 local 9)"
+mock_cleanup
+
+setup_guard
+printf '5 1000 alice - -\n' >"$MOCK_SESSION_TABLE"; session 5 - user active tty
+assert_eq "guard, local: a seatless ssh login (Type tty) doesn't block" "0" "$(run_guard alice "" local 9)"
+mock_cleanup
+
+setup_guard
+assert_eq "guard: unknown mode is a usage error" "2" "$(run_guard alice "" sideways)"
 mock_cleanup
 
 setup_guard
@@ -242,9 +260,12 @@ mock_cleanup
 setup_dropin() {
   setup
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" >"$MOCK_DIR/dropin"
+  # The stub records the mode it was called with and refuses only in the
+  # mode MOCK_REFUSE_MODE names (default remote).
   mock_bin ohmydebn-xrdp-session-guard <<'EOF2'
 #!/bin/bash
-[[ -n "${MOCK_REFUSE:-}" ]] && { echo "refused: $MOCK_REFUSE"; exit 1; }
+echo "guard ${1:-}" >>"$MOCK_CALLS"
+[[ -n "${MOCK_REFUSE:-}" && "${1:-}" == "${MOCK_REFUSE_MODE:-remote}" ]] && { echo "refused: $MOCK_REFUSE"; exit 1; }
 exit 0
 EOF2
   # Logged straight to $MOCK_CALLS: the drop-in runs under dash, which
@@ -260,24 +281,30 @@ exit 1
 EOF2
 }
 # loginctl here answers only show-session -p Seat, from MOCK_SEAT.
-run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" XDG_SESSION_ID="${3:-}" MOCK_SEAT="${4:-}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
+# run_dropin <XRDP_SESSION> <refusal> <session id> <seat> [refuse in mode]
+run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" XDG_SESSION_ID="${3:-}" MOCK_SEAT="${4:-}" MOCK_REFUSE_MODE="${5:-remote}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
 
 setup_dropin
-# xrdp sets XRDP_SESSION to the session's pid, not to 1 - the drop-in
-# must test for the variable being set, whatever its value (found live:
-# a literal-1 comparison let every remote session through).
-assert_eq "drop-in, XRDP session refused: session ends before startup, message shown" "" "$(run_dropin 23440 "local desktop busy")"
+assert_eq "drop-in, XRDP session refused: session ends before startup, message shown" "" "$(run_dropin 23440 "local desktop busy" c10 "")"
 assert_contains "drop-in, XRDP session refused: xmessage carries the guard's reason" "$(cat "$MOCK_CALLS")" "xmessage -center -timeout 30 refused: local desktop busy"
-assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 23440 "")"
-assert_eq "drop-in, local login (no XRDP_SESSION): guard not even consulted" "reached-startup" "$(run_dropin "" "local desktop busy")"
-# The variable alone isn't trusted: a local login (session on seat0) that
-# inherited XRDP_SESSION from the systemd user environment after a remote
-# logout must not be refused (seen live); a remote one (no seat) still is.
-assert_eq "drop-in, leaked XRDP_SESSION in a seated local login: not refused" "reached-startup" "$(run_dropin 23440 "local desktop busy" 12 seat0)"
-assert_eq "drop-in, XRDP_SESSION and a seatless session: refused" "" "$(run_dropin 23440 "local desktop busy" c10 "")"
-assert_eq "drop-in, XRDP_SESSION and a seatless session (logind prints -): refused" "" "$(run_dropin 23440 "local desktop busy" c10 -)"
+assert_contains "drop-in, XRDP session: guard asked in remote mode" "$(cat "$MOCK_CALLS")" "guard remote"
+assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 23440 "" c10 "")"
+assert_eq "drop-in, XRDP session (logind prints - for the seat): still remote" "reached-startup" "$(run_dropin 23440 "" c10 -)"
+# A seated login is local whatever XRDP_SESSION says (it leaks in from
+# the systemd user environment after a remote logout - seen live): the
+# guard is asked in local mode, and refuses only for an open remote session.
+: >"$MOCK_CALLS"
+assert_eq "drop-in, seated login with a leaked XRDP_SESSION: local, allowed" "reached-startup" "$(run_dropin 23440 "remote still open" 12 seat0 remote)"
+assert_contains "drop-in, seated login: guard asked in local mode" "$(cat "$MOCK_CALLS")" "guard local"
+assert_not_contains "drop-in, seated login: never asked in remote mode" "$(cat "$MOCK_CALLS")" "guard remote"
+assert_eq "drop-in, local login while a remote session is open: refused" "" "$(run_dropin "" "remote still open" 12 seat0 local)"
+assert_eq "drop-in, local login, nothing open remotely: allowed" "reached-startup" "$(run_dropin "" "" 12 seat0)"
+# Without logind's answer nothing can be told apart, so nothing is checked.
+: >"$MOCK_CALLS"
+assert_eq "drop-in, no session id: unchecked" "reached-startup" "$(run_dropin 23440 "x" "" "")"
+assert_eq "drop-in, no session id: guard not consulted" "" "$(cat "$MOCK_CALLS")"
 rm "$MOCK_BIN/ohmydebn-xrdp-session-guard"
-assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 23440 "x")"
+assert_eq "drop-in, guard binary missing (package removed but drop-in left): logins unaffected" "reached-startup" "$(run_dropin 23440 "x" c10 "")"
 mock_cleanup
 
 # --- firewall hint: live state; rules for the port, or the two allow commands ---

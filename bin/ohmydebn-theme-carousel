@@ -2178,6 +2178,18 @@ if __name__ == "__main__":
     win = Carousel()
     win.pre_carousel_win = pre_carousel_win
     win.show_all()
+    # fullscreen() fills whichever monitor the window is on at that moment,
+    # and Cinnamon places a freshly shown window on the primary monitor -
+    # not the one the pointer is on, which is what get_monitor_geometry()
+    # sized this window for. With the pointer on an external monitor of a
+    # different resolution the carousel opened on the internal screen at
+    # the external one's size and spilled across the seam (single-monitor
+    # setups never noticed: the sizes match). Moving the window onto its
+    # monitor before fullscreening is what makes fullscreen() pick that
+    # monitor; Cinnamon's placement-mode and center-new-windows settings
+    # don't. Needs the GdkWindow, hence realize() first.
+    win.realize()
+    win.get_window().move(win._geo.x, win._geo.y)
     win.fullscreen()
     Gtk.main()
     sys.exit(0)

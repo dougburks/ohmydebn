@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# ohmydebn-firewall-hint <port> <label>: tell the user how to let a service
+# through the firewall. OhMyDebn turns ufw on with inbound denied
+# (install/config/ufw.sh), so a freshly installed server listens but no
+# one can reach it - and OhMyDebn deliberately never opens a port itself:
+# whether a service should be reachable from anywhere or from one
+# address or range is the user's call. Print the two commands, most
+# restrictive first, and get out of the way. No sudo here (ufw status
+# needs root), so this is safe to run from a menu's status window.
+#
+# Usage: ohmydebn-firewall-hint 3389 "Remote Desktop"
+
+if [ "$#" -ne 2 ]; then
+  echo "Usage: ohmydebn-firewall-hint <port> <label>" >&2
+  exit 1
+fi
+PORT="$1"
+LABEL="$2"
+
+if ! command -v ufw >/dev/null 2>&1; then
+  exit 0
+fi
+
+cat <<MSG
+The firewall denies inbound connections by default, so port $PORT stays
+closed until you allow it. From one address or range (recommended):
+  sudo ufw allow from 192.168.1.0/24 to any port $PORT proto tcp comment 'OhMyDebn $LABEL'
+From anywhere:
+  sudo ufw allow $PORT/tcp comment 'OhMyDebn $LABEL'
+To see what's allowed now: sudo ufw status
+MSG

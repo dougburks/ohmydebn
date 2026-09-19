@@ -9,7 +9,7 @@
 # restrictive first, and get out of the way. No sudo here (ufw status
 # needs root), so this is safe to run from a menu's status window.
 #
-# Usage: ohmydebn-firewall-hint 3389 "Remote Desktop"
+# Usage: ohmydebn-firewall-hint 3389 "Remote Desktop Server"
 
 if [ "$#" -ne 2 ]; then
   echo "Usage: ohmydebn-firewall-hint <port> <label>" >&2

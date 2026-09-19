@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Only prompt if the package is not installed at all
+if ! dpkg -s "remmina" >/dev/null 2>&1; then
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Remmina (remote desktop client) is not currently installed."
+    echo
+    echo "Continuing will install it from your existing distro repo, with its"
+    echo "RDP and VNC plugins."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+
+    read -r
+  fi
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install remmina remmina-plugin-rdp remmina-plugin-vnc
+fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Unit tests for the Remote Desktop (XRDP) scripts: ohmydebn-remote-desktop
+# Unit tests for the Remote Desktop (XRDP) scripts: ohmydebn-remote-desktop-server
 # (menu launcher), -install, -remove, ohmydebn-xrdp-session-guard with its
 # Xsession.d drop-in (config/xrdp/), and ohmydebn-firewall-hint. The
 # Xsession.d directory and systemd signal directory are sed-patched into a
@@ -14,7 +14,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== ohmydebn-remote-desktop / -install / -remove / ohmydebn-xrdp-session-guard / ohmydebn-firewall-hint ==="
+echo "=== ohmydebn-remote-desktop-server / -install / -remove / ohmydebn-xrdp-session-guard / ohmydebn-firewall-hint ==="
 
 setup() {
   mock_init
@@ -60,7 +60,7 @@ EOF2
 echo "$name \$*" >>"\$MOCK_CALLS"
 EOF2
   done
-  for script in ohmydebn-remote-desktop ohmydebn-remote-desktop-install ohmydebn-remote-desktop-remove ohmydebn-xrdp-session-guard ohmydebn-firewall-hint; do
+  for script in ohmydebn-remote-desktop-server ohmydebn-remote-desktop-server-install ohmydebn-remote-desktop-server-remove ohmydebn-xrdp-session-guard ohmydebn-firewall-hint; do
     sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^GUARD=.*#GUARD=$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard#; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
       "$REPO_ROOT/bin/$script" >"$MOCK_BIN/$script"
     chmod +x "$MOCK_BIN/$script"
@@ -71,7 +71,7 @@ run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_
 
 # --- install, fresh, systemd: packages, TLS group, PAM guard, ~/.xsession, service, no firewall rule ---
 setup
-OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt)
+OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "fresh: installs xrdp and xorgxrdp" "$CALLS" "sudo /usr/bin/apt -y install xrdp xorgxrdp"
 assert_contains "fresh: xrdp user added to ssl-cert for the TLS key" "$CALLS" "sudo adduser xrdp ssl-cert"
@@ -80,15 +80,15 @@ assert_eq "fresh: Xsession.d drop-in installed, world-readable, identical to the
 assert_eq "fresh: no ~/.xsession written" "no" "$([ -e "$H/.xsession" ] && echo yes || echo no)"
 assert_contains "fresh: service enabled under systemd" "$CALLS" "sudo systemctl enable --now xrdp"
 assert_not_contains "fresh: no firewall rule added" "$CALLS" "ufw allow"
-assert_contains "fresh: firewall guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop'"
+assert_contains "fresh: firewall guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop Server'"
 assert_contains "fresh: address shown" "$OUT" "192.0.2.10:3389"
 mock_cleanup
 
 # --- install again, everything already in place: idempotent ---
 setup
-run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
+run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt >/dev/null
 : >"$MOCK_CALLS"
-OUT=$(MOCK_INSTALLED="xrdp" MOCK_XRDP_GROUPS="xrdp ssl-cert" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt)
+OUT=$(MOCK_INSTALLED="xrdp" MOCK_XRDP_GROUPS="xrdp ssl-cert" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "rerun: no apt" "$CALLS" "apt"
 assert_not_contains "rerun: adduser skipped when already a member" "$CALLS" "adduser"
@@ -99,14 +99,14 @@ mock_cleanup
 # --- install with the user's own ~/.xsession: not our business, untouched ---
 setup
 printf '#!/bin/sh\nexec startxfce4\n' >"$H/.xsession"
-MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt >/dev/null
 assert_eq "own xsession: file untouched" "#!/bin/sh
 exec startxfce4" "$(cat "$H/.xsession")"
 mock_cleanup
 
 # --- install without systemd (Devuan/LCOS): service, not systemctl ---
 MOCK_SYSTEMD=false setup
-OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt)
+OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "no systemd: systemctl never called" "$CALLS" "systemctl"
 assert_contains "no systemd: service restart used" "$CALLS" "sudo service xrdp restart"
@@ -114,7 +114,7 @@ mock_cleanup
 
 # --- install, prompt cancelled (EOF): nothing happens ---
 setup
-run "$MOCK_BIN/ohmydebn-remote-desktop-install" >/dev/null
+run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" >/dev/null
 EXIT_CODE=$?
 assert_eq "cancelled at the prompt: exits non-zero" "1" "$EXIT_CODE"
 assert_eq "cancelled at the prompt: nothing run" "" "$(cat "$MOCK_CALLS")"
@@ -122,28 +122,28 @@ mock_cleanup
 
 # --- menu launcher: not installed -> presentation with the installer; installed -> status window ---
 setup
-MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop" >/dev/null
-assert_contains "launcher, not installed: install presented" "$(cat "$MOCK_CALLS")" "ohmydebn-launch-floating-terminal-with-presentation Remote Desktop $MOCK_BIN/ohmydebn-remote-desktop-install"
+MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
+assert_contains "launcher, not installed: install presented" "$(cat "$MOCK_CALLS")" "ohmydebn-launch-floating-terminal-with-presentation Remote Desktop Server $MOCK_BIN/ohmydebn-remote-desktop-server-install"
 mock_cleanup
 setup
-MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop" >/dev/null
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
 assert_contains "launcher, package present but guard missing: installer presented to configure it" "$(cat "$MOCK_CALLS")" "ohmydebn-launch-floating-terminal-with-presentation Remote Desktop"
 mock_cleanup
 setup
 cp "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" "$DROPIN"
-MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop" >/dev/null
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "launcher, installed and configured: no installer" "$CALLS" "with-presentation"
 assert_contains "launcher, installed: status window with the address" "$CALLS" "192.0.2.10:3389"
 assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
-assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop'"
+assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop Server'"
 mock_cleanup
 
 # --- remove: drop-in gone, service stopped, purged; firewall left alone ---
 setup
-run "$MOCK_BIN/ohmydebn-remote-desktop-install" --skip-prompt >/dev/null
+run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt >/dev/null
 : >"$MOCK_CALLS"
-OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-remove" --skip-prompt)
+OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server-remove" --skip-prompt)
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "remove: Xsession.d drop-in removed" "no" "$([ -e "$DROPIN" ] && echo yes || echo no)"
 assert_contains "remove: service disabled" "$CALLS" "sudo systemctl disable --now xrdp xrdp-sesman"
@@ -155,13 +155,13 @@ mock_cleanup
 # --- remove with the user's own ~/.xsession: never ours, kept ---
 setup
 printf '#!/bin/sh\nexec startxfce4\n' >"$H/.xsession"
-MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-remove" --skip-prompt >/dev/null
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server-remove" --skip-prompt >/dev/null
 assert_eq "remove, own xsession: kept" "yes" "$([ -f "$H/.xsession" ] && echo yes || echo no)"
 mock_cleanup
 
 # --- remove when not installed: says so, does nothing ---
 setup
-OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-remove" --skip-prompt)
+OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-remove" --skip-prompt)
 assert_contains "remove, not installed: message" "$OUT" "not currently installed"
 assert_eq "remove, not installed: nothing run" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup

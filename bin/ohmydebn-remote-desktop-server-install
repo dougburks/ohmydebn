@@ -70,7 +70,7 @@ echo
 echo "XRDP is running. Connect with Remmina or any RDP client to:"
 echo "  $IP:3389"
 echo
-/usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 "Remote Desktop"
+/usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 "Remote Desktop Server"
 echo
 echo "Log in as a user who isn't logged into the local desktop - a separate user is simplest."
 echo "A user new to OhMyDebn gets its desktop by running the installer once in their session:"

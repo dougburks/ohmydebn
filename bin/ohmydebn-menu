@@ -551,13 +551,14 @@ show_cybersecurity_menu() {
 }
 
 show_utility_menu() {
-  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n↔  rclone\n󰍉  Screen Magnifier\n  Remote Desktop\n󰒒  SSH Server"
+  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n↔  rclone\n󰍉  Screen Magnifier\n  Remote Desktop Client (Remmina)\n  Remote Desktop Server (XRDP)\n󰒒  SSH Server"
   case "$MENU_RESULT" in
   *Deskflow*) /usr/share/ohmydebn/bin/ohmydebn-deskflow ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *rclone*) /usr/share/ohmydebn/bin/ohmydebn-rclone ;;
   *Magnifier*) present_terminal "Screen Magnifier" /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
-  *Remote*) /usr/share/ohmydebn/bin/ohmydebn-remote-desktop ;;
+  *Remmina*) /usr/share/ohmydebn/bin/ohmydebn-remmina ;;
+  *XRDP*) /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-server ;;
   *SSH*) /usr/share/ohmydebn/bin/ohmydebn-ssh-server ;;
   *) show_apps_menu ;;
   esac

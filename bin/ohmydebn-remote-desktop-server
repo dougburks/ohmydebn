@@ -8,7 +8,7 @@ set -euo pipefail
 # what's missing, so this is how the configuration reaches such a system.
 GUARD=/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard
 if ! dpkg -s "xrdp" >/dev/null 2>&1 || [ ! -f "$GUARD" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-install
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop Server" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-server-install
 fi
 
 if dpkg -s "xrdp" >/dev/null 2>&1; then
@@ -20,5 +20,5 @@ if dpkg -s "xrdp" >/dev/null 2>&1; then
   # ohmydebn-ssh-server for the /run/systemd/system signal).
   IP=$(hostname -I | awk '{print $1}')
   STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Remote Desktop" "echo 'Connect to this machine with Remmina or any RDP client:'; echo '  $IP:3389'; echo; echo -n 'XRDP service status: '; $STATUS_CMD; echo; /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 'Remote Desktop'; echo; echo 'Press Enter to close this window.'; read -r"
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Remote Desktop Server" "echo 'Connect to this machine with Remmina or any RDP client:'; echo '  $IP:3389'; echo; echo -n 'XRDP service status: '; $STATUS_CMD; echo; /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 'Remote Desktop Server'; echo; echo 'Press Enter to close this window.'; read -r"
 fi

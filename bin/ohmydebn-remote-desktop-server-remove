@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-# Same paths as ohmydebn-remote-desktop-install, variables for the tests.
+# Same paths as ohmydebn-remote-desktop-server-install, variables for the tests.
 SYSTEMD_DIR=/run/systemd/system
 XSESSION_D=/etc/X11/Xsession.d
 

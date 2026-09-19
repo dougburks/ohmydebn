@@ -1,0 +1,130 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if [ "$SKIP_PROMPT" = false ]; then
+  echo
+  echo "Remote Desktop (XRDP) is not currently configured."
+  echo
+  echo "Continuing will install xrdp/xorgxrdp and allow RDP connections."
+  echo "Use this only on trusted networks, a VPN, or your LAN."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+
+  read -r
+fi
+
+sudo /usr/bin/apt update
+sudo /usr/bin/apt -y install xrdp xorgxrdp
+
+if getent group ssl-cert >/dev/null && id xrdp >/dev/null 2>&1; then
+  sudo adduser xrdp ssl-cert
+fi
+
+# Enforce the same one-graphical-session-per-user policy before xrdp-sesman can
+# reconnect an already-running XRDP session. ~/.xsession is only evaluated when
+# a new desktop starts, not when sesman reconnects to an existing display.
+if [ -f /etc/pam.d/xrdp-sesman ] && ! grep -Fq 'ohmydebn-xrdp-session-guard' /etc/pam.d/xrdp-sesman; then
+  sudo sed -i '/^@include common-account/a account  requisite pam_exec.so quiet /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard' /etc/pam.d/xrdp-sesman
+fi
+
+cat >"$HOME/.xsession" <<'EOF'
+#!/bin/sh
+# OhMyDebn Cinnamon session for XRDP
+#
+# XRDP needs its own session bus so Cinnamon's org.gnome.SessionManager name
+# does not collide with an already-running local Cinnamon login for the same
+# user. That private bus also needs its own Secret Service provider; otherwise
+# browser-login CLIs such as gh, Chrome, and xdg-desktop-portal hang trying to
+# activate org.freedesktop.secrets on a bus where gnome-keyring only discovers
+# the other desktop's daemon.
+
+unset DBUS_SESSION_BUS_ADDRESS
+unset SESSION_MANAGER
+export XDG_SESSION_TYPE=x11
+export DESKTOP_SESSION=cinnamon
+export XDG_CURRENT_DESKTOP=X-Cinnamon
+
+# Model B: one graphical session per user. Running a local Cinnamon desktop and
+# an XRDP Cinnamon desktop for the same user at the same time creates conflicts
+# across DBus names, Secret Service/keyring, portals, and snap cgroups. Refuse
+# the XRDP desktop when this same user already owns a local seat session. Use a
+# separate user for XRDP, or log out locally first.
+if [ "${OHMYDEBN_XRDP_ALLOW_SHARED_USER:-}" != "1" ] && command -v loginctl >/dev/null 2>&1; then
+  for sid in $(loginctl list-sessions --no-legend 2>/dev/null | awk -v user="$USER" '$3 == user {print $1}'); do
+    [ "$sid" = "${XDG_SESSION_ID:-}" ] && continue
+    seat=$(loginctl show-session "$sid" -p Seat --value 2>/dev/null || true)
+    state=$(loginctl show-session "$sid" -p State --value 2>/dev/null || true)
+    class=$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)
+    if [ -n "$seat" ] && [ "$seat" != "-" ] && [ "$class" = "user" ] && [ "$state" != "closing" ]; then
+      msg="OhMyDebn XRDP: user '$USER' already has a local graphical session ($sid on $seat). Log out locally or use a separate XRDP user."
+      echo "$msg" >&2
+      if command -v xmessage >/dev/null 2>&1; then
+        xmessage -center -timeout 30 "$msg" || true
+      else
+        sleep 10
+      fi
+      exit 1
+    fi
+  done
+fi
+
+exec dbus-run-session -- sh -c '
+  if command -v gnome-keyring-daemon >/dev/null 2>&1; then
+    keyring_dir="${XDG_RUNTIME_DIR:-/tmp}/keyring-xrdp-${DISPLAY#:}"
+    mkdir -p "$keyring_dir"
+    chmod 700 "$keyring_dir"
+    eval "$(gnome-keyring-daemon --start --components=secrets,pkcs11 --control-directory="$keyring_dir")" || true
+  fi
+
+  exec cinnamon-session-cinnamon
+'
+EOF
+chmod 755 "$HOME/.xsession"
+
+touch "$HOME/.xsessionrc"
+python3 - "$HOME/.xsessionrc" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1]).expanduser()
+content = path.read_text()
+old_block = '''
+# Update PATH to include OhMyDebn binaries
+if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
+  export PATH="/usr/share/ohmydebn/bin:$PATH"
+fi
+'''
+for candidate in (old_block, old_block.lstrip('\n')):
+    content = content.replace(candidate, '\n')
+if '# Update PATH to include OhMyDebn binaries' not in content:
+    content += '''
+# Update PATH to include OhMyDebn binaries
+case ":$PATH:" in
+  *:/usr/share/ohmydebn/bin:*) ;;
+  *) export PATH="/usr/share/ohmydebn/bin:$PATH" ;;
+esac
+'''
+path.write_text(content)
+PY
+
+sudo systemctl enable --now xrdp
+sudo systemctl restart xrdp xrdp-sesman
+
+# OhMyDebn enables UFW with denied inbound connections. XRDP needs an
+# explicit inbound rule when the firewall is active.
+if command -v ufw >/dev/null 2>&1; then
+  sudo ufw allow 3389/tcp comment 'OhMyDebn XRDP'
+fi
+
+IP=$(hostname -I | awk '{print $1}')
+echo
+echo "XRDP is ready. Connect with Remmina/RDP to:"
+echo "  $IP:3389"
+echo
+echo "If this user is already logged into the local desktop, create or use a separate user for XRDP."

@@ -18,14 +18,38 @@ if [ ! -f $ZSHRC_STATE ]; then
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
-  if ! grep -F 'export PATH="/usr/share/ohmydebn/bin:$PATH"' $FILE >/dev/null 2>&1; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
-    cat <<'EOF' >>$FILE
+  touch "$FILE"
 
+  # ~/.xsessionrc is sourced by /etc/X11/Xsession under /bin/sh, notably for
+  # XRDP sessions. Older OhMyDebn installs appended a Bash/Zsh-only [[ ... ]]
+  # PATH block there, which makes remote desktop sessions exit right after
+  # login. Migrate that old block out before appending the POSIX-sh version.
+  python3 - "$FILE" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1]).expanduser()
+content = path.read_text()
+old_block = '''
 # Update PATH to include OhMyDebn binaries
 if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
   export PATH="/usr/share/ohmydebn/bin:$PATH"
 fi
+'''
+for candidate in (old_block, old_block.lstrip('\n')):
+    content = content.replace(candidate, '\n')
+path.write_text(content)
+PY
+
+  if ! grep -F '# Update PATH to include OhMyDebn binaries' "$FILE" >/dev/null 2>&1; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
+    cat <<'EOF' >>"$FILE"
+
+# Update PATH to include OhMyDebn binaries
+case ":$PATH:" in
+  *:/usr/share/ohmydebn/bin:*) ;;
+  *) export PATH="/usr/share/ohmydebn/bin:$PATH" ;;
+esac
 EOF
   fi
 done

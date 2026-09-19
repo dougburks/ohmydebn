@@ -50,9 +50,13 @@ EOF2
 #!/bin/bash
 echo "192.0.2.10 fd00::10"
 EOF2
+  # `ufw status` output comes from MOCK_UFW_STATUS (the sudo mock execs
+  # ufw); empty means the sudo prompt was declined (ufw fails).
   mock_bin ufw <<'EOF2'
 #!/bin/bash
 mock_log "ufw $*"
+[[ -n "${MOCK_UFW_STATUS:-}" ]] || exit 1
+printf '%s\n' "$MOCK_UFW_STATUS"
 EOF2
   for name in ohmydebn-launch-floating-terminal ohmydebn-launch-floating-terminal-with-presentation; do
     mock_bin "$name" <<EOF2
@@ -67,7 +71,20 @@ EOF2
   done
   DROPIN="$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard"
 }
-run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" bash "$@" </dev/null 2>&1; }
+run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" MOCK_UFW_STATUS="${MOCK_UFW_STATUS:-}" bash "$@" </dev/null 2>&1; }
+UFW_OPEN='Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       192.168.1.0/24             # OhMyDebn SSH Server
+3389/tcp                   ALLOW       Anywhere                   # OhMyDebn Remote Desktop Server
+3389/tcp (v6)              ALLOW       Anywhere (v6)              # OhMyDebn Remote Desktop Server'
+UFW_CLOSED='Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere'
+
 
 # --- install, fresh, systemd: packages, TLS group, PAM guard, ~/.xsession, service, no firewall rule ---
 setup
@@ -80,7 +97,7 @@ assert_eq "fresh: Xsession.d drop-in installed, world-readable, identical to the
 assert_eq "fresh: no ~/.xsession written" "no" "$([ -e "$H/.xsession" ] && echo yes || echo no)"
 assert_contains "fresh: service enabled under systemd" "$CALLS" "sudo systemctl enable --now xrdp"
 assert_not_contains "fresh: no firewall rule added" "$CALLS" "ufw allow"
-assert_contains "fresh: firewall guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop Server'"
+assert_contains "fresh: firewall state read and guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop Server'"
 assert_contains "fresh: address shown" "$OUT" "192.0.2.10:3389"
 mock_cleanup
 
@@ -263,11 +280,27 @@ rm "$MOCK_BIN/ohmydebn-xrdp-session-guard"
 assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 23440 "x")"
 mock_cleanup
 
-# --- firewall hint: two commands, restrictive first; silent without ufw ---
+# --- firewall hint: live state; rules for the port, or the two allow commands ---
 setup
-OUT=$(run "$MOCK_BIN/ohmydebn-firewall-hint" 22 "SSH Server")
-assert_contains "hint: restrictive rule first" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 22 proto tcp comment 'OhMyDebn SSH Server'"
-assert_contains "hint: open rule second" "$OUT" "sudo ufw allow 22/tcp comment 'OhMyDebn SSH Server'"
+OUT=$(MOCK_UFW_STATUS="$UFW_CLOSED" run "$MOCK_BIN/ohmydebn-firewall-hint" 3389 "Remote Desktop Server")
+assert_contains "hint, no rule for the port: says so" "$OUT" "no rule allows port 3389 yet"
+assert_contains "hint, no rule: restrictive command first" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop Server'"
+assert_contains "hint, no rule: open command second" "$OUT" "sudo ufw allow 3389/tcp comment 'OhMyDebn Remote Desktop Server'"
+assert_not_contains "hint, no rule: the other port's rule isn't shown" "$OUT" "22/tcp"
+OUT=$(MOCK_UFW_STATUS="$UFW_OPEN" run "$MOCK_BIN/ohmydebn-firewall-hint" 3389 "Remote Desktop Server")
+assert_contains "hint, rules present: header shown" "$OUT" "  To                         Action      From"
+assert_contains "hint, rules present: the port's rules listed" "$OUT" "  3389/tcp                   ALLOW       Anywhere                   # OhMyDebn Remote Desktop Server"
+assert_contains "hint, rules present: v6 rule too" "$OUT" "  3389/tcp (v6)              ALLOW       Anywhere (v6)"
+assert_not_contains "hint, rules present: other ports filtered out" "$OUT" "22/tcp"
+assert_not_contains "hint, rules present: no allow commands" "$OUT" "sudo ufw allow"
+OUT=$(MOCK_UFW_STATUS="$UFW_OPEN" run "$MOCK_BIN/ohmydebn-firewall-hint" 22 "SSH Server")
+assert_contains "hint, port 22: its own rule" "$OUT" "22/tcp                     ALLOW       192.168.1.0/24"
+assert_not_contains "hint, port 22: 3389 filtered out" "$OUT" "3389"
+OUT=$(MOCK_UFW_STATUS="Status: inactive" run "$MOCK_BIN/ohmydebn-firewall-hint" 22 "SSH Server")
+assert_contains "hint, firewall inactive: port reachable" "$OUT" "The firewall is inactive, so port 22 is reachable."
+OUT=$(MOCK_UFW_STATUS="" run "$MOCK_BIN/ohmydebn-firewall-hint" 22 "SSH Server")
+assert_contains "hint, sudo declined: falls back to the commands" "$OUT" "sudo ufw allow 22/tcp comment 'OhMyDebn SSH Server'"
+assert_contains "hint, sudo declined: and how to look for yourself" "$OUT" "To see what's allowed now: sudo ufw status"
 rm "$MOCK_BIN/ufw"
 OUT=$(env -i PATH="$MOCK_BIN:/usr/bin:/bin" HOME="$H" /bin/bash "$MOCK_BIN/ohmydebn-firewall-hint" 22 "SSH Server" 2>&1)
 assert_eq "hint: nothing printed when ufw isn't installed" "" "$OUT"

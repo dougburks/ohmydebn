@@ -40,7 +40,12 @@ while read -r sid _uid name seat _rest; do
 
   logger -t ohmydebn-xrdp-session-guard \
     "Refusing XRDP session for '$USER_TO_CHECK': local graphical session '$sid' is active on '$seat'" || true
-  echo "OhMyDebn: user '$USER_TO_CHECK' is already logged into the local desktop (session $sid on $seat), so this remote session can't start. Log out locally first, or use a separate user for remote desktop."
+  # Short lines: the drop-in shows this through xmessage, which doesn't
+  # wrap - one long line runs off the screen.
+  printf '%s\n' \
+    "OhMyDebn: user '$USER_TO_CHECK' is already logged into the local desktop (session $sid on $seat)," \
+    "so this remote session can't start." \
+    "Log out locally first, or use a separate user for remote desktop."
   exit 1
 done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
 

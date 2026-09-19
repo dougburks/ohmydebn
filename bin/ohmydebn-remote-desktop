@@ -2,7 +2,12 @@
 
 set -euo pipefail
 
-if ! dpkg -s "xrdp" >/dev/null 2>&1; then
+# The installer runs when the package is missing, and also when the package
+# is there but OhMyDebn's session guard isn't (xrdp installed by hand, or
+# before this entry existed): the installer is idempotent and only adds
+# what's missing, so this is how the configuration reaches such a system.
+GUARD=/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard
+if ! dpkg -s "xrdp" >/dev/null 2>&1 || [ ! -f "$GUARD" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-install
 fi
 

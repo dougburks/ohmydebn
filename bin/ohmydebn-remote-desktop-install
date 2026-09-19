@@ -48,7 +48,7 @@ fi
 # shared user bus, keyring, portals), so a drop-in in Xsession.d - a
 # directory OhMyDebn can own a file in, no other package's file edited -
 # refuses the remote session with a message when that user already has a
-# local one. Only XRDP sessions are affected (xrdp exports XRDP_SESSION=1),
+# local one. Only XRDP sessions are affected (xrdp exports XRDP_SESSION),
 # and every user on the machine is covered: the remote session itself is
 # the distro's default Cinnamon session on the user's normal session bus,
 # where xrdp's own PAM setup already starts the keyring, so no per-user

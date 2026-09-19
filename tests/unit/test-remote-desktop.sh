@@ -61,7 +61,7 @@ echo "$name \$*" >>"\$MOCK_CALLS"
 EOF2
   done
   for script in ohmydebn-remote-desktop ohmydebn-remote-desktop-install ohmydebn-remote-desktop-remove ohmydebn-xrdp-session-guard ohmydebn-firewall-hint; do
-    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
+    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^GUARD=.*#GUARD=$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard#; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
       "$REPO_ROOT/bin/$script" >"$MOCK_BIN/$script"
     chmod +x "$MOCK_BIN/$script"
   done
@@ -127,7 +127,13 @@ assert_contains "launcher, not installed: install presented" "$(cat "$MOCK_CALLS
 mock_cleanup
 setup
 MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop" >/dev/null
+assert_contains "launcher, package present but guard missing: installer presented to configure it" "$(cat "$MOCK_CALLS")" "ohmydebn-launch-floating-terminal-with-presentation Remote Desktop"
+mock_cleanup
+setup
+cp "$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard" "$DROPIN"
+MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop" >/dev/null
 CALLS=$(cat "$MOCK_CALLS")
+assert_not_contains "launcher, installed and configured: no installer" "$CALLS" "with-presentation"
 assert_contains "launcher, installed: status window with the address" "$CALLS" "192.0.2.10:3389"
 assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
 assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop'"
@@ -231,12 +237,15 @@ EOF2
 run_dropin() { XRDP_SESSION="${1:-}" MOCK_REFUSE="${2:-}" PATH="$(mock_path)" sh -e -c '. "$1"; echo reached-startup' _ "$MOCK_DIR/dropin" </dev/null 2>/dev/null; }
 
 setup_dropin
-assert_eq "drop-in, XRDP session refused: session ends before startup, message shown" "" "$(run_dropin 1 "local desktop busy")"
+# xrdp sets XRDP_SESSION to the session's pid, not to 1 - the drop-in
+# must test for the variable being set, whatever its value (found live:
+# a literal-1 comparison let every remote session through).
+assert_eq "drop-in, XRDP session refused: session ends before startup, message shown" "" "$(run_dropin 23440 "local desktop busy")"
 assert_contains "drop-in, XRDP session refused: xmessage carries the guard's reason" "$(cat "$MOCK_CALLS")" "xmessage -center -timeout 30 refused: local desktop busy"
-assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 1 "")"
+assert_eq "drop-in, XRDP session allowed: continues to startup" "reached-startup" "$(run_dropin 23440 "")"
 assert_eq "drop-in, local login (no XRDP_SESSION): guard not even consulted" "reached-startup" "$(run_dropin "" "local desktop busy")"
 rm "$MOCK_BIN/ohmydebn-xrdp-session-guard"
-assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 1 "x")"
+assert_eq "drop-in, guard binary missing (package removed but drop-in left): local and remote logins unaffected" "reached-startup" "$(run_dropin 23440 "x")"
 mock_cleanup
 
 # --- firewall hint: two commands, restrictive first; silent without ufw ---

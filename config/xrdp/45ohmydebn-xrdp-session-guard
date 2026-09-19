@@ -2,7 +2,8 @@
 #
 # Sourced by /etc/X11/Xsession (under /bin/sh with `set -e` - every
 # command here is guarded) for every X login; does nothing unless xrdp
-# started this session (it exports XRDP_SESSION=1). Running a user's
+# started this session (it exports XRDP_SESSION, set to the session's
+# own pid - so tested for non-empty, not for a value). Running a user's
 # Cinnamon desktop locally and over XRDP at the same time breaks in
 # several ways at once (one session manager name on the shared user bus,
 # keyring, portals), so when the same user already has a local graphical
@@ -11,7 +12,7 @@
 # ohmydebn-remote-desktop-remove. OHMYDEBN_XRDP_ALLOW_SHARED_USER=1 in
 # /etc/environment lifts the check for a site that wants shared-user
 # sessions anyway.
-if [ "${XRDP_SESSION:-}" = "1" ] && [ -x /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard ]; then
+if [ -n "${XRDP_SESSION:-}" ] && [ -x /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard ]; then
   if ! OHMYDEBN_XRDP_REFUSAL=$(/usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard); then
     if command -v xmessage >/dev/null 2>&1; then
       xmessage -center -timeout 30 "$OHMYDEBN_XRDP_REFUSAL" || true

@@ -392,11 +392,20 @@ def current_background_path():
 
 
 def get_monitor_geometry():
+    """(geometry, monitor number) of the monitor the pointer is on. The
+    number is the Gdk.Screen index fullscreen_on_monitor() takes - found
+    by matching geometry, since GdkMonitor carries no index of its own."""
     display = Gdk.Display.get_default()
     seat = display.get_default_seat()
     _screen, x, y = seat.get_pointer().get_position()
     monitor = display.get_monitor_at_point(x, y) or display.get_primary_monitor() or display.get_monitor(0)
-    return monitor.get_geometry()
+    geo = monitor.get_geometry()
+    monitor_num = 0
+    for i in range(display.get_n_monitors()):
+        if display.get_monitor(i).get_geometry().equal(geo):
+            monitor_num = i
+            break
+    return geo, monitor_num
 
 
 def load_cover_pixbuf(path, target_w, target_h, min_target=None):
@@ -944,7 +953,7 @@ class Carousel(Gtk.Window):
         # share of a warm-cache keypress (14-40ms). The window is sized
         # and fullscreened for this monitor, so it's the right one for the
         # whole session.
-        geo = get_monitor_geometry()
+        geo, self._monitor_num = get_monitor_geometry()
         self._geo = geo
         self.set_default_size(geo.width, geo.height)
 
@@ -2177,19 +2186,22 @@ if __name__ == "__main__":
 
     win = Carousel()
     win.pre_carousel_win = pre_carousel_win
-    win.show_all()
-    # fullscreen() fills whichever monitor the window is on at that moment,
-    # and Cinnamon places a freshly shown window on the primary monitor -
-    # not the one the pointer is on, which is what get_monitor_geometry()
-    # sized this window for. With the pointer on an external monitor of a
+    # fullscreen() fills whichever monitor the window is on when it's
+    # issued, and Cinnamon maps a new window on the primary monitor - not
+    # the one the pointer is on, which is what get_monitor_geometry() sized
+    # this window for. With the pointer on an external monitor of a
     # different resolution the carousel opened on the internal screen at
     # the external one's size and spilled across the seam (single-monitor
-    # setups never noticed: the sizes match). Moving the window onto its
-    # monitor before fullscreening is what makes fullscreen() pick that
-    # monitor; Cinnamon's placement-mode and center-new-windows settings
-    # don't. Needs the GdkWindow, hence realize() first.
-    win.realize()
-    win.get_window().move(win._geo.x, win._geo.y)
-    win.fullscreen()
+    # setups, and multi-monitor ones with matching resolutions, never
+    # notice). Naming the monitor before the first map is the only thing
+    # that works: a post-map move() is a ConfigureRequest the WM services
+    # on its own schedule, after the fullscreen has already been queued
+    # against the wrong monitor - and since the widgets were scaled for the
+    # larger monitor, the window's minimum size can't fit the smaller one
+    # anyway, so no later correction can shrink it back. Same rule
+    # ohmydebn-menu-picker follows by positioning inside __init__: commit
+    # to the monitor before show_all(), never after.
+    win.fullscreen_on_monitor(win.get_screen(), win._monitor_num)
+    win.show_all()
     Gtk.main()
     sys.exit(0)

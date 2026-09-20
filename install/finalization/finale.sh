@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # One consolidated restart for anything earlier in finalization that
-# asked for it (see finalization/gtile-restart-flag.sh and
-# install/keybinding/keybinding.sh) - each sets
-# OHMYDEBN_CINNAMON_RESTART_NEEDED rather than restarting immediately, so
-# two independent restarts in the same run don't race each other. Done
+# asked for it (today only finalization/gtile-restart-flag.sh; the
+# keybinding step used to as well, until it learned to make Cinnamon
+# reload live) - a step sets OHMYDEBN_CINNAMON_RESTART_NEEDED rather than
+# restarting immediately, so two independent restarts in the same run
+# can't race each other. Done
 # here, before the "update complete"/"installation complete" messaging
 # below, so that's the last thing printed, not this.
 # pgrep -x cinnamon here (not at flag-set time) is the up-to-date check of

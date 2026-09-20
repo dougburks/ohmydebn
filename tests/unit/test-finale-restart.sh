@@ -1,10 +1,11 @@
 #!/bin/bash
 #
 # Unit tests for install/finalization/finale.sh's consolidated Cinnamon
-# restart. finalization/gtile-restart-flag.sh and install/keybinding/keybinding.sh
-# each set OHMYDEBN_CINNAMON_RESTART_NEEDED instead of restarting Cinnamon
-# directly, so two independent backgrounded `cinnamon --replace &` calls
-# in the same run can't race each other - finale.sh (the last finalization
+# restart. A finalization step that needs one (today only
+# finalization/gtile-restart-flag.sh; install/keybinding/keybinding.sh used
+# to as well) sets OHMYDEBN_CINNAMON_RESTART_NEEDED instead of restarting
+# Cinnamon directly, so two independent backgrounded `cinnamon --replace &`
+# calls in the same run can't race each other - finale.sh (the last finalization
 # step) does the one actual restart here if anything asked for it, and
 # only if there's actually a live Cinnamon session to restart
 # (pgrep -x cinnamon), checked fresh here rather than trusting whatever

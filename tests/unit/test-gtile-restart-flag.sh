@@ -4,9 +4,9 @@
 # extension's JS into the already-running process - upgrading
 # ohmydebn-gtile on disk alone doesn't reach a session that's already
 # running until Cinnamon reloads it. This script doesn't restart Cinnamon
-# directly - install/keybinding/keybinding.sh can also decide a restart is
-# needed, for its own unrelated reason, and two independent backgrounded
-# `cinnamon --replace &` calls in the same run would race each other.
+# directly - two independent backgrounded `cinnamon --replace &` calls in
+# the same run would race each other (install/keybinding/keybinding.sh used
+# to schedule one too, before it learned to reload keybindings live).
 # Instead this sets OHMYDEBN_CINNAMON_RESTART_NEEDED, a plain shell
 # variable shared across every finalization script sourced into the same
 # process (see finalization/all.sh) - finalization/finale.sh does the one

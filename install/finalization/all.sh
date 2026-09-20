@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Clear any pre-existing value before gtile-restart-flag.sh/keybinding.sh
-# below get a chance to set it - under the normal ohmydebn-update
+# Clear any pre-existing value before gtile-restart-flag.sh below gets a
+# chance to set it - under the normal ohmydebn-update
 # invocation (a fresh `bash install.sh` subprocess each run) this can
 # never actually be set yet at this point, so this is a no-op in
 # practice; it exists so that stays true even if something ever invokes

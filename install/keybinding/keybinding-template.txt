@@ -13,6 +13,8 @@
 # activate an example. Key names are Cinnamon's: <Super> <Ctrl> <Alt>
 # <Shift>, letters, digits, Return, space, F1..F12, Page_Up, KP_1, and so on.
 # Several keys for one keybinding: "['<Super>R', '<Super><Alt>space']".
+# Avoid <Ctrl><Alt> with F1..F12 (with or without other modifiers): the X
+# server switches to a text console on those before Cinnamon ever sees them.
 #
 # Stock keybindings are addressed by NAME. Names are the first quoted field in
 #   /usr/share/ohmydebn/install/keybinding/keybinding-custom.txt

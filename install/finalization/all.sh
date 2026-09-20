@@ -13,6 +13,7 @@
 unset OHMYDEBN_CINNAMON_RESTART_NEEDED
 
 source $OHMYDEBN_INSTALL/finalization/updates.sh
+source $OHMYDEBN_INSTALL/finalization/theme-carousel-cache.sh
 source $OHMYDEBN_INSTALL/finalization/gtile-restart-flag.sh
 source $OHMYDEBN_INSTALL/finalization/hotkeys.sh
 source $OHMYDEBN_INSTALL/finalization/lightdm.sh

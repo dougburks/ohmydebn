@@ -25,7 +25,10 @@
 # still pays ~35ms for the accent CSS reload), first draw 379ms -> ~100ms
 # cold and 133ms -> 84ms warm, cold decodes 40 -> 24 (superseded jobs
 # skipped), and "settled" - every image render() asked for on screen -
-# 160-300ms per cold move.
+# 160-300ms per cold move. `ohmydebn-theme-carousel --warm-cache` (run in
+# the background by the install/update) fills the whole standard set for
+# this monitor - 372 images, 48MB, 12s on this box - after which a first
+# launch measures like a warm one (settle 13-48ms per move).
 
 import cProfile
 import io

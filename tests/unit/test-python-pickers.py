@@ -689,6 +689,54 @@ try:
     check("_evict_cache: a missing cache directory is not an error", True)
     tc.CAROUSEL_CACHE_DIR, tc.CAROUSEL_CACHE_MAX_BYTES = saved_dir, saved_cap
 
+    # compute_layout / warm_targets: the sizes a carousel on a monitor
+    # shows, and the decodes that would make every theme open instantly
+    # there - the same function Carousel.__init__ sizes itself from, so
+    # a warmed cache always holds the keys a carousel will look up.
+    class _Geo:
+        def __init__(self, w, h):
+            self.width, self.height = w, h
+
+    big = tc.compute_layout(_Geo(4000, 3000))
+    check_eq("compute_layout: a large monitor gets the design sizes unscaled",
+             (big.card_w, big.card_h, big.ring_dims[0], big.bg_thumb_w, big.bg_thumb_h),
+             (tc.CARD_W, tc.CARD_H, (tc.RING_SPECS[0][0], tc.RING_SPECS[0][1]), tc.BG_THUMB_W, tc.BG_THUMB_H))
+    small = tc.compute_layout(_Geo(1024, 600))
+    check("compute_layout: a small monitor shrinks every size, never below the 0.35 floor",
+          small.card_w < big.card_w and small.card_w >= round(tc.CARD_W * 0.35) and len(small.ring_dims) == len(tc.RING_SPECS))
+
+    # Theme fixture from above: zeta (two backgrounds + preview), alpha
+    # (one background), middle (nothing). Cache dir pointed at an empty
+    # fixture so nothing is skipped as already cached.
+    tc.CAROUSEL_CACHE_DIR = os.path.join(fixture, "carousel-warm")
+    geo = _Geo(1920, 1080)
+    layout = tc.compute_layout(geo)
+    targets = tc.warm_targets(["zeta", "alpha", "middle"], geo, layout, skip_cached=False)
+    # zeta's background list is whatever list_backgrounds_for_theme()
+    # says - unfiltered by extension, by design (see its docstring), so
+    # an earlier test's stray non-image file in there is part of it and
+    # gets a (None-cached) target too, exactly as render() would request.
+    zeta_bgs = tc.list_backgrounds_for_theme("zeta")
+    zeta_preview = tc.neighbor_preview("zeta")
+    alpha_bg = os.path.join(user_dir, "alpha", "backgrounds", "only.png")
+    expected = [(zeta_preview, w, h) for w, h in layout.ring_dims]
+    for path in zeta_bgs:
+        expected += [(path, 1920, 1080), (path, layout.card_w, layout.card_h), (path, layout.bg_thumb_w, layout.bg_thumb_h)]
+    check_eq("warm_targets: zeta - ring sizes of its preview first, then each background at backdrop/card/thumb, in list order",
+             targets[:len(expected)], expected)
+    check("warm_targets: alpha (one background) gets no background-thumbnail size",
+          (alpha_bg, 1920, 1080) in targets and (alpha_bg, layout.card_w, layout.card_h) in targets
+          and (alpha_bg, layout.bg_thumb_w, layout.bg_thumb_h) not in targets)
+    check("warm_targets: middle (no images at all) contributes nothing", not any("middle" in t[0] for t in targets))
+    check_eq("warm_targets: no duplicate targets", len(targets), len(set(targets)))
+    # skip_cached: an existing cache file drops that target; the fixture
+    # images are empty files, so the key comes from _cache_path directly.
+    os.makedirs(tc.CAROUSEL_CACHE_DIR, exist_ok=True)
+    open(tc._cache_path(alpha_bg, 1920, 1080), "w").close()
+    targets_skipping = tc.warm_targets(["alpha"], geo, layout)
+    check("warm_targets: an already-cached key is skipped, the rest kept",
+          (alpha_bg, 1920, 1080) not in targets_skipping and (alpha_bg, layout.card_w, layout.card_h) in targets_skipping)
+
     check_eq("_hex_to_rgb: basic conversion", tc._hex_to_rgb("#e68e0d"), (230, 142, 13))
     check(
         "_relative_luminance: white is brighter than black",

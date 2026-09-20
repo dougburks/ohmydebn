@@ -63,6 +63,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 import collections
+import concurrent.futures
 import hashlib
 import os
 import subprocess
@@ -70,6 +71,7 @@ import sys
 import tempfile
 import queue
 import threading
+import time
 import tomllib
 import warnings
 
@@ -945,6 +947,89 @@ def make_nav_button(pieces, halign, button_classes=("carousel-nav-btn",)):
     return button, labels
 
 
+Layout = collections.namedtuple("Layout", "card_w card_h ring_dims bg_thumb_w bg_thumb_h")
+
+
+def compute_layout(geo):
+    """Every image size the carousel shows on a monitor of this geometry.
+    Shrink (never grow) the card/thumbnail sizes to whatever fits - see
+    the comment on DESIGN_ROW_W above for why this is needed at all.
+    `caption` is carried as a fixed budget (it doesn't scale with these),
+    `row` is the part that does. Shared by Carousel.__init__ and the
+    cache warm-up (warm_targets), so a warmed cache always holds exactly
+    the keys a carousel on that monitor will look up."""
+    available_w = geo.width - CAROUSEL_H_MARGIN
+    available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
+    scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
+    return Layout(
+        round(CARD_W * scale), round(CARD_H * scale),
+        [(round(w * scale), round(h * scale)) for w, h, _ in RING_SPECS],
+        round(BG_THUMB_W * scale), round(BG_THUMB_H * scale),
+    )
+
+
+def warm_targets(slugs, geo, layout, skip_cached=True):
+    """The (path, w, h) decodes that would make every theme in `slugs`
+    open instantly on a monitor of this geometry, in the order the
+    carousel needs them: for each theme its ring thumbnails first (what
+    every neighbor shows of it), then its first background at the
+    backdrop, card and background-thumbnail sizes (what landing on it
+    shows), then its remaining backgrounds the same way (Up/Down).
+    Targets whose cache file already exists are left out, so a warm
+    cache costs one stat per key and no decode. Every size of one image
+    is listed together and largest first, so the master-decode cache
+    serves them all from one source decode."""
+    targets = []
+    seen = set()
+
+    def add(path, w, h):
+        if path is None or (path, w, h) in seen:
+            return
+        seen.add((path, w, h))
+        if skip_cached:
+            cache_path = _cache_path(path, w, h)
+            if cache_path is None or os.path.exists(cache_path):
+                return
+        targets.append((path, w, h))
+
+    for slug in slugs:
+        preview = neighbor_preview(slug)
+        for w, h in layout.ring_dims:
+            add(preview, w, h)
+        backgrounds = list_backgrounds_for_theme(slug)
+        landing = backgrounds[0] if backgrounds else (first_background(slug) or preview_image(slug))
+        for path in [landing] + [b for b in backgrounds if b != landing]:
+            add(path, geo.width, geo.height)
+            add(path, layout.card_w, layout.card_h)
+            if len(backgrounds) > 1:
+                add(path, layout.bg_thumb_w, layout.bg_thumb_h)
+    return targets
+
+
+def warm_cache(geo, threads=2, log=None):
+    """Decode every warm_targets() miss for this geometry into the disk
+    cache, on `threads` threads (GdkPixbuf's decode releases the GIL).
+    Returns the number of targets decoded. Used by --warm-cache (the
+    install/update stage) and mirrored, at the lowest queue priority, by
+    the carousel itself after its first paint."""
+    layout = compute_layout(geo)
+    targets = warm_targets(list_theme_slugs(), geo, layout)
+    if log:
+        log(f"{len(targets)} images to cache for {geo.width}x{geo.height}")
+    min_target = (geo.width, geo.height)
+
+    def decode(target):
+        path, w, h = target
+        try:
+            load_cover_pixbuf_cached(path, w, h, min_target)
+        except Exception:
+            pass
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
+        list(pool.map(decode, targets))
+    return len(targets)
+
+
 class DecodeWorker:
     """The one background thread every image decode goes through - the
     images render() wants on screen now, and the speculative prefetch of
@@ -1081,23 +1166,20 @@ class Carousel(Gtk.Window):
         self._geo = geo
         self.set_default_size(geo.width, geo.height)
 
-        # Shrink (never grow) the card/thumbnail sizes to whatever fits this
-        # monitor - see the comment on DESIGN_ROW_W above for why this is
-        # needed at all. `caption` is carried as a fixed budget (it doesn't
-        # scale with these), `row` is the part that does.
-        available_w = geo.width - CAROUSEL_H_MARGIN
-        available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
-        scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
-        self.card_w, self.card_h = round(CARD_W * scale), round(CARD_H * scale)
-        global MASTER_MIN_TARGET
-        MASTER_MIN_TARGET = (self.card_w, self.card_h)
-        # One (w, h) pair per RING_SPECS entry, same order (index 0 = the
-        # +-1 ring closest to the card) - render()'s theme_changed block
-        # indexes this the same way it indexes self.left_images/
+        # Every image size for this monitor - see compute_layout(). One
+        # (w, h) pair per RING_SPECS entry in ring_dims, same order (index
+        # 0 = the +-1 ring closest to the card) - render()'s theme_changed
+        # block indexes this the same way it indexes self.left_images/
         # right_images below, so ring i's frame size and its populated
         # pixbuf size always agree.
-        self.ring_dims = [(round(w * scale), round(h * scale)) for w, h, _ in RING_SPECS]
-        self.bg_thumb_w, self.bg_thumb_h = round(BG_THUMB_W * scale), round(BG_THUMB_H * scale)
+        layout = compute_layout(geo)
+        self.card_w, self.card_h = layout.card_w, layout.card_h
+        global MASTER_MIN_TARGET
+        MASTER_MIN_TARGET = (self.card_w, self.card_h)
+        self.ring_dims = layout.ring_dims
+        self.bg_thumb_w, self.bg_thumb_h = layout.bg_thumb_w, layout.bg_thumb_h
+        self._layout = layout
+        self._warmed = False
 
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS.encode("utf-8"))
@@ -1874,7 +1956,37 @@ class Carousel(Gtk.Window):
         if self._remove_armed and self._remove_armed_slug != slug:
             self._disarm_remove()
         self._schedule_prefetch(geo)
+        if not self._warmed:
+            self._warmed = True
+            self._schedule_warm_all(geo)
         return GLib.SOURCE_REMOVE
+
+    def _schedule_warm_all(self, geo):
+        """Once per session, after the first paint: queue every theme's
+        images that aren't in the disk cache yet, at the lowest priority
+        (behind what's on screen and behind the +-1 prefetch), so a cold
+        machine browses smoothly by the time the user gets past the first
+        few themes - and the next launch starts warm. warm_targets() does
+        a stat per key, so on an already-warm cache this is a short list
+        walk and nothing else. The enumeration itself runs on the worker
+        (it lists directories)."""
+        slugs = list(self.slugs)
+        layout = self._layout
+        min_target = (geo.width, geo.height)
+
+        def collect():
+            return warm_targets(slugs, geo, layout)
+
+        def enqueue(targets):
+            for path, w, h in targets or []:
+                self._decoder.submit(
+                    2,
+                    lambda: True,
+                    lambda path=path, w=w, h=h: load_cover_pixbuf_cached(path, w, h, min_target),
+                    lambda _pixbuf: None,
+                )
+
+        self._decoder.submit(2, lambda: True, collect, enqueue)
 
     def _schedule_prefetch(self, geo):
         """Decode the assets for the most likely next moves - one step in
@@ -2290,6 +2402,28 @@ class Carousel(Gtk.Window):
 
 
 if __name__ == "__main__":
+    if "--warm-cache" in sys.argv[1:]:
+        # Fill the disk cache for every installed theme at this display's
+        # monitor sizes, so the first carousel launch on a new machine (or
+        # after a theme update) shows pictures instead of empty frames
+        # while it decodes. Run from install/finalization/theme-carousel-
+        # cache.sh in the background at low priority; harmless to rerun,
+        # since only missing entries are decoded. Every monitor's geometry
+        # is warmed - the carousel opens on whichever has the pointer.
+        display = Gdk.Display.get_default()
+        if display is None:
+            print("ohmydebn-theme-carousel --warm-cache: no display, nothing to size for", file=sys.stderr)
+            sys.exit(0)
+        geometries = []
+        for i in range(display.get_n_monitors()):
+            geo = display.get_monitor(i).get_geometry()
+            if not any(g.width == geo.width and g.height == geo.height for g in geometries):
+                geometries.append(geo)
+        started = time.monotonic()
+        total = sum(warm_cache(geo, log=print) for geo in geometries)
+        print(f"cached {total} images in {time.monotonic() - started:.1f}s")
+        sys.exit(0)
+
     # Captured before the carousel window exists - this is the window
     # that will transiently regain focus the moment the carousel closes
     # (Gtk.main_quit() alone doesn't make it disappear immediately - see

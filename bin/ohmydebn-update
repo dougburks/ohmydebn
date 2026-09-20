@@ -157,7 +157,14 @@ OHMYDEBN_REPO_HOST="packages.ohmydebn.org"
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
   APT_UPDATE_OUT=$(mktemp)
-  sudo /usr/bin/env LC_ALL=C /usr/bin/apt update 2>&1 | tee "$APT_UPDATE_OUT"
+  # apt prints "WARNING: apt does not have a stable CLI interface" whenever
+  # its stdout isn't a terminal, and the tee below makes it a pipe.
+  # Disable-Script-Warning is apt's own switch for scripts that accept
+  # that; the only output parsed here is the Err:/W: Failed to fetch
+  # lines, which apt-get prints identically, so nothing rests on the
+  # unstable part. Kept as `apt` (not apt-get) for its closing "N packages
+  # can be upgraded" summary, which users read.
+  sudo /usr/bin/env LC_ALL=C /usr/bin/apt update -o Apt::Cmd::Disable-Script-Warning=true 2>&1 | tee "$APT_UPDATE_OUT"
   APT_UPDATE_STATUS=${PIPESTATUS[0]}
   FAILED_SOURCES=$(grep -E '^(Err:|W: Failed to fetch )' "$APT_UPDATE_OUT" | grep -oE 'https?://[^ ]+' | sort -u || true)
   rm -f "$APT_UPDATE_OUT"

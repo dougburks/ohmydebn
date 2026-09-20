@@ -15,23 +15,37 @@ echo "=== install/finalization/theme-carousel-cache.sh ==="
 
 setup() {
   mock_init
-  for name in ohmydebn-headline ohmydebn-theme-carousel; do
-    mock_bin "$name" <<EOF2
+  mock_bin ohmydebn-headline <<'EOF2'
 #!/bin/bash
-echo "$name \$*" >>"\$MOCK_CALLS"
+echo "ohmydebn-headline $*" >>"$MOCK_CALLS"
 EOF2
-  done
+  # --warm-cache-pending answers from MOCK_PENDING (the number of images
+  # not yet cached); --warm-cache is only logged.
+  mock_bin ohmydebn-theme-carousel <<'EOF2'
+#!/bin/bash
+echo "ohmydebn-theme-carousel $*" >>"$MOCK_CALLS"
+[[ "$1" == --warm-cache-pending ]] && echo "${MOCK_PENDING:-0}"
+exit 0
+EOF2
   # setsid/nice/ionice are real (they're in the PATH as usual) and just
   # exec through to the mocked carousel, which records how it was called.
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/patched.sh"
 }
 
 setup
-DISPLAY=:0 PATH="$(mock_path)" bash "$MOCK_DIR/patched.sh" </dev/null >/dev/null 2>&1
+MOCK_PENDING=372 DISPLAY=:0 PATH="$(mock_path)" bash "$MOCK_DIR/patched.sh" </dev/null >/dev/null 2>&1
 sleep 0.5
 CALLS=$(cat "$MOCK_CALLS")
-assert_contains "with a display: headline shown" "$CALLS" "ohmydebn-headline Preparing theme previews in the background"
-assert_contains "with a display: carousel run in warm-cache mode" "$CALLS" "ohmydebn-theme-carousel --warm-cache"
+assert_contains "images missing: headline names the count" "$CALLS" "ohmydebn-headline Preparing 372 theme previews in the background"
+assert_eq "images missing: carousel run in warm-cache mode, once" "1" "$(grep -cx 'ohmydebn-theme-carousel --warm-cache' "$MOCK_CALLS")"
+mock_cleanup
+
+# The usual ohmydebn-update on an unchanged system: nothing missing, so
+# no headline and no warm-up - only the (cheap) count.
+setup
+MOCK_PENDING=0 DISPLAY=:0 PATH="$(mock_path)" bash "$MOCK_DIR/patched.sh" </dev/null >/dev/null 2>&1
+sleep 0.3
+assert_eq "nothing missing: only the pending count is asked for" "ohmydebn-theme-carousel --warm-cache-pending" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
 setup

@@ -2402,7 +2402,7 @@ class Carousel(Gtk.Window):
 
 
 if __name__ == "__main__":
-    if "--warm-cache" in sys.argv[1:]:
+    if "--warm-cache" in sys.argv[1:] or "--warm-cache-pending" in sys.argv[1:]:
         # Fill the disk cache for every installed theme at this display's
         # monitor sizes, so the first carousel launch on a new machine (or
         # after a theme update) shows pictures instead of empty frames
@@ -2413,12 +2413,21 @@ if __name__ == "__main__":
         display = Gdk.Display.get_default()
         if display is None:
             print("ohmydebn-theme-carousel --warm-cache: no display, nothing to size for", file=sys.stderr)
+            if "--warm-cache-pending" in sys.argv[1:]:
+                print(0)
             sys.exit(0)
         geometries = []
         for i in range(display.get_n_monitors()):
             geo = display.get_monitor(i).get_geometry()
             if not any(g.width == geo.width and g.height == geo.height for g in geometries):
                 geometries.append(geo)
+        if "--warm-cache-pending" in sys.argv[1:]:
+            # Just the count of images not yet cached, so the install can
+            # skip the warm-up (and its headline) when there's nothing to
+            # do - a few hundred stats, no decode.
+            slugs = list_theme_slugs()
+            print(sum(len(warm_targets(slugs, geo, compute_layout(geo))) for geo in geometries))
+            sys.exit(0)
         started = time.monotonic()
         total = sum(warm_cache(geo, log=print) for geo in geometries)
         print(f"cached {total} images in {time.monotonic() - started:.1f}s")

@@ -65,18 +65,46 @@ fi
 # One update at a time per user. The menu, Ctrl+Super+U, the update
 # notification and a terminal can all start this, and apt's own lock only
 # serializes the package layer - two config layers interleaving is
-# exactly the inconsistent state the warning below describes. Taken here,
-# inside the logging wrapper (so the wrapper's re-exec doesn't contend
-# with itself), and held on fd 9 for the rest of the run, install.sh
-# included. Per user rather than system-wide: the config layer is
-# per-user, and apt already serializes the shared part.
+# exactly the inconsistent state the warning below describes. Per user
+# rather than system-wide: the config layer is per-user, and apt already
+# serializes the shared part.
+#
+# Held by flock(1) in a parent process of its own, NOT on a shell
+# descriptor (`exec 9>>` + `flock -n 9`, as this used to be). A shell
+# descriptor is inherited by every child, and two children of an update
+# outlive it: the Cinnamon that finalization/finale.sh restarts and the
+# theme carousel cache warmer. Both kept the lock after the update had
+# finished - Cinnamon until logout - and the next ohmydebn-update was
+# refused with a "Started by process N" naming a pid that no longer
+# existed. `flock -o` closes the lock descriptor before running us, so
+# nothing this run or install.sh spawns can inherit it; the flock parent
+# alone holds it, for exactly as long as the run lasts. Taken here, inside
+# the logging wrapper above, so a refusal lands in the log too and the
+# wrapper's own re-exec never contends with itself. -E 213 tells a refusal
+# apart from any exit status of the run itself.
 LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 [ -d "$LOCK_DIR" ] || LOCK_DIR=/tmp
 LOCK_FILE="$LOCK_DIR/ohmydebn-update-$(id -u).lock"
-exec 9>>"$LOCK_FILE"
-if ! flock -n 9; then
+if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
+  if OHMYDEBN_UPDATE_LOCKED=1 flock -n -o -E 213 "$LOCK_FILE" bash "$0" "$@"; then
+    exit 0
+  else
+    RC=$?
+  fi
+  [ "$RC" -eq 213 ] || exit "$RC"
   $DIR/bin/ohmydebn-headline "Another OhMyDebn update is already running"
-  echo "Started by process $(cat "$LOCK_FILE" 2>/dev/null || echo '?'). Let it finish before starting another."
+  HOLDER=$(cat "$LOCK_FILE" 2>/dev/null || echo '?')
+  if [[ "$HOLDER" =~ ^[0-9]+$ ]] && ! kill -0 "$HOLDER" 2>/dev/null; then
+    # A machine still on the old descriptor-based lock got here with a
+    # leftover child of a finished update holding it.
+    echo "It was started by process $HOLDER, which has already exited, so the lock is held by a"
+    echo "process that update left running - an older ohmydebn-update let its background children,"
+    echo "usually the Cinnamon it restarted, inherit the lock. Find the holder with:"
+    echo "  fuser -v $LOCK_FILE"
+    echo "Restarting Cinnamon from a terminal (cinnamon --replace &) or logging out releases it."
+  else
+    echo "Started by process $HOLDER. Let it finish before starting another."
+  fi
   exit 1
 fi
 echo "$$" >"$LOCK_FILE"

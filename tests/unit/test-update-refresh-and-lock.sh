@@ -126,25 +126,60 @@ mock_cleanup
 # --- lock: a second run while one holds the lock is refused ---
 setup
 LOCK="$RUNTIME/ohmydebn-update-$(id -u).lock"
-echo "424242" >"$LOCK"
-# Hold the lock from THIS shell on a spare descriptor - flock locks live
-# on open file descriptions, so the script's own `flock -n 9` (a fresh
-# description on the same file) is refused for as long as fd 8 stays
-# open here. No helper process, nothing left running afterwards.
+# This test shell poses as the running update: its pid in the lock file
+# (alive, so the plain "let it finish" message applies) and the lock held
+# from here on a spare descriptor - flock locks live on open file
+# descriptions, so the script's own `flock -n` (a fresh description on the
+# same file) is refused for as long as fd 8 stays open here. No helper
+# process, nothing left running afterwards.
+echo "$$" >"$LOCK"
 exec 8>>"$LOCK"
 flock 8
 run_update
 assert_eq "locked: exits 1" "1" "$STATUS"
 assert_contains "locked: says another update is running" "$OUTPUT" "Another OhMyDebn update is already running"
-assert_contains "locked: names the holder's pid from the lock file" "$OUTPUT" "Started by process 424242"
+assert_contains "locked: names the holder's pid from the lock file" "$OUTPUT" "Started by process $$. Let it finish"
 assert_not_contains "locked: no apt calls" "$(cat "$MOCK_CALLS")" "sudo"
 assert_not_contains "locked: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+# The recorded pid is gone but the lock is still held: the shape a machine
+# on the old descriptor-based lock gets into when a finished update's
+# background child (the restarted Cinnamon) inherited the lock.
+echo "424242" >"$LOCK"
+run_update
+assert_eq "stale holder: exits 1" "1" "$STATUS"
+assert_contains "stale holder: explains the pid is gone" "$OUTPUT" "started by process 424242, which has already exited"
+assert_contains "stale holder: says how to find the real holder" "$OUTPUT" "fuser -v $LOCK"
 # ...and once released, the same run goes through.
 exec 8>&-
 : >"$MOCK_CALLS"
 run_update
 assert_eq "released: exits 0" "0" "$STATUS"
 assert_contains "released: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh"
+assert_eq "released: lock file records the run's own pid" "yes" "$([[ "$(cat "$LOCK")" =~ ^[0-9]+$ ]] && echo yes || echo no)"
+mock_cleanup
+
+# --- the lock is NOT inherited by children of the run ---
+# install.sh is mocked to background a child that outlives the update (as
+# finale.sh's `setsid cinnamon --replace &` does for real). With the lock
+# held by flock -o in a parent process, that child holds nothing, so a
+# second update right after the first is not refused.
+setup
+cat >"$FAKE_TREE/install.sh" <<'EOF2'
+#!/bin/bash
+mock_log "install.sh $*"
+setsid sleep 20 >/dev/null 2>&1 &
+echo "$!" >"$MOCK_DIR/lingering-child.pid"
+EOF2
+chmod +x "$FAKE_TREE/install.sh"
+run_update
+assert_eq "lingering child: first run exits 0" "0" "$STATUS"
+LINGER=$(cat "$MOCK_DIR/lingering-child.pid" 2>/dev/null)
+assert_eq "lingering child: is still alive when the second run starts" "yes" "$([ -n "$LINGER" ] && kill -0 "$LINGER" 2>/dev/null && echo yes || echo no)"
+: >"$MOCK_CALLS"
+run_update
+assert_eq "lingering child: second run is NOT refused" "0" "$STATUS"
+assert_not_contains "lingering child: no 'already running'" "$OUTPUT" "already running"
+[ -n "$LINGER" ] && kill "$LINGER" 2>/dev/null
 mock_cleanup
 
 # --- lock works through the logging wrapper too (lock taken by the inner run, not contended by the outer) ---

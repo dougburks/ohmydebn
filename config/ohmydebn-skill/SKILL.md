@@ -268,34 +268,38 @@ ohmydebn-theme-install <url>     # Install from git repo
 
 ### Keybindings
 
-**Preferred: the user's own hotkeys file.** `~/.config/ohmydebn/hotkeys.txt` is
-applied on top of the stock hotkeys by every `ohmydebn-update`, whenever it
-changes, and by `ohmydebn-hotkeys-apply`. It survives updates and can be copied
-to another OhMyDebn machine. Stock hotkeys are addressed by NAME (the first
-quoted field in `/usr/share/ohmydebn/install/keybinding/keybinding-custom.txt`),
+Terminology: a *hotkey* is the key combination you press (the docs page at
+ohmydebn.org/hotkeys lists them); a *keybinding* is the configuration that ties
+a key to an action. Menus, commands and files say keybinding.
+
+**Preferred: the user's own keybindings file.** `~/.config/ohmydebn/keybindings.txt`
+is applied on top of the stock keybindings by every `ohmydebn-update`, whenever
+it changes, and by `ohmydebn-keybindings-apply`. It survives updates and can be
+copied to another OhMyDebn machine. Stock keybindings are addressed by NAME (the
+first quoted field in `/usr/share/ohmydebn/install/keybinding/keybinding-custom.txt`),
 never by slot number. Three verbs:
 
 ```bash
-# add a hotkey, or change the stock hotkey of that name (command and/or key)
-hotkey "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['<Super>S']"
-hotkey "Neovim" "/usr/share/ohmydebn/bin/ohmydebn-neovim" "['<Super>V']"
-# remove a stock hotkey's key
-hotkey-unbind "X"
-# change a Cinnamon built-in (same arguments as keybinding-cinnamon.txt)
-hotkey-cinnamon "wm" "close" "['<Alt>F4']"
+# add a keybinding, or change the stock keybinding of that name (command and/or key)
+keybinding "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['<Super>S']"
+keybinding "Neovim" "/usr/share/ohmydebn/bin/ohmydebn-neovim" "['<Super>V']"
+# remove a stock keybinding's key
+keybinding-unbind "X"
+# change a Cinnamon built-in (same verb and arguments as keybinding-cinnamon.txt)
+keybinding-cinnamon "wm" "close" "['<Alt>F4']"
 ```
 
-Workflow: `ohmydebn-hotkeys-edit` (creates the file from the commented
-template, opens it, applies on close) or edit the file and run
-`ohmydebn-hotkeys-apply`. A key used by a `hotkey` line is freed from whichever
-stock hotkey had it. Deleting a line reverts that hotkey to stock on the next
-apply. Changes take effect immediately, no Cinnamon restart. `ohmydebn-doctor`
-reports a file that was edited but not applied. The Super + K page lists stock
-hotkeys only.
+Workflow: `ohmydebn-keybindings-edit` (OhMyDebn Menu → Setup → Keybindings;
+creates the file from the commented template, opens it, applies on close) or
+edit the file and run `ohmydebn-keybindings-apply`. A key used by a `keybinding`
+line is freed from whichever stock keybinding had it. Deleting a line reverts
+that keybinding to stock on the next apply. Changes take effect immediately, no
+Cinnamon restart. `ohmydebn-doctor` reports a file that was edited but not
+applied. The Super + K page lists the stock keybindings only.
 
 **Do NOT write custom keybindings with raw `gsettings`** - `ohmydebn-update`
 rewrites the stock slots and a stray slot number will collide with a future
-stock hotkey. Use the file above. Cinnamon Settings (`cinnamon-settings
+stock keybinding. Use the file above. Cinnamon Settings (`cinnamon-settings
 keyboard`) is fine for one-off, machine-local tweaks of Cinnamon's own
 shortcuts.
 
@@ -305,7 +309,7 @@ View current bindings:
 
 **When re-binding a key that is already used:** check the stock files first and
 tell the user what the key was bound to before, e.g. "Note: Super+X was bound
-to X.com; it now opens Slack." `ohmydebn-hotkeys-apply` prints the same
+to X.com; it now opens Slack." `ohmydebn-keybindings-apply` prints the same
 information when it frees a key.
 
 ### Display/Monitors

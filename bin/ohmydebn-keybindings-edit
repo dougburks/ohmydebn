@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# ohmydebn-keybindings-edit: open your own keybindings file in the editor, then
+# apply it. Creates ~/.config/ohmydebn/keybindings.txt from the commented
+# template on first use. See ohmydebn-keybindings-apply for the file's verbs
+# and how it is applied (also on every ohmydebn-update).
+#
+# gedit's --wait blocks until the file's tab is closed, even when it hands
+# the file to an already-running gedit, so the apply below really does run
+# after the user is done editing. Reached from the menu (Setup > Keybindings)
+# inside a presentation terminal so the apply output is visible there.
+
+set -uo pipefail
+
+USER_FILE=~/.config/ohmydebn/keybindings.txt
+TEMPLATE=/usr/share/ohmydebn/install/keybinding/keybinding-template.txt
+
+if [ ! -f "$USER_FILE" ]; then
+  mkdir -p "$(dirname "$USER_FILE")"
+  cp "$TEMPLATE" "$USER_FILE"
+  echo "Created $USER_FILE from the template."
+fi
+
+echo "Editing $USER_FILE - close the editor tab when done and your keybindings will be applied."
+/usr/share/ohmydebn/bin/ohmydebn-editor --wait "$USER_FILE"
+
+exec /usr/share/ohmydebn/bin/ohmydebn-keybindings-apply

@@ -43,11 +43,11 @@ if [[ "$1 $2 $3" == "get org.cinnamon.desktop.keybindings custom-list" ]]; then
 fi
 exit 0
 EOF
-  # The user's own hotkeys layer, run as a separate process after the stock
+  # The user's own keybindings layer, run as a separate process after the stock
   # pass (and on every run, gated inside itself) - see keybinding.sh.
-  mock_bin ohmydebn-hotkeys-apply <<'EOF'
+  mock_bin ohmydebn-keybindings-apply <<'EOF'
 #!/bin/bash
-mock_log "ohmydebn-hotkeys-apply $* stock_applied=${OHMYDEBN_HOTKEYS_STOCK_APPLIED:-}"
+mock_log "ohmydebn-keybindings-apply $* stock_applied=${OHMYDEBN_KEYBINDINGS_STOCK_APPLIED:-}"
 EOF
   # pgrep -x cinnamon is how the real script checks for a live session to
   # restart - mocked so the test controls it instead of depending on
@@ -66,7 +66,7 @@ EOF
 
 # Sources (doesn't exec) the patched script - required to observe
 # OHMYDEBN_CINNAMON_RESTART_NEEDED, which only propagates back to the
-# caller via `source`, matching how finalization/hotkeys.sh invokes it
+# caller via `source`, matching how finalization/keybinding.sh invokes it
 # for real. Sets RESTART_FLAG to "1" or "".
 # OHMYDEBN_CINNAMON_RESTART_NEEDED= clears whatever this var already is in
 # the ambient environment before the child bash starts - on a real OhMyDebn
@@ -89,10 +89,10 @@ SCRATCH_HOME=$(mktemp -d)
 MOCK_CINNAMON_RUNNING=true run_script
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "first run, Cinnamon running: restart flagged" "1" "$RESTART_FLAG"
-assert_contains "first run: restart headline shown" "$CALLS" "Cinnamon will restart at the end of this update to apply hotkeys"
+assert_contains "first run: restart headline shown" "$CALLS" "Cinnamon will restart at the end of this update to apply keybindings"
 assert_eq "first run: keybinding state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER" ] && echo yes || echo no)"
-assert_contains "first run: user hotkeys applied afterwards, told the stock pass ran" "$CALLS" "ohmydebn-hotkeys-apply --from-install stock_applied=1"
+assert_contains "first run: user keybindings applied afterwards, told the stock pass ran" "$CALLS" "ohmydebn-keybindings-apply --from-install stock_applied=1"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -121,13 +121,13 @@ MOCK_CINNAMON_RUNNING=true run_script
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "already run: no restart flag" "" "$RESTART_FLAG"
 assert_not_contains "already run: no headline shown" "$CALLS" "ohmydebn-headline"
-assert_contains "already run: user hotkeys layer still consulted (it gates itself on the file's hash)" "$CALLS" "ohmydebn-hotkeys-apply --from-install stock_applied="
+assert_contains "already run: user keybindings layer still consulted (it gates itself on the file's hash)" "$CALLS" "ohmydebn-keybindings-apply --from-install stock_applied="
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
 # Scenario 4: the stock pass rebuilds custom-list but keeps whatever else
 # was in it - shortcuts added in Cinnamon Settings (custom5) and the
-# user-hotkeys slots (custom-1000) - and drops Cinnamon Settings'
+# user-keybindings slots (custom-1000) - and drops Cinnamon Settings'
 # transient __dummy__. Before this, every refresh truncated the list to
 # the stock slots, making user-added shortcuts vanish from Settings.
 mock_init
@@ -139,7 +139,7 @@ LIST_CALL=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$
 assert_contains "custom-list: stock slots present" "$LIST_CALL" "'custom-0', 'custom-1', 'custom-2'"
 assert_contains "custom-list: last stock slot present" "$LIST_CALL" "'custom-$((STOCK_COUNT - 1))'"
 assert_contains "custom-list: GUI-added shortcut kept" "$LIST_CALL" "'custom5'"
-assert_contains "custom-list: user hotkey slot kept" "$LIST_CALL" "'custom-1000'"
+assert_contains "custom-list: user keybinding slot kept" "$LIST_CALL" "'custom-1000'"
 assert_not_contains "custom-list: __dummy__ dropped" "$LIST_CALL" "__dummy__"
 assert_eq "custom-list: stock slot listed once, not duplicated from the old list" "1" "$(grep -o "'custom-1'" <<<"$LIST_CALL" | wc -l)"
 assert_eq "custom-list: closes the array" "]" "${LIST_CALL: -1}"

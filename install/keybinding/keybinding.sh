@@ -4,7 +4,7 @@ STATE_DIR=~/.local/state/ohmydebn-config
 KEYBINDING_STATE=$STATE_DIR/keybinding-20260910
 
 if [ ! -f $KEYBINDING_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "Updating hotkeys"
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Updating keybindings"
 
   KEYBINDING_DIR=/usr/share/ohmydebn/install/keybinding
   KEYBINDING_CINNAMON=$KEYBINDING_DIR/keybinding-cinnamon.txt
@@ -63,9 +63,9 @@ if [ ! -f $KEYBINDING_STATE ]; then
   done
   # Keep whatever else is already in the list - shortcuts the user added in
   # Cinnamon Settings (custom0, custom1, ...: no hyphen, Cinnamon's own
-  # naming) and the custom-1000+ slots ohmydebn-hotkeys-apply manages -
+  # naming) and the custom-1000+ slots ohmydebn-keybindings-apply manages -
   # instead of truncating the list to the stock slots, which used to make
-  # every user-added shortcut vanish from Settings on each hotkey refresh.
+  # every user-added shortcut vanish from Settings on each keybinding refresh.
   # Cinnamon Settings' transient "__dummy__" entry is dropped.
   CUSTOM_EXISTING=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null | grep -oP "'[^']*'" | tr -d "'" || true)
   for existing in $CUSTOM_EXISTING; do
@@ -93,26 +93,26 @@ if [ ! -f $KEYBINDING_STATE ]; then
   # gtile-restart-flag.sh sets; finalization/finale.sh does the one actual
   # restart at the end if anything asked for it.
   if pgrep -x cinnamon >/dev/null; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update to apply hotkeys"
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update to apply keybindings"
     export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
-    echo "You can see all hotkeys by pressing Super + K"
+    echo "You can see all keybindings by pressing Super + K"
   fi
 
-  # Tells ohmydebn-hotkeys-apply below that the stock slots were just
-  # rewritten, so the user's own hotkeys must go back on top even if their
+  # Tells ohmydebn-keybindings-apply below that the stock slots were just
+  # rewritten, so the user's own keybindings must go back on top even if their
   # file hasn't changed since they were last applied.
-  export OHMYDEBN_HOTKEYS_STOCK_APPLIED=1
+  export OHMYDEBN_KEYBINDINGS_STOCK_APPLIED=1
 
   mkdir -p $STATE_DIR
   touch $KEYBINDING_STATE
 fi
 
-# The user's own hotkeys (~/.config/ohmydebn/hotkeys.txt), layered on top of
-# the stock ones. Outside the state gate on purpose: it has to run when the
-# user's file changed even though the stock hotkeys didn't. It gates itself
+# The user's own keybindings (~/.config/ohmydebn/keybindings.txt), layered on
+# top of the stock ones. Outside the state gate on purpose: it has to run when
+# the user's file changed even though the stock keybindings didn't. It gates itself
 # on the file's hash (and on the flag above), so on a normal update with
 # nothing changed it exits silently. A separate process rather than a
 # sourced script, and `|| true`, so nothing in the user's file can abort the
 # install under the caller's `set -e`; it never needs a Cinnamon restart
 # (see its own header for how it makes Cinnamon reload live).
-/usr/share/ohmydebn/bin/ohmydebn-hotkeys-apply --from-install || true
+/usr/share/ohmydebn/bin/ohmydebn-keybindings-apply --from-install || true

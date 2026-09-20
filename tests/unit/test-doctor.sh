@@ -142,22 +142,22 @@ assert_contains "broken: wrong keybinding command named" "$OUTPUT" "differs: cus
 assert_contains "broken: summary lists failures" "$OUTPUT" "  failed:"
 mock_cleanup
 
-# --- the user's own hotkeys.txt: a retargeted stock slot is not a failure ---
+# --- the user's own keybindings.txt: a retargeted stock slot is not a failure ---
 build_machine yes
-echo 'hotkey "Update" "/usr/bin/something-else" "['"'"'<Super>U'"'"']"' >"$H/.config/ohmydebn/hotkeys.txt"
-printf 'custom 1\nuser 1000\n' >"$H/.local/state/ohmydebn-config/hotkeys-user-touched"
-sha256sum <"$H/.config/ohmydebn/hotkeys.txt" | cut -d' ' -f1 >"$H/.local/state/ohmydebn-config/hotkeys-user-sha256"
+echo 'keybinding "Update" "/usr/bin/something-else" "['"'"'<Super>U'"'"']"' >"$H/.config/ohmydebn/keybindings.txt"
+printf 'custom 1\nuser 1000\n' >"$H/.local/state/ohmydebn-config/keybindings-user-touched"
+sha256sum <"$H/.config/ohmydebn/keybindings.txt" | cut -d' ' -f1 >"$H/.local/state/ohmydebn-config/keybindings-user-sha256"
 run_doctor MOCK_CUSTOM1=/usr/bin/something-else "MOCK_EXTRA_LIST=, 'custom-1000'"
-assert_eq "user hotkeys: exits 0" "0" "$EXIT_CODE"
-assert_contains "user hotkeys: retargeted stock slot exempted" "$OUTPUT" "ok - every custom keybinding runs the command keybinding-custom.txt says"
-assert_contains "user hotkeys: file parses" "$OUTPUT" "ok - hotkeys.txt parses"
-assert_contains "user hotkeys: applied" "$OUTPUT" "ok - hotkeys.txt applied"
-assert_contains "user hotkeys: user slot listed" "$OUTPUT" "ok - user hotkey slots in custom-list (1)"
-echo '# edited since' >>"$H/.config/ohmydebn/hotkeys.txt"
+assert_eq "user keybindings: exits 0" "0" "$EXIT_CODE"
+assert_contains "user keybindings: retargeted stock slot exempted" "$OUTPUT" "ok - every custom keybinding runs the command keybinding-custom.txt says"
+assert_contains "user keybindings: file parses" "$OUTPUT" "ok - keybindings.txt parses"
+assert_contains "user keybindings: applied" "$OUTPUT" "ok - keybindings.txt applied"
+assert_contains "user keybindings: user slot listed" "$OUTPUT" "ok - user keybinding slots in custom-list (1)"
+echo '# edited since' >>"$H/.config/ohmydebn/keybindings.txt"
 run_doctor MOCK_CUSTOM1=/usr/bin/something-else
-assert_eq "user hotkeys edited: exits 1" "1" "$EXIT_CODE"
-assert_contains "user hotkeys edited: says how to fix" "$OUTPUT" "FAIL - hotkeys.txt applied (edited but not applied - run ohmydebn-hotkeys-apply)"
-assert_contains "user hotkeys edited: missing user slot named" "$OUTPUT" "FAIL - user hotkey slots in custom-list (missing: custom-1000)"
+assert_eq "user keybindings edited: exits 1" "1" "$EXIT_CODE"
+assert_contains "user keybindings edited: says how to fix" "$OUTPUT" "FAIL - keybindings.txt applied (edited but not applied - run ohmydebn-keybindings-apply)"
+assert_contains "user keybindings edited: missing user slot named" "$OUTPUT" "FAIL - user keybinding slots in custom-list (missing: custom-1000)"
 mock_cleanup
 
 # --- healthy non-systemd (Devuan-style) install with SLiM ---

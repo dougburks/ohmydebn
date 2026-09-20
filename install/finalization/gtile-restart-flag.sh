@@ -19,7 +19,7 @@
 # to live in cinnamon.sh too) and (confirmed live) restarting Cinnamon
 # before ohmydebn-gtile had actually been upgraded that run.
 #
-# Doesn't restart Cinnamon directly - finalization/hotkeys.sh (sourced
+# Doesn't restart Cinnamon directly - finalization/keybinding.sh (sourced
 # right after this) can also decide a restart is needed, for its own
 # unrelated reason (updated keybindings). Two independent, backgrounded
 # `cinnamon --replace &` calls in the same run would race each other -

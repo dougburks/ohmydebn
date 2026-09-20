@@ -199,9 +199,9 @@ fi
 # ------------------------------------------------------------ keybindings
 section "Custom keybindings"
 KB_FILE="$OHMYDEBN/install/keybinding/keybinding-custom.txt"
-USER_HOTKEYS="$CONFIG/hotkeys.txt"
-USER_HOTKEYS_TOUCHED="$STATE/ohmydebn-config/hotkeys-user-touched"
-USER_HOTKEYS_HASH="$STATE/ohmydebn-config/hotkeys-user-sha256"
+USER_KEYBINDINGS="$CONFIG/keybindings.txt"
+USER_KEYBINDINGS_TOUCHED="$STATE/ohmydebn-config/keybindings-user-touched"
+USER_KEYBINDINGS_HASH="$STATE/ohmydebn-config/keybindings-user-sha256"
 if [ ! -f "$KB_FILE" ]; then
   fail "keybinding-custom.txt present in the installed tree"
 elif ! has_session_bus; then
@@ -210,9 +210,9 @@ else
   EXPECTED=$(grep -c '^keybinding-custom' "$KB_FILE")
   LISTED=$(gs org.cinnamon.desktop.keybindings custom-list | grep -o "'custom-[0-9]*'" | wc -l)
   if [ "$LISTED" -ge "$EXPECTED" ]; then ok "custom-list has all $EXPECTED OhMyDebn keybindings ($LISTED listed)"; else fail "custom-list has all $EXPECTED OhMyDebn keybindings" "$LISTED listed"; fi
-  # Stock slots the user's hotkeys.txt retargeted (ohmydebn-hotkeys-apply
+  # Stock slots the user's keybindings.txt retargeted (ohmydebn-keybindings-apply
   # records each as "custom N") are meant to differ from the txt file.
-  OVERRIDDEN=" $(awk '$1 == "custom" { printf "custom-%s ", $2 }' "$USER_HOTKEYS_TOUCHED" 2>/dev/null)"
+  OVERRIDDEN=" $(awk '$1 == "custom" { printf "custom-%s ", $2 }' "$USER_KEYBINDINGS_TOUCHED" 2>/dev/null)"
   WRONG=()
   while IFS= read -r line; do
     n=$(echo "$line" | awk '{print $2}')
@@ -224,25 +224,25 @@ else
   if [ ${#WRONG[@]} -eq 0 ]; then ok "every custom keybinding runs the command keybinding-custom.txt says"; else fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"; fi
 fi
 
-# The user's own hotkeys file is optional; nothing is reported when absent.
-if [ -f "$USER_HOTKEYS" ]; then
-  if bash -n "$USER_HOTKEYS" >/dev/null 2>&1; then ok "hotkeys.txt parses"; else fail "hotkeys.txt parses" "bash -n $USER_HOTKEYS"; fi
-  if [ "$(sha256sum <"$USER_HOTKEYS" | cut -d' ' -f1)" = "$(cat "$USER_HOTKEYS_HASH" 2>/dev/null)" ]; then
-    ok "hotkeys.txt applied"
+# The user's own keybindings file is optional; nothing is reported when absent.
+if [ -f "$USER_KEYBINDINGS" ]; then
+  if bash -n "$USER_KEYBINDINGS" >/dev/null 2>&1; then ok "keybindings.txt parses"; else fail "keybindings.txt parses" "bash -n $USER_KEYBINDINGS"; fi
+  if [ "$(sha256sum <"$USER_KEYBINDINGS" | cut -d' ' -f1)" = "$(cat "$USER_KEYBINDINGS_HASH" 2>/dev/null)" ]; then
+    ok "keybindings.txt applied"
   else
-    fail "hotkeys.txt applied" "edited but not applied - run ohmydebn-hotkeys-apply"
+    fail "keybindings.txt applied" "edited but not applied - run ohmydebn-keybindings-apply"
   fi
-  USER_SLOTS=$(awk '$1 == "user" { print "custom-" $2 }' "$USER_HOTKEYS_TOUCHED" 2>/dev/null)
+  USER_SLOTS=$(awk '$1 == "user" { print "custom-" $2 }' "$USER_KEYBINDINGS_TOUCHED" 2>/dev/null)
   if [ -n "$USER_SLOTS" ]; then
     if ! has_session_bus; then
-      skip "user hotkey slots in custom-list" "no session bus for gsettings"
+      skip "user keybinding slots in custom-list" "no session bus for gsettings"
     else
       LIST=$(gs org.cinnamon.desktop.keybindings custom-list)
       MISSING=()
       for slot in $USER_SLOTS; do
         case "$LIST" in *"'$slot'"*) ;; *) MISSING+=("$slot") ;; esac
       done
-      if [ ${#MISSING[@]} -eq 0 ]; then ok "user hotkey slots in custom-list ($(echo "$USER_SLOTS" | wc -l))"; else fail "user hotkey slots in custom-list" "missing: ${MISSING[*]}"; fi
+      if [ ${#MISSING[@]} -eq 0 ]; then ok "user keybinding slots in custom-list ($(echo "$USER_SLOTS" | wc -l))"; else fail "user keybinding slots in custom-list" "missing: ${MISSING[*]}"; fi
     fi
   fi
 fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Unit tests for bin/ohmydebn-hotkeys-apply - the user's own hotkeys file
-# (~/.config/ohmydebn/hotkeys.txt) layered on top of the stock hotkeys.
+# Unit tests for bin/ohmydebn-keybindings-apply - the user's own keybindings file
+# (~/.config/ohmydebn/keybindings.txt) layered on top of the stock keybindings.
 #
 # gsettings is replaced by a STATEFUL fake (values stored as files under
 # $GS_STORE, so `get` returns what `set` wrote, and reset/reset-recursively
@@ -13,10 +13,10 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPT="$REPO_ROOT/bin/ohmydebn-hotkeys-apply"
+SCRIPT="$REPO_ROOT/bin/ohmydebn-keybindings-apply"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== bin/ohmydebn-hotkeys-apply ==="
+echo "=== bin/ohmydebn-keybindings-apply ==="
 
 CUSTOM_SCHEMA=org.cinnamon.desktop.keybindings.custom-keybinding
 CUSTOM_PATH=/org/cinnamon/desktop/keybindings/custom-keybindings
@@ -28,7 +28,7 @@ setup() {
   STOCK="$MOCK_DIR/keybinding"
   mkdir -p "$GS_STORE" "$STOCK" "$SCRATCH_HOME/.config/ohmydebn"
   export GS_STORE
-  USER_FILE="$SCRATCH_HOME/.config/ohmydebn/hotkeys.txt"
+  USER_FILE="$SCRATCH_HOME/.config/ohmydebn/keybindings.txt"
   STATE="$SCRATCH_HOME/.local/state/ohmydebn-config"
 
   cat >"$STOCK/keybinding-custom.txt" <<'EOF'
@@ -107,27 +107,27 @@ custom_list() { gs get org.cinnamon.desktop.keybindings custom-list; }
 # run_apply [script args...]; STOCK_APPLIED=1 in the environment models the
 # stock pass having just run in the same install.
 run_apply() {
-  OUTPUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_HOTKEYS_STOCK_APPLIED="${STOCK_APPLIED:-}" bash "$MOCK_DIR/apply-patched.sh" "$@" 2>&1)
+  OUTPUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_KEYBINDINGS_STOCK_APPLIED="${STOCK_APPLIED:-}" bash "$MOCK_DIR/apply-patched.sh" "$@" 2>&1)
   EXIT_CODE=$?
 }
 
-# --- new hotkey: user slot, list preserved, reload toggle, state written ---
+# --- new keybinding: user slot, list preserved, reload toggle, state written ---
 setup
-echo 'hotkey "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['"'"'<Super>S'"'"']"' >"$USER_FILE"
+echo 'keybinding "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['"'"'<Super>S'"'"']"' >"$USER_FILE"
 run_apply
-assert_eq "new hotkey: exits 0" "0" "$EXIT_CODE"
-assert_eq "new hotkey: lands in custom-1000" "'Slack'" "$(slot 1000 name)"
-assert_eq "new hotkey: command written" "'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com'" "$(slot 1000 command)"
-assert_eq "new hotkey: binding written" "['<Super>S']" "$(slot 1000 binding)"
-assert_eq "new hotkey: custom-list keeps stock, GUI-added and user slots" \
+assert_eq "new keybinding: exits 0" "0" "$EXIT_CODE"
+assert_eq "new keybinding: lands in custom-1000" "'Slack'" "$(slot 1000 name)"
+assert_eq "new keybinding: command written" "'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com'" "$(slot 1000 command)"
+assert_eq "new keybinding: binding written" "['<Super>S']" "$(slot 1000 binding)"
+assert_eq "new keybinding: custom-list keeps stock, GUI-added and user slots" \
   "['custom-0', 'custom-1', 'custom-2', 'custom-3', 'custom5', 'custom-1000']" "$(custom_list)"
 CALLS=$(cat "$MOCK_CALLS")
-assert_contains "new hotkey: custom-list toggled through __dummy__ so Cinnamon reloads" "$CALLS" "'custom-1000', '__dummy__']"
-assert_contains "new hotkey: headline shown" "$CALLS" "ohmydebn-headline Applying your custom hotkeys"
-assert_contains "new hotkey: reported" "$OUTPUT" "Super + S: Slack"
-assert_eq "new hotkey: hash state written" "$(sha256sum <"$USER_FILE" | cut -d' ' -f1)" "$(cat "$STATE/hotkeys-user-sha256")"
-assert_contains "new hotkey: user slot recorded for the doctor" "$(cat "$STATE/hotkeys-user-touched")" "user 1000"
-assert_eq "new hotkey: stock slots untouched" "'/usr/share/ohmydebn/bin/ohmydebn-neovim'" "$(slot 1 command)"
+assert_contains "new keybinding: custom-list toggled through __dummy__ so Cinnamon reloads" "$CALLS" "'custom-1000', '__dummy__']"
+assert_contains "new keybinding: headline shown" "$CALLS" "ohmydebn-headline Applying your custom keybindings"
+assert_contains "new keybinding: reported" "$OUTPUT" "Super + S: Slack"
+assert_eq "new keybinding: hash state written" "$(sha256sum <"$USER_FILE" | cut -d' ' -f1)" "$(cat "$STATE/keybindings-user-sha256")"
+assert_contains "new keybinding: user slot recorded for the doctor" "$(cat "$STATE/keybindings-user-touched")" "user 1000"
+assert_eq "new keybinding: stock slots untouched" "'/usr/share/ohmydebn/bin/ohmydebn-neovim'" "$(slot 1 command)"
 
 # --- --from-install gating on top of that state ---
 : >"$MOCK_CALLS"
@@ -137,60 +137,60 @@ assert_eq "from-install, unchanged file, no stock pass: does nothing" "" "$(cat 
 assert_eq "from-install, unchanged file, no stock pass: prints nothing" "" "$OUTPUT"
 : >"$MOCK_CALLS"
 STOCK_APPLIED=1 run_apply --from-install
-assert_contains "from-install after the stock pass: re-applies" "$(cat "$MOCK_CALLS")" "ohmydebn-headline Applying your custom hotkeys"
+assert_contains "from-install after the stock pass: re-applies" "$(cat "$MOCK_CALLS")" "ohmydebn-headline Applying your custom keybindings"
 : >"$MOCK_CALLS"
 echo '# edited' >>"$USER_FILE"
 run_apply --from-install
-assert_contains "from-install with an edited file: re-applies" "$(cat "$MOCK_CALLS")" "ohmydebn-headline Applying your custom hotkeys"
+assert_contains "from-install with an edited file: re-applies" "$(cat "$MOCK_CALLS")" "ohmydebn-headline Applying your custom keybindings"
 
 # --- deleting the file removes the user slot and the state ---
 rm "$USER_FILE"
 run_apply
 assert_eq "file deleted: exits 0" "0" "$EXIT_CODE"
-assert_contains "file deleted: says so" "$OUTPUT" "stock hotkeys restored"
+assert_contains "file deleted: says so" "$OUTPUT" "stock keybindings restored"
 assert_eq "file deleted: user slot reset" "''" "$(slot 1000 name)"
 assert_eq "file deleted: user slot dropped from custom-list, others kept" \
   "['custom-0', 'custom-1', 'custom-2', 'custom-3', 'custom5']" "$(custom_list)"
-assert_eq "file deleted: hash state removed" "no" "$([ -f "$STATE/hotkeys-user-sha256" ] && echo yes || echo no)"
-assert_eq "file deleted: touched state removed" "no" "$([ -f "$STATE/hotkeys-user-touched" ] && echo yes || echo no)"
+assert_eq "file deleted: hash state removed" "no" "$([ -f "$STATE/keybindings-user-sha256" ] && echo yes || echo no)"
+assert_eq "file deleted: touched state removed" "no" "$([ -f "$STATE/keybindings-user-touched" ] && echo yes || echo no)"
 : >"$MOCK_CALLS"
 run_apply
 assert_eq "no file, no state: prints nothing" "" "$OUTPUT"
 assert_eq "no file, no state: touches nothing" "" "$(cat "$MOCK_CALLS")"
 teardown
 
-# --- override a stock hotkey by name, then remove the line: restored ---
+# --- override a stock keybinding by name, then remove the line: restored ---
 setup
-echo 'hotkey "Neovim" "/usr/bin/foo" "['"'"'<Super>V'"'"']"' >"$USER_FILE"
+echo 'keybinding "Neovim" "/usr/bin/foo" "['"'"'<Super>V'"'"']"' >"$USER_FILE"
 run_apply
 assert_eq "override: stock slot's command changed in place" "'/usr/bin/foo'" "$(slot 1 command)"
 assert_eq "override: stock slot's binding changed in place" "['<Super>V']" "$(slot 1 binding)"
 assert_eq "override: name kept" "'Neovim'" "$(slot 1 name)"
 assert_eq "override: no user slot allocated" "''" "$(slot 1000 name)"
-assert_contains "override: recorded as touched" "$(cat "$STATE/hotkeys-user-touched")" "custom 1"
-assert_contains "override: reported as a stock change" "$OUTPUT" "Super + V: Neovim (stock hotkey changed)"
+assert_contains "override: recorded as touched" "$(cat "$STATE/keybindings-user-touched")" "custom 1"
+assert_contains "override: reported as a stock change" "$OUTPUT" "Super + V: Neovim (stock keybinding changed)"
 : >"$USER_FILE"
 run_apply
 assert_eq "line removed: stock command restored" "'/usr/share/ohmydebn/bin/ohmydebn-neovim'" "$(slot 1 command)"
 assert_eq "line removed: stock binding restored" "['<Super>N']" "$(slot 1 binding)"
-assert_contains "line removed: empty file noted" "$OUTPUT" "No hotkeys defined"
-assert_eq "line removed: nothing left touched" "no" "$([ -f "$STATE/hotkeys-user-touched" ] && echo yes || echo no)"
+assert_contains "line removed: empty file noted" "$OUTPUT" "No keybindings defined"
+assert_eq "line removed: nothing left touched" "no" "$([ -f "$STATE/keybindings-user-touched" ] && echo yes || echo no)"
 teardown
 
-# --- unbind a stock hotkey; unknown names warn ---
+# --- unbind a stock keybinding; unknown names warn ---
 setup
-printf 'hotkey-unbind "X"\nhotkey-unbind "Nope"\n' >"$USER_FILE"
+printf 'keybinding-unbind "X"\nkeybinding-unbind "Nope"\n' >"$USER_FILE"
 run_apply
 assert_eq "unbind: exits 0 despite the unknown name" "0" "$EXIT_CODE"
 assert_eq "unbind: binding emptied" "[]" "$(slot 2 binding)"
 assert_eq "unbind: command kept" "'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://x.com'" "$(slot 2 command)"
 assert_contains "unbind: reported with the old key" "$OUTPUT" "X: unbound (was Super + X)"
-assert_contains "unbind: unknown name warned" "$OUTPUT" 'Warning: hotkey-unbind "Nope": no stock hotkey has that name'
+assert_contains "unbind: unknown name warned" "$OUTPUT" 'Warning: keybinding-unbind "Nope": no stock keybinding has that name'
 teardown
 
-# --- a claimed key is stripped from the stock hotkey that had it ---
+# --- a claimed key is stripped from the stock keybinding that had it ---
 setup
-printf 'hotkey "Slack" "/usr/bin/slack" "['"'"'<super>x'"'"']"\nhotkey "Runner" "/usr/bin/runner" "['"'"'<Super>R'"'"']"\n' >"$USER_FILE"
+printf 'keybinding "Slack" "/usr/bin/slack" "['"'"'<super>x'"'"']"\nkeybinding "Runner" "/usr/bin/runner" "['"'"'<Super>R'"'"']"\n' >"$USER_FILE"
 run_apply
 assert_eq "collision: whole binding stripped (case-insensitive match)" "[]" "$(slot 2 binding)"
 assert_contains "collision: X's key reported in the stock spelling" "$OUTPUT" 'Super + X: removed from stock "X" (now Slack)'
@@ -205,7 +205,7 @@ teardown
 
 # --- Cinnamon built-ins: applied, restored from stock or reset ---
 setup
-printf 'hotkey-cinnamon "wm" "close" "['"'"'<Alt>F4'"'"']"\nhotkey-cinnamon "wm" "minimize" "['"'"'<Super>m'"'"']"\n' >"$USER_FILE"
+printf 'keybinding-cinnamon "wm" "close" "['"'"'<Alt>F4'"'"']"\nkeybinding-cinnamon "wm" "minimize" "['"'"'<Super>m'"'"']"\n' >"$USER_FILE"
 run_apply
 assert_eq "cinnamon: stock key changed" "['<Alt>F4']" "$(gs get org.cinnamon.desktop.keybindings.wm close)"
 assert_eq "cinnamon: other key set" "['<Super>m']" "$(gs get org.cinnamon.desktop.keybindings.wm minimize)"
@@ -227,19 +227,19 @@ teardown
 
 # --- syntax error: warn, change nothing, keep retrying on later installs ---
 setup
-echo 'hotkey "Broken' >"$USER_FILE"
+echo 'keybinding "Broken' >"$USER_FILE"
 run_apply
 assert_eq "syntax error: exits 0" "0" "$EXIT_CODE"
-assert_contains "syntax error: warned" "$OUTPUT" "has a syntax error - your custom hotkeys were not applied"
+assert_contains "syntax error: warned" "$OUTPUT" "has a syntax error - your custom keybindings were not applied"
 assert_eq "syntax error: nothing written" "" "$(cat "$MOCK_CALLS")"
-assert_eq "syntax error: hash not recorded, so the next install tries again" "no" "$([ -f "$STATE/hotkeys-user-sha256" ] && echo yes || echo no)"
+assert_eq "syntax error: hash not recorded, so the next install tries again" "no" "$([ -f "$STATE/keybindings-user-sha256" ] && echo yes || echo no)"
 teardown
 
 # --- a stale user slot from a file copied off another machine is cleaned up ---
 setup
 seed_slot 1007 "Old" "/usr/bin/old" "['<Super>O']"
 gs set org.cinnamon.desktop.keybindings custom-list "['custom-0', 'custom-1', 'custom-2', 'custom-3', 'custom-1007', '__dummy__']"
-echo 'hotkey "Slack" "/usr/bin/slack" "['"'"'<Super>S'"'"']"' >"$USER_FILE"
+echo 'keybinding "Slack" "/usr/bin/slack" "['"'"'<Super>S'"'"']"' >"$USER_FILE"
 run_apply
 assert_eq "stale user slot: reset" "''" "$(slot 1007 name)"
 assert_eq "stale user slot: list rebuilt without it or __dummy__" "['custom-0', 'custom-1', 'custom-2', 'custom-3', 'custom-1000']" "$(custom_list)"

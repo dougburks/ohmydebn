@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# ohmydebn-hotkeys-edit: open your own hotkeys file in the editor, then
+# apply it. Creates ~/.config/ohmydebn/hotkeys.txt from the commented
+# template on first use. See ohmydebn-hotkeys-apply for the file's verbs
+# and how it is applied (also on every ohmydebn-update).
+#
+# gedit's --wait blocks until the file's tab is closed, even when it hands
+# the file to an already-running gedit, so the apply below really does run
+# after the user is done editing. Reached from the menu (Setup > Hotkeys)
+# inside a presentation terminal so the apply output is visible there.
+
+set -uo pipefail
+
+USER_FILE=~/.config/ohmydebn/hotkeys.txt
+TEMPLATE=/usr/share/ohmydebn/install/keybinding/hotkeys-template.txt
+
+if [ ! -f "$USER_FILE" ]; then
+  mkdir -p "$(dirname "$USER_FILE")"
+  cp "$TEMPLATE" "$USER_FILE"
+  echo "Created $USER_FILE from the template."
+fi
+
+echo "Editing $USER_FILE - close the editor tab when done and your hotkeys will be applied."
+/usr/share/ohmydebn/bin/ohmydebn-editor --wait "$USER_FILE"
+
+exec /usr/share/ohmydebn/bin/ohmydebn-hotkeys-apply

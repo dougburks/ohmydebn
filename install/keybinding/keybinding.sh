@@ -59,13 +59,23 @@ if [ ! -f $KEYBINDING_STATE ]; then
   CUSTOM_KEYBINDING_TOTAL=$((CUSTOM_KEYBINDING_TOTAL - 1))
   CUSTOM_LIST="gsettings set org.cinnamon.desktop.keybindings custom-list \"["
   for i in $(seq 0 $CUSTOM_KEYBINDING_TOTAL); do
-    CUSTOM_LIST+="'custom-$i'"
-    if [ "$i" != "$CUSTOM_KEYBINDING_TOTAL" ]; then
-      CUSTOM_LIST+=", "
-    else
-      CUSTOM_LIST+="]\""
-    fi
+    CUSTOM_LIST+="'custom-$i', "
   done
+  # Keep whatever else is already in the list - shortcuts the user added in
+  # Cinnamon Settings (custom0, custom1, ...: no hyphen, Cinnamon's own
+  # naming) and the custom-1000+ slots ohmydebn-hotkeys-apply manages -
+  # instead of truncating the list to the stock slots, which used to make
+  # every user-added shortcut vanish from Settings on each hotkey refresh.
+  # Cinnamon Settings' transient "__dummy__" entry is dropped.
+  CUSTOM_EXISTING=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null | grep -oP "'[^']*'" | tr -d "'" || true)
+  for existing in $CUSTOM_EXISTING; do
+    [ "$existing" = "__dummy__" ] && continue
+    if [[ "$existing" =~ ^custom-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -le "$CUSTOM_KEYBINDING_TOTAL" ]; then
+      continue
+    fi
+    CUSTOM_LIST+="'$existing', "
+  done
+  CUSTOM_LIST="${CUSTOM_LIST%, }]\""
   eval "$CUSTOM_LIST"
 
   # Update all keybindings and sort the output for display
@@ -88,6 +98,21 @@ if [ ! -f $KEYBINDING_STATE ]; then
     echo "You can see all hotkeys by pressing Super + K"
   fi
 
+  # Tells ohmydebn-hotkeys-apply below that the stock slots were just
+  # rewritten, so the user's own hotkeys must go back on top even if their
+  # file hasn't changed since they were last applied.
+  export OHMYDEBN_HOTKEYS_STOCK_APPLIED=1
+
   mkdir -p $STATE_DIR
   touch $KEYBINDING_STATE
 fi
+
+# The user's own hotkeys (~/.config/ohmydebn/hotkeys.txt), layered on top of
+# the stock ones. Outside the state gate on purpose: it has to run when the
+# user's file changed even though the stock hotkeys didn't. It gates itself
+# on the file's hash (and on the flag above), so on a normal update with
+# nothing changed it exits silently. A separate process rather than a
+# sourced script, and `|| true`, so nothing in the user's file can abort the
+# install under the caller's `set -e`; it never needs a Cinnamon restart
+# (see its own header for how it makes Cinnamon reload live).
+/usr/share/ohmydebn/bin/ohmydebn-hotkeys-apply --from-install || true

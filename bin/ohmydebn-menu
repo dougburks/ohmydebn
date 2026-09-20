@@ -775,11 +775,12 @@ show_system_menu() {
 }
 
 show_setup_menu() {
-  menu "Setup" "  Bluetooth\n  Display\n󰟋  Gestures\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
+  menu "Setup" "  Bluetooth\n  Display\n󰟋  Gestures\n󰌌  Hotkeys\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
   case "$MENU_RESULT" in
   *Bluetooth*) blueman-manager ;;
   *Display*) cinnamon-settings display ;;
   *Gestures*) cinnamon-settings gestures ;;
+  *Hotkeys*) present_terminal "Hotkeys" "/usr/share/ohmydebn/bin/ohmydebn-hotkeys-edit" ;;
   *Keyboard*) cinnamon-settings keyboard ;;
   *Mouse*) cinnamon-settings mouse ;;
   *Network*) cinnamon-settings network ;;

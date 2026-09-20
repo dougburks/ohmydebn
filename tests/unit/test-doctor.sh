@@ -83,7 +83,7 @@ EOF2
 case "$*" in
 "list-schemas") exit 0 ;;
 "get org.cinnamon enabled-extensions") echo "['gTile@OhMyDebn']" ;;
-"get org.cinnamon.desktop.keybindings custom-list") echo "['custom-0', 'custom-1']" ;;
+"get org.cinnamon.desktop.keybindings custom-list") echo "['custom-0', 'custom-1'${MOCK_EXTRA_LIST:-}]" ;;
 *custom-0/\ command) echo "'/usr/share/ohmydebn/bin/ohmydebn-browser-tiled'" ;;
 *custom-1/\ command) echo "'${MOCK_CUSTOM1:-/usr/share/ohmydebn/bin/ohmydebn-update-gui}'" ;;
 *) echo "''" ;;
@@ -140,6 +140,24 @@ assert_contains "broken: version mismatch caught with both values" "$OUTPUT" "FA
 assert_contains "broken: missing dependency named" "$OUTPUT" "missing: gir1.2-wnck-3.0"
 assert_contains "broken: wrong keybinding command named" "$OUTPUT" "differs: custom-1"
 assert_contains "broken: summary lists failures" "$OUTPUT" "  failed:"
+mock_cleanup
+
+# --- the user's own hotkeys.txt: a retargeted stock slot is not a failure ---
+build_machine yes
+echo 'hotkey "Update" "/usr/bin/something-else" "['"'"'<Super>U'"'"']"' >"$H/.config/ohmydebn/hotkeys.txt"
+printf 'custom 1\nuser 1000\n' >"$H/.local/state/ohmydebn-config/hotkeys-user-touched"
+sha256sum <"$H/.config/ohmydebn/hotkeys.txt" | cut -d' ' -f1 >"$H/.local/state/ohmydebn-config/hotkeys-user-sha256"
+run_doctor MOCK_CUSTOM1=/usr/bin/something-else "MOCK_EXTRA_LIST=, 'custom-1000'"
+assert_eq "user hotkeys: exits 0" "0" "$EXIT_CODE"
+assert_contains "user hotkeys: retargeted stock slot exempted" "$OUTPUT" "ok - every custom keybinding runs the command keybinding-custom.txt says"
+assert_contains "user hotkeys: file parses" "$OUTPUT" "ok - hotkeys.txt parses"
+assert_contains "user hotkeys: applied" "$OUTPUT" "ok - hotkeys.txt applied"
+assert_contains "user hotkeys: user slot listed" "$OUTPUT" "ok - user hotkey slots in custom-list (1)"
+echo '# edited since' >>"$H/.config/ohmydebn/hotkeys.txt"
+run_doctor MOCK_CUSTOM1=/usr/bin/something-else
+assert_eq "user hotkeys edited: exits 1" "1" "$EXIT_CODE"
+assert_contains "user hotkeys edited: says how to fix" "$OUTPUT" "FAIL - hotkeys.txt applied (edited but not applied - run ohmydebn-hotkeys-apply)"
+assert_contains "user hotkeys edited: missing user slot named" "$OUTPUT" "FAIL - user hotkey slots in custom-list (missing: custom-1000)"
 mock_cleanup
 
 # --- healthy non-systemd (Devuan-style) install with SLiM ---

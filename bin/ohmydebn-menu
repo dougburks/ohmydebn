@@ -659,15 +659,34 @@ show_virtualization_menu() {
 }
 
 show_browsers_menu() {
-  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium\n  Set Default"
   case "$MENU_RESULT" in
+  *Default*) show_default_browser_menu ;;
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
   *Chromium*) /usr/share/ohmydebn/bin/ohmydebn-chromium ;;
-  *Firefox*) install "Firefox" "firefox-esr" ;;
+  *Firefox*) /usr/share/ohmydebn/bin/ohmydebn-firefox-esr ;;
   *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
   *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium-bin ;;
   *) show_apps_menu ;;
+  esac
+}
+
+# Every browser the Browsers menu can install, installed or not: the
+# picker's search list is generated from this file's literal text
+# (bin/ohmydebn-menu-tree), so it can't be filtered at runtime -
+# ohmydebn-browser-set-default itself declines one that isn't installed,
+# in the terminal, and says where to install it.
+show_default_browser_menu() {
+  menu "Default Browser" "󰖟  Brave Origin\n󰖟  Brave Browser\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  case "$MENU_RESULT" in
+  *Origin*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-origin" ;;
+  *Browser*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-browser" ;;
+  *Chromium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default chromium" ;;
+  *Firefox*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default firefox-esr" ;;
+  *Google*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default google-chrome-stable" ;;
+  *Helium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default helium-bin" ;;
+  *) show_browsers_menu ;;
   esac
 }
 

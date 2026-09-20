@@ -33,4 +33,10 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   # no same-repo dependency, just ordinary system libraries.
   printf 'Package: *\nPin: origin "dl.google.com"\nPin-Priority: -1\n\nPackage: google-chrome-stable\nPin: origin "dl.google.com"\nPin-Priority: 500\n' |
     sudo tee /etc/apt/preferences.d/google-chrome.pref >/dev/null
+
+  # Installed onto a system that already has a default browser: ask before
+  # taking it over (defaults to no - see ohmydebn-browser-set-default). A
+  # setting that couldn't be applied is reported there and mustn't abort
+  # the install.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask google-chrome-stable || true
 fi

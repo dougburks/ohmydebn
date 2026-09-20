@@ -25,6 +25,16 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-brave-repo ensure
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install brave-browser
+
+  # Installed by hand, from the menu, onto a system that already has a
+  # default browser: ask before taking it over (defaults to no - see
+  # ohmydebn-browser-set-default). A setting that couldn't be applied is
+  # reported there and mustn't abort the rest of this install. Not under
+  # --skip-prompt, where a new install's own default-browser step
+  # (install/config/mimetypes.sh) has this covered.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask brave-browser || true
+  fi
 elif ! /usr/share/ohmydebn/bin/ohmydebn-brave-repo is-configured; then
   # Installed, but from a bare .deb with no repository behind it - add
   # Brave's so it actually receives updates.

@@ -3,45 +3,29 @@
 # Brave Origin is the default browser for new installs (install/packaging/
 # browser.sh); Chromium is what installs before that switch got, and what
 # browser.sh falls back to when Brave Origin can't be installed. Whichever
-# is present is the one to configure, Brave Origin first.
-#
-# Brave's package registers /usr/bin/brave-origin-stable itself as an
-# x-www-browser and gnome-www-browser alternative (priority 201), so that
-# exact path is the one to select below - /usr/bin/brave-origin is a further
-# alternatives symlink on top of it and would register as a second entry.
+# is present is the one to configure, Brave Origin first. The configuring
+# itself - alternatives, xdg-settings, scheme handlers, PDF viewer - is
+# bin/ohmydebn-browser-set-default's, shared with the browser installers'
+# "make it your default?" question and the menu's Browsers > Set Default,
+# so a new install and a later switch set the same things the same way.
 #
 # Ubuntu has no "chromium" apt package (see bin/ohmydebn-chromium-install) -
-# it only ever gets chromium as a strictly-confined snap, which has no
-# /usr/bin/chromium at all. The real binary is /snap/bin/chromium (itself a
-# symlink into snapd's own command dispatcher, not a broken link), and its
-# desktop file is registered under snapd's own naming scheme rather than
-# plain "chromium.desktop". Confirmed working end-to-end - update-
-# alternatives, xdg-settings, xdg-mime, and an actual xdg-open launch - on
-# Ubuntu 24.04/26.04 with Cinnamon.
+# it only ever gets chromium as a strictly-confined snap. The package name
+# handed on is still "chromium"; ohmydebn-browser-set-default resolves the
+# snap's own binary and desktop id itself.
+BROWSER_PKG=""
 if dpkg -s brave-origin >/dev/null 2>&1; then
-  BROWSER_NAME="Brave Origin"
-  BROWSER_BIN=/usr/bin/brave-origin-stable
-  BROWSER_DESKTOP=brave-origin.desktop
-elif dpkg -s chromium >/dev/null 2>&1; then
-  BROWSER_NAME=chromium
-  BROWSER_BIN=/usr/bin/chromium
-  BROWSER_DESKTOP=chromium.desktop
-elif snap list chromium >/dev/null 2>&1; then
-  BROWSER_NAME=chromium
-  BROWSER_BIN=/snap/bin/chromium
-  BROWSER_DESKTOP=chromium_chromium.desktop
+  BROWSER_PKG=brave-origin
+elif dpkg -s chromium >/dev/null 2>&1 || snap list chromium >/dev/null 2>&1; then
+  BROWSER_PKG=chromium
 fi
 
-if [ ! -f ~/.local/state/ohmydebn ]; then
-  if [ -n "$BROWSER_BIN" ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $BROWSER_NAME as default web browser"
-    sudo update-alternatives --install /usr/bin/x-www-browser x-www-browser "$BROWSER_BIN" 200 || true
-    sudo update-alternatives --set x-www-browser "$BROWSER_BIN" || true
-    sudo update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser "$BROWSER_BIN" 200 || true
-    sudo update-alternatives --set gnome-www-browser "$BROWSER_BIN" || true
-    xdg-settings set default-web-browser "$BROWSER_DESKTOP" || true
-    xdg-mime default "$BROWSER_DESKTOP" x-scheme-handler/http || true
-    xdg-mime default "$BROWSER_DESKTOP" x-scheme-handler/https || true
+NEW_INSTALL=false
+[ -f ~/.local/state/ohmydebn ] || NEW_INSTALL=true
+
+if [ "$NEW_INSTALL" = true ]; then
+  if [ -n "$BROWSER_PKG" ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default "$BROWSER_PKG" || true
   fi
 
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring ristretto as default image viewer"
@@ -49,11 +33,15 @@ if [ ! -f ~/.local/state/ohmydebn ]; then
 fi
 
 # Existing installs already carry this marker, so their PDF handler stays
-# whatever it is (chromium) - only a new install gets Brave Origin here.
+# whatever it is (chromium) - only a new install gets Brave Origin here. A
+# new install just got its PDF viewer along with the browser above; an
+# existing install from before the PDF handler was set at all gets only
+# that, its default browser left alone.
 PDF_STATE=~/.local/state/ohmydebn-config/pdf-20251107
-if [ ! -f $PDF_STATE ] && [ -n "$BROWSER_BIN" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $BROWSER_NAME as default pdf viewer"
-  xdg-mime default "$BROWSER_DESKTOP" application/pdf
+if [ ! -f $PDF_STATE ] && [ -n "$BROWSER_PKG" ]; then
+  if [ "$NEW_INSTALL" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --pdf-only "$BROWSER_PKG" || true
+  fi
   mkdir -p ~/.local/state/ohmydebn-config
   touch $PDF_STATE
 fi

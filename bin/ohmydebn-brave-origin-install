@@ -25,6 +25,16 @@ if ! dpkg -s "brave-origin" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-brave-repo ensure
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install brave-origin
+
+  # Installed by hand, from the menu, onto a system that already has a
+  # default browser: ask before taking it over (defaults to no - see
+  # ohmydebn-browser-set-default). A setting that couldn't be applied is
+  # reported there and mustn't abort the rest of this install. Not under
+  # --skip-prompt, where a new install's own default-browser step
+  # (install/config/mimetypes.sh) has this covered.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask brave-origin || true
+  fi
 elif ! /usr/share/ohmydebn/bin/ohmydebn-brave-repo is-configured; then
   # Installed, but from a bare .deb with no repository behind it - add
   # Brave's so it actually receives updates.
@@ -41,8 +51,9 @@ fi
 #     Brave doesn't open its welcome tour (brave://welcome: make default
 #     browser, choose theme, send diagnostic reports) - the tour is gated
 #     on first run alone. OhMyDebn already made it the default browser
-#     (install/config/mimetypes.sh); the theme is left at Brave's default,
-#     which follows the system light/dark setting.
+#     (install/config/mimetypes.sh) or asked above whether to; the theme
+#     is left at Brave's default, which follows the system light/dark
+#     setting.
 #   Default/Preferences - follow the system GTK theme, no content-setting
 #     exceptions, welcome page marked as seen.
 #   Local State -

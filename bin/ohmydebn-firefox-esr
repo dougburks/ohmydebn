@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Firefox" /usr/share/ohmydebn/bin/ohmydebn-firefox-esr-install
+fi
+
+if dpkg -s "firefox-esr" >/dev/null 2>&1; then
+  /usr/bin/firefox-esr
+fi

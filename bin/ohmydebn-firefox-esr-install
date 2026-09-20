@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# firefox-esr is Debian's (and Kali's) Firefox - the one the base ISO
+# ships and --power-user removes (bin/ohmydebn-pkg-remove-all-optional),
+# so this is mostly "put it back". Ubuntu (a snap) and Mint (their own
+# deb) package Firefox under other names and aren't handled here - same
+# as when the menu ran a bare `apt install firefox-esr` for this.
+if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
+  echo
+  echo "Firefox is not currently installed."
+  echo
+  echo "Continuing will install it from your distribution's repositories."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install firefox-esr
+
+  # Installed onto a system that already has a default browser: ask before
+  # taking it over (defaults to no - see ohmydebn-browser-set-default). A
+  # setting that couldn't be applied is reported there and mustn't abort
+  # the install.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask firefox-esr || true
+fi

@@ -31,6 +31,16 @@ if ! dpkg -s "$CHROMIUM_PACKAGE" >/dev/null 2>&1; then
   # install (via ohmydebn-pkg-install-optional): its one Recommends,
   # chromium-sandbox, isn't needed on a kernel with user namespaces.
   sudo /usr/bin/apt -y --no-install-recommends install "$CHROMIUM_PACKAGE"
+
+  # Installed by hand, from the menu, onto a system that already has a
+  # default browser: ask before taking it over (defaults to no - see
+  # ohmydebn-browser-set-default). A setting that couldn't be applied is
+  # reported there and mustn't abort the rest of this install. Not under
+  # --skip-prompt, where a new install's own default-browser step
+  # (install/config/mimetypes.sh) has this covered.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask chromium || true
+  fi
 fi
 
 # uBlock Origin Lite for a profile that doesn't exist yet - the same step

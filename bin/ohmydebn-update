@@ -101,7 +101,8 @@ if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
     echo "process that update left running - an older ohmydebn-update let its background children,"
     echo "usually the Cinnamon it restarted, inherit the lock. Find the holder with:"
     echo "  fuser -v $LOCK_FILE"
-    echo "Restarting Cinnamon from a terminal (cinnamon --replace &) or logging out releases it."
+    echo "If that is cinnamon, press Ctrl + Alt + Escape to restart it - Cinnamon's self-restart closes"
+    echo "inherited descriptors, which releases the lock (confirmed). Logging out releases it too."
   else
     echo "Started by process $HOLDER. Let it finish before starting another."
   fi

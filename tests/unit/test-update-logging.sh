@@ -67,7 +67,9 @@ run_update
 assert_eq "logged run: exits 0" "0" "$STATUS"
 LOGS=("$LOG_DIR"/update-[0-9]*.log)
 assert_eq "logged run: exactly one log file created" "1" "${#LOGS[@]}"
-assert_contains "logged run: announces the log path on the terminal" "$OUTPUT" "Logging this update to $LOG_DIR/update-"
+assert_contains "logged run: announces the log path on the terminal" "$OUTPUT" "Logging this update to:"
+assert_contains "logged run: log path on its own line" "$OUTPUT" "
+$LOG_DIR/update-"
 assert_contains "logged run: log holds the version headline" "$(cat "${LOGS[0]}")" "current OhMyDebn version: 1.2.3"
 assert_contains "logged run: log holds install.sh's output" "$(cat "${LOGS[0]}")" "install.sh ran with:"
 assert_contains "logged run: install.sh sees the log path in its environment" "$(cat "${LOGS[0]}")" "log seen by install.sh: $LOG_DIR/update-"
@@ -114,7 +116,8 @@ OUTPUT=$(HOME="$FAKE_HOME" PATH="$(mock_path)" OHMYDEBN_UPDATE_LOG=/somewhere/ou
 STATUS=$?
 assert_eq "inner run: exits 0" "0" "$STATUS"
 assert_eq "inner run: creates no log of its own" "no" "$([ -d "$LOG_DIR" ] && echo yes || echo no)"
-assert_contains "inner run: reports the outer log path" "$OUTPUT" "Logging this update to /somewhere/outer.log"
+assert_contains "inner run: reports the outer log path" "$OUTPUT" "Logging this update to:
+/somewhere/outer.log"
 mock_cleanup
 
 test_summary

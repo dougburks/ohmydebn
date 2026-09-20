@@ -113,10 +113,6 @@ echo "$$" >"$LOCK_FILE"
 VERSION=$($DIR/bin/ohmydebn-version)
 
 $DIR/bin/ohmydebn-headline "OhMyDebn Update - current OhMyDebn version: $VERSION"
-if [ -n "${OHMYDEBN_UPDATE_LOG:-}" ]; then
-  echo "Logging this update to $OHMYDEBN_UPDATE_LOG"
-  echo
-fi
 
 if [ "$ASSUME_YES" = false ]; then
   cat <<EOF
@@ -134,6 +130,14 @@ Press Enter to continue or Ctrl-C to cancel.
 EOF
 
   read -r
+fi
+
+# Announced after the confirmation, not before it, so the prompt text is
+# the last thing on screen while waiting for Enter.
+if [ -n "${OHMYDEBN_UPDATE_LOG:-}" ]; then
+  echo
+  echo "Logging this update to:"
+  echo "$OHMYDEBN_UPDATE_LOG"
 fi
 
 # Update time

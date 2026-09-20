@@ -403,7 +403,8 @@ fi
 
 if [ -f "$USER_FILE" ]; then
   echo
-  echo "Edit with: ohmydebn-keybindings-edit  (file: $USER_FILE)"
+  echo "File: $USER_FILE"
+  echo "Edit with: ohmydebn-keybindings-edit"
   echo "The Super + K page lists the stock keybindings only."
 fi
 exit 0

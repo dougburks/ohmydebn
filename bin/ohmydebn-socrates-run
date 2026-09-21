@@ -38,7 +38,7 @@ ensure_pasta_ipv4
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:2222086dfde5ce9f97210e10deee227e9569d535fc450a0a9a4b7c719045995a"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:46a00109c013e0f46df2d8bfe3c26d687a8357ad7dddd966e3fe71d1e9cf515f"
 
 if [[ -n "$1" ]]; then
   IMAGE="$IMAGE_REPO:$1"

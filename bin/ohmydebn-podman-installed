@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# Exit 0 when podman is installed *with* everything rootless mode needs,
+# non-zero otherwise. With --missing, also prints the missing package
+# names one per line. The single place the list lives: ohmydebn-podman-
+# install consumes it to know what to apt install, and the podman entry
+# points (ohmydebn-podman, ohmydebn-socrates-launch) use it as their
+# "already installed?" gate instead of checking the podman package alone.
+#
+# uidmap (newuidmap/newgidmap, for the user namespace) and passt (pasta,
+# podman 5's default rootless network backend - without it -p fails
+# outright) are only Recommends of podman, so a system with recommends
+# turned off, as seen on LCOS, gets a podman that can't run SO-CRATES.
+
+PACKAGES=(podman uidmap passt)
+
+missing=()
+for pkg in "${PACKAGES[@]}"; do
+  dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+done
+
+if [[ "${1:-}" == "--missing" && ${#missing[@]} -gt 0 ]]; then
+  printf '%s\n' "${missing[@]}"
+fi
+
+[[ ${#missing[@]} -eq 0 ]]

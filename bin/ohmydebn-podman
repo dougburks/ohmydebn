@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-if ! dpkg -s "podman" >/dev/null 2>&1; then
+# "Installed" means podman plus the rootless extras (uidmap, passt) - see
+# ohmydebn-podman-installed - so a podman missing those gets repaired here.
+if ! /usr/share/ohmydebn/bin/ohmydebn-podman-installed; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Podman" /usr/share/ohmydebn/bin/ohmydebn-podman-install
 fi
 

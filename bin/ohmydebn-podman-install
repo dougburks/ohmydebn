@@ -7,13 +7,25 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-if dpkg -s "podman" >/dev/null 2>&1; then
+# Everything rootless podman needs, not just the podman package - uidmap
+# and passt are only Recommends, and a distro that skips recommends (LCOS)
+# otherwise ends up with a podman that can't map IDs or publish ports.
+# ohmydebn-podman-installed owns the list; this just installs whatever
+# part of it is missing, so it also repairs a podman installed earlier
+# without them.
+mapfile -t MISSING < <(/usr/share/ohmydebn/bin/ohmydebn-podman-installed --missing || true)
+
+if [ ${#MISSING[@]} -eq 0 ]; then
   echo
   echo "Podman is already installed."
 else
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "Podman is not currently installed."
+    if dpkg -s "podman" >/dev/null 2>&1; then
+      echo "Podman is installed but is missing packages rootless mode needs: ${MISSING[*]}"
+    else
+      echo "Podman is not currently installed."
+    fi
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
@@ -24,10 +36,7 @@ else
 
   # Install packages
   sudo /usr/bin/apt update
-  # uidmap is only a Recommends of podman, but rootless podman can't set
-  # up its user namespace without newuidmap/newgidmap - name it outright
-  # so a system with recommends turned off still gets it.
-  sudo /usr/bin/apt -y install podman uidmap
+  sudo /usr/bin/apt -y install "${MISSING[@]}"
 
   # Output message to user
   cat <<EOF

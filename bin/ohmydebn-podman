@@ -7,6 +7,10 @@ if ! dpkg -s "podman" >/dev/null 2>&1; then
 fi
 
 if dpkg -s "podman" >/dev/null 2>&1; then
+  # Podman installed before this check existed may still lack the
+  # subordinate ID ranges rootless mode needs; no-op when it has them.
+  /usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure
+
   # Podman has no GUI, so "launching" it means opening a terminal already
   # running --help - a starting point for whatever subcommand the user
   # actually needs - then dropping into an interactive shell in that same

@@ -31,8 +31,14 @@ EOF
 echo "ohmydebn-socrates-cleanup $*" >>"$MOCK_CALLS"
 exit 0
 EOF
+  mock_bin ohmydebn-podman-subids-ensure <<'EOF'
+#!/bin/bash
+echo "ohmydebn-podman-subids-ensure $*" >>"$MOCK_CALLS"
+exit 0
+EOF
   sed -e "s#/usr/bin/podman#$MOCK_BIN/podman#" \
     -e "s#/usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup#$MOCK_BIN/ohmydebn-socrates-cleanup#" \
+    -e "s#/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure#$MOCK_BIN/ohmydebn-podman-subids-ensure#" \
     "$SCRIPT" >"$MOCK_DIR/socrates-run-patched.sh"
 }
 
@@ -124,6 +130,18 @@ setup_mocks
 SCRATCH_HOME=$(mktemp -d)
 run_socrates
 assert_contains "podman still invoked after the containers.conf guard" "$(cat "$MOCK_CALLS")" "-p 8000:8000"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 6: the subordinate-ID backfill runs, and runs before podman -
+# it exists to fix the pull, so after would be useless.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+run_socrates
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "subids-ensure invoked" "$CALLS" "ohmydebn-podman-subids-ensure"
+assert_eq "subids-ensure runs before podman" "ohmydebn-podman-subids-ensure" "$(head -n1 "$MOCK_CALLS" | cut -d' ' -f1)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

@@ -24,7 +24,10 @@ else
 
   # Install packages
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install podman
+  # uidmap is only a Recommends of podman, but rootless podman can't set
+  # up its user namespace without newuidmap/newgidmap - name it outright
+  # so a system with recommends turned off still gets it.
+  sudo /usr/bin/apt -y install podman uidmap
 
   # Output message to user
   cat <<EOF
@@ -35,3 +38,9 @@ Podman is now installed.
 
 EOF
 fi
+
+# Installing podman doesn't give the user the subordinate UID/GID ranges
+# rootless mode needs - Debian only writes those at account creation, and
+# not always then (see the script). Runs on the already-installed path too
+# since it's a no-op once the ranges exist.
+/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure

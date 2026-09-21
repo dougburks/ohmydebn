@@ -30,6 +30,11 @@ ensure_pasta_ipv4() {
 
 ensure_pasta_ipv4
 
+# Rootless podman can't unpack the image without subordinate UID/GID
+# ranges for this user, and some installs (Devuan's, for one) leave them
+# out - backfill before the pull rather than let it fail on /etc/gshadow.
+/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure
+
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"

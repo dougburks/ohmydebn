@@ -1,5 +1,5 @@
 ---
-name: OhMyDebn
+name: ohmydebn
 description: >
   REQUIRED for ANY changes to Linux desktop, window manager, or system config.
   Use when editing ~/.config/cinnamon/, ~/.config/nemo/, ~/.config/gtk-3.0/,

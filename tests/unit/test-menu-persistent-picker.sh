@@ -123,6 +123,38 @@ assert_contains "first pick's request reaches the picker" "$CALLS" "serve-reques
 assert_contains "both picks returned correctly" "$CALLS" "RESULTS:Install|AI"
 assert_contains "session end sends QUIT" "$CALLS" "serve-quit"
 
+# --- Breadcrumb lookup runs once per process, not once per menu level ---
+# menu() maps its calling show_*_menu function to a breadcrumb via
+# menu_tree_paths - a bash+awk subprocess that used to run on every level.
+# It's now filled into MENU_BREADCRUMB_OF on the first call and reused.
+mock_init
+setup_mock_picker
+RESPONSES_FILE="$MOCK_DIR/responses"
+set_responses "AI" "SomeAI" "Codex"
+(
+  PATH="$(mock_path):$PATH"
+  export MOCK_CALLS PATH MOCK_RESPONSES_FILE="$RESPONSES_FILE"
+  set +u
+  source "$MOCK_DIR/menu-functions.sh"
+  set -u
+  # Override the real (sourced) tree function so its calls are counted and
+  # its answer is fixed; a duplicate func line checks first-match-wins.
+  menu_tree_paths() {
+    echo "tree-paths-call" >>"$MOCK_CALLS"
+    printf 'show_install_menu\tInstall\nshow_ai_menu\tInstall > AI\nshow_ai_menu\tWRONG\n'
+  }
+  show_install_menu() { menu "Install" "some items"; }
+  show_ai_menu() { menu "AI" "some items"; }
+  show_install_menu
+  show_ai_menu
+  show_ai_menu
+)
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "breadcrumb cache: menu_tree_paths ran exactly once across three levels" "1" "$(grep -c '^tree-paths-call$' <<<"$CALLS")"
+assert_contains "breadcrumb cache: first level got its breadcrumb" "$CALLS" "serve-request:Install"
+assert_eq "breadcrumb cache: later levels resolved from the cache (first match wins over the duplicate)" "2" "$(grep -c '^serve-request:Install > AI$' <<<"$CALLS")"
+assert_not_contains "breadcrumb cache: the duplicate's WRONG value never used" "$CALLS" "serve-request:WRONG"
+
 # --- Request line format: breadcrumb and options are tab-separated, in order ---
 mock_init
 setup_mock_picker

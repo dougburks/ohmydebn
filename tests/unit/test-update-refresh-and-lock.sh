@@ -1,0 +1,201 @@
+#!/bin/bash
+#
+# Unit tests for two guards in bin/ohmydebn-update:
+#
+#  - the self-update refresh: plain `apt update` exits 0 even when a
+#    source is unreachable, so its output is inspected. OhMyDebn's own
+#    repository failing (or apt itself failing) stops the run BEFORE
+#    install.sh with a message - it used to be skipped silently by set -e's
+#    and-list rule and the old install.sh ran anyway. Any OTHER source
+#    failing is only warned about, so a dead third-party repo can't block
+#    OhMyDebn updates. A failed `apt install ohmydebn` stops the run too.
+#  - the per-user flock: a second ohmydebn-update while one is running
+#    exits 1 with a message and never reaches install.sh.
+#
+# SAFETY: dpkg is mocked to report ohmydebn INSTALLED here (unlike
+# test-update-assume-yes.sh), because the self-update branch is the thing
+# under test - so the script's /usr/share/ohmydebn tree is sed-patched to
+# a scratch tree whose install.sh only logs, and sudo is a logger that
+# simulates apt outcomes via MOCK_APT_UPDATE_EXIT / MOCK_APT_INSTALL_EXIT.
+# Logging is opted out (OHMYDEBN_UPDATE_NO_LOG=1) except where the lock is
+# proven to work through the wrapper too.
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT="$REPO_ROOT/bin/ohmydebn-update"
+source "$REPO_ROOT/tests/lib/test-helpers.sh"
+
+echo "=== ohmydebn-update: refresh check and lock ==="
+
+setup() {
+  mock_init
+  mock_bin dpkg <<'EOF2'
+#!/bin/bash
+[[ "$1" == "-s" && "$2" == "ohmydebn" ]] && exit 0
+exit 1
+EOF2
+  mock_bin sudo <<'EOF2'
+#!/bin/bash
+mock_log "sudo $*"
+case "$*" in
+*"apt update"*)
+  # Canned `apt update` output (C locale shapes): MOCK_APT_OUTPUT, else
+  # every source Hit.
+  printf '%b\n' "${MOCK_APT_OUTPUT:-Hit:1 https://deb.debian.org/debian trixie InRelease\nHit:2 https://packages.ohmydebn.org trixie InRelease\nReading package lists...}"
+  exit "${MOCK_APT_UPDATE_EXIT:-0}" ;;
+*"apt -y install ohmydebn"*) exit "${MOCK_APT_INSTALL_EXIT:-0}" ;;
+esac
+exit 0
+EOF2
+  FAKE_HOME="$MOCK_DIR/home"
+  FAKE_TREE="$MOCK_DIR/usr-share-ohmydebn"
+  RUNTIME="$MOCK_DIR/runtime"
+  mkdir -p "$FAKE_HOME" "$FAKE_TREE/bin" "$RUNTIME"
+  cat >"$FAKE_TREE/bin/ohmydebn-version" <<'EOF2'
+#!/bin/bash
+echo 1.2.3
+EOF2
+  cat >"$FAKE_TREE/bin/ohmydebn-headline" <<'EOF2'
+#!/bin/bash
+echo "HEADLINE: $1"
+EOF2
+  cat >"$FAKE_TREE/install.sh" <<'EOF2'
+#!/bin/bash
+mock_log "install.sh $*"
+EOF2
+  chmod +x "$FAKE_TREE"/bin/* "$FAKE_TREE/install.sh"
+  sed "s#DIR=/usr/share/ohmydebn\$#DIR=$FAKE_TREE#" "$SCRIPT" >"$MOCK_DIR/update-patched.sh"
+}
+
+# run_update [extra env assignments...]
+run_update() {
+  OUTPUT=$(env HOME="$FAKE_HOME" XDG_RUNTIME_DIR="$RUNTIME" PATH="$(mock_path)" OHMYDEBN_UPDATE_NO_LOG=1 "$@" \
+    bash "$MOCK_DIR/update-patched.sh" --yes </dev/null 2>&1)
+  STATUS=$?
+}
+
+# --- happy path: strict refresh, install, then install.sh ---
+setup
+run_update
+assert_eq "happy path: exits 0" "0" "$STATUS"
+assert_contains "happy path: refresh runs apt update in the C locale (parseable output)" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/env LC_ALL=C /usr/bin/apt update"
+assert_not_contains "happy path: no warning when every source refreshed" "$OUTPUT" "could not be refreshed"
+assert_contains "happy path: self-update installs ohmydebn" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install ohmydebn"
+assert_contains "happy path: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh"
+assert_eq "happy path: lock file records this run's pid and is left in place" "yes" "$([ -s "$RUNTIME/ohmydebn-update-$(id -u).lock" ] && echo yes || echo no)"
+mock_cleanup
+
+# --- apt update itself failing (lock held, broken sources file) stops the run ---
+setup
+run_update MOCK_APT_UPDATE_EXIT=100
+assert_eq "apt failure: non-zero exit" "1" "$STATUS"
+assert_contains "apt failure: explains and names the next step" "$OUTPUT" "Could not refresh the OhMyDebn package repository - update stopped"
+assert_contains "apt failure: says nothing changed" "$OUTPUT" "Nothing has been changed"
+assert_not_contains "apt failure: no apt install attempted" "$(cat "$MOCK_CALLS")" "apt -y install ohmydebn"
+assert_not_contains "apt failure: install.sh NOT run (the old silent-skip bug)" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- OhMyDebn's own repo unreachable (apt exits 0, only warns): stops the run ---
+setup
+run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://packages.ohmydebn.org trixie InRelease\n  Could not resolve host: packages.ohmydebn.org\nW: Failed to fetch https://packages.ohmydebn.org/dists/trixie/InRelease  Could not resolve host\nW: Some index files failed to download. They have been ignored, or old ones used instead.'
+assert_eq "ohmydebn repo down: non-zero exit even though apt itself exited 0" "1" "$STATUS"
+assert_contains "ohmydebn repo down: names the OhMyDebn repository" "$OUTPUT" "Could not refresh the OhMyDebn package repository - update stopped"
+assert_not_contains "ohmydebn repo down: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- a third-party repo unreachable, OhMyDebn's fine: warn and continue ---
+setup
+run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://brave-browser-apt-release.s3.brave.com stable InRelease\n  Could not connect to brave-browser-apt-release.s3.brave.com:443\nHit:3 https://packages.ohmydebn.org trixie InRelease\nW: Failed to fetch https://brave-browser-apt-release.s3.brave.com/dists/stable/InRelease  Could not connect\nW: Some index files failed to download. They have been ignored, or old ones used instead.'
+assert_eq "third-party repo down: exits 0" "0" "$STATUS"
+assert_contains "third-party repo down: warns, naming the failed source" "$OUTPUT" "Some package repositories could not be refreshed - continuing"
+assert_contains "third-party repo down: the failed URL is listed" "$OUTPUT" "https://brave-browser-apt-release.s3.brave.com"
+assert_not_contains "third-party repo down: OhMyDebn's own repo is not listed as failed" "$OUTPUT" "  https://packages.ohmydebn.org"
+assert_contains "third-party repo down: self-update still runs" "$(cat "$MOCK_CALLS")" "apt -y install ohmydebn"
+assert_contains "third-party repo down: install.sh still runs" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- a failed self-update install stops the run too ---
+setup
+run_update MOCK_APT_INSTALL_EXIT=100
+assert_eq "install failure: non-zero exit" "1" "$STATUS"
+assert_contains "install failure: explains" "$OUTPUT" "Could not install the latest ohmydebn package - update stopped"
+assert_not_contains "install failure: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
+# --- lock: a second run while one holds the lock is refused ---
+setup
+LOCK="$RUNTIME/ohmydebn-update-$(id -u).lock"
+# This test shell poses as the running update: its pid in the lock file
+# (alive, so the plain "let it finish" message applies) and the lock held
+# from here on a spare descriptor - flock locks live on open file
+# descriptions, so the script's own `flock -n` (a fresh description on the
+# same file) is refused for as long as fd 8 stays open here. No helper
+# process, nothing left running afterwards.
+echo "$$" >"$LOCK"
+exec 8>>"$LOCK"
+flock 8
+run_update
+assert_eq "locked: exits 1" "1" "$STATUS"
+assert_contains "locked: says another update is running" "$OUTPUT" "Another OhMyDebn update is already running"
+assert_contains "locked: names the holder's pid from the lock file" "$OUTPUT" "Started by process $$. Let it finish"
+assert_not_contains "locked: no apt calls" "$(cat "$MOCK_CALLS")" "sudo"
+assert_not_contains "locked: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+# The recorded pid is gone but the lock is still held: the shape a machine
+# on the old descriptor-based lock gets into when a finished update's
+# background child (the restarted Cinnamon) inherited the lock.
+echo "424242" >"$LOCK"
+run_update
+assert_eq "stale holder: exits 1" "1" "$STATUS"
+assert_contains "stale holder: explains the pid is gone" "$OUTPUT" "started by process 424242, which has already exited"
+assert_contains "stale holder: says how to find the real holder" "$OUTPUT" "fuser -v $LOCK"
+# ...and once released, the same run goes through.
+exec 8>&-
+: >"$MOCK_CALLS"
+run_update
+assert_eq "released: exits 0" "0" "$STATUS"
+assert_contains "released: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh"
+assert_eq "released: lock file records the run's own pid" "yes" "$([[ "$(cat "$LOCK")" =~ ^[0-9]+$ ]] && echo yes || echo no)"
+mock_cleanup
+
+# --- the lock is NOT inherited by children of the run ---
+# install.sh is mocked to background a child that outlives the update (as
+# finale.sh's `setsid cinnamon --replace &` does for real). With the lock
+# held by flock -o in a parent process, that child holds nothing, so a
+# second update right after the first is not refused.
+setup
+cat >"$FAKE_TREE/install.sh" <<'EOF2'
+#!/bin/bash
+mock_log "install.sh $*"
+setsid sleep 20 >/dev/null 2>&1 &
+echo "$!" >"$MOCK_DIR/lingering-child.pid"
+EOF2
+chmod +x "$FAKE_TREE/install.sh"
+run_update
+assert_eq "lingering child: first run exits 0" "0" "$STATUS"
+LINGER=$(cat "$MOCK_DIR/lingering-child.pid" 2>/dev/null)
+assert_eq "lingering child: is still alive when the second run starts" "yes" "$([ -n "$LINGER" ] && kill -0 "$LINGER" 2>/dev/null && echo yes || echo no)"
+: >"$MOCK_CALLS"
+run_update
+assert_eq "lingering child: second run is NOT refused" "0" "$STATUS"
+assert_not_contains "lingering child: no 'already running'" "$OUTPUT" "already running"
+[ -n "$LINGER" ] && kill "$LINGER" 2>/dev/null
+mock_cleanup
+
+# --- lock works through the logging wrapper too (lock taken by the inner run, not contended by the outer) ---
+setup
+OUTPUT=$(env HOME="$FAKE_HOME" XDG_RUNTIME_DIR="$RUNTIME" PATH="$(mock_path)" bash "$MOCK_DIR/update-patched.sh" --yes </dev/null 2>&1)
+STATUS=$?
+assert_eq "logged run: exits 0 (the wrapper's re-exec does not contend with itself)" "0" "$STATUS"
+assert_contains "logged run: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh"
+assert_contains "logged run: was actually logged" "$OUTPUT" "Logging this update to"
+mock_cleanup
+
+# --- lock dir fallback: an unusable XDG_RUNTIME_DIR falls back to /tmp without failing ---
+setup
+run_update XDG_RUNTIME_DIR=/definitely/not/a/dir
+assert_eq "runtime dir fallback: still runs" "0" "$STATUS"
+assert_eq "runtime dir fallback: lock landed in /tmp" "yes" "$([ -e "/tmp/ohmydebn-update-$(id -u).lock" ] && echo yes || echo no)"
+mock_cleanup
+
+test_summary

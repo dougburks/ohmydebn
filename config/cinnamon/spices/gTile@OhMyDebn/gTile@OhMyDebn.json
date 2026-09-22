@@ -150,35 +150,35 @@
     },
     "animation": {
         "type": "checkbox",
-        "default": "true",
+        "default": true,
         "description": "Animation",
         "value": false
     },
     "autoclose": {
         "type": "checkbox",
-        "default": "true",
+        "default": true,
         "description": "Auto-Close",
-        "value": "true"
+        "value": true
     },
     "aspect-ratio": {
         "type": "checkbox",
-        "default": "true",
+        "default": true,
         "description": "Use monitor aspect ratio",
         "tooltip": "Should the popup's grid reflect the current monitor's aspect ratio or not.",
-        "value": "true"
+        "value": true
     },
     "useMonitorCenter": {
         "type": "checkbox",
-        "default": "false",
+        "default": false,
         "description": "UI always centered to monitor",
         "tooltip": "By default the grid UI shows up in the middle of the active window. With this, it always displays in the middle of the monitor.",
-        "value": "false"
+        "value": false
     },
     "showGridOnAllMonitors": {
         "type": "checkbox",
-        "default": "false",
+        "default": false,
         "description": "Show UI and all monitors at the same time",
-        "value": "false"
+        "value": false
     },
     "columns": {
         "type": "label",

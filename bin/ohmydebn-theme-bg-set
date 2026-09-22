@@ -1,0 +1,29 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-theme-bg-set: make one specific image the current background.
+# Usage: ohmydebn-theme-bg-set <absolute-image-path>
+#
+# The single place the "current background" mechanism lives: the
+# ~/.config/ohmydebn/current/background symlink (what everything else
+# reads - fastfetch, the theme carousel, Aether's own state watcher) plus
+# the Cinnamon picture-uri, which has to be set to the symlink's *target*
+# because Cinnamon doesn't notice the link itself changing.
+# ohmydebn-theme-bg-next picks which image and calls this; the `omarchy`
+# shim's `theme bg set <path>` (what Aether >= 4.29.9 drives) calls it
+# with a path Aether chose.
+
+if [[ $# -ne 1 || -z "$1" ]]; then
+  echo "Usage: ohmydebn-theme-bg-set <image-path>" >&2
+  exit 1
+fi
+
+BACKGROUND=$(readlink -f -- "$1") || true
+if [[ -z "$BACKGROUND" || ! -f "$BACKGROUND" ]]; then
+  echo "Error: background image not found: $1" >&2
+  exit 1
+fi
+
+mkdir -p "$HOME/.config/ohmydebn/current"
+ln -nsf "$BACKGROUND" "$HOME/.config/ohmydebn/current/background"
+gsettings set org.cinnamon.desktop.background picture-uri "file://$BACKGROUND"

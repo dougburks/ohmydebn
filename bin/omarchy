@@ -1,0 +1,71 @@
+#!/bin/bash
+set -euo pipefail
+
+# omarchy: the Omarchy CLI surface that the Aether theme builder drives,
+# implemented on top of OhMyDebn's own theme tools.
+#
+# Aether 4.29.9+ ("Make Omarchy own theme runtime", omacom/aether, Aug
+# 2026) no longer runs omarchy-theme-set. It looks up a single `omarchy`
+# executable on PATH - "omarchy is not installed" is the error for every
+# apply when that lookup fails - and calls exactly these:
+#
+#   omarchy version                 shown in its Omarchy Themes header
+#   omarchy theme set <name>        activate a theme by name
+#   omarchy theme bg set <path>     make one image the current background
+#
+# When a generated theme comes with a wallpaper, Aether first runs
+# `theme bg set <path>` and then `theme set <name>` with
+# OMARCHY_THEME_SKIP_BACKGROUND=1 in the environment, meaning "don't pick
+# a background of your own, keep the one just set" - hence
+# ohmydebn-theme-set's --keep-background. Theme names resolve exactly as
+# they do for ohmydebn-theme-set: ~/.config/ohmydebn/themes (where Aether
+# writes its bundles, via the ~/.config/omarchy symlink) and the stock
+# themes. `theme current` and `theme list` are provided for completeness
+# (Omarchy has them; Aether doesn't call them today).
+#
+# The older omarchy-theme-set shim next to this one stays for Aether
+# builds before 4.29.9.
+
+BIN=/usr/share/ohmydebn/bin
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: omarchy version
+       omarchy theme set <name>        (OMARCHY_THEME_SKIP_BACKGROUND=1 keeps the current background)
+       omarchy theme bg set <path>
+       omarchy theme current
+       omarchy theme list
+USAGE
+  exit 1
+}
+
+case "${1:-}" in
+version)
+  echo "ohmydebn $($BIN/ohmydebn-version)"
+  ;;
+theme)
+  case "${2:-}" in
+  set)
+    [[ $# -eq 3 && -n "$3" ]] || usage
+    if [[ "${OMARCHY_THEME_SKIP_BACKGROUND:-}" == "1" ]]; then
+      exec "$BIN/ohmydebn-theme-set" --keep-background "$3"
+    fi
+    exec "$BIN/ohmydebn-theme-set" "$3"
+    ;;
+  bg)
+    [[ "${3:-}" == "set" && $# -eq 4 && -n "$4" ]] || usage
+    exec "$BIN/ohmydebn-theme-bg-set" "$4"
+    ;;
+  current)
+    [[ $# -eq 2 ]] || usage
+    cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null || echo "Unknown"
+    ;;
+  list)
+    [[ $# -eq 2 ]] || usage
+    exec "$BIN/ohmydebn-theme-list"
+    ;;
+  *) usage ;;
+  esac
+  ;;
+*) usage ;;
+esac

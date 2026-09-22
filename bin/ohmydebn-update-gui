@@ -82,6 +82,7 @@ except (ValueError, ImportError):
 import cairo  # noqa: E402
 import fcntl  # noqa: E402
 import functools  # noqa: E402
+import json  # noqa: E402
 import math  # noqa: E402
 import os  # noqa: E402
 import pty  # noqa: E402
@@ -91,8 +92,11 @@ import struct  # noqa: E402
 import subprocess  # noqa: E402
 import sys  # noqa: E402
 import termios  # noqa: E402
+import threading  # noqa: E402
 import time  # noqa: E402
 import traceback  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 # The palette loader started life in this script and moved to the shared
@@ -100,6 +104,9 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from ohmydebn_theme_colors import contrast_ratio, css_rgba, load_theme_colors  # noqa: E402
 
 RELEASE_NOTES_URL = "https://github.com/dougburks/ohmydebn/releases"
+# Same endpoint ohmydebn-update-check polls for its notification.
+RELEASES_API_URL = "https://api.github.com/repos/dougburks/ohmydebn/releases/latest"
+PREFLIGHT_TIMEOUT_S = 6
 
 THEME = load_theme_colors()
 
@@ -121,27 +128,40 @@ SUDO_PROMPT_MARKER = SUDO_PROMPT.rstrip()
 # helpful.
 STALL_SECONDS = 90
 
-# The exact confirmation line a pre---yes ohmydebn-update prints before
-# its blocking `read -r`. During the one transition update where this GUI
-# (from the new package/checkout) drives the OLD installed script - which
-# doesn't understand --yes - that read would otherwise hang forever
-# behind a collapsed terminal. The GUI's "Update Now" button already
-# collected exactly this consent, so it answers this prompt itself.
-# Matched verbatim, capital C and all: install.sh's own root/unsupported-
-# distro warnings say "Ctrl-c" (lowercase) and ask for consent the GUI
-# never showed, so those deliberately do NOT match - they stay manual,
-# via the stall hint + revealed terminal.
-LEGACY_ENTER_PROMPT = "Press Enter to continue or Ctrl-C to cancel."
-
 # install.sh's own consent prompts (unsupported distro, running as root,
-# first-install welcome) all end "...or Ctrl-c to cancel." - lowercase c,
-# deliberately distinct from LEGACY_ENTER_PROMPT's capital C above. These
-# ask for consent the Update Now button never collected, so they are
-# never auto-answered: the GUI reveals its terminal and asks the user to
-# respond there (see _on_consent_prompt). They reach the GUI at all
-# because ohmydebn-update runs install.sh WITHOUT --yes - forwarding it
-# would skip these warnings entirely, found in review.
+# first-install welcome) all end "...or Ctrl-c to cancel." - lowercase c
+# (tests/consistency.sh pins that spelling). These ask for consent the
+# Update Now button never collected, so they are never auto-answered: the
+# GUI reveals its terminal and asks the user to respond there (see
+# _on_consent_prompt). They reach the GUI at all because ohmydebn-update
+# runs install.sh WITHOUT --yes - forwarding it would skip these warnings
+# entirely, found in review.
+#
+# Nothing is ever auto-answered any more. This GUI used to press Enter on
+# ohmydebn-update's own "Press Enter to continue or Ctrl-C to cancel."
+# line, for a transition where a new GUI drove an old script that lacked
+# --yes - but GUI and script ship in the same package (--yes arrived with
+# the current GUI in 4.7.0), so that never happens, while the matched
+# phrase is the stock prompt of some fifty ohmydebn-*-install/-remove
+# scripts. Retired in review; an unexpected prompt now surfaces through
+# the stall hint and the revealed terminal like any other.
 CONSENT_PROMPT_MARKER = "Ctrl-c to cancel"
+
+# How an abort proceeds: (delay ms, signal) sent to the child's whole
+# process group, in order, each skipped if the child is already gone.
+# SIGINT is the Ctrl-C the terminal flow would deliver, which apt handles
+# as gracefully as an interrupt can be - but alone it's not enough: sudo
+# catches it and exits normally, and bash's cooperative-SIGINT rule lets
+# the script march on to its next command (seen live: cancelling the
+# password dialog killed only the prompt and the update carried on). So
+# SIGTERM follows after a grace period. Deliberately NO SIGKILL: the
+# group includes apt and dpkg, and killing dpkg mid-configure is exactly
+# the inconsistent state the abort dialog warns about. If the child is
+# still running after ABORT_PATIENCE_MS, apt is finishing a package - the
+# GUI says so and waits for it (see _abort); the window closes when the
+# process really exits.
+ABORT_ESCALATION = ((0, signal.SIGINT), (2000, signal.SIGTERM))
+ABORT_PATIENCE_MS = 8000
 
 ANSI_RE = re.compile(r"\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-B])")
 
@@ -178,16 +198,13 @@ class StreamWatcher:
                           fires twice while more bytes trickle in - but a
                           re-prompt after a wrong password (a new marker
                           occurrence) fires again.
-      ("enter-prompt",) - a pre---yes ohmydebn-update printed its
-                          LEGACY_ENTER_PROMPT confirmation and is blocked
-                          on `read -r`. Completed lines only (the real
-                          prompt line ends in a newline - it comes from a
-                          heredoc cat, not an inline printf).
       ("consent-prompt",) - install.sh printed one of its own
                           CONSENT_PROMPT_MARKER warnings (unsupported
                           distro / root / first install) and is blocked
-                          on `read -r`. Completed lines only, same as
-                          enter-prompt - and never auto-answered.
+                          on `read -r`. Completed lines only (the real
+                          prompt line ends in a newline - it comes from a
+                          heredoc cat, not an inline printf) - and never
+                          auto-answered.
 
     Pure logic, no GTK - covered directly by tests/unit/test-update-gui.py.
     """
@@ -211,9 +228,7 @@ class StreamWatcher:
         for line in lines:
             line = strip_ansi(line)
             self._markers_in_lines += line.count(SUDO_PROMPT_MARKER)
-            if LEGACY_ENTER_PROMPT in line:
-                events.append(("enter-prompt",))
-            elif CONSENT_PROMPT_MARKER in line:
+            if CONSENT_PROMPT_MARKER in line:
                 events.append(("consent-prompt",))
             if self._after_fence and line.strip() and not is_fence(line):
                 events.append(("stage", line.strip()))
@@ -228,6 +243,20 @@ class StreamWatcher:
             self._markers_seen = total
             events.append(("sudo-prompt",))
         return events
+
+
+# finalization/reboot-notice.sh's headline, which the stage parser turns
+# into an ordinary stage; the success status keys off it so a GUI user -
+# whose terminal is collapsed - still learns a reboot is due.
+REBOOT_HEADLINE = "A reboot is needed to finish this update"
+
+
+def success_message(stages):
+    """The final status line for a clean exit, given every stage title
+    seen during the run."""
+    if any(stage.startswith(REBOOT_HEADLINE) for stage in stages):
+        return "Update complete - reboot when convenient to finish it."
+    return "Update complete - you're up to date."
 
 
 def normalize_returncode(returncode):
@@ -293,6 +322,118 @@ def guarded(default=None):
         return wrapper
 
     return decorate
+
+
+# ---------- pre-flight release check ----------
+# The card used to show only the current version and a release-notes
+# link, so a user couldn't tell whether a multi-minute run would bring a
+# new OhMyDebn or not. The window now asks GitHub for the latest release
+# in a background thread (never blocking the UI, never gating the update
+# - an offline answer just says so) and shows the verdict on the card.
+# Pure functions here; the thread and label live in UpdateWindow.
+
+
+def parse_latest_tag(payload):
+    """The release tag from the GitHub 'latest release' JSON, without a
+    leading 'v'. None for anything malformed."""
+    try:
+        tag = json.loads(payload).get("tag_name")
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(tag, str) or not tag.strip():
+        return None
+    tag = tag.strip()
+    return tag[1:] if tag.startswith("v") else tag
+
+
+def version_key(version):
+    """Sort key matching `sort -V` for the shapes OhMyDebn uses (4.8.0,
+    4.10.0, 4.8.0-rc1): numeric parts compare as numbers, a suffixed
+    version sorts after its bare form."""
+    parts = []
+    for part in re.split(r"[.-]", version.strip()):
+        parts.append((0, int(part)) if part.isdigit() else (1, part))
+    return tuple(parts)
+
+
+def preflight_message(current, latest):
+    """What the card says about `latest` (None when the check failed)
+    relative to `current`. Returns (text, kind) with kind one of
+    'available', 'current', 'ahead', 'unknown'."""
+    if not latest or not current or current == "unknown":
+        return ("Couldn't check for a newer OhMyDebn release - the update will still run.", "unknown")
+    if version_key(latest) > version_key(current):
+        return (f"OhMyDebn {latest} is available.", "available")
+    if version_key(latest) == version_key(current):
+        return (f"OhMyDebn {current} is the latest release - the update will still refresh OS packages.", "current")
+    return (f"OhMyDebn {current} is newer than the latest release ({latest}).", "ahead")
+
+
+def fetch_latest_release(url=RELEASES_API_URL, timeout=PREFLIGHT_TIMEOUT_S):
+    """The latest release tag, or None on any network/parse failure. Run
+    off the main thread - it blocks for up to `timeout` seconds."""
+    request = urllib.request.Request(url, headers={"User-Agent": "ohmydebn-update-gui"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https URL
+            return parse_latest_tag(response.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
+# ---------- single instance ----------
+# Ctrl+Super+U, the menu entry and the update notification all launch
+# this script, and nothing else stopped a second window from starting a
+# second update on top of a running one - apt's own lock only covers the
+# package layer, not the config layer that follows it. One lock file per
+# user, held (flock) for the window's whole lifetime: a later launch finds
+# it held, pokes the holder with SIGUSR1 so it presents its window, and
+# exits. flock (not the file's mere existence) is what decides - a lock
+# file left behind by a crash or a logout carries no flock, so it's
+# simply taken over. The holder's pid is written into the file only so
+# the second launch knows whom to signal. Kept as plain functions with
+# no GTK in them so tests/unit/test-update-gui.py can exercise them
+# against a real second process.
+
+
+def instance_lock_path():
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime_dir or not os.path.isdir(runtime_dir):
+        runtime_dir = "/tmp"
+    return os.path.join(runtime_dir, f"ohmydebn-update-gui-{os.getuid()}.lock")
+
+
+def acquire_instance_lock(path):
+    """Tries to become THE instance. Returns (fd, None) on success - keep
+    fd open for as long as the instance lives, closing it releases the
+    lock - or (None, holder_pid) when another live process holds it
+    (holder_pid may be None if its pid couldn't be read)."""
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        holder = None
+        try:
+            with open(path, encoding="utf-8") as f:
+                holder = int(f.read().strip() or 0) or None
+        except (OSError, ValueError):
+            holder = None
+        os.close(fd)
+        return None, holder
+    os.ftruncate(fd, 0)
+    os.write(fd, f"{os.getpid()}\n".encode("utf-8"))
+    return fd, None
+
+
+def present_existing_instance(pid):
+    """Asks the running instance to bring its window forward. True if the
+    signal was delivered."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except OSError:
+        return False
+    return True
 
 
 class ProgressRing(Gtk.DrawingArea):
@@ -518,6 +659,7 @@ class UpdateWindow(Gtk.Window):
 
         self._build_ui()
         self._apply_css()
+        self._start_preflight_check()
 
         self.connect("key-press-event", self._on_key_press)
         self.connect("delete-event", self._on_delete_event)
@@ -530,6 +672,10 @@ class UpdateWindow(Gtk.Window):
         # gesture) - _on_destroy handles that.
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+        # A second launch of this script found our instance lock held and
+        # sent SIGUSR1 (see present_existing_instance): bring this window
+        # forward instead of letting a second update start.
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_present_signal)
 
     # ---------- UI construction ----------
 
@@ -543,6 +689,17 @@ class UpdateWindow(Gtk.Window):
         self.version_label = Gtk.Label(label=f"Current version {read_version(self.dir)}")
         self.version_label.get_style_context().add_class("dim")
         outer.pack_start(self.version_label, False, False, 0)
+
+        # Filled in by the background release check (see
+        # _start_preflight_check); hidden until it answers, and again once
+        # the update starts, since the running view has its own status.
+        self.preflight_label = Gtk.Label(label="")
+        self.preflight_label.set_line_wrap(True)
+        self.preflight_label.set_justify(Gtk.Justification.CENTER)
+        self.preflight_label.set_max_width_chars(56)
+        self.preflight_label.set_halign(Gtk.Align.CENTER)
+        self.preflight_label.set_no_show_all(True)
+        outer.pack_start(self.preflight_label, False, False, 0)
 
         self.ring = ProgressRing()
         self.ring.set_halign(Gtk.Align.CENTER)
@@ -779,6 +936,11 @@ class UpdateWindow(Gtk.Window):
             self._abort()
         return True  # never close immediately; an abort closes via _finish
 
+    @guarded(default=GLib.SOURCE_CONTINUE)
+    def _on_present_signal(self):
+        self.present()
+        return GLib.SOURCE_CONTINUE
+
     def _on_terminate_signal(self):
         # Being SIGTERMed is the "terminal window closed" gesture of the
         # pre-GUI flow: take the child down with us rather than orphaning
@@ -804,6 +966,7 @@ class UpdateWindow(Gtk.Window):
             self._set_status_error(f"Could not start the update: {exc}")
             return
         self.start_button.hide()
+        self.preflight_label.hide()
         self.warning_label.hide()
         self.notes_link.hide()
         self.close_button.hide()
@@ -813,6 +976,29 @@ class UpdateWindow(Gtk.Window):
         self.status_label.set_text("Updating - this can take a while.")
         self.poll_source = GLib.timeout_add(1000, self._poll_child)
         GLib.timeout_add_seconds(5, self._check_stalled)
+
+    def _start_preflight_check(self):
+        def worker():
+            latest = fetch_latest_release()
+            GLib.idle_add(self._on_preflight_result, latest)
+
+        threading.Thread(target=worker, name="preflight-release-check", daemon=True).start()
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_preflight_result(self, latest):
+        # Back on the main loop. Only the pre-flight card shows this - if
+        # the user already clicked Update Now, the running view owns the
+        # status and this answer is moot.
+        if self.proc is not None:
+            return GLib.SOURCE_REMOVE
+        text, kind = preflight_message(read_version(self.dir), latest)
+        self.preflight_label.set_text(text)
+        style = self.preflight_label.get_style_context()
+        for cls in ("stage-current", "dim", "hint"):
+            style.remove_class(cls)
+        style.add_class("stage-current" if kind == "available" else "dim")
+        self.preflight_label.show()
+        return GLib.SOURCE_REMOVE
 
     def _spawn_update(self):
         self.master, slave = pty.openpty()
@@ -892,8 +1078,6 @@ class UpdateWindow(Gtk.Window):
                     self._on_stage(event[1])
                 elif event[0] == "sudo-prompt":
                     self._on_sudo_prompt()
-                elif event[0] == "enter-prompt":
-                    self._on_enter_prompt()
                 elif event[0] == "consent-prompt":
                     self._on_consent_prompt()
 
@@ -975,13 +1159,6 @@ class UpdateWindow(Gtk.Window):
             return GLib.SOURCE_REMOVE
 
         GLib.idle_add(scroll_to_newest)
-
-    @guarded()
-    def _on_enter_prompt(self):
-        # See LEGACY_ENTER_PROMPT: an old, pre---yes ohmydebn-update is
-        # blocked on the confirmation the Update Now button already gave.
-        if not self.aborting:
-            self._write_master(b"\n")
 
     @guarded()
     def _on_consent_prompt(self):
@@ -1099,12 +1276,13 @@ class UpdateWindow(Gtk.Window):
                 self.stages_done.append(self.current_stage)
                 self.current_stage = None
                 self._rebuild_stage_box()
-            self.status_label.set_text("Update complete - you're up to date.")
+            self.status_label.set_text(success_message(self.stages_done))
         else:
             self.ring.set_state("failure")
             self._set_status_error(
                 f"The update did not finish cleanly (exit code {exit_code})."
-                " The details below show what happened."
+                " The details below show what happened, and the full log is at"
+                " ~/.local/state/ohmydebn-logs/update-latest.log"
             )
             # Failure is the one moment the terminal reveals itself: the
             # real error is in there, and hiding it behind a click when
@@ -1118,26 +1296,32 @@ class UpdateWindow(Gtk.Window):
         )
 
     def _abort(self):
-        # SIGINT to the child's process group first - the same Ctrl-C the
-        # terminal flow would deliver, which apt handles as gracefully as
-        # an interrupt can be handled. But SIGINT alone is NOT enough:
-        # sudo catches it and exits normally rather than dying from the
-        # signal, and bash's cooperative-SIGINT rule ("the foreground
-        # child handled it, keep running") lets the script march on to
-        # its next command - the chronyc line's `|| true` even swallows
-        # the failure outright. Seen live: canceling the password dialog
-        # killed only the prompt and the update continued anyway. So a
-        # grace period after SIGINT, then SIGTERM, then SIGKILL - each
-        # escalation skipped automatically if the child is already gone.
-        # _poll_child sees the exit and routes to _finish with aborting
-        # set.
+        # See ABORT_ESCALATION for the signal plan and why it stops at
+        # SIGTERM. _poll_child sees the exit and routes to _finish with
+        # aborting set.
         if self.aborting:
             return
         self.aborting = True
         self.status_label.set_text("Aborting update...")
-        self._kill_child(signal.SIGINT)
-        GLib.timeout_add(2000, self._make_escalation(signal.SIGTERM))
-        GLib.timeout_add(6000, self._make_escalation(signal.SIGKILL))
+        for delay_ms, sig in ABORT_ESCALATION:
+            if delay_ms == 0:
+                self._kill_child(sig)
+            else:
+                GLib.timeout_add(delay_ms, self._make_escalation(sig))
+        GLib.timeout_add(ABORT_PATIENCE_MS, self._on_abort_patience)
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_abort_patience(self):
+        # Still running after every signal in the plan: apt/dpkg is
+        # finishing the package it was in the middle of, which is the one
+        # thing an abort must not cut short. Say so instead of forcing it.
+        if self._running():
+            self.status_label.set_text(
+                "Still stopping - apt is finishing the current package."
+                " This window will close on its own when it's done."
+            )
+            self._set_details_revealed(True)
+        return GLib.SOURCE_REMOVE
 
     def _make_escalation(self, sig):
         @guarded(default=GLib.SOURCE_REMOVE)
@@ -1225,10 +1409,21 @@ def main():
             ],
         )
 
+    # One window per user - see acquire_instance_lock. The fd is held in
+    # a name that lives as long as main() does; the lock dies with it.
+    lock_fd, holder = acquire_instance_lock(instance_lock_path())
+    if lock_fd is None:
+        if present_existing_instance(holder):
+            print("ohmydebn-update-gui is already running - bringing its window forward.")
+        else:
+            print("ohmydebn-update-gui is already running.")
+        return
+
     win = UpdateWindow(dir_)
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()
+    os.close(lock_fd)
 
 
 if __name__ == "__main__":

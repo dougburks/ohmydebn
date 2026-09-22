@@ -6,6 +6,21 @@
 
 set -euo pipefail
 
+# The timer below is a systemd user unit, so it needs systemd running as
+# PID 1 (a user manager only exists under one). Devuan and other
+# non-systemd systems have no such thing - on those, skip the timer with a
+# note rather than failing here, since this runs late in finalization
+# (install/finalization/updates.sh) and a failure would abort the rest of
+# the install over a non-essential background check. /run/systemd/system
+# is the documented way to detect systemd as init (see sd_booted(3)) -
+# OHMYDEBN_TEST_SYSTEMD_DIR lets the unit test point this at a scratch path.
+SYSTEMD_DIR="${OHMYDEBN_TEST_SYSTEMD_DIR:-/run/systemd/system}"
+if [ ! -d "$SYSTEMD_DIR" ]; then
+  echo "systemd is not the init system - skipping update notification timer"
+  echo "(ohmydebn-update-check can still be run manually to check for updates)"
+  exit 0
+fi
+
 SCRIPT_PATH="/usr/share/ohmydebn/bin/ohmydebn-update-check"
 USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
 SERVICE_NAME="ohmydebn-update-check.service"

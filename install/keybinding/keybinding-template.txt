@@ -1,0 +1,51 @@
+# Your own OhMyDebn keybindings.
+#
+# This file lives at ~/.config/ohmydebn/keybindings.txt. It is applied on top of
+# the stock keybindings every time ohmydebn-update runs, whenever you change it,
+# and whenever you run ohmydebn-keybindings-apply. Copy it to another OhMyDebn
+# machine and run ohmydebn-keybindings-apply there to get the same keybindings.
+#
+# Edit it with:   ohmydebn-keybindings-edit   (OhMyDebn menu > Setup > Keybindings)
+# Apply it with:  ohmydebn-keybindings-apply
+#
+# It is read as a bash script by your own user, so keep the quoting exactly
+# as in the examples. Lines starting with # are comments; remove the # to
+# activate an example. Key names are Cinnamon's: <Super> <Ctrl> <Alt>
+# <Shift>, letters, digits, Return, space, F1..F12, Page_Up, KP_1, and so on.
+# Several keys for one keybinding: "['<Super>R', '<Super><Alt>space']".
+# Avoid <Ctrl><Alt> with F1..F12 (with or without other modifiers): the X
+# server switches to a text console on those before Cinnamon ever sees them.
+#
+# Stock keybindings are addressed by NAME. Names are the first quoted field in
+#   /usr/share/ohmydebn/install/keybinding/keybinding-custom.txt
+# for example "Browser", "Neovim", "X", "Visual Studio Code".
+# Lines pasted from that file work here too (the number is ignored).
+#
+# Note: the Super + K page lists the stock keybindings only.
+
+# ---------------------------------------------------------------------------
+# keybinding NAME COMMAND BINDING
+#   A new name adds a keybinding. A stock name changes that stock keybinding's
+#   command and/or key in place. Any key you use here is automatically
+#   removed from whichever stock keybinding had it before.
+
+# keybinding "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['<Super>S']"
+# keybinding "Neovim" "/usr/share/ohmydebn/bin/ohmydebn-neovim" "['<Super>V']"
+# keybinding "Browser" "/usr/bin/firefox" "['<Super>B']"
+
+# ---------------------------------------------------------------------------
+# keybinding-unbind NAME
+#   Remove a stock keybinding's key entirely.
+
+# keybinding-unbind "X"
+
+# ---------------------------------------------------------------------------
+# keybinding-cinnamon SUBSCHEMA KEY BINDING
+#   Change one of Cinnamon's own shortcuts (window manager, media keys...).
+#   Same arguments as /usr/share/ohmydebn/install/keybinding/keybinding-cinnamon.txt;
+#   list the keys with:  gsettings list-recursively org.cinnamon.desktop.keybindings.wm
+#   Use "[]" to remove a Cinnamon shortcut. Keys taken by a Cinnamon shortcut
+#   are not freed automatically - unbind them here yourself if they clash.
+
+# keybinding-cinnamon "wm" "close" "['<Alt>F4']"
+# keybinding-cinnamon "wm" "switch-to-workspace-1" "[]"

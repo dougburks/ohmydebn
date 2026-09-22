@@ -1,0 +1,44 @@
+# OhMyDebn: one graphical session per user, while the Remote Desktop
+# Server (XRDP) is installed.
+#
+# Sourced by /etc/X11/Xsession (under /bin/sh with `set -e` - every
+# command here is guarded) for every X login. Running a user's Cinnamon
+# desktop locally and over XRDP at the same time breaks in several ways at
+# once (one session-manager name on the shared user bus, keyring,
+# portals), and the second desktop to start simply exits. So a remote
+# session is refused while the same user is logged into the local
+# desktop, and a local login is refused while the user still has a remote
+# session open (disconnected but not logged out counts) - each with a
+# message saying what to do instead of a login that dies silently.
+# Installed by ohmydebn-remote-desktop-server-install, removed by
+# ohmydebn-remote-desktop-server-remove. OHMYDEBN_XRDP_ALLOW_SHARED_USER=1
+# in /etc/environment lifts both checks for a site that wants shared-user
+# sessions anyway.
+#
+# Which side this login is on comes from logind, not from xrdp's
+# XRDP_SESSION variable alone: a later step of Xsession copies every
+# session variable into the systemd user manager, which outlives the
+# remote session, so a local login after a remote logout inherits
+# XRDP_SESSION (seen live). A local login always has a seat; an XRDP one
+# never does. Without logind (no session id, or no loginctl) nothing can
+# be told apart, and nothing is checked.
+ohmydebn_session_side=""
+if [ -n "${XDG_SESSION_ID:-}" ] && command -v loginctl >/dev/null 2>&1; then
+  ohmydebn_seat=$(loginctl show-session "$XDG_SESSION_ID" -p Seat --value 2>/dev/null) || ohmydebn_seat=""
+  if [ -z "$ohmydebn_seat" ] || [ "$ohmydebn_seat" = "-" ]; then
+    [ -z "${XRDP_SESSION:-}" ] || ohmydebn_session_side=remote
+  else
+    ohmydebn_session_side=local
+  fi
+fi
+
+if [ -n "$ohmydebn_session_side" ] && [ -x /usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard ]; then
+  if ! OHMYDEBN_XRDP_REFUSAL=$(/usr/share/ohmydebn/bin/ohmydebn-xrdp-session-guard "$ohmydebn_session_side"); then
+    if command -v xmessage >/dev/null 2>&1; then
+      xmessage -center -timeout 30 "$OHMYDEBN_XRDP_REFUSAL" || true
+    else
+      sleep 10
+    fi
+    exit 1
+  fi
+fi

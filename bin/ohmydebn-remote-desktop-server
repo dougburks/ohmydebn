@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# The installer runs when the package is missing, and also when the package
+# is there but OhMyDebn's session guard isn't (xrdp installed by hand, or
+# before this entry existed): the installer is idempotent and only adds
+# what's missing, so this is how the configuration reaches such a system.
+# The installer ends by printing the address and firewall guidance itself,
+# so after it has run this is done - the status window below would only
+# repeat that same text in a second window.
+GUARD=/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard
+if ! dpkg -s "xrdp" >/dev/null 2>&1 || [ ! -f "$GUARD" ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Remote Desktop Server" /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-server-install
+  exit 0
+fi
+
+if dpkg -s "xrdp" >/dev/null 2>&1; then
+  # XRDP is a background service, not an interactive app - like the SSH
+  # Server entry, show the address, the service's live status, and how to
+  # let it through the firewall (which OhMyDebn never opens itself). The
+  # status command is picked inside the spawned terminal: `systemctl` only
+  # exists under systemd, `service` is the Devuan/LCOS equivalent (see
+  # ohmydebn-ssh-server for the /run/systemd/system signal).
+  IP=$(hostname -I | awk '{print $1}')
+  STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Remote Desktop Server" "echo 'Connect to this machine with Remmina or any RDP client:'; echo '  $IP:3389'; echo; echo -n 'XRDP service status: '; $STATUS_CMD; echo; /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 'Remote Desktop Server'; echo; echo 'Press Enter to close this window.'; read -r"
+fi

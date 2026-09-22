@@ -18,14 +18,32 @@ if [ ! -f $ZSHRC_STATE ]; then
 fi
 
 for FILE in ~/.bashrc ~/.xsessionrc ~/.zshrc; do
-  if ! grep -F 'export PATH="/usr/share/ohmydebn/bin:$PATH"' $FILE >/dev/null 2>&1; then
+  # ~/.xsessionrc is sourced by /etc/X11/Xsession under /bin/sh (dash on
+  # Debian), for every X login and for XRDP sessions alike. The PATH block
+  # OhMyDebn used to append was Bash syntax (`[[ ... ]]`), which dash
+  # reports as "[[: not found" in ~/.xsession-errors on every login. Not
+  # fatal - it sits in an `if` condition, so Xsession's `set -e` doesn't
+  # trip, and the negated not-found status still exports PATH - but noise
+  # with a real error's shape. Convert an old block in place (once: the
+  # grep keeps untouched files untouched) to the POSIX form appended below.
+  if grep -Fq 'if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then' "$FILE" 2>/dev/null; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH block in $FILE to POSIX sh syntax"
+    sed -i '\#^if ! \[\[ "\$PATH" =~ "/usr/share/ohmydebn/bin:" \]\]; then$#,/^fi$/c\
+case ":$PATH:" in\
+  *:/usr/share/ohmydebn/bin:*) ;;\
+  *) export PATH="/usr/share/ohmydebn/bin:$PATH" ;;\
+esac' "$FILE"
+  fi
+
+  if ! grep -F '# Update PATH to include OhMyDebn binaries' "$FILE" >/dev/null 2>&1; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Updating PATH in $FILE"
-    cat <<'EOF' >>$FILE
+    cat <<'EOF' >>"$FILE"
 
 # Update PATH to include OhMyDebn binaries
-if ! [[ "$PATH" =~ "/usr/share/ohmydebn/bin:" ]]; then
-  export PATH="/usr/share/ohmydebn/bin:$PATH"
-fi
+case ":$PATH:" in
+  *:/usr/share/ohmydebn/bin:*) ;;
+  *) export PATH="/usr/share/ohmydebn/bin:$PATH" ;;
+esac
 EOF
   fi
 done
@@ -59,6 +77,16 @@ if [ ! -f $PI_ALIAS_STATE ]; then
 alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'
 EOF
   touch $PI_ALIAS_STATE
+fi
+
+CODEX_ALIAS_STATE=~/.local/state/ohmydebn-config/codex-alias
+if [ ! -f $CODEX_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Codex (OpenAI) CLI coding agent, run in the current terminal
+alias codex='/usr/share/ohmydebn/bin/ohmydebn-codex-cli'
+EOF
+  touch $CODEX_ALIAS_STATE
 fi
 
 OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias

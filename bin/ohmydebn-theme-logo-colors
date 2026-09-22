@@ -1,0 +1,88 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-theme-logo-colors: the current theme's palette, shaped for the
+# logo scripts. Prints key=value lines:
+#
+#   rain=<hex> <hex> ...      ttfx rain --rain-colors (dark to bright)
+#   gradient=<hex> <hex> ...  ttfx rain --final-gradient-stops
+#   accent=<hex>              the theme accent
+#   accent_rgb=R;G;B          the same, ready for a truecolor escape
+#
+# Hex values carry no '#', which is what ttfx wants. Read from the current
+# theme's colors.toml at call time (an optional argument overrides the
+# path, for tests), so a theme change is picked up by the next logo with
+# nothing to regenerate. With no theme file, or no accent in it, the
+# output is ttfx's own default rain palette, so the logo never fails for
+# want of a theme.
+#
+# Roles: the final gradient runs accent -> blue -> cyan (whichever exist,
+# de-duplicated), so the settled text is the theme's own hues; the rain
+# leading up to it is the accent mixed toward the theme background at
+# 20/40/60/80%, then the accent, blue, cyan and foreground - the same
+# dark-to-bright progression ttfx's default palette has, in the theme's
+# colors. The mixing is plain integer math on the hex channels.
+
+COLORS_TOML="${1:-$HOME/.config/ohmydebn/current/theme/colors.toml}"
+
+DEFAULT_RAIN="00315C 004C8F 0075DB 3F91D9 78B9F2 9AC8F5 B8D8F8 E3EFFC"
+DEFAULT_GRADIENT="488bff b2e7de 57eaf7"
+
+# toml_color <key> -> "rrggbb" (lowercase, no '#') or nothing.
+toml_color() {
+  local value
+  value=$(grep -E "^\s*$1\s*=" "$COLORS_TOML" 2>/dev/null | head -1 | sed -E 's/.*=\s*"#?([0-9A-Fa-f]{6})".*/\1/')
+  [[ "$value" =~ ^[0-9A-Fa-f]{6}$ ]] && printf '%s' "${value,,}"
+  return 0
+}
+
+# mix <hex-a> <hex-b> <percent-of-a> -> hex of a*p + b*(1-p), per channel.
+mix() {
+  local a="$1" b="$2" p="$3" out="" i ca cb
+  for i in 0 2 4; do
+    ca=$((16#${a:i:2})); cb=$((16#${b:i:2}))
+    printf -v out '%s%02x' "$out" $(((ca * p + cb * (100 - p) + 50) / 100))
+  done
+  printf '%s' "$out"
+}
+
+hex_to_rgb() {
+  printf '%d;%d;%d' $((16#${1:0:2})) $((16#${1:2:2})) $((16#${1:4:2}))
+}
+
+ACCENT=$(toml_color accent)
+if [[ -z "$ACCENT" ]]; then
+  echo "rain=$DEFAULT_RAIN"
+  echo "gradient=$DEFAULT_GRADIENT"
+  echo "accent=${DEFAULT_GRADIENT%% *}"
+  echo "accent_rgb=$(hex_to_rgb "${DEFAULT_GRADIENT%% *}")"
+  exit 0
+fi
+
+BG=$(toml_color background)
+[[ -n "$BG" ]] || BG=000000
+FG=$(toml_color foreground)
+BLUE=$(toml_color blue)
+CYAN=$(toml_color cyan)
+
+# Append each color once, in order, skipping blanks and repeats.
+append_unique() {
+  local list="$1" c="$2"
+  [[ -z "$c" ]] && { printf '%s' "$list"; return; }
+  for existing in $list; do
+    [[ "$existing" == "$c" ]] && { printf '%s' "$list"; return; }
+  done
+  printf '%s' "${list:+$list }$c"
+}
+
+GRADIENT=""
+for c in "$ACCENT" "$BLUE" "$CYAN"; do GRADIENT=$(append_unique "$GRADIENT" "$c"); done
+
+RAIN=""
+for p in 20 40 60 80; do RAIN=$(append_unique "$RAIN" "$(mix "$ACCENT" "$BG" "$p")"); done
+for c in "$ACCENT" "$BLUE" "$CYAN" "$FG"; do RAIN=$(append_unique "$RAIN" "$c"); done
+
+echo "rain=$RAIN"
+echo "gradient=$GRADIENT"
+echo "accent=$ACCENT"
+echo "accent_rgb=$(hex_to_rgb "$ACCENT")"

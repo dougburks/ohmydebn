@@ -5,7 +5,7 @@
 # calls on every AI pick to record it as the new default - see that
 # function's own comment). ohmydebn-ai must default to opencode - Super+A's
 # original, hardcoded target - whenever nothing's been picked yet or the
-# stored value isn't one of the six known names, so a corrupted/foreign
+# stored value isn't one of the seven known names, so a corrupted/foreign
 # value can't silently break the shortcut.
 
 set -uo pipefail
@@ -18,7 +18,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai / bin/ohmydebn-ai-set-default ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode ohmydebn-claude-code ohmydebn-chatgpt ohmydebn-pi ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode ohmydebn-claude-code ohmydebn-chatgpt ohmydebn-codex ohmydebn-pi ohmydebn-code ohmydebn-antigravity; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -46,11 +46,12 @@ fresh_scratch_home
 run_ai
 assert_contains "no config file: launches opencode" "$(cat "$MOCK_CALLS")" "ohmydebn-opencode"
 
-# --- Each of the six valid stored names maps to the matching launcher ---
+# --- Each of the seven valid stored names maps to the matching launcher ---
 declare -A EXPECTED=(
   [opencode]="ohmydebn-opencode"
   [claude-code]="ohmydebn-claude-code"
   [chatgpt]="ohmydebn-chatgpt"
+  [codex]="ohmydebn-codex"
   [pi]="ohmydebn-pi"
   [vscode]="ohmydebn-code"
   [antigravity]="ohmydebn-antigravity"
@@ -80,7 +81,7 @@ set_default() {
   HOME="$SCRATCH_HOME" bash "$SET_DEFAULT_SCRIPT" "$1" >/dev/null 2>&1
 }
 
-for name in opencode claude-code chatgpt pi vscode antigravity; do
+for name in opencode claude-code chatgpt codex pi vscode antigravity; do
   if ! set_default "$name"; then
     assert_eq "accepts valid name '$name'" "accepted" "rejected"
   else

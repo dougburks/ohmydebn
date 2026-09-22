@@ -123,7 +123,7 @@ mock_bin dpkg <<'EOF'
 [[ "$1" == "-l" ]] && exit 1
 if [[ "$1" == "-s" ]]; then
   case "$2" in
-  claude-code | ohmydebn-pi-coding-agent) exit 0 ;;
+  claude-code | brave-browser | brave-origin | ohmydebn-pi-coding-agent | ohmydebn-codex-cli) exit 0 ;;
   *) exit 1 ;;
   esac
 fi
@@ -142,12 +142,28 @@ mock_bin ohmydebn-pi-remove <<'EOF'
 #!/bin/bash
 echo "ohmydebn-pi-remove $*" >>"$MOCK_CALLS"
 EOF
+for name in ohmydebn-brave-browser-remove ohmydebn-brave-origin-remove; do
+  mock_bin "$name" <<EOF
+#!/bin/bash
+echo "$name \$*" >>"\$MOCK_CALLS"
+EOF
+done
+mock_bin ohmydebn-codex-remove <<'EOF'
+#!/bin/bash
+echo "ohmydebn-codex-remove $*" >>"$MOCK_CALLS"
+EOF
 sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/pkg-remove-all-optional-patched.sh"
 PATH="$(mock_path)" bash "$MOCK_DIR/pkg-remove-all-optional-patched.sh" --skip-prompt </dev/null >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "dedicated-remove loop: installed claude-code gets removed" "$CALLS" "ohmydebn-claude-code-remove --skip-prompt"
 assert_contains "Pi special case: installed Pi gets removed" "$CALLS" "ohmydebn-pi-remove --skip-prompt"
+assert_contains "Codex special case: installed Codex gets removed" "$CALLS" "ohmydebn-codex-remove --skip-prompt"
 assert_not_contains "dedicated-remove loop: not-installed chatgpt is left alone" "$CALLS" "ohmydebn-chatgpt-remove"
+assert_contains "dedicated-remove loop: installed brave-browser (optional) gets removed" "$CALLS" "ohmydebn-brave-browser-remove --skip-prompt"
+# Brave Origin is the default browser, not an optional app - the power-user
+# flow runs this script and then ohmydebn-brave-origin-install, so removing
+# it here would only purge it to reinstall it a moment later.
+assert_not_contains "dedicated-remove loop: installed brave-origin (the default browser) is left alone" "$CALLS" "ohmydebn-brave-origin-remove"
 mock_cleanup
 
 # Scenario 6: on Kali, Firefox is Kali's default and only preinstalled

@@ -4,9 +4,9 @@
 # extension's JS into the already-running process - upgrading
 # ohmydebn-gtile on disk alone doesn't reach a session that's already
 # running until Cinnamon reloads it. This script doesn't restart Cinnamon
-# directly - install/keybinding/keybinding.sh can also decide a restart is
-# needed, for its own unrelated reason, and two independent backgrounded
-# `cinnamon --replace &` calls in the same run would race each other.
+# directly - two independent backgrounded `cinnamon --replace &` calls in
+# the same run would race each other (install/keybinding/keybinding.sh used
+# to schedule one too, before it learned to reload keybindings live).
 # Instead this sets OHMYDEBN_CINNAMON_RESTART_NEEDED, a plain shell
 # variable shared across every finalization script sourced into the same
 # process (see finalization/all.sh) - finalization/finale.sh does the one
@@ -54,6 +54,18 @@ if [[ "$1" == "get" && "$2" == "org.cinnamon" && "$3" == "enabled-extensions" ]]
 fi
 exit 0
 EOF
+  # pgrep -x cinnamon is how the real script checks for a live session to
+  # restart - mocked so the test controls it instead of depending on
+  # whatever's actually running on the machine the tests execute on.
+  mock_bin pgrep <<'EOF'
+#!/bin/bash
+mock_log "pgrep $*"
+if [[ "${MOCK_CINNAMON_RUNNING:-true}" == "true" ]]; then
+  echo "12345"
+  exit 0
+fi
+exit 1
+EOF
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/gtile-restart-patched.sh"
 }
 
@@ -74,7 +86,8 @@ EOF
 # scenario that expects none.
 run_script() {
   local output
-  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED='' bash -c "
+  output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED='' \
+    MOCK_CINNAMON_RUNNING="${MOCK_CINNAMON_RUNNING:-true}" bash -c "
     source '$MOCK_DIR/gtile-restart-patched.sh'
     echo \"GTILE_TEST_FLAG_MARKER:\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
   " 2>/dev/null)
@@ -170,6 +183,24 @@ DPKG_GTILE_VERSION="2.8.1-20260831" run_script
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "at/above min version: no out-of-date headline" "$CALLS" "out of date"
 assert_not_contains "at/above min version: no out-of-date detail" "$SCRIPT_STDOUT" "Installed:"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 8: version bumped, but no Cinnamon session is running (the
+# install or update ran from XFCE on an LCOS/Devuan base, say) -> no
+# restart flag and no "Cinnamon will restart" headline, since finale.sh
+# checks the same thing and wouldn't restart anything; the version is
+# still recorded, because the extension loads fresh at the next Cinnamon
+# login and no restart is owed for it later.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+MOCK_CINNAMON_RUNNING=false DPKG_GTILE_VERSION="2.9.0-20260901" run_script
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "no Cinnamon session: no restart flag" "" "$RESTART_FLAG"
+assert_not_contains "no Cinnamon session: no 'will restart' headline" "$CALLS" "Cinnamon will restart"
+assert_eq "no Cinnamon session: restart-version state file still written" "2.9.0-20260901" \
+  "$(cat "$SCRATCH_HOME/.local/state/ohmydebn-config/gtile-cinnamon-restart-version" 2>/dev/null)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

@@ -22,3 +22,9 @@ if ! dpkg -s "openssh-server" >/dev/null 2>&1; then
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install openssh-server
 fi
+
+# Debian's postinst starts and enables the service, but OhMyDebn's firewall
+# (inbound denied) keeps it unreachable until the user allows port 22 -
+# OhMyDebn never opens a port itself; see ohmydebn-firewall-hint.
+echo
+/usr/share/ohmydebn/bin/ohmydebn-firewall-hint 22 "SSH Server"

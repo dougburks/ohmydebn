@@ -24,7 +24,7 @@ setup_mocks() {
     ohmydebn-theme-set-colors-delete ohmydebn-theme-set-icon ohmydebn-theme-set-terminal \
     ohmydebn-theme-set-btop ohmydebn-theme-set-gedit ohmydebn-theme-set-starship \
     ohmydebn-theme-set-antigravity ohmydebn-theme-set-cava ohmydebn-theme-set-eza \
-    ohmydebn-theme-set-fastfetch ohmydebn-theme-set-opencode ohmydebn-theme-set-vscode; do
+    ohmydebn-theme-set-fastfetch ohmydebn-theme-set-logo ohmydebn-theme-set-opencode ohmydebn-theme-set-vscode; do
     mock_bin "$cmd" <<'EOF'
 #!/bin/bash
 exit 0

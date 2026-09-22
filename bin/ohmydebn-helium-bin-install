@@ -29,4 +29,10 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install helium-bin
 
   cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/
+
+  # Installed onto a system that already has a default browser: ask before
+  # taking it over (defaults to no - see ohmydebn-browser-set-default). A
+  # setting that couldn't be applied is reported there and mustn't abort
+  # the install.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask helium-bin || true
 fi

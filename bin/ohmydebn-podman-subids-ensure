@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# Makes sure the invoking user has subordinate UID and GID ranges in
+# /etc/subuid and /etc/subgid. Rootless podman needs them to map the
+# extra UIDs/GIDs an image's files are owned by (group 42 for
+# /etc/gshadow, say); without them it falls back to a single-ID mapping
+# and every pull dies unpacking a layer with "lchown ...: invalid
+# argument" plus a "no subuid ranges found for user" error above it.
+#
+# Debian's useradd only writes a range at account creation if /etc/subuid
+# already exists, and installers that create the first user early (Devuan's
+# live installer, images built in a chroot) don't guarantee that - the
+# installed system ends up with podman but no range for its user, and
+# installing podman later never backfills one. This is the backfill.
+# Idempotent: exits immediately when both ranges already exist, so every
+# podman entry point can call it unconditionally.
+
+set -euo pipefail
+
+SUBUID_FILE=/etc/subuid
+SUBGID_FILE=/etc/subgid
+# Same size Debian's login.defs (SUB_UID_COUNT) hands out at useradd time.
+RANGE_COUNT=65536
+RANGE_MIN=100000
+
+user="$(id -un)"
+
+has_range() {
+  grep -q "^${user}:" "$1" 2>/dev/null
+}
+
+need_uid=false
+need_gid=false
+has_range "$SUBUID_FILE" || need_uid=true
+has_range "$SUBGID_FILE" || need_gid=true
+
+if [[ "$need_uid" == false && "$need_gid" == false ]]; then
+  exit 0
+fi
+
+# First RANGE_COUNT-wide block at or above RANGE_MIN that sits past every
+# range still owned by a real account in either file - both files are
+# scanned together so the one start chosen is free in both, matching the
+# Debian convention of identical subuid/subgid ranges per user. Lines for
+# accounts that no longer exist (a live installer's default user copied
+# into the installed system alongside the new one, as seen on Devuan)
+# are skipped: reusing their range is harmless, and honouring them would
+# push the new user up a block for nothing.
+next_free_start() {
+  local start=$RANGE_MIN owner first count end
+  while IFS=: read -r owner first count; do
+    [[ "$first" =~ ^[0-9]+$ && "$count" =~ ^[0-9]+$ ]] || continue
+    # The owner field can be a name or a numeric UID; getent takes either.
+    getent passwd "$owner" >/dev/null 2>&1 || continue
+    end=$((first + count))
+    ((end > start)) && start=$end
+  done < <(cat "$SUBUID_FILE" "$SUBGID_FILE" 2>/dev/null)
+  echo "$start"
+}
+
+start=$(next_free_start)
+end=$((start + RANGE_COUNT - 1))
+
+usermod_args=()
+missing=()
+if [[ "$need_uid" == true ]]; then
+  usermod_args+=(--add-subuids "$start-$end")
+  missing+=("$SUBUID_FILE")
+fi
+if [[ "$need_gid" == true ]]; then
+  usermod_args+=(--add-subgids "$start-$end")
+  missing+=("$SUBGID_FILE")
+fi
+
+echo
+echo "Rootless podman needs subordinate UID/GID ranges for $user, but"
+echo "${missing[*]} has none. Adding $start-$end (sudo may prompt for your password)."
+echo
+
+# usermod refuses --add-subuids/--add-subgids outright when the file it
+# would write to doesn't exist, rather than creating it.
+for f in "$SUBUID_FILE" "$SUBGID_FILE"; do
+  [[ -e "$f" ]] || sudo touch "$f"
+done
+
+sudo /usr/sbin/usermod "${usermod_args[@]}" "$user"
+
+# Anything podman already stored under the old single-ID mapping has to be
+# re-chowned for the new one, otherwise the next run trips over it. A no-op
+# when there's nothing stored yet.
+if command -v podman >/dev/null 2>&1; then
+  podman system migrate
+fi

@@ -19,7 +19,6 @@ PACKAGES=(
   bat
   btop
   cava
-  chromium
   fastfetch
   gedit
   keepassxc
@@ -50,6 +49,17 @@ PACKAGES=(
   # this isn't installed yet - i.e. exactly once, on the update that
   # first brings it in.
   gir1.2-vte-2.91
+
+  # Wnck introspection data, for ohmydebn-menu-picker's window-switcher
+  # mode (Ctrl+Alt+Tab) - it imports Wnck at startup, so without this the
+  # picker fails outright and every menu, plus ohmydebn-update, dies with
+  # "Namespace Wnck not available". Cinnamon itself only depends on the
+  # libwnck-3-0 library, not this typelib; the Debian and Mint Cinnamon
+  # images happen to carry it via orca (a Recommends of
+  # cinnamon-desktop-environment), which is why it looked pre-installed
+  # everywhere until a --no-install-recommends install on a non-Cinnamon
+  # base (LCOS/Devuan XFCE) surfaced the gap.
+  gir1.2-wnck-3.0
 
   # Dev toolchain
   gcc
@@ -97,17 +107,8 @@ PACKAGES=(
   starship
 )
 
-# Ubuntu carries no "chromium" apt package at all (unlike Debian/Kali/Mint) -
-# it only ships "chromium-browser", a transitional package whose postinst
-# installs the real thing as a strictly-confined snap. install/config/
-# chromium.sh accounts for the snap's different profile layout when seeding
-# the bundled extension. Swapped in here, after the array literal above,
-# rather than substituted into the array itself - tests/lib/extract-
-# packages.sh parses PACKAGES=( ... ) as plain text (no shell evaluation),
-# so a variable reference there would read as a literal, nonexistent
-# package name instead of "chromium".
-if [ "$ID" = "ubuntu" ]; then
-  PACKAGES=("${PACKAGES[@]/chromium/chromium-browser}")
-fi
-
+# The web browser isn't in this list: Brave Origin comes from Brave's own
+# repository, which has to be configured (and refreshed) before it can be
+# installed, so install/packaging/browser.sh handles it - on new installs
+# only - after this batch.
 /usr/share/ohmydebn/bin/ohmydebn-pkg-install-optional "${PACKAGES[@]}"

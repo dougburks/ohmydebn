@@ -1,5 +1,22 @@
 #!/bin/bash
 
+# The static splash the AI/CLI launchers print before an on-demand
+# install. Tinted with the current theme's accent (a truecolor escape
+# around toilet's output) so it matches the terminal it appears in; with
+# no theme, the accent falls back to ttfx's stock blue, same as
+# ohmydebn-logo.
+
+ACCENT_RGB=""
+while IFS='=' read -r key value; do
+  [ "$key" = "accent_rgb" ] && ACCENT_RGB="$value"
+done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
+
 clear
-toilet -f mono12 "OhMyDebn"
+if [ -n "$ACCENT_RGB" ]; then
+  printf '\e[38;2;%sm' "$ACCENT_RGB"
+  toilet -f mono12 "OhMyDebn"
+  printf '\e[0m'
+else
+  toilet -f mono12 "OhMyDebn"
+fi
 echo

@@ -61,10 +61,5 @@ else
     NEW_BACKGROUND="${BACKGROUNDS[$NEXT_INDEX]}"
   fi
 
-  # Set new background symlink
-  ln -nsf "$NEW_BACKGROUND" "$CURRENT_BACKGROUND_LINK"
-
-  # cinnamon doesn't automatically update when the symlink changes
-  # so we have to force cinnamon to use the symlink destination
-  gsettings set org.cinnamon.desktop.background picture-uri "file://$(readlink -f "$HOME"/.config/ohmydebn/current/background)"
+  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
 fi

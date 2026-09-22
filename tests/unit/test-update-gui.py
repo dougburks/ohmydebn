@@ -129,18 +129,19 @@ check_eq(
     ],
 )
 
-# The legacy "Press Enter" confirmation of a pre---yes ohmydebn-update
-# (which the GUI answers itself - see LEGACY_ENTER_PROMPT's comment)
-# emits an enter-prompt event - but ONLY that exact line. install.sh's
-# root/unsupported-distro warnings ("Ctrl-c", lowercase) ask for consent
-# the GUI never showed, and ohmydebn-update-pause's "Press Enter to close
-# this window" would re-fire pointlessly - neither may match.
+# Nothing is auto-answered any more (see the CONSENT_PROMPT_MARKER
+# comment in the GUI): the stock "Press Enter to continue or Ctrl-C to
+# cancel." line - ohmydebn-update's own, and the identical prompt of some
+# fifty ohmydebn-*-install/-remove scripts - must emit NO event, and so
+# must ohmydebn-update-pause's "Press Enter to close this window".
 w = gui.StreamWatcher()
 check_eq(
-    "legacy Press Enter prompt emits enter-prompt",
+    "stock capital-C Press Enter prompt emits nothing (no auto-answer)",
     w.feed("Press Enter to continue or Ctrl-C to cancel.\n"),
-    [("enter-prompt",)],
+    [],
 )
+check("the retired auto-answer marker is gone", not hasattr(gui, "LEGACY_ENTER_PROMPT"))
+check("the retired auto-answer handler is gone", not hasattr(gui.UpdateWindow, "_on_enter_prompt"))
 w = gui.StreamWatcher()
 check_eq(
     "update-pause's close-window prompt does NOT match",
@@ -149,10 +150,9 @@ check_eq(
 )
 
 # install.sh's own consent prompts (lowercase "Ctrl-c") emit a
-# consent-prompt event - surfaced to the user, never auto-answered - and
-# must NOT read as the auto-answered legacy enter-prompt. Both real
-# install.sh prompt shapes are covered: the warning form ("Press Enter if
-# you are sure...") and the first-install welcome form.
+# consent-prompt event - surfaced to the user, never auto-answered. Both
+# real install.sh prompt shapes are covered: the warning form ("Press
+# Enter if you are sure...") and the first-install welcome form.
 w = gui.StreamWatcher()
 check_eq(
     "install.sh root/distro warning emits consent-prompt",
@@ -161,15 +161,15 @@ check_eq(
 )
 w = gui.StreamWatcher()
 check_eq(
-    "install.sh welcome prompt emits consent-prompt, not enter-prompt",
+    "install.sh welcome prompt emits consent-prompt",
     w.feed("Press Enter to continue or Ctrl-c to cancel.\n"),
     [("consent-prompt",)],
 )
 w = gui.StreamWatcher()
 check_eq(
-    "legacy capital-C prompt still emits enter-prompt, not consent-prompt",
+    "capital-C prompt does not read as a consent prompt either",
     w.feed("Press Enter to continue or Ctrl-C to cancel.\n"),
-    [("enter-prompt",)],
+    [],
 )
 
 # is_fence: the real 68-char fence and a short 10-char one match; an
@@ -218,5 +218,183 @@ check_eq("guarded: exception becomes the declared default", boom(), "fallback")
 check_eq("guarded: wrapped function actually ran", len(calls), 1)
 
 print()
+
+# --- abort escalation plan (see ABORT_ESCALATION's comment) ---
+# The child's process group includes apt and dpkg. SIGINT (apt's graceful
+# interrupt) first, SIGTERM after a grace period, and NEVER SIGKILL - a
+# killed dpkg mid-configure is the inconsistent state the abort dialog
+# warns about. Pinned here so a future "make abort faster" change can't
+# quietly reintroduce it.
+import signal as _signal  # noqa: E402
+
+plan = list(gui.ABORT_ESCALATION)
+check_eq("abort plan: opens with SIGINT immediately", plan[0], (0, _signal.SIGINT))
+check_eq("abort plan: escalates to SIGTERM after a grace period", plan[1][1], _signal.SIGTERM)
+check("abort plan: grace period is positive", plan[1][0] > 0)
+check("abort plan: never SIGKILLs apt/dpkg", all(sig != _signal.SIGKILL for _d, sig in plan))
+check("abort plan: delays are ascending", all(a[0] < b[0] for a, b in zip(plan, plan[1:])))
+check("abort plan: patience wait comes after the last signal", gui.ABORT_PATIENCE_MS > plan[-1][0])
+
+
+# --- single instance: the lock and the "present yourself" poke ---
+# Exercised against a real second process, since that's the whole point:
+# the lock must be held across processes, a stale lock file with no
+# flock behind it must be taken over, and the holder must actually
+# receive the SIGUSR1 that asks it to present its window.
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+import signal as _sig  # noqa: E402
+
+GUI_PATH = os.path.join(BIN, "ohmydebn-update-gui")
+with tempfile.TemporaryDirectory() as tmp:
+    lock_path = os.path.join(tmp, "instance.lock")
+
+    fd, holder = gui.acquire_instance_lock(lock_path)
+    check("lock: first acquire succeeds", fd is not None and holder is None)
+    with open(lock_path, encoding="utf-8") as f:
+        check_eq("lock: holder pid recorded", f.read().strip(), str(os.getpid()))
+
+    # A second PROCESS trying the same lock must be refused and told our pid.
+    # Same SourceFileLoader trick as load() above - the script has no .py
+    # extension, so a spec-based import finds no loader for it.
+    probe = (
+        "from importlib.machinery import SourceFileLoader\n"
+        f"gui = SourceFileLoader('gui', {GUI_PATH!r}).load_module()\n"
+        f"fd, holder = gui.acquire_instance_lock({lock_path!r})\n"
+        "print('acquired' if fd is not None else f'held-by {holder}')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=False)
+    check_eq("lock: a second process is refused and learns the holder's pid",
+             result.stdout.strip(), f"held-by {os.getpid()}")
+
+    # Same-process re-acquire is also refused (flock is per open file description).
+    fd2, holder2 = gui.acquire_instance_lock(lock_path)
+    check("lock: re-acquire while held is refused", fd2 is None and holder2 == os.getpid())
+
+    # Releasing (closing the fd) frees it; a stale file with a dead pid and
+    # no flock is simply taken over.
+    os.close(fd)
+    with open(lock_path, "w", encoding="utf-8") as f:
+        f.write("999999999\n")
+    fd3, holder3 = gui.acquire_instance_lock(lock_path)
+    check("lock: stale lock file (no flock, dead pid) is taken over", fd3 is not None and holder3 is None)
+    os.close(fd3)
+
+    # present_existing_instance: the holder really gets SIGUSR1. A helper
+    # process installs a handler that exits 42 on SIGUSR1, and we poke it.
+    waiter = subprocess.Popen(
+        [sys.executable, "-c",
+         "import signal, sys, time\n"
+         "signal.signal(signal.SIGUSR1, lambda *_: sys.exit(42))\n"
+         "print('ready', flush=True)\n"
+         "time.sleep(10)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    waiter.stdout.readline()  # wait for 'ready' so the handler is installed
+    check("present: signal delivered to a live holder", gui.present_existing_instance(waiter.pid))
+    check_eq("present: the holder received SIGUSR1", waiter.wait(timeout=5), 42)
+    check("present: no pid means nothing to poke", not gui.present_existing_instance(None))
+    check("present: a dead pid is reported as not delivered", not gui.present_existing_instance(999999999))
+
+# instance_lock_path honors XDG_RUNTIME_DIR and falls back to /tmp.
+saved = os.environ.get("XDG_RUNTIME_DIR")
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["XDG_RUNTIME_DIR"] = tmp
+        check_eq("lock path: under XDG_RUNTIME_DIR, per uid",
+                 gui.instance_lock_path(), os.path.join(tmp, f"ohmydebn-update-gui-{os.getuid()}.lock"))
+    os.environ["XDG_RUNTIME_DIR"] = "/definitely/not/a/dir"
+    check_eq("lock path: falls back to /tmp when the runtime dir is unusable",
+             gui.instance_lock_path(), f"/tmp/ohmydebn-update-gui-{os.getuid()}.lock")
+finally:
+    if saved is None:
+        os.environ.pop("XDG_RUNTIME_DIR", None)
+    else:
+        os.environ["XDG_RUNTIME_DIR"] = saved
+
+
+# --- pre-flight release check: parsing, ordering, wording, and the fetch ---
+check_eq("parse_latest_tag: strips the v prefix", gui.parse_latest_tag('{"tag_name": "v4.8.0"}'), "4.8.0")
+check_eq("parse_latest_tag: bare tag passes through", gui.parse_latest_tag('{"tag_name": "4.8.0"}'), "4.8.0")
+check("parse_latest_tag: missing tag_name is None", gui.parse_latest_tag('{"name": "x"}') is None)
+check("parse_latest_tag: empty tag is None", gui.parse_latest_tag('{"tag_name": "  "}') is None)
+check("parse_latest_tag: invalid JSON is None", gui.parse_latest_tag("<html>rate limited</html>") is None)
+check("parse_latest_tag: non-object JSON is None", gui.parse_latest_tag("[1, 2]") is None)
+
+check("version_key: 4.8.0 > 4.7.0", gui.version_key("4.8.0") > gui.version_key("4.7.0"))
+check("version_key: 4.10.0 > 4.9.0 (numeric, not lexical)", gui.version_key("4.10.0") > gui.version_key("4.9.0"))
+check("version_key: equal versions compare equal", gui.version_key("4.8.0") == gui.version_key("4.8.0"))
+check("version_key: a -rc1 suffix sorts after the bare version (as sort -V does)",
+      gui.version_key("4.8.0-rc1") > gui.version_key("4.8.0"))
+check("version_key: 5.0.0 > 4.99.99", gui.version_key("5.0.0") > gui.version_key("4.99.99"))
+
+check_eq("preflight: newer release -> available",
+         gui.preflight_message("4.7.0", "4.8.0"), ("OhMyDebn 4.8.0 is available.", "available"))
+check_eq("preflight: same release -> current, and says OS packages still update",
+         gui.preflight_message("4.8.0", "4.8.0")[1], "current")
+check("preflight: same release wording mentions OS packages",
+      "OS packages" in gui.preflight_message("4.8.0", "4.8.0")[0])
+check_eq("preflight: dev build ahead of the release -> ahead",
+         gui.preflight_message("4.9.0", "4.8.0")[1], "ahead")
+check_eq("preflight: fetch failed -> unknown, update still offered",
+         gui.preflight_message("4.8.0", None)[1], "unknown")
+check_eq("preflight: unknown current version -> unknown",
+         gui.preflight_message("unknown", "4.8.0")[1], "unknown")
+
+# fetch_latest_release against a local HTTP server: a good answer, a
+# non-JSON answer (GitHub's rate-limit HTML), and a refused connection.
+import http.server  # noqa: E402
+import socket  # noqa: E402
+import threading  # noqa: E402
+
+
+class _Releases(http.server.BaseHTTPRequestHandler):
+    payload = b'{"tag_name": "v4.8.0"}'
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(self.payload)
+
+    def log_message(self, *_args):
+        pass
+
+
+server = http.server.HTTPServer(("127.0.0.1", 0), _Releases)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+base = f"http://127.0.0.1:{server.server_port}"
+check_eq("fetch: parses a good release answer", gui.fetch_latest_release(base + "/latest", timeout=3), "4.8.0")
+_Releases.payload = b"<html>API rate limit exceeded</html>"
+check("fetch: a non-JSON answer is None", gui.fetch_latest_release(base + "/latest", timeout=3) is None)
+server.shutdown()
+server.server_close()
+with socket.socket() as probe_sock:
+    probe_sock.bind(("127.0.0.1", 0))
+    closed_port = probe_sock.getsockname()[1]
+check("fetch: a refused connection is None, not an exception",
+      gui.fetch_latest_release(f"http://127.0.0.1:{closed_port}/latest", timeout=3) is None)
+
+
+# --- success status: a reboot-notice stage changes the final line ---
+check_eq("success_message: plain run says up to date",
+         gui.success_message(["Installing any available package updates", "OhMyDebn update complete - version: 4.8.0"]),
+         "Update complete - you're up to date.")
+check_eq("success_message: a reboot-notice stage asks for a reboot",
+         gui.success_message(["OhMyDebn update complete - version: 4.8.0", gui.REBOOT_HEADLINE]),
+         "Update complete - reboot when convenient to finish it.")
+check_eq("success_message: no stages at all still reads as up to date", gui.success_message([]),
+         "Update complete - you're up to date.")
+
+
+# --- the real ohmydebn-headline output parses as exactly one stage, titled by
+# the title line - pinned so a future change to the banner (a timestamp line
+# inside it was tried once) can't break the GUI's stage parsing unnoticed ---
+import subprocess as _sp  # noqa: E402
+real_banner = _sp.run([os.path.join(BIN, "ohmydebn-headline"), "Configuring Alacritty"],
+                      capture_output=True, text=True, check=False, env={k: v for k, v in os.environ.items() if k != "OHMYDEBN_RUN_START"}).stdout
+w = gui.StreamWatcher()
+check_eq("real banner: one stage event, the bare title", w.feed(real_banner), [("stage", "Configuring Alacritty")])
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

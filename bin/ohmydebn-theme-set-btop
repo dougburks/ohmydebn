@@ -12,37 +12,40 @@
 # process - confirmed as the real cause of a reported bug where btop's
 # window (run as `alacritty -e btop`, no --hold, so the window closes the
 # instant its child dies) vanished the moment a theme was applied, on a
-# machine running btop 1.3.0. Version-gating below means an old btop just
-# keeps its current colors until the user restarts it by hand, rather
-# than being killed out from under them. A version that fails to parse
+# machine running btop 1.3.0. Version-gating below keeps the broad signal
+# away from any btop the user opened by hand in an ordinary terminal - an
+# old one of those would simply die. A version that fails to parse
 # (unexpected `--version` output, or no btop installed) is treated the
-# same as "too old" - skipping the signal is always the safe default here,
-# never the dangerous one.
+# same as "too old" - skipping the broad signal is always the safe
+# default here, never the dangerous one.
 BTOP_VERSION=$(/usr/bin/btop --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 if [ -n "$BTOP_VERSION" ] && printf '%s\n' "1.3.1" "$BTOP_VERSION" | sort -C -V 2>/dev/null; then
-  pkill -SIGUSR2 btop 2>/dev/null || true
+  # -x matches the process name exactly. Without it pkill's pattern is an
+  # unanchored regex, and "btop" also matches the hotkey window's
+  # ohmydebn-btop-run wrapper (its 15-char process name is
+  # "ohmydebn-btop-r"). bash has no SIGUSR2 handler, so that wrapper was
+  # killed by the signal, alacritty closed with it, and the window vanished
+  # - exactly the disappearing-window bug, now on a btop that hot-reloads.
+  pkill -x -SIGUSR2 btop 2>/dev/null || true
 else
   # Can't confirm this btop will hot-reload cleanly (too old, or the
-  # version couldn't be parsed at all) - falling back to killing and
-  # relaunching the hotkey's own btop window (Super+T / ohmydebn-btop-gui)
-  # instead of leaving it showing stale colors until the user restarts it
-  # by hand. Matched by the wrapper's own cmdline, not a bare "btop" name
-  # match, so a btop the user opened by hand in an ordinary terminal is
-  # left alone. Killing the wrapper alone wouldn't close the window - bash
-  # doesn't forward signals to a backgrounded child - so its alacritty
-  # child is the actual kill target, same as the original bug (killing
-  # the window's process closes the window, since it runs with no
-  # --hold), just deliberate this time. gTile-OhMyDebn's own
-  # window-created auto-tile handler re-tiles the relaunched window
-  # itself (matching wmClass "Alacritty" + title "btop"), same as any
-  # other fresh btop launch - no tiling logic needed here.
-  while IFS= read -r WRAPPER_PID; do
-    [ -z "$WRAPPER_PID" ] && continue
-    ALACRITTY_PID=$(pgrep -P "$WRAPPER_PID" -x alacritty | head -1)
-    if [ -n "$ALACRITTY_PID" ]; then
-      kill "$ALACRITTY_PID" 2>/dev/null || true
-      /usr/share/ohmydebn/bin/ohmydebn-btop-gui >/dev/null 2>&1 &
-      disown
-    fi
-  done < <(pgrep -f "ohmydebn-terminal --title btop -e /usr/bin/btop")
+  # version couldn't be parsed at all). The hotkey's own btop window
+  # (Super+T / ohmydebn-btop-gui) runs btop under ohmydebn-btop-run, a
+  # loop that restarts btop in the same terminal window whenever it is
+  # terminated by SIGUSR2 specifically - so for that window alone, the
+  # signal is still the right thing to send: an old btop dies and is back
+  # a moment later in the new colors, in the same window, with its
+  # position, size, workspace, monitor and tiling untouched (the previous
+  # kill-the-window-and-relaunch fallback lost all of those, since gTile
+  # re-placed the fresh window at the rule's default slot on whichever
+  # monitor the pointer was on). Only btop processes that are direct
+  # children of a running ohmydebn-btop-run get the signal - a btop the
+  # user opened by hand has no loop around it and is left alone.
+  while IFS= read -r RUN_PID; do
+    [ -z "$RUN_PID" ] && continue
+    while IFS= read -r BTOP_PID; do
+      [ -z "$BTOP_PID" ] && continue
+      kill -SIGUSR2 "$BTOP_PID" 2>/dev/null || true
+    done < <(pgrep -P "$RUN_PID" -x btop)
+  done < <(pgrep -f "ohmydebn-btop-run")
 fi

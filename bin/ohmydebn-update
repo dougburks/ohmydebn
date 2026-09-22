@@ -13,6 +13,10 @@ set -e
 # (every normal update) install.sh prompts for nothing anyway; where its
 # warnings do fire under the GUI, ohmydebn-update-gui detects them and
 # reveals its terminal so they can be answered for real.
+# See install.sh's own OHMYDEBN_RUN_START comment - set here first so the
+# self-update step below is timed too (install.sh keeps this value).
+export OHMYDEBN_RUN_START="${OHMYDEBN_RUN_START:-$EPOCHSECONDS}"
+
 ASSUME_YES=false
 for arg in "$@"; do
   case $arg in
@@ -22,11 +26,89 @@ for arg in "$@"; do
   esac
 done
 
+# Log every run to a file. A failed update is the commonest support
+# case, and until now its output lived only in terminal scrollback or the
+# GUI's details pane - gone with the window. The run re-execs itself under
+# util-linux's `script`, which gives the child a real pty (so apt keeps
+# its progress output and the GUI's stream parser sees exactly what it
+# saw before) while copying every byte to the log, and returns the
+# child's own exit status (-e). sudo disables echo before reading a
+# password, so passwords never reach the log. Logging is best-effort:
+# if `script` is missing or the directory can't be made, the update runs
+# unlogged rather than not at all. OHMYDEBN_UPDATE_LOG marks the inner,
+# already-logged run (and tells later steps where the log is);
+# OHMYDEBN_UPDATE_NO_LOG=1 opts out. The newest KEEP_LOGS runs are kept;
+# update-latest.log always points at the current one. The log dir sits
+# beside ~/.local/state/ohmydebn-config (~/.local/state/ohmydebn itself
+# is the "installation complete" marker file, not a directory).
+LOG_DIR="$HOME/.local/state/ohmydebn-logs"
+KEEP_LOGS=10
+if [ -z "${OHMYDEBN_UPDATE_LOG:-}" ] && [ "${OHMYDEBN_UPDATE_NO_LOG:-}" != "1" ] &&
+  command -v script >/dev/null 2>&1 && mkdir -p "$LOG_DIR" 2>/dev/null; then
+  OHMYDEBN_UPDATE_LOG="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
+  # Rotate before creating: drop everything past the newest KEEP_LOGS-1,
+  # so with this run there are at most KEEP_LOGS. The [0-9] keeps the
+  # update-latest.log symlink out of the candidate list.
+  ls -1t "$LOG_DIR"/update-[0-9]*.log 2>/dev/null | tail -n +"$KEEP_LOGS" | xargs -r rm -f --
+  ln -sfn "$OHMYDEBN_UPDATE_LOG" "$LOG_DIR/update-latest.log"
+  export OHMYDEBN_UPDATE_LOG
+  WRAPPED_CMD=$(printf '%q ' bash "$0" "$@")
+  exec script -qefc "$WRAPPED_CMD" "$OHMYDEBN_UPDATE_LOG"
+fi
+
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   DIR=/usr/share/ohmydebn
 else
   DIR=~/.local/share/ohmydebn
 fi
+
+# One update at a time per user. The menu, Ctrl+Super+U, the update
+# notification and a terminal can all start this, and apt's own lock only
+# serializes the package layer - two config layers interleaving is
+# exactly the inconsistent state the warning below describes. Per user
+# rather than system-wide: the config layer is per-user, and apt already
+# serializes the shared part.
+#
+# Held by flock(1) in a parent process of its own, NOT on a shell
+# descriptor (`exec 9>>` + `flock -n 9`, as this used to be). A shell
+# descriptor is inherited by every child, and two children of an update
+# outlive it: the Cinnamon that finalization/finale.sh restarts and the
+# theme carousel cache warmer. Both kept the lock after the update had
+# finished - Cinnamon until logout - and the next ohmydebn-update was
+# refused with a "Started by process N" naming a pid that no longer
+# existed. `flock -o` closes the lock descriptor before running us, so
+# nothing this run or install.sh spawns can inherit it; the flock parent
+# alone holds it, for exactly as long as the run lasts. Taken here, inside
+# the logging wrapper above, so a refusal lands in the log too and the
+# wrapper's own re-exec never contends with itself. -E 213 tells a refusal
+# apart from any exit status of the run itself.
+LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+[ -d "$LOCK_DIR" ] || LOCK_DIR=/tmp
+LOCK_FILE="$LOCK_DIR/ohmydebn-update-$(id -u).lock"
+if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
+  if OHMYDEBN_UPDATE_LOCKED=1 flock -n -o -E 213 "$LOCK_FILE" bash "$0" "$@"; then
+    exit 0
+  else
+    RC=$?
+  fi
+  [ "$RC" -eq 213 ] || exit "$RC"
+  $DIR/bin/ohmydebn-headline "Another OhMyDebn update is already running"
+  HOLDER=$(cat "$LOCK_FILE" 2>/dev/null || echo '?')
+  if [[ "$HOLDER" =~ ^[0-9]+$ ]] && ! kill -0 "$HOLDER" 2>/dev/null; then
+    # A machine still on the old descriptor-based lock got here with a
+    # leftover child of a finished update holding it.
+    echo "It was started by process $HOLDER, which has already exited, so the lock is held by a"
+    echo "process that update left running - an older ohmydebn-update let its background children,"
+    echo "usually the Cinnamon it restarted, inherit the lock. Find the holder with:"
+    echo "  fuser -v $LOCK_FILE"
+    echo "If that is cinnamon, press Ctrl + Alt + Escape to restart it - Cinnamon's self-restart closes"
+    echo "inherited descriptors, which releases the lock (confirmed). Logging out releases it too."
+  else
+    echo "Started by process $HOLDER. Let it finish before starting another."
+  fi
+  exit 1
+fi
+echo "$$" >"$LOCK_FILE"
 
 VERSION=$($DIR/bin/ohmydebn-version)
 
@@ -50,13 +132,63 @@ EOF
   read -r
 fi
 
+# Announced after the confirmation, not before it, so the prompt text is
+# the last thing on screen while waiting for Enter.
+if [ -n "${OHMYDEBN_UPDATE_LOG:-}" ]; then
+  echo
+  echo "Logging this update to:"
+  echo "$OHMYDEBN_UPDATE_LOG"
+fi
+
 # Update time
 sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
-# Update the ohmydebn package first to get the latest code
+# Update the ohmydebn package first to get the latest code. Both steps
+# are checked explicitly: under set -e a failing first member of an
+# `a && b` list doesn't stop the script, so a failed refresh used to skip
+# the self-update silently and carry on running the OLD install.sh as if
+# nothing had happened. And `apt update` itself exits 0 even when a
+# source is unreachable (it only warns), so its output is inspected: the
+# one source this step actually needs is OhMyDebn's own
+# (packages.ohmydebn.org) - if THAT failed to refresh, or apt itself
+# failed, the update stops before changing anything. Any OTHER source
+# that failed (a third-party repo that's down or gone) is named in a
+# warning and the update continues, exactly as apt itself does; a
+# strict any-source-fails mode was tried first and would have let one
+# dead vendor repo block every OhMyDebn update. LC_ALL=C so apt's
+# "Err:"/"Failed to fetch" lines are matchable in any locale.
+OHMYDEBN_REPO_HOST="packages.ohmydebn.org"
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
-  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install ohmydebn
+  APT_UPDATE_OUT=$(mktemp)
+  # apt prints "WARNING: apt does not have a stable CLI interface" whenever
+  # its stdout isn't a terminal, and the tee below makes it a pipe.
+  # Disable-Script-Warning is apt's own switch for scripts that accept
+  # that; the only output parsed here is the Err:/W: Failed to fetch
+  # lines, which apt-get prints identically, so nothing rests on the
+  # unstable part. Kept as `apt` (not apt-get) for its closing "N packages
+  # can be upgraded" summary, which users read.
+  sudo /usr/bin/env LC_ALL=C /usr/bin/apt update -o Apt::Cmd::Disable-Script-Warning=true 2>&1 | tee "$APT_UPDATE_OUT"
+  APT_UPDATE_STATUS=${PIPESTATUS[0]}
+  FAILED_SOURCES=$(grep -E '^(Err:|W: Failed to fetch )' "$APT_UPDATE_OUT" | grep -oE 'https?://[^ ]+' | sort -u || true)
+  rm -f "$APT_UPDATE_OUT"
+  if [ "$APT_UPDATE_STATUS" -ne 0 ] || grep -q "$OHMYDEBN_REPO_HOST" <<<"$FAILED_SOURCES"; then
+    $DIR/bin/ohmydebn-headline "Could not refresh the OhMyDebn package repository - update stopped"
+    echo "Nothing has been changed. Check your Internet connection and the apt output"
+    echo "above, then run ohmydebn-update again."
+    exit 1
+  fi
+  if [ -n "$FAILED_SOURCES" ]; then
+    $DIR/bin/ohmydebn-headline "Some package repositories could not be refreshed - continuing"
+    echo "These sources failed and were skipped (their packages won't update this run):"
+    printf '  %s\n' $FAILED_SOURCES
+    echo "If one of them is no longer needed, remove it from /etc/apt/sources.list.d/."
+  fi
+  if ! sudo /usr/bin/apt -y install ohmydebn; then
+    $DIR/bin/ohmydebn-headline "Could not install the latest ohmydebn package - update stopped"
+    echo "See the apt output above, then run ohmydebn-update again."
+    exit 1
+  fi
 fi
 
 bash $DIR/install.sh

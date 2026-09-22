@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# ohmydebn-btop-run: Run btop inside the Super+T hotkey window
+# (ohmydebn-btop-gui), restarting it in place when a theme change
+# terminates it.
+#
+# ohmydebn-theme-set-btop sends btop SIGUSR2 to hot-reload its theme. That
+# handler only exists on btop >= 1.3.1 - on anything older (Ubuntu 24.04 /
+# Linux Mint 22 ship 1.3.0) SIGUSR2 has no handler and falls back to its
+# POSIX default action, terminating btop. Running btop directly under
+# `alacritty -e` (no --hold) means the window closes the instant that
+# happens. The previous workaround killed and relaunched the window, which
+# lost anything the user had done to it: a manual move or resize, the
+# workspace it was on, the monitor it was on (gTile's window-created
+# auto-tile re-places a fresh window on whichever monitor the pointer is
+# on, in the rule's default grid slot).
+#
+# This loop keeps the same terminal window alive instead: when btop dies
+# from SIGUSR2 specifically, run it again right here, in the same X window,
+# so position/size/workspace/monitor/tiling are all untouched and the user
+# sees one redraw in the new colors. btop re-initializes the terminal
+# (raw mode, alternate screen, hidden cursor) on start, so the abrupt death
+# of the previous instance leaves nothing to clean up. Every other exit -
+# `q`, Escape, Ctrl+C, the window's close button, a crash - exits the loop
+# with btop's own status so the window closes exactly as it always has.
+# Nothing else on the system sends btop SIGUSR2, so this can never keep a
+# window open that the user meant to close. On a btop that does hot-reload,
+# the signal never terminates it and this loop simply never iterates.
+
+# 128 + signal number is how bash reports a child killed by a signal.
+# Looked up rather than hardcoded as 140 so it can't silently drift on an
+# architecture with a different SIGUSR2 number.
+SIGUSR2_STATUS=$((128 + $(kill -l USR2)))
+
+while true; do
+  /usr/bin/btop "$@"
+  STATUS=$?
+  [ "$STATUS" -eq "$SIGUSR2_STATUS" ] || exit "$STATUS"
+done

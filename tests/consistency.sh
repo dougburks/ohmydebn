@@ -189,8 +189,13 @@ for f in "$REPO_ROOT"/install/config/*.sh; do
   name=$(grep -m1 -oP '(?<=dpkg -s ")[^"]+' "$f" || true)
   [[ -z "$name" ]] && continue
   CHECKED=$((CHECKED + 1))
-  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name"; then
-    echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh"
+  # A config script for an optional package (chromium.sh, now that Brave
+  # Origin is the default browser) is guarded on a name no install list
+  # carries; its dedicated bin/ohmydebn-<package>-install script vouches
+  # for the name instead.
+  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name" &&
+    [[ ! -x "$REPO_ROOT/bin/ohmydebn-$name-install" ]]; then
+    echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh, and has no bin/ohmydebn-$name-install"
     FAIL=$((FAIL + 1))
   fi
 done
@@ -660,6 +665,7 @@ declare -A AI_ARM_TO_DEFAULT_NAME=(
   [OpenCode]=opencode
   [Claude]=claude-code
   [ChatGPT]=chatgpt
+  [Codex]=codex
   [Pi]=pi
   [Antigravity]=antigravity
   [VSCode]=vscode
@@ -1032,8 +1038,9 @@ PIN_FILE_OWNERS=(
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
   "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
   "ohmydebn-tailscale-install:ohmydebn-tailscale-remove:tailscale.pref"
-  "ohmydebn-brave-browser-install:ohmydebn-brave-browser-remove:brave-browser-release.pref"
-  "ohmydebn-brave-origin-install:ohmydebn-brave-origin-remove:brave-browser-release.pref"
+  # Both Brave variants share one repository, set up and torn down by the
+  # same helper - so writer and cleaner are the one script.
+  "ohmydebn-brave-repo:ohmydebn-brave-repo:brave-browser-release.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
   "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
@@ -1139,11 +1146,13 @@ TITLE_OWNERS=(
   "ohmydebn-claude-code:Claude Code"
   "ohmydebn-opencode:OpenCode"
   "ohmydebn-pi:Pi"
+  "ohmydebn-codex:Codex"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
   "ohmydebn-logo-gui:OhMyDebn Logo"
   "ohmydebn-btop-gui:btop"
   "ohmydebn-update-gui:OhMyDebn Update"
+  "ohmydebn-doctor-gui:OhMyDebn Doctor"
   "ohmydebn-neovim:nvim"
   "ohmydebn-cava:cava"
 )
@@ -1190,6 +1199,23 @@ for HELPER in ohmydebn-update ohmydebn-update-pause ohmydebn-terminal; do
     FAIL=$((FAIL + 1))
   fi
 done
+# The GUI recognizes install.sh's consent prompts (unsupported distro,
+# root, first-install welcome) by their lowercase "Ctrl-c to cancel"
+# wording, revealing its terminal so the user can answer them - see
+# CONSENT_PROMPT_MARKER in bin/ohmydebn-update-gui. The rest of the repo
+# spells the same prompt "Ctrl-C"; if install.sh's were ever "fixed" to
+# match, the GUI would stop surfacing them and an update under the GUI
+# would silently sit on an invisible prompt. Pin both sides.
+CONSENT_MARKER=$(grep -oP '^CONSENT_PROMPT_MARKER = "\K[^"]+' "$REPO_ROOT/bin/ohmydebn-update-gui")
+if [[ -z "$CONSENT_MARKER" ]]; then
+  echo "  FAIL - bin/ohmydebn-update-gui no longer defines CONSENT_PROMPT_MARKER"
+  FAIL=$((FAIL + 1))
+elif ! grep -qF "$CONSENT_MARKER" "$REPO_ROOT/install.sh"; then
+  echo "  FAIL - install.sh's consent prompts no longer contain \"$CONSENT_MARKER\" (the GUI can't surface them)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  install.sh's consent prompts match the GUI's marker \"$CONSENT_MARKER\""
+fi
 
 # Same idea for the GUI apps' install-presentation window, whose title
 # comes from ohmydebn-launch-floating-terminal-with-presentation's own
@@ -1200,6 +1226,7 @@ PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-antigravity:Antigravity"
   "ohmydebn-brave-origin:Brave Origin"
   "ohmydebn-brave-browser:Brave Browser"
+  "ohmydebn-chromium:Chromium"
 )
 for ENTRY in "${PRESENTATION_TITLE_OWNERS[@]}"; do
   LAUNCHER="${ENTRY%%:*}"

@@ -6,6 +6,13 @@ export PATH="/usr/share/ohmydebn/bin:$PATH"
 
 source /usr/share/ohmydebn/bin/ohmydebn-menu-tree
 
+# show_*_menu function -> its breadcrumb, filled from menu_tree_paths on
+# menu()'s first call and reused for every later level in this process:
+# that lookup is a bash+awk subprocess (~7ms) and its answer can't change
+# while this script runs.
+declare -A MENU_BREADCRUMB_OF=()
+MENU_BREADCRUMBS_LOADED=""
+
 # Set to true when going directly to a submenu, so we can exit directly
 DIRECT_ACCESS=false
 
@@ -387,7 +394,15 @@ menu() {
   local caller="${FUNCNAME[1]:-}"
   local breadcrumb_prefix=""
   if [[ -n "$caller" ]]; then
-    breadcrumb_prefix=$(menu_tree_paths "${BASH_SOURCE[0]}" | awk -F'\t' -v f="$caller" '$1==f{print $2; exit}')
+    if [[ -z "$MENU_BREADCRUMBS_LOADED" ]]; then
+      local func crumb
+      # First match wins, as the old `awk ... exit` did.
+      while IFS=$'\t' read -r func crumb; do
+        [[ -v MENU_BREADCRUMB_OF["$func"] ]] || MENU_BREADCRUMB_OF["$func"]="$crumb"
+      done < <(menu_tree_paths "${BASH_SOURCE[0]}")
+      MENU_BREADCRUMBS_LOADED=1
+    fi
+    breadcrumb_prefix="${MENU_BREADCRUMB_OF[$caller]:-}"
   fi
 
   get_picker_result "$options" "$breadcrumb_prefix"
@@ -536,12 +551,14 @@ show_cybersecurity_menu() {
 }
 
 show_utility_menu() {
-  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n↔  rclone\n󰍉  Screen Magnifier\n󰒒  SSH Server"
+  menu "Utility" "󰞍  Deskflow keyboard and mouse sharing\n↔  LocalSend\n↔  rclone\n󰍉  Screen Magnifier\n  Remote Desktop Client (Remmina)\n  Remote Desktop Server (XRDP)\n󰒒  SSH Server"
   case "$MENU_RESULT" in
   *Deskflow*) /usr/share/ohmydebn/bin/ohmydebn-deskflow ;;
   *LocalSend*) /usr/share/ohmydebn/bin/ohmydebn-localsend ;;
   *rclone*) /usr/share/ohmydebn/bin/ohmydebn-rclone ;;
   *Magnifier*) present_terminal "Screen Magnifier" /usr/share/ohmydebn/bin/ohmydebn-magnifier-enable ;;
+  *Remmina*) /usr/share/ohmydebn/bin/ohmydebn-remmina ;;
+  *XRDP*) /usr/share/ohmydebn/bin/ohmydebn-remote-desktop-server ;;
   *SSH*) /usr/share/ohmydebn/bin/ohmydebn-ssh-server ;;
   *) show_apps_menu ;;
   esac
@@ -642,15 +659,34 @@ show_virtualization_menu() {
 }
 
 show_browsers_menu() {
-  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium (installed by default)\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium\n  Set Default"
   case "$MENU_RESULT" in
+  *Default*) show_default_browser_menu ;;
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
-  *Chromium*) install "Chromium" "chromium" ;;
-  *Firefox*) install "Firefox" "firefox-esr" ;;
+  *Chromium*) /usr/share/ohmydebn/bin/ohmydebn-chromium ;;
+  *Firefox*) /usr/share/ohmydebn/bin/ohmydebn-firefox-esr ;;
   *Google*) /usr/share/ohmydebn/bin/ohmydebn-google-chrome-stable ;;
   *Helium*) /usr/share/ohmydebn/bin/ohmydebn-helium-bin ;;
   *) show_apps_menu ;;
+  esac
+}
+
+# Every browser the Browsers menu can install, installed or not: the
+# picker's search list is generated from this file's literal text
+# (bin/ohmydebn-menu-tree), so it can't be filtered at runtime -
+# ohmydebn-browser-set-default itself declines one that isn't installed,
+# in the terminal, and says where to install it.
+show_default_browser_menu() {
+  menu "Default Browser" "󰖟  Brave Origin\n󰖟  Brave Browser\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
+  case "$MENU_RESULT" in
+  *Origin*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-origin" ;;
+  *Browser*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-browser" ;;
+  *Chromium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default chromium" ;;
+  *Firefox*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default firefox-esr" ;;
+  *Google*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default google-chrome-stable" ;;
+  *Helium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default helium-bin" ;;
+  *) show_browsers_menu ;;
   esac
 }
 
@@ -658,11 +694,12 @@ show_ai_menu() {
   # Picking any of these also makes it ohmydebn-ai's (Super+A's) default -
   # see ohmydebn-ai-set-default - so there's no separate "set default AI"
   # menu duplicating this same list.
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Codex*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default codex; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
   *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;
@@ -693,9 +730,10 @@ show_remove_menu() {
 }
 
 show_update_menu() {
-  menu "Update" "  OhMyDebn\n  Password\n  Timezone"
+  menu "Update" "  OhMyDebn\n  Doctor\n  Password\n  Timezone"
   case "$MENU_RESULT" in
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
+  *Doctor*) /usr/share/ohmydebn/bin/ohmydebn-doctor-gui ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
   *) show_main_menu ;;
@@ -728,20 +766,21 @@ show_system_menu() {
   menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown"
   case "$MENU_RESULT" in
   *Lock*) cinnamon-screensaver-command -l ;;
-  *Suspend*) systemctl suspend ;;
+  *Suspend*) /usr/share/ohmydebn/bin/ohmydebn-power suspend ;;
   *Relaunch*) /usr/bin/cinnamon --replace & ;;
-  *Restart*) systemctl reboot ;;
-  *Shutdown*) systemctl poweroff ;;
+  *Restart*) /usr/share/ohmydebn/bin/ohmydebn-power reboot ;;
+  *Shutdown*) /usr/share/ohmydebn/bin/ohmydebn-power poweroff ;;
   *) back_to show_main_menu ;;
   esac
 }
 
 show_setup_menu() {
-  menu "Setup" "  Bluetooth\n  Display\n󰟋  Gestures\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
+  menu "Setup" "  Bluetooth\n  Display\n󰟋  Gestures\n󰌌  Keybindings\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
   case "$MENU_RESULT" in
   *Bluetooth*) blueman-manager ;;
   *Display*) cinnamon-settings display ;;
   *Gestures*) cinnamon-settings gestures ;;
+  *Keybindings*) present_terminal "Keybindings" "/usr/share/ohmydebn/bin/ohmydebn-keybindings-edit" ;;
   *Keyboard*) cinnamon-settings keyboard ;;
   *Mouse*) cinnamon-settings mouse ;;
   *Network*) cinnamon-settings network ;;

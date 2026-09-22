@@ -18,3 +18,7 @@ source $OHMYDEBN_INSTALL/packaging/dependencies.sh
 # power-user.sh must run after dependencies.sh above (see the comment in
 # that file for why).
 source $OHMYDEBN_INSTALL/packaging/power-user.sh
+
+# browser.sh runs after power-user.sh (see the comment in that file for
+# why).
+source $OHMYDEBN_INSTALL/packaging/browser.sh

@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for Codex (OpenAI's CLI coding
+# agent), meant to run inside an already-open terminal (via -e) rather
+# than opening one of its own - see ohmydebn-codex, which wraps this in a
+# terminal instead of duplicating it. Like Pi, the package installs no
+# /usr/bin symlink - only /usr/lib/ohmydebn-codex-cli/bin/codex - so it's
+# run directly at that path, the same way ohmydebn-pi-run runs
+# /usr/lib/ohmydebn-pi-coding-agent/pi.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-codex-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
+  mkdir -p ~/codex-sessions && cd "$(mktemp -d ~/codex-sessions/session-XXXXXX)"
+  exec /usr/lib/ohmydebn-codex-cli/bin/codex
+fi

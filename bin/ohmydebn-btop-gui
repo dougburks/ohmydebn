@@ -4,7 +4,11 @@
 # window-created auto-tile handler tiles this window itself, matching
 # wmClass "Alacritty" + title "btop" against
 # /usr/share/ohmydebn/config/tile-rules.json.
+#
+# btop runs under ohmydebn-btop-run rather than directly, so a theme change
+# on a btop too old to hot-reload (see that script) restarts btop inside
+# this same window instead of closing it.
 
 set -euo pipefail
 
-exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'btop' -e /usr/bin/btop
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'btop' -e /usr/share/ohmydebn/bin/ohmydebn-btop-run

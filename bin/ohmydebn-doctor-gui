@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Opens a terminal running ohmydebn-doctor and keeps it open until Enter,
+# for the menu's Update > Doctor entry. gTile-OhMyDebn's own window-created
+# auto-tile handler tiles this window itself, matching wmClass "Alacritty"
+# + title "OhMyDebn Doctor" against /usr/share/ohmydebn/config/tile-rules.json.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'OhMyDebn Doctor' -e /usr/share/ohmydebn/bin/ohmydebn-doctor-pause

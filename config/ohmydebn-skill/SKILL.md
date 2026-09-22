@@ -1,5 +1,5 @@
 ---
-name: OhMyDebn
+name: ohmydebn
 description: >
   REQUIRED for ANY changes to Linux desktop, window manager, or system config.
   Use when editing ~/.config/cinnamon/, ~/.config/nemo/, ~/.config/gtk-3.0/,
@@ -268,33 +268,49 @@ ohmydebn-theme-install <url>     # Install from git repo
 
 ### Keybindings
 
-Edit keyboard shortcuts through Cinnamon Settings or via `cinnamon-settings keyboard`. For manual editing:
-```
-~/.config/cinnamon/spices/keybindings/  # Custom keybinding configurations
-```
+Terminology: a *hotkey* is the key combination you press (the docs page at
+ohmydebn.org/hotkeys lists them); a *keybinding* is the configuration that ties
+a key to an action. Menus, commands and files say keybinding.
 
-View current bindings: 
-- `gsettings list-keys org.cinnamon.desktop.keybindings`
-- Check `/usr/share/ohmydebn/install/keybinding/*.txt` for existing OhMyDebn bindings
+**Preferred: the user's own keybindings file.** `~/.config/ohmydebn/keybindings.txt`
+is applied on top of the stock keybindings by every `ohmydebn-update`, whenever
+it changes, and by `ohmydebn-keybindings-apply`. It survives updates and can be
+copied to another OhMyDebn machine. Stock keybindings are addressed by NAME (the
+first quoted field in `/usr/share/ohmydebn/install/keybinding/keybinding-custom.txt`),
+never by slot number. Three verbs:
 
-**IMPORTANT: When re-binding an existing key:**
-
-1. First check existing bindings in `/usr/share/ohmydebn/install/keybinding/*.txt`
-2. Check if the key is already bound to avoid conflicts
-3. Inform the user what the key was previously bound to
-
-Example - rebinding Super+F (which may be bound to files by default):
 ```bash
-# Check current binding
-gsettings get org.cinnamon.desktop.keybindings "show-desktop"
-
-# Set new binding
-gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom0/ name "Custom File Manager"
-gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom0/ command "nemo"
-gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom0/ binding "<Super>F"
+# add a keybinding, or change the stock keybinding of that name (command and/or key)
+keybinding "Slack" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://slack.com" "['<Super>S']"
+keybinding "Neovim" "/usr/share/ohmydebn/bin/ohmydebn-neovim" "['<Super>V']"
+# remove a stock keybinding's key
+keybinding-unbind "X"
+# change a Cinnamon built-in (same verb and arguments as keybinding-cinnamon.txt)
+keybinding-cinnamon "wm" "close" "['<Alt>F4']"
 ```
 
-Always tell the user: "Note: Super+F was previously bound to files. I've created a new custom keybinding."
+Workflow: `ohmydebn-keybindings-edit` (OhMyDebn Menu → Setup → Keybindings;
+creates the file from the commented template, opens it, applies on close) or
+edit the file and run `ohmydebn-keybindings-apply`. A key used by a `keybinding`
+line is freed from whichever stock keybinding had it. Deleting a line reverts
+that keybinding to stock on the next apply. Changes take effect immediately, no
+Cinnamon restart. `ohmydebn-doctor` reports a file that was edited but not
+applied. The Super + K page lists the stock keybindings only.
+
+**Do NOT write custom keybindings with raw `gsettings`** - `ohmydebn-update`
+rewrites the stock slots and a stray slot number will collide with a future
+stock keybinding. Use the file above. Cinnamon Settings (`cinnamon-settings
+keyboard`) is fine for one-off, machine-local tweaks of Cinnamon's own
+shortcuts.
+
+View current bindings:
+- `gsettings list-recursively org.cinnamon.desktop.keybindings.wm`
+- `/usr/share/ohmydebn/install/keybinding/*.txt` for the stock OhMyDebn bindings
+
+**When re-binding a key that is already used:** check the stock files first and
+tell the user what the key was bound to before, e.g. "Note: Super+X was bound
+to X.com; it now opens Slack." `ohmydebn-keybindings-apply` prints the same
+information when it frees a key.
 
 ### Display/Monitors
 

@@ -10,7 +10,10 @@
 
 set -euo pipefail
 
-if ! dpkg -s "podman" >/dev/null 2>&1; then
+# "Installed" means podman plus the rootless extras (uidmap, passt) - see
+# ohmydebn-podman-installed. A podman missing those fails at pull or -p
+# time, so it gets sent through the installer to pick them up.
+if ! /usr/share/ohmydebn/bin/ohmydebn-podman-installed; then
   /usr/share/ohmydebn/bin/ohmydebn-show-logo
   /usr/share/ohmydebn/bin/ohmydebn-podman-install
   /usr/share/ohmydebn/bin/ohmydebn-show-done

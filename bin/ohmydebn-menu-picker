@@ -63,6 +63,11 @@ import time
 OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
 MENU_FILE = f"{OHMYDEBN_BIN}/ohmydebn-menu"
 MENU_TREE_LIB = f"{OHMYDEBN_BIN}/ohmydebn-menu-tree"
+# ohmydebn-package-build ships menu_tree_flatten's output for the exact
+# ohmydebn-menu in the same .deb; ohmydebn-menu-tree's _mt_cached_raw
+# trusts it unconditionally for the installed MENU_FILE, and so does
+# flatten_lines() below - read directly, without spawning bash at all.
+SHIPPED_FLATTEN_CACHE = "/usr/share/ohmydebn/cache/menu-tree-flatten.tsv"
 
 # Confirmed by actually measuring get_allocated_height(), not estimated
 # from CSS values - see Picker.resize_to_content()'s own comment for what
@@ -86,6 +91,37 @@ def run_menu_tree(func_call):
     script = f'source "{MENU_TREE_LIB}"; {func_call}'
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
     return [line for line in result.stdout.split("\n") if line]
+
+
+_flatten_memo = {}  # MENU_FILE -> menu_tree_flatten's rows, once per process
+
+
+def _read_shipped_flatten():
+    """The shipped cache as menu_tree_flatten() would print it (its PATH
+    rows filtered out), or None if it isn't there."""
+    try:
+        with open(SHIPPED_FLATTEN_CACHE, encoding="utf-8") as f:
+            return [line.rstrip("\n") for line in f if line.strip() and not line.startswith("PATH\t")]
+    except OSError:
+        return None
+
+
+def flatten_lines():
+    """menu_tree_flatten's rows for MENU_FILE. Once per process: every
+    menu-level reload() used to spawn bash to source the tree library and
+    cat the cache again - ~8ms of a 9-18ms level change, for a list that
+    can't change while this process lives. On a real install the shipped
+    cache is read straight from disk (no bash at all, mirroring
+    _mt_cached_raw's own shortcut); anything else - a repo checkout, a
+    missing shipped file - goes through run_menu_tree as before."""
+    lines = _flatten_memo.get(MENU_FILE)
+    if lines is None:
+        if MENU_FILE == f"{OHMYDEBN_BIN}/ohmydebn-menu":
+            lines = _read_shipped_flatten()
+        if lines is None:
+            lines = run_menu_tree(f'menu_tree_flatten "{MENU_FILE}"')
+        _flatten_memo[MENU_FILE] = lines
+    return lines
 
 
 def load_categories(go_items):
@@ -161,7 +197,7 @@ def load_leaves(breadcrumb_prefix=""):
     """
     rows = []
     match_prefix = f"{breadcrumb_prefix} > " if breadcrumb_prefix else ""
-    for line in run_menu_tree(f'menu_tree_flatten "{MENU_FILE}"'):
+    for line in flatten_lines():
         breadcrumb, _, _target = line.partition("\t")
         if match_prefix:
             if not breadcrumb.startswith(match_prefix):
@@ -490,9 +526,10 @@ _SWITCHABLE_WINDOW_TYPES = (Wnck.WindowType.NORMAL, Wnck.WindowType.DIALOG, Wnck
 
 def load_windows():
     """Enumerates open windows the way rofi's `-show window` did for
-    ohmydebn-window-switcher - Wnck (already installed; Cinnamon
-    itself depends on it) gives window listing/activation/icons directly,
-    no wmctrl/xdotool parsing needed.
+    ohmydebn-window-switcher - Wnck (gir1.2-wnck-3.0, installed by
+    install/packaging/dependencies.sh; Cinnamon only depends on the
+    libwnck library, not this typelib) gives window listing/activation/
+    icons directly, no wmctrl/xdotool parsing needed.
 
     get_windows_stacked() is bottom-to-top; reversing it approximates a
     most-recently-used order for free (raising a window moves it to the

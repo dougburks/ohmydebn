@@ -321,6 +321,49 @@ finally:
     shutil.rmtree(fake_home)
 
 print()
+# flatten_lines(): menu_tree_flatten's rows once per process (every
+# menu-level reload used to spawn bash for them again), read straight from
+# the shipped cache on a real install and via run_menu_tree otherwise.
+print("=== ohmydebn-menu-picker flatten_lines ===")
+import tempfile as _tf
+_saved_menu_file, _saved_shipped, _saved_run = mp.MENU_FILE, mp.SHIPPED_FLATTEN_CACHE, mp.run_menu_tree
+_tree_calls = []
+mp.run_menu_tree = lambda call: (_tree_calls.append(call), ["Install > Media > GIMP\tohmydebn-gimp", "Apps > AI > Codex\tohmydebn-codex"])[1]
+mp._flatten_memo.clear()
+mp.MENU_FILE = "/not/the/installed/ohmydebn-menu"
+rows = mp.load_leaves("")
+check_eq("flatten: a non-installed MENU_FILE goes through run_menu_tree", len(_tree_calls), 1)
+check_eq("flatten: rows come back as (display, breadcrumb)", rows[0], ("Install > Media > GIMP", "Install > Media > GIMP"))
+mp.load_leaves("Install")
+mp.load_leaves("Apps")
+check_eq("flatten: later levels reuse the memo - still one bash spawn", len(_tree_calls), 1)
+check_eq("flatten: per-level scoping still applied on top of the memo",
+         mp.load_leaves("Apps"), [("AI > Codex", "Apps > AI > Codex")])
+mp._flatten_memo.clear()
+mp.load_leaves("")
+check_eq("flatten: clearing the memo spawns again", len(_tree_calls), 2)
+
+# Installed path + shipped cache: read directly, no bash; PATH rows dropped.
+with _tf.TemporaryDirectory() as _d:
+    shipped = os.path.join(_d, "menu-tree-flatten.tsv")
+    with open(shipped, "w", encoding="utf-8") as f:
+        f.write("PATH\tshow_install_menu\tInstall\nInstall > Media > GIMP\tohmydebn-gimp\n\nStyle > Theme\tohmydebn-theme-carousel\n")
+    mp.SHIPPED_FLATTEN_CACHE = shipped
+    mp.MENU_FILE = mp.OHMYDEBN_BIN + "/ohmydebn-menu"
+    mp.run_menu_tree = lambda call: (_ for _ in ()).throw(AssertionError("bash spawned despite the shipped cache"))
+    mp._flatten_memo.clear()
+    check_eq("flatten: installed MENU_FILE reads the shipped cache without bash (PATH rows dropped, blanks skipped)",
+             mp.flatten_lines(), ["Install > Media > GIMP\tohmydebn-gimp", "Style > Theme\tohmydebn-theme-carousel"])
+    check_eq("flatten: load_leaves on top of it scopes as usual",
+             mp.load_leaves("Style"), [("Theme", "Style > Theme")])
+    # Shipped cache missing (a dev install with it deleted): back to bash.
+    os.remove(shipped)
+    mp.run_menu_tree = lambda call: (_tree_calls.append(call), ["X > Y\tz"])[1]
+    mp._flatten_memo.clear()
+    check_eq("flatten: no shipped cache falls back to run_menu_tree", mp.flatten_lines(), ["X > Y\tz"])
+mp.MENU_FILE, mp.SHIPPED_FLATTEN_CACHE, mp.run_menu_tree = _saved_menu_file, _saved_shipped, _saved_run
+mp._flatten_memo.clear()
+
 print("=== ohmydebn-theme-carousel (pure logic) ===")
 # Formerly two separate scripts/hotkeys/menu entries (this one for themes,
 # ohmydebn-theme-bg-carousel for backgrounds within the current theme) -
@@ -441,6 +484,80 @@ try:
         (cover.get_width(), cover.get_height()), (200, 150),
     )
 
+    # _master_pixbuf: one real decode per source file, smaller sizes derived
+    # from it, a larger request upgrading it - counted through the
+    # _decode_at_scale seam. This is what keeps a cold-cache render() from
+    # decoding one wallpaper five times over (see the comment above
+    # MASTER_LIMIT in the carousel).
+    decodes = []
+    real_decode = tc._decode_at_scale
+    tc._decode_at_scale = lambda path, w, h: (decodes.append((os.path.basename(path), w, h)), real_decode(path, w, h))[1]
+    tc._masters.clear()
+    first = tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: first request decodes once", len(decodes), 1)
+    smaller = tc.load_cover_pixbuf(wide_src, 100, 75)
+    check_eq("master: a smaller request derives from the master - no second decode", len(decodes), 1)
+    check_eq("master: derived cover is exactly the requested size", (smaller.get_width(), smaller.get_height()), (100, 75))
+    same = tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: repeating the original size still no decode", len(decodes), 1)
+    check_eq("master: same-size result matches the first", (same.get_width(), same.get_height()), (first.get_width(), first.get_height()))
+    bigger = tc.load_cover_pixbuf(wide_src, 400, 300)
+    check_eq("master: a larger request decodes afresh at the larger scale", len(decodes), 2)
+    check_eq("master: the upgrade decoded at the larger scale, not the old one", decodes[-1][1] >= 400 * 2, True)
+    check_eq("master: larger cover is exactly the requested size", (bigger.get_width(), bigger.get_height()), (400, 300))
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: after the upgrade, the original size derives from the new master - no decode", len(decodes), 2)
+    bumped = os.stat(wide_src).st_mtime_ns + 2_000_000_000
+    os.utime(wide_src, ns=(bumped, bumped))
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master: a changed source mtime invalidates the master (decodes again)", len(decodes), 3)
+    # Eviction: only MASTER_LIMIT most-recent files are held.
+    saved_limit = tc.MASTER_LIMIT
+    tc.MASTER_LIMIT = 2
+    tc._masters.clear(); decodes.clear()
+    extra = []
+    for i in range(3):
+        pth = os.path.join(fixture, f"evict-{i}.png")
+        tc.GdkPixbuf.Pixbuf.new(tc.GdkPixbuf.Colorspace.RGB, False, 8, 40, 20).savev(pth, "png", [], [])
+        extra.append(pth)
+        tc.load_cover_pixbuf(pth, 20, 10)
+    check_eq("master: held masters capped at MASTER_LIMIT", len(tc._masters), 2)
+    check("master: the oldest file was the one evicted", extra[0] not in tc._masters and extra[2] in tc._masters)
+    tc.load_cover_pixbuf(extra[0], 20, 10)
+    check_eq("master: an evicted file decodes again when asked for", len(decodes), 4)
+    tc.MASTER_LIMIT = saved_limit
+    # MASTER_MIN_TARGET (the card size, once a Carousel exists): a small
+    # first request decodes at least that large, so the ring-0/card
+    # requests that follow derive instead of upgrading.
+    tc._masters.clear(); decodes.clear()
+    tc.MASTER_MIN_TARGET = (200, 150)
+    tiny = tc.load_cover_pixbuf(wide_src, 40, 30)
+    check_eq("master floor: a tiny request still returns the tiny size", (tiny.get_width(), tiny.get_height()), (40, 30))
+    check("master floor: ...but decoded at least at the card scale", decodes[-1][1] >= 200)
+    tc.load_cover_pixbuf(wide_src, 100, 75)
+    tc.load_cover_pixbuf(wide_src, 200, 150)
+    check_eq("master floor: ring-0 and card sized requests then derive - still one decode", len(decodes), 1)
+    # min_target: the per-call floor the background threads use (the
+    # screen size) - a thumbnail request decodes that large, and every
+    # later request up to it, the backdrop included, derives.
+    tc._masters.clear(); decodes.clear()
+    tc.MASTER_MIN_TARGET = (200, 150)
+    ring = tc.load_cover_pixbuf(wide_src, 40, 30, min_target=(400, 100))
+    check_eq("hybrid floor: ring request returns the ring size", (ring.get_width(), ring.get_height()), (40, 30))
+    check("hybrid floor: ...decoded at the screen-sized floor, above the card floor", decodes[-1][1] >= 400)
+    # (Requests that fit inside the floor in BOTH dimensions, as the real
+    # card does inside the screen - a taller-than-source request like
+    # 200x150 on this 400x100 fixture legitimately needs a bigger master.)
+    tc.load_cover_pixbuf(wide_src, 200, 50)
+    tc.load_cover_pixbuf(wide_src, 400, 100)
+    check_eq("hybrid floor: card and backdrop then derive - still one decode", len(decodes), 1)
+    check("hybrid floor: cached loader accepts the floor too",
+          tc.load_cover_pixbuf_cached(wide_src, 40, 30, (400, 100)).get_width() == 40)
+    check_eq("hybrid floor: via the cached loader, still no new decode", len(decodes), 1)
+    tc.MASTER_MIN_TARGET = None
+    tc._decode_at_scale = real_decode
+    tc._masters.clear()
+
     # _cache_path/load_cover_pixbuf_cached: the on-disk persistence layer
     # over load_cover_pixbuf, keyed by source path + mtime + size +
     # CACHE_FORMAT_VERSION (see both functions' own docstrings). Isolated
@@ -545,6 +662,80 @@ try:
         "load_cover_pixbuf_cached: a failed cache write leaves no orphaned temp files",
         set(os.listdir(tc.CAROUSEL_CACHE_DIR)), files_before,
     )
+
+    # _evict_cache: a size cap on CAROUSEL_CACHE_DIR, oldest first, applied
+    # after each write - the file just written survives even when it alone
+    # exceeds the cap, and nothing runs while the directory is under it.
+    evict_dir = os.path.join(fixture, "carousel-evict")
+    os.makedirs(evict_dir)
+    saved_dir, saved_cap = tc.CAROUSEL_CACHE_DIR, tc.CAROUSEL_CACHE_MAX_BYTES
+    tc.CAROUSEL_CACHE_DIR = evict_dir
+    for i, name in enumerate(("old.jpg", "mid.jpg", "new.jpg")):
+        pth = os.path.join(evict_dir, name)
+        with open(pth, "wb") as f:
+            f.write(b"x" * 100)
+        os.utime(pth, ns=(1_000_000_000 * (i + 1), 1_000_000_000 * (i + 1)))
+    tc.CAROUSEL_CACHE_MAX_BYTES = 1000
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: under the cap, nothing removed", sorted(os.listdir(evict_dir)), ["mid.jpg", "new.jpg", "old.jpg"])
+    tc.CAROUSEL_CACHE_MAX_BYTES = 250
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: over the cap, the oldest goes first and only as far as needed", sorted(os.listdir(evict_dir)), ["mid.jpg", "new.jpg"])
+    tc.CAROUSEL_CACHE_MAX_BYTES = 50
+    tc._evict_cache(os.path.join(evict_dir, "new.jpg"))
+    check_eq("_evict_cache: the file just written is kept even when it alone exceeds the cap", os.listdir(evict_dir), ["new.jpg"])
+    tc.CAROUSEL_CACHE_DIR = os.path.join(fixture, "no-such-cache-dir")
+    tc._evict_cache("whatever")
+    check("_evict_cache: a missing cache directory is not an error", True)
+    tc.CAROUSEL_CACHE_DIR, tc.CAROUSEL_CACHE_MAX_BYTES = saved_dir, saved_cap
+
+    # compute_layout / warm_targets: the sizes a carousel on a monitor
+    # shows, and the decodes that would make every theme open instantly
+    # there - the same function Carousel.__init__ sizes itself from, so
+    # a warmed cache always holds the keys a carousel will look up.
+    class _Geo:
+        def __init__(self, w, h):
+            self.width, self.height = w, h
+
+    big = tc.compute_layout(_Geo(4000, 3000))
+    check_eq("compute_layout: a large monitor gets the design sizes unscaled",
+             (big.card_w, big.card_h, big.ring_dims[0], big.bg_thumb_w, big.bg_thumb_h),
+             (tc.CARD_W, tc.CARD_H, (tc.RING_SPECS[0][0], tc.RING_SPECS[0][1]), tc.BG_THUMB_W, tc.BG_THUMB_H))
+    small = tc.compute_layout(_Geo(1024, 600))
+    check("compute_layout: a small monitor shrinks every size, never below the 0.35 floor",
+          small.card_w < big.card_w and small.card_w >= round(tc.CARD_W * 0.35) and len(small.ring_dims) == len(tc.RING_SPECS))
+
+    # Theme fixture from above: zeta (two backgrounds + preview), alpha
+    # (one background), middle (nothing). Cache dir pointed at an empty
+    # fixture so nothing is skipped as already cached.
+    tc.CAROUSEL_CACHE_DIR = os.path.join(fixture, "carousel-warm")
+    geo = _Geo(1920, 1080)
+    layout = tc.compute_layout(geo)
+    targets = tc.warm_targets(["zeta", "alpha", "middle"], geo, layout, skip_cached=False)
+    # zeta's background list is whatever list_backgrounds_for_theme()
+    # says - unfiltered by extension, by design (see its docstring), so
+    # an earlier test's stray non-image file in there is part of it and
+    # gets a (None-cached) target too, exactly as render() would request.
+    zeta_bgs = tc.list_backgrounds_for_theme("zeta")
+    zeta_preview = tc.neighbor_preview("zeta")
+    alpha_bg = os.path.join(user_dir, "alpha", "backgrounds", "only.png")
+    expected = [(zeta_preview, w, h) for w, h in layout.ring_dims]
+    for path in zeta_bgs:
+        expected += [(path, 1920, 1080), (path, layout.card_w, layout.card_h), (path, layout.bg_thumb_w, layout.bg_thumb_h)]
+    check_eq("warm_targets: zeta - ring sizes of its preview first, then each background at backdrop/card/thumb, in list order",
+             targets[:len(expected)], expected)
+    check("warm_targets: alpha (one background) gets no background-thumbnail size",
+          (alpha_bg, 1920, 1080) in targets and (alpha_bg, layout.card_w, layout.card_h) in targets
+          and (alpha_bg, layout.bg_thumb_w, layout.bg_thumb_h) not in targets)
+    check("warm_targets: middle (no images at all) contributes nothing", not any("middle" in t[0] for t in targets))
+    check_eq("warm_targets: no duplicate targets", len(targets), len(set(targets)))
+    # skip_cached: an existing cache file drops that target; the fixture
+    # images are empty files, so the key comes from _cache_path directly.
+    os.makedirs(tc.CAROUSEL_CACHE_DIR, exist_ok=True)
+    open(tc._cache_path(alpha_bg, 1920, 1080), "w").close()
+    targets_skipping = tc.warm_targets(["alpha"], geo, layout)
+    check("warm_targets: an already-cached key is skipped, the rest kept",
+          (alpha_bg, 1920, 1080) not in targets_skipping and (alpha_bg, layout.card_w, layout.card_h) in targets_skipping)
 
     check_eq("_hex_to_rgb: basic conversion", tc._hex_to_rgb("#e68e0d"), (230, 142, 13))
     check(

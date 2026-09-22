@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# ohmydebn-power suspend|reboot|poweroff - init-system-agnostic power actions
+#
+# On systemd these are `systemctl suspend/reboot/poweroff`. On Devuan there
+# is no systemd, but elogind's loginctl implements the same three verbs
+# (systemd's own loginctl does NOT - it has only session/user/seat
+# commands - so the branch below has to be on which init is running, not
+# on which binary happens to exist). /run/systemd/system is the documented
+# way to detect systemd as init (see sd_booted(3)); OHMYDEBN_TEST_SYSTEMD_DIR
+# lets the unit test point that check at a scratch path.
+
+set -euo pipefail
+
+ACTION="${1:-}"
+case "$ACTION" in
+suspend | reboot | poweroff) ;;
+*)
+  echo "Usage: $(basename "$0") suspend|reboot|poweroff" >&2
+  exit 1
+  ;;
+esac
+
+SYSTEMD_DIR="${OHMYDEBN_TEST_SYSTEMD_DIR:-/run/systemd/system}"
+if [ -d "$SYSTEMD_DIR" ]; then
+  exec systemctl "$ACTION"
+else
+  exec loginctl "$ACTION"
+fi

@@ -251,6 +251,16 @@ def show_dialog(title, body, button_labels):
     return result["index"]
 
 
+OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
+
+
+def ensure_ohmydebn_bin_on_path(path):
+    """PATH with OhMyDebn's bin directory in front, unless it's already on it."""
+    if OHMYDEBN_BIN in [p for p in path.split(os.pathsep) if p]:
+        return path
+    return OHMYDEBN_BIN + os.pathsep + path if path else OHMYDEBN_BIN
+
+
 def main():
     if len(sys.argv) != 2:
         show_dialog("Aether link blocked", "Usage: ohmydebn-aether-url-guard <aether://...>", ["OK"])
@@ -276,6 +286,12 @@ def main():
     # re-parsed by a shell - so this only ever adds a confirmation gate in
     # front of Aether's own handling, it doesn't change what Aether does
     # with an approved link.
+    # Same stock-themes root ohmydebn-aether exports - see its comment - and
+    # the same PATH guarantee: Aether needs the `omarchy` shim in
+    # /usr/share/ohmydebn/bin to apply anything, and a browser-launched
+    # handler inherits whatever PATH the session gave the browser.
+    os.environ.setdefault("OMARCHY_PATH", os.path.expanduser("~/.local/share/omarchy"))
+    os.environ["PATH"] = ensure_ohmydebn_bin_on_path(os.environ.get("PATH", ""))
     os.execv(AETHER_BIN, [AETHER_BIN, "--handle-url", forward_url])
     return 1  # unreachable if execv succeeds
 

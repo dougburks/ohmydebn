@@ -7,13 +7,25 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-if dpkg -s "podman" >/dev/null 2>&1; then
+# Everything rootless podman needs, not just the podman package - uidmap
+# and passt are only Recommends, and a distro that skips recommends (LCOS)
+# otherwise ends up with a podman that can't map IDs or publish ports.
+# ohmydebn-podman-installed owns the list; this just installs whatever
+# part of it is missing, so it also repairs a podman installed earlier
+# without them.
+mapfile -t MISSING < <(/usr/share/ohmydebn/bin/ohmydebn-podman-installed --missing || true)
+
+if [ ${#MISSING[@]} -eq 0 ]; then
   echo
   echo "Podman is already installed."
 else
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "Podman is not currently installed."
+    if dpkg -s "podman" >/dev/null 2>&1; then
+      echo "Podman is installed but is missing packages rootless mode needs: ${MISSING[*]}"
+    else
+      echo "Podman is not currently installed."
+    fi
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
@@ -24,7 +36,7 @@ else
 
   # Install packages
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install podman
+  sudo /usr/bin/apt -y install "${MISSING[@]}"
 
   # Output message to user
   cat <<EOF
@@ -35,3 +47,9 @@ Podman is now installed.
 
 EOF
 fi
+
+# Installing podman doesn't give the user the subordinate UID/GID ranges
+# rootless mode needs - Debian only writes those at account creation, and
+# not always then (see the script). Runs on the already-installed path too
+# since it's a no-op once the ranges exist.
+/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure

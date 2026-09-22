@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# ohmydebn-doctor followed by a "press Enter" pause, so the report stays
+# on screen when run in its own terminal window (see ohmydebn-doctor-gui) -
+# the same shape ohmydebn-update-pause gives ohmydebn-update.
+
+/usr/share/ohmydebn/bin/ohmydebn-doctor
+echo
+/usr/share/ohmydebn/bin/ohmydebn-headline "Press Enter to close this window"
+read -r

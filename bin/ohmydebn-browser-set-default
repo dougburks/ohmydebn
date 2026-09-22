@@ -1,0 +1,120 @@
+#!/bin/bash
+#
+# ohmydebn-browser-set-default: makes one installed browser the default web
+# browser - the one xdg-open, links clicked in other apps, Super+B
+# (bin/ohmydebn-browser) and PDFs all land in. One script for the whole
+# job because it's four separate mechanisms that have to agree:
+#   update-alternatives  x-www-browser and gnome-www-browser - what
+#                        sensible-browser and Debian-style tools go by
+#   xdg-settings         the desktop-wide default - what ohmydebn-browser
+#                        and xdg-open go by; Cinnamon's Preferred
+#                        Applications panel sets only this one
+#   xdg-mime             the http/https scheme handlers, and the PDF viewer
+# A browser's own "make me the default" dialog and Cinnamon's panel each
+# set just the xdg part, which is how a system ends up with two different
+# answers to "what's my browser".
+#
+# Callers: install/config/mimetypes.sh (a new install's default),
+# each ohmydebn-<browser>-install's "make it your default?" question after
+# a browser is installed from the menu (--ask), and OhMyDebn Menu > Apps >
+# Browsers > Set Default (bin/ohmydebn-menu). Every entry in that menu is
+# in the table below.
+#
+# Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <package>
+#   <package>   the apt package name: brave-origin, brave-browser, chromium,
+#               google-chrome-stable, helium-bin or firefox-esr. "chromium"
+#               covers Ubuntu's snap too (see bin/ohmydebn-chromium-install).
+#   --ask       ask first, defaulting to no. This runs right after an
+#               installer's own "Press Enter to continue", so a reflexive
+#               second Enter must not silently take over the default. A
+#               "no" is not an error; the user is told where to change it
+#               later.
+#   --pdf-only  only the PDF viewer - mimetypes.sh's one-time catch-up for
+#               installs from before the PDF handler was ever set.
+
+set -uo pipefail
+
+MODE=full
+case "${1:-}" in
+--ask) MODE=ask; shift ;;
+--pdf-only) MODE=pdf; shift ;;
+esac
+PACKAGE="${1:-}"
+
+# The binary given to update-alternatives has to be the exact path the
+# package's own postinst registered (Brave's, Chrome's and Debian's Firefox
+# all register one; Helium's doesn't) - /usr/bin/brave-origin and friends
+# are themselves alternatives symlinks on top of it and would register as
+# a second, separate entry. Desktop ids are the primary .desktop each
+# package ships; Brave and Chrome also ship a reverse-DNS duplicate
+# (com.brave.Origin.desktop, com.google.Chrome.desktop) that isn't used.
+case "$PACKAGE" in
+brave-origin)
+  NAME="Brave Origin"; BIN=/usr/bin/brave-origin-stable; DESKTOP=brave-origin.desktop ;;
+brave-browser)
+  NAME="Brave Browser"; BIN=/usr/bin/brave-browser-stable; DESKTOP=brave-browser.desktop ;;
+chromium)
+  # Debian's deb, or Ubuntu's strictly-confined snap: no /usr/bin/chromium,
+  # a /snap/bin dispatcher symlink, and a snapd-scheme desktop id.
+  NAME="Chromium"
+  if snap list chromium >/dev/null 2>&1 && ! dpkg -s chromium >/dev/null 2>&1; then
+    BIN=/snap/bin/chromium; DESKTOP=chromium_chromium.desktop
+  else
+    BIN=/usr/bin/chromium; DESKTOP=chromium.desktop
+  fi ;;
+google-chrome-stable)
+  NAME="Google Chrome"; BIN=/usr/bin/google-chrome-stable; DESKTOP=google-chrome.desktop ;;
+helium-bin)
+  NAME="Helium"; BIN=/usr/bin/helium; DESKTOP=helium.desktop ;;
+firefox-esr)
+  NAME="Firefox"; BIN=/usr/bin/firefox-esr; DESKTOP=firefox-esr.desktop ;;
+*)
+  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr>" >&2
+  exit 1 ;;
+esac
+
+installed() {
+  dpkg -s "$PACKAGE" >/dev/null 2>&1 && return 0
+  [ "$PACKAGE" = chromium ] && snap list chromium >/dev/null 2>&1
+}
+if ! installed; then
+  echo "$NAME is not installed. Install it first: OhMyDebn Menu > Apps > Browsers." >&2
+  exit 1
+fi
+
+if [ "$MODE" = ask ]; then
+  echo
+  # printf + read rather than read -p: bash shows a -p prompt only when
+  # stdin is a terminal, and the floating install terminal's isn't always.
+  printf 'Make %s your default web browser? [y/N] ' "$NAME"
+  read -r answer
+  if [[ "${answer,,}" != y* ]]; then
+    echo "Keeping your current default browser. Change it any time: OhMyDebn Menu > Apps > Browsers > Set Default."
+    exit 0
+  fi
+fi
+
+# Every step runs even if an earlier one fails (a denied sudo shouldn't
+# also cost the xdg half), and the exit status says whether all of them
+# took: mimetypes.sh ignores it, the menu's terminal shows it.
+FAILED=false
+step() { "$@" || FAILED=true; }
+
+if [ "$MODE" != pdf ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $NAME as default web browser"
+  step sudo update-alternatives --install /usr/bin/x-www-browser x-www-browser "$BIN" 200
+  step sudo update-alternatives --set x-www-browser "$BIN"
+  step sudo update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser "$BIN" 200
+  step sudo update-alternatives --set gnome-www-browser "$BIN"
+  step xdg-settings set default-web-browser "$DESKTOP"
+  step xdg-mime default "$DESKTOP" x-scheme-handler/http
+  step xdg-mime default "$DESKTOP" x-scheme-handler/https
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $NAME as default pdf viewer"
+step xdg-mime default "$DESKTOP" application/pdf
+
+if [ "$FAILED" = true ]; then
+  echo "Warning: not every default-browser setting could be applied - see the errors above." >&2
+  exit 1
+fi

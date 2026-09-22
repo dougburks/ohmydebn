@@ -69,18 +69,27 @@ fi
 sudo /usr/bin/apt -y autoremove
 
 # Apps with their own dedicated ohmydebn-<package>-remove script for
-# repo/keyring/config cleanup beyond a plain apt purge.
-for PACKAGE in antigravity brave-browser brave-origin chatgpt claude-code cloudflare-warp code \
+# repo/keyring/config cleanup beyond a plain apt purge. Not brave-origin:
+# it's the default browser (install/packaging/browser.sh), not an optional
+# app, so it stays for the same reason Chromium never appeared here when it
+# was the default - and the power-user flow, which runs this first, would
+# otherwise purge it only for its own ohmydebn-brave-origin-install to put
+# it straight back a moment later.
+for PACKAGE in antigravity brave-browser chatgpt claude-code cloudflare-warp code \
   google-chrome-stable helium-bin powershell simplescreenrecorder tailscale; do
   if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
     "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt
   fi
 done
 
-# Pi doesn't fit the loop above - its dpkg package name
-# (ohmydebn-pi-coding-agent) isn't the same string as its remove script's
-# ohmydebn-pi-remove (the loop assumes both are the same $PACKAGE, true
-# for every other entry there but not for Pi's short script name).
+# Pi and Codex don't fit the loop above - their dpkg package names
+# (ohmydebn-pi-coding-agent, ohmydebn-codex-cli) aren't the same string as
+# their remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove (the loop
+# assumes both are the same $PACKAGE, true for every other entry there but
+# not for these two short script names).
 if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
+fi
+if dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-codex-remove --skip-prompt
 fi

@@ -1,0 +1,410 @@
+#!/bin/bash
+
+# ohmydebn-keybindings-apply [--from-install]
+#
+# Applies the user's own keybindings from ~/.config/ohmydebn/keybindings.txt on top
+# of the stock ones that install/keybinding/keybinding.sh writes. The file
+# is meant to be copied between OhMyDebn machines, so it keys everything by
+# NAME (the first quoted field in keybinding-custom.txt), never by the
+# custom-N slot number - those shift whenever a stock line is inserted.
+# Create/edit it with ohmydebn-keybindings-edit; the shipped template
+# (install/keybinding/keybinding-template.txt) documents the three verbs:
+#
+#   keybinding NAME COMMAND BINDING   add a keybinding, or retarget/rebind the
+#                                 stock keybinding of that name in place
+#   keybinding-unbind NAME            remove a stock keybinding's key entirely
+#   keybinding-cinnamon SUB KEY BINDING   change a Cinnamon built-in, same
+#                                 arguments as keybinding-cinnamon.txt
+#
+# Lines pasted straight from keybinding-custom.txt / keybinding-cinnamon.txt
+# also work: keybinding-custom's slot number and the trailing description
+# are ignored, and keybinding-cinnamon is the same verb in both files.
+#
+# How it stays idempotent and reversible:
+#   - New keybindings get slots custom-1000 upward. Cinnamon Settings computes
+#     its next free id with int(entry.replace("custom","")), so ids MUST
+#     stay numeric after the word "custom" - named slots would crash its
+#     "Add custom shortcut" button. custom-1000 parses as -1000: harmless.
+#   - Every stock slot / Cinnamon key this script changes is recorded in
+#     ~/.local/state/ohmydebn-config/keybindings-user-touched. Each run first
+#     restores those from the stock txt files (or resets them), clears
+#     every custom-1000+ slot, then applies the file fresh - so deleting a
+#     line, or the whole file, reverts to stock on the next apply.
+#   - A key claimed by a user keybinding is removed from any stock slot the
+#     user did not name, so "rebind Super+X to something else" is one
+#     line, not two. Cinnamon built-ins aren't scanned for that; the
+#     template says to use keybinding-cinnamon for those.
+#   - Cinnamon only re-reads custom shortcuts on a custom-list change
+#     (js/ui/keybindings.js listens to changed::custom-list, not to the
+#     per-slot keys), so the list is written twice - with a __dummy__
+#     entry, then without - exactly as Cinnamon Settings itself does. No
+#     Cinnamon restart needed.
+#   - --from-install (keybinding.sh calls it this way on every update):
+#     skip when the file's sha256 matches the last applied one AND the
+#     stock pass didn't run this time (OHMYDEBN_KEYBINDINGS_STOCK_APPLIED unset).
+#     When the stock pass did run it just rewrote the slots, so the user's
+#     changes have to go back on top regardless.
+#
+# Deliberately NOT `set -e`: the install sources keybinding.sh under set -e
+# and this runs as a child of it - a syntax error in the user's file must
+# print a warning, never abort ohmydebn-update. Exit status is 0 in every
+# user-file case; only a usage error exits non-zero.
+
+set -uo pipefail
+
+STOCK_DIR=/usr/share/ohmydebn/install/keybinding
+STOCK_CUSTOM=$STOCK_DIR/keybinding-custom.txt
+STOCK_CINNAMON=$STOCK_DIR/keybinding-cinnamon.txt
+USER_FILE=~/.config/ohmydebn/keybindings.txt
+STATE_DIR=~/.local/state/ohmydebn-config
+HASH_STATE=$STATE_DIR/keybindings-user-sha256
+TOUCHED_STATE=$STATE_DIR/keybindings-user-touched
+USER_SLOT_BASE=1000
+KB_SCHEMA=org.cinnamon.desktop.keybindings
+CUSTOM_SCHEMA=$KB_SCHEMA.custom-keybinding
+CUSTOM_PATH=/org/cinnamon/desktop/keybindings/custom-keybindings
+# Field separator for the records the parsers below emit - can't appear in
+# a name, command or binding.
+SEP=$'\x1f'
+
+FROM_INSTALL=false
+for arg in "$@"; do
+  case "$arg" in
+  --from-install) FROM_INSTALL=true ;;
+  -h | --help) echo "Usage: ohmydebn-keybindings-apply [--from-install]"; exit 0 ;;
+  *) echo "Usage: ohmydebn-keybindings-apply [--from-install]" >&2; exit 2 ;;
+  esac
+done
+
+warn() { echo "Warning: $*" >&2; }
+
+# ---------------------------------------------------------------- gating
+
+CUR_HASH=""
+[ -f "$USER_FILE" ] && CUR_HASH=$(sha256sum <"$USER_FILE" | cut -d' ' -f1)
+OLD_HASH=$(cat "$HASH_STATE" 2>/dev/null || true)
+
+if $FROM_INSTALL && [ -z "${OHMYDEBN_KEYBINDINGS_STOCK_APPLIED:-}" ] && [ "$CUR_HASH" = "$OLD_HASH" ]; then
+  exit 0
+fi
+# No file, and nothing of ours to undo: nothing to do at all.
+if [ ! -f "$USER_FILE" ] && [ -z "$OLD_HASH" ] && [ ! -s "$TOUCHED_STATE" ]; then
+  exit 0
+fi
+
+if ! gsettings list-schemas >/dev/null 2>&1; then
+  warn "no session bus for gsettings - your custom keybindings were not applied; run ohmydebn-keybindings-apply from a desktop session"
+  exit 0
+fi
+
+if [ -f "$USER_FILE" ]; then
+  if ! SYNTAX_ERROR=$(bash -n "$USER_FILE" 2>&1); then
+    warn "$USER_FILE has a syntax error - your custom keybindings were not applied:"
+    echo "$SYNTAX_ERROR" >&2
+    exit 0
+  fi
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Applying your custom keybindings"
+
+# ---------------------------------------------------------------- helpers
+
+gset() {
+  gsettings set "$@" >/dev/null 2>&1 || warn "gsettings set $* failed"
+}
+
+custom_slot() { echo "$CUSTOM_SCHEMA:$CUSTOM_PATH/custom-$1/"; }
+
+set_custom() { # n key value
+  gset "$(custom_slot "$1")" "$2" "$3"
+}
+
+get_custom() { # n key -> unquoted string, or the raw array text
+  gsettings get "$(custom_slot "$1")" "$2" 2>/dev/null | sed -E "s/^'(.*)'$/\1/"
+}
+
+reset_custom() {
+  gsettings reset-recursively "$(custom_slot "$1")" >/dev/null 2>&1 || true
+}
+
+cinnamon_schema() { # sub -> schema; empty sub means the root keybindings schema
+  if [ -n "$1" ]; then echo "$KB_SCHEMA.$1"; else echo "$KB_SCHEMA"; fi
+}
+
+# Current custom-list ids, one per line ("['custom-0', 'custom-1']" -> ids).
+current_custom_list() {
+  gsettings get "$KB_SCHEMA" custom-list 2>/dev/null | grep -oP "'[^']*'" | tr -d "'"
+}
+
+# Writes custom-list from the ids on stdin, twice: first with __dummy__
+# appended, then without, so the value actually changes and Cinnamon
+# reloads even when the id list itself is identical to before.
+write_custom_list() {
+  local ids=() id list
+  while IFS= read -r id; do
+    [ -n "$id" ] && ids+=("$id")
+  done
+  list=$(printf "'%s', " "${ids[@]}" "__dummy__")
+  gset "$KB_SCHEMA" custom-list "[${list%, }]"
+  if [ ${#ids[@]} -eq 0 ]; then
+    gset "$KB_SCHEMA" custom-list "[]"
+  else
+    list=$(printf "'%s', " "${ids[@]}")
+    gset "$KB_SCHEMA" custom-list "[${list%, }]"
+  fi
+}
+
+# "['<Ctrl><Super>S', '<Super>x']" -> one normalized chord per line
+# ("<ctrl><super>s"), for collision comparison.
+chords_of() {
+  tr -d "[]'\"" <<<"$1" | tr ',' '\n' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' | grep -v '^$' || true
+}
+
+# Same, but keeping the original spelling, for writing a reduced array.
+raw_chords_of() {
+  tr -d "[]'\"" <<<"$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true
+}
+
+# "<Ctrl><Super>S" -> "Ctrl + Super + S", for display.
+pretty_chord() {
+  sed -E 's/></ + /g; s/^<//; s/>/ + /' <<<"$1"
+}
+
+# "['<Super>R', '<Super><Alt>space']" -> "Super + R or Super + Alt + space".
+pretty_binding() {
+  local raw out=""
+  while IFS= read -r raw; do
+    out+="${out:+ or }$(pretty_chord "$raw")"
+  done < <(raw_chords_of "$1")
+  echo "${out:-nothing}"
+}
+
+# Reads a keybinding-*.txt file (stock or user) in a throwaway subshell,
+# with each verb redefined to print one SEP-separated record
+# (kind, name-or-subschema, command-or-key, binding, stock slot number)
+# instead of calling gsettings. The subshell means an `exit`, `set -e` or
+# stray command in the user's file can't disturb this process; its stderr
+# is left alone on purpose so a typo'd verb shows up as "command not found".
+parse_file() { # file -> records on stdout
+  (
+    set +u
+    # shellcheck disable=SC2317  # called by the sourced file, not directly
+    function keybinding-custom() { printf '%s\n' "add${SEP}$2${SEP}$3${SEP}$4${SEP}$1"; }
+    # shellcheck disable=SC2317
+    function keybinding() { printf '%s\n' "add${SEP}$1${SEP}$2${SEP}$3"; }
+    # shellcheck disable=SC2317
+    function keybinding-unbind() { printf '%s\n' "unbind${SEP}$1${SEP}${SEP}"; }
+    # shellcheck disable=SC2317
+    function keybinding-cinnamon() { printf '%s\n' "cinnamon${SEP}$1${SEP}$2${SEP}$3"; }
+    # shellcheck disable=SC1090
+    source "$1"
+  ) | grep -a "$SEP" || true
+}
+
+# ---------------------------------------------------------- stock index
+
+STOCK_IDX=() STOCK_NAME=() STOCK_CMD=() STOCK_BINDING=()
+while IFS="$SEP" read -r kind name cmd binding idx; do
+  { [ "$kind" = "add" ] && [ -n "$idx" ]; } || continue
+  STOCK_IDX+=("$idx"); STOCK_NAME+=("$name"); STOCK_CMD+=("$cmd"); STOCK_BINDING+=("$binding")
+done < <(parse_file "$STOCK_CUSTOM")
+
+stock_pos_of_name() { # name -> array position, or nothing
+  local i
+  for i in "${!STOCK_NAME[@]}"; do
+    [ "${STOCK_NAME[$i]}" = "$1" ] && { echo "$i"; return; }
+  done
+}
+
+stock_pos_of_idx() {
+  local i
+  for i in "${!STOCK_IDX[@]}"; do
+    [ "${STOCK_IDX[$i]}" = "$1" ] && { echo "$i"; return; }
+  done
+}
+
+restore_stock_slot() { # idx
+  local pos
+  pos=$(stock_pos_of_idx "$1")
+  if [ -n "$pos" ]; then
+    set_custom "$1" name "${STOCK_NAME[$pos]}"
+    set_custom "$1" command "${STOCK_CMD[$pos]}"
+    set_custom "$1" binding "${STOCK_BINDING[$pos]}"
+  else
+    # Stock no longer has this slot; leave nothing of ours behind.
+    reset_custom "$1"
+  fi
+}
+
+restore_cinnamon_key() { # sub key
+  local rec
+  rec=$(parse_file "$STOCK_CINNAMON" | grep -a "^cinnamon${SEP}$1${SEP}$2${SEP}" | tail -1)
+  if [ -n "$rec" ]; then
+    IFS="$SEP" read -r _ _ _ binding _ <<<"$rec"
+    gset "$(cinnamon_schema "$1")" "$2" "$binding"
+  else
+    gsettings reset "$(cinnamon_schema "$1")" "$2" >/dev/null 2>&1 || true
+  fi
+}
+
+# --------------------------------------------- 1. undo the previous apply
+
+if [ -s "$TOUCHED_STATE" ]; then
+  while read -r kind a b; do
+    case "$kind" in
+    custom) restore_stock_slot "$a" ;;
+    cinnamon) restore_cinnamon_key "$a" "$b" ;;
+    esac
+  done <"$TOUCHED_STATE"
+fi
+
+# Drop every user-range slot, whoever wrote it (a file copied from another
+# machine may have used more or fewer of them).
+KEEP_IDS=()
+while IFS= read -r id; do
+  if [[ "$id" =~ ^custom-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge "$USER_SLOT_BASE" ]; then
+    reset_custom "${BASH_REMATCH[1]}"
+  elif [ "$id" != "__dummy__" ]; then
+    KEEP_IDS+=("$id")
+  fi
+done < <(current_custom_list)
+
+# --------------------------------------------------- 2. the user's file
+
+TOUCHED=()
+USER_IDS=()
+# Names of stock slots the user addressed explicitly - collision handling
+# below must leave those alone.
+NAMED_STOCK=()
+CLAIMED_CHORDS=()
+CLAIMED_BY=()
+
+if [ -f "$USER_FILE" ]; then
+  mapfile -t ENTRIES < <(parse_file "$USER_FILE")
+  if [ ${#ENTRIES[@]} -eq 0 ]; then
+    echo "No keybindings defined in $USER_FILE yet."
+  fi
+  next_user=$USER_SLOT_BASE
+  for rec in "${ENTRIES[@]}"; do
+    IFS="$SEP" read -r kind a b c _ <<<"$rec"
+    case "$kind" in
+    add)
+      if [ -z "$a" ] || [ -z "$b" ] || [ -z "$c" ]; then
+        warn "skipping keybinding with an empty name, command or binding: $a"
+        continue
+      fi
+      pos=$(stock_pos_of_name "$a")
+      if [ -n "$pos" ]; then
+        idx="${STOCK_IDX[$pos]}"
+        set_custom "$idx" command "$b"
+        set_custom "$idx" binding "$c"
+        TOUCHED+=("custom $idx")
+        NAMED_STOCK+=("$a")
+        echo "$(pretty_binding "$c"): $a (stock keybinding changed)"
+      else
+        idx=$next_user
+        next_user=$((next_user + 1))
+        set_custom "$idx" name "$a"
+        set_custom "$idx" command "$b"
+        set_custom "$idx" binding "$c"
+        USER_IDS+=("custom-$idx")
+        # Not something to restore - the undo step clears every user-range
+        # slot from the live list anyway - but recorded so ohmydebn-doctor
+        # can check each one is still in custom-list.
+        TOUCHED+=("user $idx")
+        echo "$(pretty_binding "$c"): $a"
+      fi
+      while IFS= read -r chord; do
+        CLAIMED_CHORDS+=("$chord"); CLAIMED_BY+=("$a")
+      done < <(chords_of "$c")
+      ;;
+    unbind)
+      pos=$(stock_pos_of_name "$a")
+      if [ -z "$pos" ]; then
+        warn "keybinding-unbind \"$a\": no stock keybinding has that name (names are the first quoted field in $STOCK_CUSTOM)"
+        continue
+      fi
+      idx="${STOCK_IDX[$pos]}"
+      set_custom "$idx" binding "[]"
+      TOUCHED+=("custom $idx")
+      NAMED_STOCK+=("$a")
+      echo "$a: unbound (was $(pretty_binding "${STOCK_BINDING[$pos]}"))"
+      ;;
+    cinnamon)
+      if [ -z "$b" ]; then
+        warn "skipping keybinding-cinnamon with an empty key"
+        continue
+      fi
+      gset "$(cinnamon_schema "$a")" "$b" "$c"
+      TOUCHED+=("cinnamon $a $b")
+      echo "$(pretty_binding "$c"): Cinnamon ${a:+$a }$b"
+      while IFS= read -r chord; do
+        CLAIMED_CHORDS+=("$chord"); CLAIMED_BY+=("Cinnamon ${a:+$a }$b")
+      done < <(chords_of "$c")
+      ;;
+    esac
+  done
+else
+  echo "$USER_FILE is gone - stock keybindings restored."
+fi
+
+# ------------------------------- 3. free claimed keys from stock keybindings
+
+if [ ${#CLAIMED_CHORDS[@]} -gt 0 ]; then
+  for pos in "${!STOCK_IDX[@]}"; do
+    name="${STOCK_NAME[$pos]}"
+    skip=false
+    for n in "${NAMED_STOCK[@]}"; do [ "$n" = "$name" ] && skip=true; done
+    $skip && continue
+    idx="${STOCK_IDX[$pos]}"
+    live=$(get_custom "$idx" binding)
+    kept=()
+    changed=false
+    while IFS= read -r raw; do
+      norm=$(chords_of "$raw")
+      hit=""
+      for i in "${!CLAIMED_CHORDS[@]}"; do
+        [ "${CLAIMED_CHORDS[$i]}" = "$norm" ] && { hit="${CLAIMED_BY[$i]}"; break; }
+      done
+      if [ -n "$hit" ]; then
+        changed=true
+        echo "$(pretty_chord "$raw"): removed from stock \"$name\" (now $hit)"
+      else
+        kept+=("$raw")
+      fi
+    done < <(raw_chords_of "$live")
+    if $changed; then
+      if [ ${#kept[@]} -eq 0 ]; then
+        set_custom "$idx" binding "[]"
+      else
+        list=$(printf "'%s', " "${kept[@]}")
+        set_custom "$idx" binding "[${list%, }]"
+      fi
+      TOUCHED+=("custom $idx")
+    fi
+  done
+fi
+
+# ------------------------------------------ 4. custom-list, then state
+
+printf '%s\n' "${KEEP_IDS[@]}" "${USER_IDS[@]}" | write_custom_list
+
+mkdir -p "$STATE_DIR"
+if [ ${#TOUCHED[@]} -gt 0 ]; then
+  printf '%s\n' "${TOUCHED[@]}" | sort -u >"$TOUCHED_STATE"
+else
+  rm -f "$TOUCHED_STATE"
+fi
+if [ -n "$CUR_HASH" ]; then
+  echo "$CUR_HASH" >"$HASH_STATE"
+else
+  rm -f "$HASH_STATE"
+fi
+
+if [ -f "$USER_FILE" ]; then
+  echo
+  echo "File: $USER_FILE"
+  echo "Edit with: ohmydebn-keybindings-edit"
+  echo "The Super + K page lists the stock keybindings only."
+fi
+exit 0

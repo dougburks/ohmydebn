@@ -35,4 +35,10 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
 
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install antigravity
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask antigravity || true
 fi

@@ -123,7 +123,7 @@ mock_bin dpkg <<'EOF'
 [[ "$1" == "-l" ]] && exit 1
 if [[ "$1" == "-s" ]]; then
   case "$2" in
-  claude-code | brave-browser | brave-origin | ohmydebn-pi-coding-agent | ohmydebn-codex-cli) exit 0 ;;
+  claude-code | brave-browser | brave-origin | ohmydebn-pi-coding-agent | ohmydebn-codex-cli | ohmydebn-t3code | ohmydebn-grok-build) exit 0 ;;
   *) exit 1 ;;
   esac
 fi
@@ -152,12 +152,22 @@ mock_bin ohmydebn-codex-remove <<'EOF'
 #!/bin/bash
 echo "ohmydebn-codex-remove $*" >>"$MOCK_CALLS"
 EOF
+mock_bin ohmydebn-t3code-remove <<'EOF'
+#!/bin/bash
+echo "ohmydebn-t3code-remove $*" >>"$MOCK_CALLS"
+EOF
+mock_bin ohmydebn-grok-remove <<'EOF'
+#!/bin/bash
+echo "ohmydebn-grok-remove $*" >>"$MOCK_CALLS"
+EOF
 sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/pkg-remove-all-optional-patched.sh"
 PATH="$(mock_path)" bash "$MOCK_DIR/pkg-remove-all-optional-patched.sh" --skip-prompt </dev/null >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "dedicated-remove loop: installed claude-code gets removed" "$CALLS" "ohmydebn-claude-code-remove --skip-prompt"
 assert_contains "Pi special case: installed Pi gets removed" "$CALLS" "ohmydebn-pi-remove --skip-prompt"
 assert_contains "Codex special case: installed Codex gets removed" "$CALLS" "ohmydebn-codex-remove --skip-prompt"
+assert_contains "T3 Code special case: installed T3 Code gets removed" "$CALLS" "ohmydebn-t3code-remove --skip-prompt"
+assert_contains "Grok Build special case: installed Grok Build gets removed" "$CALLS" "ohmydebn-grok-remove --skip-prompt"
 assert_not_contains "dedicated-remove loop: not-installed chatgpt is left alone" "$CALLS" "ohmydebn-chatgpt-remove"
 assert_contains "dedicated-remove loop: installed brave-browser (optional) gets removed" "$CALLS" "ohmydebn-brave-browser-remove --skip-prompt"
 # Brave Origin is the default browser, not an optional app - the power-user

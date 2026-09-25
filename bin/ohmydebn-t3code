@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "T3 Code" /usr/share/ohmydebn/bin/ohmydebn-t3code-install
+fi
+
+if dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
+  # The package's own launcher, not its AppRun directly: it puts OhMyDebn's
+  # agent CLIs on PATH under the names T3 Code looks for (opencode, codex).
+  exec /usr/lib/ohmydebn-t3code/ohmydebn-t3code-launch "$@"
+fi

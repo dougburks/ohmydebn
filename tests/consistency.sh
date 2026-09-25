@@ -650,45 +650,42 @@ else
 fi
 
 echo
-echo "-- show_ai_menu picks stay in sync with ohmydebn-ai-set-default --"
-# ohmydebn-ai (Super+A) launches whatever bin/ohmydebn-menu's
-# show_ai_menu last recorded via ohmydebn-ai-set-default - see that
-# function's own comment. There's no separate "set default AI" menu, so if
-# a pick's set-default call names the wrong tool (or is missing/reordered
-# after the launcher instead of before it), Super+A silently launches
-# something other than what was just picked.
+echo "-- AI defaults: menu picks only open, installers ask with the right name --"
+# ohmydebn-ai (Super+A) launches the default recorded by
+# ohmydebn-ai-set-default. It's set by each AI installer's "make it your
+# default?" question (--ask) or Setup > Defaults > Agent - not by picking a
+# tool from Apps > AI, which only opens it. So: no show_ai_menu arm may set
+# the default, and every installer must ask about its own tool - a wrong
+# name there would offer to make some other tool the default.
 AI_MENU_START=$(grep -n '^show_ai_menu() {' "$MENU_FILE" | head -1 | cut -d: -f1)
 AI_MENU_REL_END=$(tail -n "+$AI_MENU_START" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
 AI_MENU_END=$((AI_MENU_START + AI_MENU_REL_END - 1))
 AI_MENU_BLOCK=$(sed -n "${AI_MENU_START},${AI_MENU_END}p" "$MENU_FILE")
-declare -A AI_ARM_TO_DEFAULT_NAME=(
-  [OpenCode]=opencode
-  [Claude]=claude-code
-  [ChatGPT]=chatgpt
-  [Codex]=codex
-  [Pi]=pi
-  [Antigravity]=antigravity
-  [VSCode]=vscode
+if echo "$AI_MENU_BLOCK" | grep -q 'ohmydebn-ai-set-default'; then
+  echo "  FAIL - show_ai_menu calls ohmydebn-ai-set-default - picking a tool there must only open it"
+  FAIL=$((FAIL + 1))
+fi
+declare -A AI_INSTALLER_TO_NAME=(
+  [ohmydebn-opencode-install]=opencode
+  [ohmydebn-claude-code-install]=claude-code
+  [ohmydebn-chatgpt-install]=chatgpt
+  [ohmydebn-codex-install]=codex
+  [ohmydebn-grok-install]=grok
+  [ohmydebn-pi-install]=pi
+  [ohmydebn-t3code-install]=t3code
+  [ohmydebn-code-install]=vscode
+  [ohmydebn-antigravity-install]=antigravity
 )
 CHECKED=0
-for arm in "${!AI_ARM_TO_DEFAULT_NAME[@]}"; do
+for installer in "${!AI_INSTALLER_TO_NAME[@]}"; do
   CHECKED=$((CHECKED + 1))
-  expected="${AI_ARM_TO_DEFAULT_NAME[$arm]}"
-  # The arm's own block: from its `*Arm*)` line up to the next `;;`.
-  arm_block=$(echo "$AI_MENU_BLOCK" | awk -v pat="\\\*${arm}\\\*\\)" '
-    $0 ~ pat { capturing=1 }
-    capturing { print }
-    capturing && /;;/ { exit }
-  ')
-  if [[ -z "$arm_block" ]]; then
-    echo "  FAIL - show_ai_menu has no '*${arm}*)' arm anymore (expected one setting default '$expected')"
-    FAIL=$((FAIL + 1))
-  elif ! echo "$arm_block" | grep -qP "ohmydebn-ai-set-default $expected\b"; then
-    echo "  FAIL - '*${arm}*)' arm doesn't call 'ohmydebn-ai-set-default $expected' - Super+A won't launch what this pick just opened"
+  expected="${AI_INSTALLER_TO_NAME[$installer]}"
+  if ! grep -qP "ohmydebn-ai-set-default --ask $expected\b" "$REPO_ROOT/bin/$installer"; then
+    echo "  FAIL - $installer doesn't ask 'ohmydebn-ai-set-default --ask $expected'"
     FAIL=$((FAIL + 1))
   fi
 done
-echo "  checked $CHECKED AI picks"
+echo "  checked $CHECKED AI installers"
 
 echo
 echo "-- ohmydebn-ai and ohmydebn-ai-set-default agree on the set of AI names --"
@@ -700,10 +697,10 @@ echo "-- ohmydebn-ai and ohmydebn-ai-set-default agree on the set of AI names --
 # actually trying to set as the new default.
 AI_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai"
 AI_SET_DEFAULT_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai-set-default"
-mapfile -t AI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z-]*(?=\) exec)' "$AI_SCRIPT" | sort -u)
+mapfile -t AI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z0-9-]*(?=\) exec)' "$AI_SCRIPT" | sort -u)
 # The valid-names line is a single "a | b | c)" case pattern, not one name
 # per line - pull that whole line out, then split it on '|'.
-AI_VALID_LINE=$(grep -E '^[a-z][a-z-]*( \| [a-z][a-z-]*)+\)' "$AI_SET_DEFAULT_SCRIPT")
+AI_VALID_LINE=$(grep -E '^[a-z][a-z0-9-]*( \| [a-z][a-z0-9-]*)+\)' "$AI_SET_DEFAULT_SCRIPT")
 mapfile -t AI_VALID_NAMES < <(echo "${AI_VALID_LINE%)*}" | tr '|' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u)
 if [[ "$(printf '%s\n' "${AI_DISPATCH_NAMES[@]}")" != "$(printf '%s\n' "${AI_VALID_NAMES[@]}")" ]]; then
   echo "  FAIL - ohmydebn-ai's dispatch names (${AI_DISPATCH_NAMES[*]}) don't match ohmydebn-ai-set-default's accepted names (${AI_VALID_NAMES[*]})"
@@ -719,7 +716,7 @@ echo "-- ohmydebn-ai-cli agrees with ohmydebn-ai-set-default on the set of AI na
 # adding a matching arm to ohmydebn-ai-cli (or vice versa), Super+A and `a`
 # would silently disagree on what the same stored default launches.
 AI_CLI_SCRIPT="$REPO_ROOT/bin/ohmydebn-ai-cli"
-mapfile -t AI_CLI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z-]*(?=\) exec)' "$AI_CLI_SCRIPT" | sort -u)
+mapfile -t AI_CLI_DISPATCH_NAMES < <(grep -oP '^(?!case|esac)\K[a-z][a-z0-9-]*(?=\) exec)' "$AI_CLI_SCRIPT" | sort -u)
 if [[ "$(printf '%s\n' "${AI_CLI_DISPATCH_NAMES[@]}")" != "$(printf '%s\n' "${AI_VALID_NAMES[@]}")" ]]; then
   echo "  FAIL - ohmydebn-ai-cli's dispatch names (${AI_CLI_DISPATCH_NAMES[*]}) don't match ohmydebn-ai-set-default's accepted names (${AI_VALID_NAMES[*]})"
   FAIL=$((FAIL + 1))
@@ -936,8 +933,6 @@ MENU_HOTKEY_PAIRS=(
   "Visual Studio Code:show_ai_menu:VSCode"
   "Visual Studio Code:show_editor_menu:VSCode"
   "Cava:show_media_menu:Cava"
-  "AI (default):show_ai_menu:OpenCode"
-  "AI (default):show_ai_menu:Pi"
 )
 for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
   IFS=':' read -r KB_LABEL MENU_FUNC MENU_KEYWORD <<<"$ENTRY"
@@ -947,10 +942,9 @@ for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
   FUNC_END=$((FUNC_START + FUNC_END_REL - 1))
   MENU_ARM=$(sed -n "${FUNC_START},${FUNC_END}p" "$MENU_FILE" | grep -P "\*${MENU_KEYWORD}\*\)" |
     sed -E 's/^[[:space:]]*\*[^*]*\*\)[[:space:]]*//; s/[[:space:]]*;;[[:space:]]*$//')
-  # A menu arm may run a side-effecting command first (e.g. the AI
-  # submenu's ohmydebn-ai-set-default) before the actual launch - only
-  # the final ";"-separated statement is the one that has to match the
-  # hotkey's launcher.
+  # A menu arm may run a side-effecting command first before the actual
+  # launch - only the final ";"-separated statement is the one that has to
+  # match the hotkey's launcher.
   MENU_COMMAND="${MENU_ARM##*; }"
   if [[ -z "$KB_COMMAND" || -z "$MENU_COMMAND" ]]; then
     echo "  FAIL - couldn't find both a keybinding command for \"$KB_LABEL\" and a menu command for $MENU_FUNC's *${MENU_KEYWORD}*"
@@ -1147,6 +1141,7 @@ TITLE_OWNERS=(
   "ohmydebn-opencode:OpenCode"
   "ohmydebn-pi:Pi"
   "ohmydebn-codex:Codex"
+  "ohmydebn-grok:Grok Build"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
   "ohmydebn-logo-gui:OhMyDebn Logo"
@@ -1222,6 +1217,7 @@ fi
 # arg instead of a direct --title flag.
 PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-chatgpt:ChatGPT"
+  "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
   "ohmydebn-antigravity:Antigravity"
   "ohmydebn-brave-origin:Brave Origin"

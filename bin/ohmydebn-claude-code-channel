@@ -1,0 +1,96 @@
+#!/bin/bash
+#
+# ohmydebn-claude-code-channel: switches which of Anthropic's Claude Code
+# apt channels this machine follows. ohmydebn-claude-code-install sets up
+# stable, which Anthropic describes as "typically about one week old,
+# skipping releases with major regressions"; latest gets every release as
+# soon as it ships. Only the channel in claude-code.list changes (both the
+# URL path and the suite name) - the signing key and the claude-code.pref
+# pin (which matches on the host) are the same for both.
+#
+# Callers: OhMyDebn Menu > Update > Channel > Claude Code
+# (bin/ohmydebn-menu's pick_claude_code_channel), which marks --current and
+# runs a switch in a terminal, since it needs sudo.
+#
+# Moving to latest upgrades Claude Code right away. Moving back to stable
+# never downgrades: apt keeps the installed version until stable has the
+# same or a newer one - what Claude Code's own /config does when you switch
+# its channel.
+#
+# Usage: ohmydebn-claude-code-channel --current | stable | latest
+
+set -euo pipefail
+
+LIST_FILE=/etc/apt/sources.list.d/claude-code.list
+
+current_channel() {
+  local line
+  line=$(grep -E '^deb .*downloads\.claude\.ai/claude-code/apt/' "$LIST_FILE" 2>/dev/null || true)
+  case "$line" in
+  */claude-code/apt/latest*) echo "latest" ;;
+  */claude-code/apt/stable*) echo "stable" ;;
+  *) echo "unknown" ;;
+  esac
+}
+
+case "${1:-}" in
+--current)
+  current_channel
+  exit 0
+  ;;
+stable | latest) ;;
+*)
+  echo "Usage: ohmydebn-claude-code-channel --current | stable | latest" >&2
+  exit 1
+  ;;
+esac
+TARGET="$1"
+
+if ! dpkg -s "claude-code" >/dev/null 2>&1 || [[ ! -f "$LIST_FILE" ]]; then
+  echo
+  echo "Claude Code isn't installed. Install it first: OhMyDebn Menu > Apps > AI."
+  exit 1
+fi
+
+CURRENT=$(current_channel)
+if [[ "$CURRENT" == "$TARGET" ]]; then
+  echo
+  echo "Claude Code is already on the $TARGET channel. Nothing to change."
+  exit 0
+fi
+
+echo
+if [[ "$TARGET" == "latest" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Warning: the Claude Code latest channel"
+  echo "The latest channel gets every Claude Code release as soon as it ships,"
+  echo "including releases that the stable channel later skips because of a"
+  echo "serious bug. You get new features about a week sooner, with a higher"
+  echo "chance of running into problems."
+  echo
+  # printf + read rather than read -p: bash shows a -p prompt only when
+  # stdin is a terminal, and the floating terminal's isn't always.
+  printf 'Switch Claude Code to the latest channel? [y/N] '
+  read -r answer || answer=""
+  if [[ "${answer,,}" != y* ]]; then
+    echo "Cancelled. Claude Code is still on the $CURRENT channel."
+    exit 0
+  fi
+else
+  echo "Switching Claude Code to the stable channel."
+  echo
+  echo "Your installed version stays until the stable channel has the same or"
+  echo "a newer one. It isn't downgraded."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r || true
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Switching Claude Code to the $TARGET channel"
+sudo sed -i -E "s#/claude-code/apt/(stable|latest) (stable|latest) #/claude-code/apt/$TARGET $TARGET #" "$LIST_FILE"
+sudo /usr/bin/apt update
+if [[ "$TARGET" == "latest" ]]; then
+  sudo /usr/bin/apt -y install --only-upgrade claude-code
+fi
+
+echo
+echo "Claude Code is now on the $TARGET channel."

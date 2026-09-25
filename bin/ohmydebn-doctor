@@ -72,6 +72,7 @@ if [ -f "$OS_RELEASE" ]; then
   linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
+  pop) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
   esac
   if [ "$DISTRO_OK" = true ]; then ok "supported distro"; else fail "supported distro" "install.sh would warn: unsupported"; fi
 else
@@ -91,7 +92,9 @@ else
 fi
 check "ohmydebn-gtile package installed" dpkg -s ohmydebn-gtile
 check "ohmydebn-themes package installed" dpkg -s ohmydebn-themes
-check "apt source for packages.ohmydebn.org present" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
+OHMYDEBN_CHANNEL="stable"
+grep -q 'packages-testing\.ohmydebn\.org' "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources" 2>/dev/null && OHMYDEBN_CHANNEL="testing"
+check "OhMyDebn apt source present ($OHMYDEBN_CHANNEL channel)" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
 check "ohmydebn repo keyring present" test -s "$SYSROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
 CANDIDATE=$(apt-cache policy ohmydebn 2>/dev/null | sed -n 's/^ *Candidate: *//p' | head -1)
 if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "(none)" ]; then ok "apt knows a candidate ohmydebn ($CANDIDATE)"; else fail "apt knows a candidate ohmydebn" "run: sudo apt update"; fi
@@ -182,14 +185,14 @@ for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
 done
 DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "(unset - opencode)")
 case "$DEFAULT_AI" in
-opencode | claude-code | chatgpt | codex | pi | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
-for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-pi-cli; do
+for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-pi-cli; do
   check "wrapper $w executable" test -x "$OHMYDEBN/bin/$w"
 done
 if [ -f "$HOME/.zshrc" ]; then
-  for a in c pi codex claude a; do
+  for a in c pi codex grok claude a; do
     if grep -qE "^alias $a=" "$HOME/.zshrc"; then ok "zsh alias '$a' present"; else fail "zsh alias '$a' present"; fi
   done
 else

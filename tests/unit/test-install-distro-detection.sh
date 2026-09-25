@@ -101,6 +101,12 @@ run_scenario "Devuan 6 Excalibur" "yes" \
 run_scenario "Devuan 5 Daedalus (unsupported release)" "no" \
   "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=daedalus"
 
+# MX Linux 25's os-release, verbatim from a real install: it keeps Debian
+# 13's own file, so it has to keep passing as Debian.
+run_scenario "MX Linux 25 (reports itself as Debian 13)" "yes" \
+  'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"' 'NAME="Debian GNU/Linux"' 'VERSION_ID="13"' \
+  'VERSION="13 (trixie)"' "VERSION_CODENAME=trixie" "DEBIAN_VERSION_FULL=13.7" "ID=debian"
+
 run_scenario "LCOS 0.5 (Devuan excalibur-based, ID=lcos)" "yes" \
   "ID=lcos" 'ID_LIKE="devuan debian"' "VERSION_CODENAME=excalibur"
 
@@ -118,5 +124,52 @@ run_scenario "Ubuntu 26.04 Resolute" "yes" \
 
 run_scenario "Ubuntu jammy (unsupported release)" "no" \
   "ID=ubuntu" "VERSION_CODENAME=jammy"
+
+# Pop!_OS 24.04's os-release, from a real install.
+run_scenario "Pop!_OS 24.04 (Ubuntu noble-based, ID=pop)" "yes" \
+  'NAME="Pop!_OS"' 'VERSION="24.04 LTS"' "ID=pop" 'ID_LIKE="ubuntu debian"' 'VERSION_ID="24.04"' \
+  "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
+
+run_scenario "Pop!_OS 22.04 (unsupported release)" "no" \
+  'NAME="Pop!_OS"' "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=jammy" "UBUNTU_CODENAME=jammy"
+
+# --- apt sources: an Ubuntu derivative's are kept, a broken Debian one's repaired ---
+# OHMYDEBN_TEST_APT_DIR points install.sh's sources check at a scratch
+# directory with no debian.sources, Mint or Proxmox file - the case where
+# install.sh used to rename sources.list and write Debian's repos, which on
+# an Ubuntu derivative (its own ID, ID_LIKE=ubuntu) would put Debian
+# packages on an Ubuntu system. sudo is mocked, so nothing is moved.
+# run_sources_scenario <description> <expect: kept|repaired> <os-release lines...>
+run_sources_scenario() {
+  local desc="$1" expect="$2"
+  shift 2
+  mock_init
+  setup_mocks
+  printf '%s\n' "$@" >"$MOCK_DIR/os-release"
+  mkdir -p "$MOCK_DIR/apt/sources.list.d"
+  echo "# managed elsewhere" >"$MOCK_DIR/apt/sources.list"
+  SCRATCH_HOME=$(mktemp -d)
+  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+    OHMYDEBN_TEST_APT_DIR="$MOCK_DIR/apt" OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
+    bash "$SCRIPT" < <(printf '\n\n') 2>&1)
+  if [[ "$expect" == "kept" ]]; then
+    assert_contains "$desc: keeps its own package sources" "$OUTPUT" "Found an APT sources file"
+    assert_not_contains "$desc: adds no Debian repos" "$(cat "$MOCK_CALLS")" "debian.sources"
+    assert_not_contains "$desc: doesn't move sources.list aside" "$(cat "$MOCK_CALLS")" "sources.list.orig"
+  else
+    assert_contains "$desc: repairs the missing Debian sources" "$OUTPUT" "Creating $MOCK_DIR/apt/sources.list.d/debian.sources"
+  fi
+  rm -rf "$SCRATCH_HOME"
+  mock_cleanup
+}
+
+run_sources_scenario "Pop!_OS 24.04 (ID=pop, ID_LIKE=ubuntu)" "kept" \
+  'NAME="Pop!_OS"' "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
+
+run_sources_scenario "Zorin OS 18 (ID=zorin, ID_LIKE=ubuntu)" "kept" \
+  "ID=zorin" "ID_LIKE=ubuntu" "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
+
+run_sources_scenario "Debian 13 with no Debian sources configured" "repaired" \
+  "ID=debian" "VERSION_CODENAME=trixie"
 
 test_summary

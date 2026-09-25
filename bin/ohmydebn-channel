@@ -1,0 +1,102 @@
+#!/bin/bash
+#
+# ohmydebn-channel: switches which OhMyDebn package repository this machine
+# follows - stable (packages.ohmydebn.org, what every install starts on) or
+# testing (packages-testing.ohmydebn.org, where packages land as soon as
+# they're built, before they're released to stable). Both repos are signed
+# with the same key, so only the URIs line of ohmydebn.sources changes.
+#
+# Callers: OhMyDebn Menu > Update > Channel > OhMyDebn (bin/ohmydebn-menu's
+# pick_ohmydebn_channel), which marks --current and runs a switch in a
+# terminal, since it needs sudo.
+#
+# Switching only changes where packages come from and refreshes apt; the
+# packages themselves change on the next Update > OhMyDebn, which also runs
+# the config steps a new ohmydebn package may need. Moving back to stable
+# never downgrades: apt keeps what testing installed until stable has the
+# same or a newer version.
+#
+# Usage: ohmydebn-channel --current | stable | testing
+
+set -euo pipefail
+
+SOURCES_FILE=/etc/apt/sources.list.d/ohmydebn.sources
+STABLE_URI="https://packages.ohmydebn.org/"
+TESTING_URI="https://packages-testing.ohmydebn.org/"
+
+current_channel() {
+  local uris
+  uris=$(grep -E '^URIs:' "$SOURCES_FILE" 2>/dev/null || true)
+  case "$uris" in
+  *packages-testing.ohmydebn.org*) echo "testing" ;;
+  *packages.ohmydebn.org*) echo "stable" ;;
+  *) echo "unknown" ;;
+  esac
+}
+
+case "${1:-}" in
+--current)
+  current_channel
+  exit 0
+  ;;
+stable) TARGET_URI="$STABLE_URI" ;;
+testing) TARGET_URI="$TESTING_URI" ;;
+*)
+  echo "Usage: ohmydebn-channel --current | stable | testing" >&2
+  exit 1
+  ;;
+esac
+TARGET="$1"
+
+if [[ ! -f "$SOURCES_FILE" ]]; then
+  echo "$SOURCES_FILE is missing, so there's no OhMyDebn channel to switch." >&2
+  echo "Run OhMyDebn Menu > Update > Doctor to check your installation." >&2
+  exit 1
+fi
+
+CURRENT=$(current_channel)
+if [[ "$CURRENT" == "$TARGET" ]]; then
+  echo
+  echo "You're already on the OhMyDebn $TARGET channel. Nothing to change."
+  exit 0
+fi
+
+echo
+if [[ "$TARGET" == "testing" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "WARNING: the OhMyDebn testing channel can break your system"
+  echo "The testing channel gets OhMyDebn packages as soon as they're built,"
+  echo "before they've been tested and released. They can be broken or"
+  echo "incomplete, and an update from testing can leave your desktop in a"
+  echo "state that you'll have to repair by hand."
+  echo
+  echo "Only use it on a machine you can afford to break, such as a virtual"
+  echo "machine, and only if you're comfortable fixing problems yourself."
+  echo
+  echo "Switching back to stable later doesn't undo it: packages you get from"
+  echo "testing stay installed until the stable channel catches up with them."
+  echo
+  # printf + read rather than read -p: bash shows a -p prompt only when
+  # stdin is a terminal, and the floating terminal's isn't always.
+  printf 'Type "testing" to switch to the testing channel, or press Enter to cancel: '
+  read -r answer || answer=""
+  if [[ "$answer" != "testing" ]]; then
+    echo "Cancelled. You're still on the OhMyDebn $CURRENT channel."
+    exit 0
+  fi
+else
+  echo "Switching OhMyDebn to the stable channel."
+  echo
+  echo "Packages you already have from testing stay installed until the stable"
+  echo "channel has the same or a newer version. They aren't downgraded."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r || true
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Switching OhMyDebn to the $TARGET channel"
+sudo sed -i "s|^URIs:.*|URIs: $TARGET_URI|" "$SOURCES_FILE"
+sudo /usr/bin/apt update
+
+echo
+echo "OhMyDebn is now on the $TARGET channel."
+echo "To install its packages, run OhMyDebn Menu > Update > OhMyDebn."

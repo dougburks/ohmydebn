@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# Runs Grok Build in the current terminal with its arguments, installing it
+# first if needed. apt updates the packaged binary, so its own self-updater
+# is switched off.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-grok-install
+fi
+
+export GROK_DISABLE_AUTOUPDATER=1
+exec /usr/lib/ohmydebn-grok-build/grok "$@"

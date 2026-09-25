@@ -8,7 +8,9 @@ if [ "${1:-}" = "--skip-prompt" ]; then
 fi
 
 # Check to see if new package is installed
+NEWLY_INSTALLED=false
 if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
+  NEWLY_INSTALLED=true
   if [ "$SKIP_PROMPT" = false ]; then
     echo
     echo "The ohmydebn-opencode-cli package is not currently installed."
@@ -39,3 +41,11 @@ fi
 # general reasoning.
 sudo /usr/bin/apt update
 sudo /usr/bin/apt -y install ohmydebn-opencode-cli
+
+# Freshly installed onto a system that may already have a default AI
+# assistant: ask before changing it (defaults to no, and says nothing when
+# OpenCode is already the default - see ohmydebn-ai-set-default). A setting
+# that couldn't be saved mustn't abort the install.
+if [ "$NEWLY_INSTALLED" = true ] && [ "$SKIP_PROMPT" = false ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask opencode || true
+fi

@@ -104,6 +104,14 @@ assert_contains "ohmydebn repo down: names the OhMyDebn repository" "$OUTPUT" "C
 assert_not_contains "ohmydebn repo down: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
 mock_cleanup
 
+# --- same, on the testing channel (ohmydebn-channel): its host must count too ---
+setup
+run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://packages-testing.ohmydebn.org trixie InRelease\n  Could not resolve host: packages-testing.ohmydebn.org\nW: Failed to fetch https://packages-testing.ohmydebn.org/dists/trixie/InRelease  Could not resolve host\nW: Some index files failed to download. They have been ignored, or old ones used instead.'
+assert_eq "testing repo down: non-zero exit" "1" "$STATUS"
+assert_contains "testing repo down: names the OhMyDebn repository" "$OUTPUT" "Could not refresh the OhMyDebn package repository - update stopped"
+assert_not_contains "testing repo down: install.sh NOT run" "$(cat "$MOCK_CALLS")" "install.sh"
+mock_cleanup
+
 # --- a third-party repo unreachable, OhMyDebn's fine: warn and continue ---
 setup
 run_update MOCK_APT_OUTPUT='Hit:1 https://deb.debian.org/debian trixie InRelease\nErr:2 https://brave-browser-apt-release.s3.brave.com stable InRelease\n  Could not connect to brave-browser-apt-release.s3.brave.com:443\nHit:3 https://packages.ohmydebn.org trixie InRelease\nW: Failed to fetch https://brave-browser-apt-release.s3.brave.com/dists/stable/InRelease  Could not connect\nW: Some index files failed to download. They have been ignored, or old ones used instead.'

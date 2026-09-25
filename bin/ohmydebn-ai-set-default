@@ -1,20 +1,122 @@
 #!/bin/bash
 #
 # ohmydebn-ai-set-default: records which AI assistant ohmydebn-ai (Super+A)
-# should launch. Called by bin/ohmydebn-menu's show_ai_menu on every
-# pick, so choosing an AI tool there doubles as making it the default - no
-# separate settings UI to keep in sync with that list.
-# Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|codex|pi|vscode|antigravity>
+# and ohmydebn-ai-cli (the `a` alias) should launch. The one place that
+# knows each AI tool's display name and the package that means it's
+# installed, for the callers below.
+#
+# Callers: each AI installer's "make it your default?" question right after
+# it installs its tool (--ask), and OhMyDebn Menu > Setup > Defaults >
+# Agent (bin/ohmydebn-menu's pick_default_agent), which lists
+# --list-installed and marks --current. Picking a tool from Apps > AI only
+# opens it - it no longer changes the default.
+#
+# Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|pi|t3code|vscode|antigravity>
+#        ohmydebn-ai-set-default --current
+#        ohmydebn-ai-set-default --list-installed
+#   --ask             ask first, defaulting to no - this runs right after an
+#                     installer's own "Press Enter to continue", so a
+#                     reflexive second Enter must not silently change the
+#                     default. Says nothing if the tool is already the
+#                     default (Super+A installing its own default on first
+#                     use).
+#   --current         print the current default's name (opencode if unset
+#                     or unrecognized - the same fallback ohmydebn-ai uses)
+#   --list-installed  print "name<TAB>display name" for each installed tool
 
 set -euo pipefail
 
-case "${1:-}" in
-opencode | claude-code | chatgpt | codex | pi | vscode | antigravity) ;;
-*)
-  echo "Usage: ohmydebn-ai-set-default <opencode|claude-code|chatgpt|codex|pi|vscode|antigravity>" >&2
+DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
+ALL_NAMES=(opencode claude-code chatgpt codex grok pi t3code vscode antigravity)
+
+display_name() {
+  case "$1" in
+  opencode) echo "OpenCode" ;;
+  claude-code) echo "Claude Code" ;;
+  chatgpt) echo "ChatGPT" ;;
+  codex) echo "Codex" ;;
+  grok) echo "Grok Build" ;;
+  pi) echo "Pi" ;;
+  t3code) echo "T3 Code" ;;
+  vscode) echo "VS Code" ;;
+  antigravity) echo "Antigravity" ;;
+  esac
+}
+
+package_of() {
+  case "$1" in
+  opencode) echo "ohmydebn-opencode-cli" ;;
+  claude-code) echo "claude-code" ;;
+  chatgpt) echo "chatgpt" ;;
+  codex) echo "ohmydebn-codex-cli" ;;
+  grok) echo "ohmydebn-grok-build" ;;
+  pi) echo "ohmydebn-pi-coding-agent" ;;
+  t3code) echo "ohmydebn-t3code" ;;
+  vscode) echo "code" ;;
+  antigravity) echo "antigravity" ;;
+  esac
+}
+
+current_default() {
+  local stored=""
+  [[ -f "$DEFAULT_AI_FILE" ]] && stored=$(<"$DEFAULT_AI_FILE")
+  case "$stored" in
+  opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity) echo "$stored" ;;
+  *) echo "opencode" ;;
+  esac
+}
+
+usage() {
+  echo "Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|pi|t3code|vscode|antigravity>" >&2
+  echo "       ohmydebn-ai-set-default --current | --list-installed" >&2
   exit 1
+}
+
+ASK=false
+case "${1:-}" in
+--current)
+  current_default
+  exit 0
+  ;;
+--list-installed)
+  for name in "${ALL_NAMES[@]}"; do
+    if dpkg -s "$(package_of "$name")" >/dev/null 2>&1; then
+      printf '%s\t%s\n' "$name" "$(display_name "$name")"
+    fi
+  done
+  exit 0
+  ;;
+--ask)
+  ASK=true
+  shift
   ;;
 esac
 
-mkdir -p "$HOME/.config/ohmydebn/current"
-echo "$1" >"$HOME/.config/ohmydebn/current/default-ai"
+case "${1:-}" in
+opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity) ;;
+*) usage ;;
+esac
+NAME="$1"
+
+if [[ "$ASK" == true ]]; then
+  [[ "$(current_default)" == "$NAME" ]] && exit 0
+  # Some installers carry on past a failed download (curl && dpkg -i), so
+  # only offer what actually got installed.
+  dpkg -s "$(package_of "$NAME")" >/dev/null 2>&1 || exit 0
+  echo
+  # printf + read rather than read -p: bash shows a -p prompt only when
+  # stdin is a terminal, and the floating install terminal's isn't always.
+  printf 'Make %s your default AI assistant (Super + A)? [y/N] ' "$(display_name "$NAME")"
+  read -r answer || answer=""
+  if [[ "${answer,,}" != y* ]]; then
+    echo "Keeping $(display_name "$(current_default)") as your default AI assistant. Change it any time: OhMyDebn Menu > Setup > Defaults > Agent."
+    exit 0
+  fi
+fi
+
+mkdir -p "$(dirname "$DEFAULT_AI_FILE")"
+echo "$NAME" >"$DEFAULT_AI_FILE"
+
+if [[ "$ASK" == true ]]; then
+  echo "$(display_name "$NAME") is now your default AI assistant."
+fi

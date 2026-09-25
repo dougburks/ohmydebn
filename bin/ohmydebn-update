@@ -150,14 +150,15 @@ sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 # nothing had happened. And `apt update` itself exits 0 even when a
 # source is unreachable (it only warns), so its output is inspected: the
 # one source this step actually needs is OhMyDebn's own
-# (packages.ohmydebn.org) - if THAT failed to refresh, or apt itself
+# (packages.ohmydebn.org, or packages-testing.ohmydebn.org on the testing
+# channel - see ohmydebn-channel) - if THAT failed to refresh, or apt itself
 # failed, the update stops before changing anything. Any OTHER source
 # that failed (a third-party repo that's down or gone) is named in a
 # warning and the update continues, exactly as apt itself does; a
 # strict any-source-fails mode was tried first and would have let one
 # dead vendor repo block every OhMyDebn update. LC_ALL=C so apt's
 # "Err:"/"Failed to fetch" lines are matchable in any locale.
-OHMYDEBN_REPO_HOST="packages.ohmydebn.org"
+OHMYDEBN_REPO_HOSTS="packages(-testing)?\.ohmydebn\.org"
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
   APT_UPDATE_OUT=$(mktemp)
@@ -172,7 +173,7 @@ if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   APT_UPDATE_STATUS=${PIPESTATUS[0]}
   FAILED_SOURCES=$(grep -E '^(Err:|W: Failed to fetch )' "$APT_UPDATE_OUT" | grep -oE 'https?://[^ ]+' | sort -u || true)
   rm -f "$APT_UPDATE_OUT"
-  if [ "$APT_UPDATE_STATUS" -ne 0 ] || grep -q "$OHMYDEBN_REPO_HOST" <<<"$FAILED_SOURCES"; then
+  if [ "$APT_UPDATE_STATUS" -ne 0 ] || grep -qE "$OHMYDEBN_REPO_HOSTS" <<<"$FAILED_SOURCES"; then
     $DIR/bin/ohmydebn-headline "Could not refresh the OhMyDebn package repository - update stopped"
     echo "Nothing has been changed. Check your Internet connection and the apt output"
     echo "above, then run ohmydebn-update again."

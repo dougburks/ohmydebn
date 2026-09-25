@@ -3,7 +3,7 @@
 # Unit tests for bin/ohmydebn-ai-cli (the `a` shell alias's target).
 # Mirrors tests/unit/test-ohmydebn-ai.sh's mocking approach for the
 # default-lookup/fallback logic, plus coverage specific to ai-cli: the
-# four CLI-native tools (opencode/claude-code/codex/pi) launch with no args,
+# five CLI-native tools (opencode/claude-code/codex/grok/pi) launch with no args,
 # while the three GUI editors (chatgpt/vscode/antigravity) are launched
 # with $PWD so they open on the caller's current directory instead of
 # running inside the terminal itself.
@@ -17,7 +17,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai-cli ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-pi-cli ohmydebn-chatgpt ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-pi-cli ohmydebn-chatgpt ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -50,7 +50,10 @@ declare -A CLI_EXPECTED=(
   [opencode]="ohmydebn-opencode-cli"
   [claude-code]="ohmydebn-claude-code-cli"
   [codex]="ohmydebn-codex-cli"
+  [grok]="ohmydebn-grok-cli"
   [pi]="ohmydebn-pi-cli"
+  # T3 Code is a GUI, but it has no "open this directory" argument.
+  [t3code]="ohmydebn-t3code"
 )
 for stored in "${!CLI_EXPECTED[@]}"; do
   fresh_scratch_home

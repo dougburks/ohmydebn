@@ -34,7 +34,7 @@ build_machine() {
   echo "4.8.0" >"$OMD/VERSION"
   printf 'PACKAGES=(\n  alacritty\n  bat # comment\n  cinnamon-desktop-environment\n)\n' >"$OMD/install/packaging/dependencies.sh"
   printf 'keybinding-custom 0 "Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-tiled" "['"'"'<Super>B'"'"']" "Press Super + B"\nkeybinding-custom 1 "Update" "/usr/share/ohmydebn/bin/ohmydebn-update-gui" "['"'"'<Ctrl><Super>U'"'"']" "Press Ctrl+Super+U"\n' >"$OMD/install/keybinding/keybinding-custom.txt"
-  for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-pi-cli ohmydebn-power omarchy; do
+  for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-pi-cli ohmydebn-power omarchy; do
     printf '#!/bin/bash\n' >"$OMD/bin/$w"; chmod +x "$OMD/bin/$w"
   done
   : >"$ROOT/etc/apt/sources.list.d/ohmydebn.sources"; echo key >"$ROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
@@ -49,7 +49,7 @@ build_machine() {
   echo opencode >"$H/.config/ohmydebn/current/default-ai"
   printf '{"autoclose": {"type": "checkbox", "default": true, "value": true}}\n' >"$H/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
   for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do ln -s /usr/share/ohmydebn/config/ohmydebn-skill "$H/$d/ohmydebn"; done
-  printf "alias c='x'\nalias pi='x'\nalias codex='x'\nalias claude='x'\nalias a='x'\n" >"$H/.zshrc"
+  printf "alias c='x'\nalias pi='x'\nalias codex='x'\nalias grok='x'\nalias claude='x'\nalias a='x'\n" >"$H/.zshrc"
   ln -s "$H/.config/ohmydebn" "$H/.config/omarchy"
   ln -s /usr/share/ohmydebn-themes "$H/.local/share/omarchy/themes"
   ln -s "$H/.config/ohmydebn/current" "$H/.local/state/omarchy/current"

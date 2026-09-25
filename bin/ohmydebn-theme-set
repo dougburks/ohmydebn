@@ -243,6 +243,9 @@ fi
 # Use COLORS_SOURCE to update the Claude Code theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-claude "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
+# Use COLORS_SOURCE to update the T3 Code theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-t3code "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
 # If COLORS_SOURCE was dynamically generated, delete it
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"
 

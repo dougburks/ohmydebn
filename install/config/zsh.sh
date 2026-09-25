@@ -89,6 +89,16 @@ EOF
   touch $CODEX_ALIAS_STATE
 fi
 
+GROK_ALIAS_STATE=~/.local/state/ohmydebn-config/grok-alias
+if [ ! -f $GROK_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Grok Build (xAI) CLI coding agent, run in the current terminal
+alias grok='/usr/share/ohmydebn/bin/ohmydebn-grok-cli'
+EOF
+  touch $GROK_ALIAS_STATE
+fi
+
 OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias
 if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
   sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc

@@ -12,8 +12,13 @@ fi
 # installs the real thing as a strictly-confined snap. install/config/
 # chromium.sh (sourced below) accounts for the snap's different profile
 # layout when seeding the bundled extension.
+#
+# Which one applies is asked of apt rather than guessed from the distro
+# name, so Ubuntu derivatives get it right too: most have no "chromium"
+# package either, but Mint (ID_LIKE=ubuntu) ships a real Chromium deb and
+# blocks snapd, and some derivatives package their own.
 CHROMIUM_PACKAGE=chromium
-if [ -f /etc/os-release ] && grep -qxE 'ID="?ubuntu"?' /etc/os-release; then
+if ! apt-cache policy chromium 2>/dev/null | grep -qE '^[[:space:]]*Candidate: [^(]'; then
   CHROMIUM_PACKAGE=chromium-browser
 fi
 

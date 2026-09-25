@@ -82,14 +82,22 @@ for PACKAGE in antigravity brave-browser chatgpt claude-code cloudflare-warp cod
   fi
 done
 
-# Pi and Codex don't fit the loop above - their dpkg package names
-# (ohmydebn-pi-coding-agent, ohmydebn-codex-cli) aren't the same string as
-# their remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove (the loop
-# assumes both are the same $PACKAGE, true for every other entry there but
-# not for these two short script names).
+# Pi, Codex, T3 Code and Grok Build don't fit the loop above - their dpkg
+# package names (ohmydebn-pi-coding-agent, ohmydebn-codex-cli,
+# ohmydebn-t3code, ohmydebn-grok-build) aren't the same string as their
+# remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove/
+# ohmydebn-t3code-remove/ohmydebn-grok-remove (the loop assumes both are the
+# same $PACKAGE, true for every other entry there but not for these short
+# script names).
 if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
 fi
 if dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-codex-remove --skip-prompt
+fi
+if dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-t3code-remove --skip-prompt
+fi
+if dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-grok-remove --skip-prompt
 fi

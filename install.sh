@@ -50,6 +50,9 @@ if [ -f "$OS_RELEASE" ]; then
   . "$OS_RELEASE"
   case "$ID" in
   debian)
+    # MX Linux 25 also lands here: it keeps Debian 13's own os-release
+    # (ID=debian, VERSION_CODENAME=trixie) and debian.sources, adding its
+    # repo in mx.sources, so it installs exactly as Debian does.
     [ "$VERSION_CODENAME" = "trixie" ] && DISTRO_OK=true
     ;;
   devuan | lcos)
@@ -72,6 +75,12 @@ if [ -f "$OS_RELEASE" ]; then
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
     ;;
+  pop)
+    # Pop!_OS is built on Ubuntu (ID_LIKE="ubuntu debian"). Its own
+    # VERSION_CODENAME happens to match Ubuntu's, but UBUNTU_CODENAME is the
+    # one that names the base.
+    [ "$UBUNTU_CODENAME" = "noble" ] && DISTRO_OK=true
+    ;;
   ubuntu)
     case "$VERSION_CODENAME" in
     noble | resolute) DISTRO_OK=true ;;
@@ -85,7 +94,7 @@ if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, and Ubuntu 24.04/26.04.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -146,24 +155,33 @@ EOF
   # Update time
   sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 
-  # Check to see if we have an APT configuration
-  DEBIANSOURCES=/etc/apt/sources.list.d/debian.sources
-  PROXMOXSOURCES=/etc/apt/sources.list.d/proxmox.sources
-  MINTSOURCES=/etc/apt/sources.list.d/official-package-repositories.list
+  # Check to see if we have an APT configuration. OHMYDEBN_TEST_APT_DIR
+  # lets the unit test point this at a scratch directory.
+  APT_DIR="${OHMYDEBN_TEST_APT_DIR:-/etc/apt}"
+  DEBIANSOURCES=$APT_DIR/sources.list.d/debian.sources
+  PROXMOXSOURCES=$APT_DIR/sources.list.d/proxmox.sources
+  MINTSOURCES=$APT_DIR/sources.list.d/official-package-repositories.list
+  # Ubuntu derivatives (ID_LIKE includes ubuntu: Pop!_OS, Zorin OS,
+  # elementary OS, KDE neon, TUXEDO OS...) report their own ID and keep
+  # their repos in files of their own, so none of the other checks match
+  # them - and the repair below would add Debian's repos to an Ubuntu
+  # system. Whether a derivative is supported is the distro check's call
+  # (it warns first); this only keeps its package sources intact.
   if [ -f $DEBIANSOURCES ] ||
     [ -f $PROXMOXSOURCES ] ||
     [ -f $MINTSOURCES ] ||
     [ "$ID" = "kali" ] ||
     [ "$ID" = "ubuntu" ] ||
     [ "$ID" = "devuan" ] ||
-    [ "$ID" = "lcos" ]; then
+    [ "$ID" = "lcos" ] ||
+    [[ " ${ID_LIKE:-} " == *" ubuntu "* ]]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that.
     # Devuan (and LCOS, built on it) is excluded above: its sources.list
     # points at deb.devuan.org (no "debian.org" match), and replacing it
     # with Debian's repos would pull systemd back in and break the system.
-    SOURCESLIST=/etc/apt/sources.list
+    SOURCESLIST=$APT_DIR/sources.list
     if ! grep -q "debian.org" $SOURCESLIST >/dev/null 2>&1; then
       echo "$SOURCESLIST does not have any debian.org references."
       if [ -f $SOURCESLIST ]; then

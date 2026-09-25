@@ -6,7 +6,7 @@
 # is present is the one to configure, Brave Origin first. The configuring
 # itself - alternatives, xdg-settings, scheme handlers, PDF viewer - is
 # bin/ohmydebn-browser-set-default's, shared with the browser installers'
-# "make it your default?" question and the menu's Browsers > Set Default,
+# "make it your default?" question and the menu's Setup > Defaults > Browser,
 # so a new install and a later switch set the same things the same way.
 #
 # Ubuntu has no "chromium" apt package (see bin/ohmydebn-chromium-install) -

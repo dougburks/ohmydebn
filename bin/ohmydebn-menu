@@ -659,9 +659,8 @@ show_virtualization_menu() {
 }
 
 show_browsers_menu() {
-  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium\n  Set Default"
+  menu "Browsers" "󰖟  Brave Origin (minimal)\n󰖟  Brave Browser (extras)\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
   case "$MENU_RESULT" in
-  *Default*) show_default_browser_menu ;;
   *Origin*) /usr/share/ohmydebn/bin/ohmydebn-brave-origin ;;
   *Browser*) /usr/share/ohmydebn/bin/ohmydebn-brave-browser ;;
   *Chromium*) /usr/share/ohmydebn/bin/ohmydebn-chromium ;;
@@ -672,37 +671,21 @@ show_browsers_menu() {
   esac
 }
 
-# Every browser the Browsers menu can install, installed or not: the
-# picker's search list is generated from this file's literal text
-# (bin/ohmydebn-menu-tree), so it can't be filtered at runtime -
-# ohmydebn-browser-set-default itself declines one that isn't installed,
-# in the terminal, and says where to install it.
-show_default_browser_menu() {
-  menu "Default Browser" "󰖟  Brave Origin\n󰖟  Brave Browser\n  Chromium\n  Firefox\n󰊯  Google Chrome\n󰖟  Helium"
-  case "$MENU_RESULT" in
-  *Origin*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-origin" ;;
-  *Browser*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default brave-browser" ;;
-  *Chromium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default chromium" ;;
-  *Firefox*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default firefox-esr" ;;
-  *Google*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default google-chrome-stable" ;;
-  *Helium*) present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default helium-bin" ;;
-  *) show_browsers_menu ;;
-  esac
-}
-
 show_ai_menu() {
-  # Picking any of these also makes it ohmydebn-ai's (Super+A's) default -
-  # see ohmydebn-ai-set-default - so there's no separate "set default AI"
-  # menu duplicating this same list.
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Pi (earendil-works)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  # Picking one just opens it. The default that ohmydebn-ai (Super+A)
+  # launches is chosen when a tool is installed (its installer asks) or
+  # later in Setup > Defaults > Agent (pick_default_agent).
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Pi (earendil-works)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
-  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default opencode; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
-  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default claude-code; /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
-  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default chatgpt; /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
-  *Codex*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default codex; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
-  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default pi; /usr/share/ohmydebn/bin/ohmydebn-ai ;;
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default antigravity; /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
-  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-ai-set-default vscode; /usr/share/ohmydebn/bin/ohmydebn-code ;;
+  *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
+  *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
+  *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
+  *Codex*) /usr/share/ohmydebn/bin/ohmydebn-codex ;;
+  *Grok*) /usr/share/ohmydebn/bin/ohmydebn-grok ;;
+  *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
+  *T3*) /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
+  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
+  *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_apps_menu ;;
   esac
 }
@@ -730,14 +713,72 @@ show_remove_menu() {
 }
 
 show_update_menu() {
-  menu "Update" "  OhMyDebn\n  Doctor\n  Password\n  Timezone"
+  menu "Update" "  OhMyDebn\n󰔫  Channel\n  Doctor\n  Firmware\n  Password\n  Timezone"
   case "$MENU_RESULT" in
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-update-gui ;;
+  *Channel*) show_channel_menu ;;
   *Doctor*) /usr/share/ohmydebn/bin/ohmydebn-doctor-gui ;;
+  *Firmware*) present_terminal "Firmware" "/usr/share/ohmydebn/bin/ohmydebn-update-firmware" ;;
   *Password*) show_update_password_menu ;;
   *Timezone*) cinnamon-settings calendar ;;
   *) show_main_menu ;;
   esac
+}
+
+show_channel_menu() {
+  menu "Channel" "󰔫  OhMyDebn\n󰔫  Claude Code"
+  case "$MENU_RESULT" in
+  *OhMyDebn*) pick_ohmydebn_channel ;;
+  *Claude*) pick_claude_code_channel ;;
+  *) show_update_menu ;;
+  esac
+}
+
+# Like pick_default_agent below: these mark the current channel, so their
+# items are built at runtime and they aren't show_*_menu functions. The
+# switch itself needs sudo (and asks for confirmation first), so it runs in
+# a terminal.
+pick_ohmydebn_channel() {
+  local current stable_item testing_item
+  current=$(/usr/share/ohmydebn/bin/ohmydebn-channel --current)
+  stable_item="󰔫  Stable (recommended)"
+  testing_item="󰔫  Testing (unreleased)"
+  [[ "$current" == "stable" ]] && stable_item+=" (current)"
+  [[ "$current" == "testing" ]] && testing_item+=" (current)"
+  menu "OhMyDebn Channel" "$stable_item\\n$testing_item"
+  # if/elif rather than case: tests/consistency.sh checks every case arm
+  # against its menu's literal items, and these items are built at runtime.
+  if [[ "$MENU_RESULT" == *Stable* ]]; then
+    present_terminal "OhMyDebn Channel" "/usr/share/ohmydebn/bin/ohmydebn-channel stable"
+  elif [[ "$MENU_RESULT" == *Testing* ]]; then
+    present_terminal "OhMyDebn Channel" "/usr/share/ohmydebn/bin/ohmydebn-channel testing"
+  else
+    show_channel_menu
+  fi
+}
+
+pick_claude_code_channel() {
+  local current stable_item latest_item
+  if ! dpkg -s claude-code >/dev/null 2>&1; then
+    command -v notify-send >/dev/null 2>&1 &&
+      notify-send "OhMyDebn" "Claude Code isn't installed. Install it from Apps > AI." -t 3000
+    return
+  fi
+  current=$(/usr/share/ohmydebn/bin/ohmydebn-claude-code-channel --current)
+  stable_item="󰔫  Stable (a week behind)"
+  latest_item="󰔫  Latest (newest releases)"
+  [[ "$current" == "stable" ]] && stable_item+=" (current)"
+  [[ "$current" == "latest" ]] && latest_item+=" (current)"
+  menu "Claude Code Channel" "$stable_item\\n$latest_item"
+  # if/elif rather than case: tests/consistency.sh checks every case arm
+  # against its menu's literal items, and these items are built at runtime.
+  if [[ "$MENU_RESULT" == *Stable* ]]; then
+    present_terminal "Claude Code Channel" "/usr/share/ohmydebn/bin/ohmydebn-claude-code-channel stable"
+  elif [[ "$MENU_RESULT" == *Latest* ]]; then
+    present_terminal "Claude Code Channel" "/usr/share/ohmydebn/bin/ohmydebn-claude-code-channel latest"
+  else
+    show_channel_menu
+  fi
 }
 
 show_update_password_menu() {
@@ -775,9 +816,10 @@ show_system_menu() {
 }
 
 show_setup_menu() {
-  menu "Setup" "  Bluetooth\n  Display\n󰟋  Gestures\n󰌌  Keybindings\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
+  menu "Setup" "  Bluetooth\n󰓎  Defaults\n  Display\n󰟋  Gestures\n󰌌  Keybindings\n  Keyboard\n󰍽  Mouse\n  Network\n  Power\n󰐪  Printers\n  Sound"
   case "$MENU_RESULT" in
   *Bluetooth*) blueman-manager ;;
+  *Defaults*) show_defaults_menu ;;
   *Display*) cinnamon-settings display ;;
   *Gestures*) cinnamon-settings gestures ;;
   *Keybindings*) present_terminal "Keybindings" "/usr/share/ohmydebn/bin/ohmydebn-keybindings-edit" ;;
@@ -789,6 +831,78 @@ show_setup_menu() {
   *Sound*) cinnamon-settings sound ;;
   *) back_to show_main_menu ;;
   esac
+}
+
+show_defaults_menu() {
+  menu "Defaults" "󱚤  Agent\n󰖟  Browser"
+  case "$MENU_RESULT" in
+  *Agent*) pick_default_agent ;;
+  *Browser*) pick_default_browser ;;
+  *) show_setup_menu ;;
+  esac
+}
+
+# pick_default_agent and pick_default_browser list only what's installed
+# right now, with the current default marked, so their items are built at
+# runtime. That's also why they aren't named show_*_menu: bin/ohmydebn-menu-tree
+# walks every show_*_menu's literal item list into the Search menu, and
+# treats any other case-arm target as a leaf - so search finds "Setup >
+# Defaults > Agent" and opens this list, which is what a runtime list needs.
+pick_default_agent() {
+  local current name label result items=""
+  local -A name_of=()
+  current=$(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --current)
+  while IFS=$'\t' read -r name label; do
+    name_of["$label"]="$name"
+    [[ "$name" == "$current" ]] && label+=" (current default)"
+    items+="${items:+\\n}󱚤  $label"
+  done < <(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --list-installed)
+  if [[ -z "$items" ]]; then
+    command -v notify-send >/dev/null 2>&1 &&
+      notify-send "OhMyDebn" "No AI assistants are installed yet. Install one from Apps > AI." -t 3000
+    return
+  fi
+  menu "Default Agent" "$items"
+  result="${MENU_RESULT#*  }"
+  result="${result% (current default)}"
+  name=""
+  [[ -n "$result" ]] && name="${name_of[$result]:-}"
+  if [[ -z "$name" ]]; then
+    show_defaults_menu
+    return
+  fi
+  /usr/share/ohmydebn/bin/ohmydebn-ai-set-default "$name"
+  command -v notify-send >/dev/null 2>&1 &&
+    notify-send "OhMyDebn" "$result is now your default AI assistant (Super + A)." -t 3000
+  return 0
+}
+
+pick_default_browser() {
+  local current pkg label result items=""
+  local -A pkg_of=()
+  current=$(/usr/share/ohmydebn/bin/ohmydebn-browser-set-default --current)
+  while IFS=$'\t' read -r pkg label; do
+    pkg_of["$label"]="$pkg"
+    [[ "$pkg" == "$current" ]] && label+=" (current default)"
+    items+="${items:+\\n}󰖟  $label"
+  done < <(/usr/share/ohmydebn/bin/ohmydebn-browser-set-default --list-installed)
+  if [[ -z "$items" ]]; then
+    command -v notify-send >/dev/null 2>&1 &&
+      notify-send "OhMyDebn" "No web browsers are installed yet. Install one from Apps > Browsers." -t 3000
+    return
+  fi
+  menu "Default Browser" "$items"
+  result="${MENU_RESULT#*  }"
+  result="${result% (current default)}"
+  pkg=""
+  [[ -n "$result" ]] && pkg="${pkg_of[$result]:-}"
+  if [[ -z "$pkg" ]]; then
+    show_defaults_menu
+    return
+  fi
+  # Needs sudo (update-alternatives), so it runs in a terminal like the
+  # rest of the menu's privileged picks.
+  present_terminal "Default Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-set-default $pkg"
 }
 
 show_main_menu() {

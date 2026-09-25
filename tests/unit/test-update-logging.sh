@@ -118,6 +118,9 @@ assert_eq "inner run: exits 0" "0" "$STATUS"
 assert_eq "inner run: creates no log of its own" "no" "$([ -d "$LOG_DIR" ] && echo yes || echo no)"
 assert_contains "inner run: reports the outer log path" "$OUTPUT" "Logging this update to:
 /somewhere/outer.log"
+assert_contains "inner run: a blank line follows the log path" "$OUTPUT" "/somewhere/outer.log
+
+"
 mock_cleanup
 
 test_summary

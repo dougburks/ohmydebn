@@ -138,6 +138,7 @@ if [ -n "${OHMYDEBN_UPDATE_LOG:-}" ]; then
   echo
   echo "Logging this update to:"
   echo "$OHMYDEBN_UPDATE_LOG"
+  echo
 fi
 
 # Update time

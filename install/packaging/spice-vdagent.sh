@@ -6,6 +6,7 @@ SPICE_VDAGENT_STATE=~/.local/state/ohmydebn-config/spice-vdagent-20260803
 # /dev path can't be faked into existing/not existing from a test without
 # root, so the path itself has to be swappable instead.
 SPICE_CHANNEL="${OHMYDEBN_TEST_SPICE_CHANNEL:-/dev/virtio-ports/com.redhat.spice.0}"
+SYSTEMD_DIR="${OHMYDEBN_TEST_SYSTEMD_DIR:-/run/systemd/system}"
 if [ ! -f $SPICE_VDAGENT_STATE ]; then
 
   # spice-vdagent is a guest-side agent that only does anything when the
@@ -40,6 +41,19 @@ EOF
 
     # Set permissions on the file
     sudo chmod 644 /etc/apt/preferences.d/ohmydebn-spice-vdagent
+
+    # The package starts its daemon from a udev rule on the SPICE port's
+    # "add" event (70-spice-vdagentd.rules wants spice-vdagentd.socket),
+    # which only fires at boot. Installed or downgraded here, after boot -
+    # always the case on a distro whose own installer didn't include it,
+    # like Pop!_OS - nothing started the daemon until the next reboot, so
+    # the session agent gave up after 60 seconds and the display stopped
+    # resizing with the VM window. Start the socket the way the rule would.
+    # Only on systemd: without it, the package's init script runs the
+    # daemon instead.
+    if [ -d "$SYSTEMD_DIR" ]; then
+      sudo systemctl start spice-vdagentd.socket || true
+    fi
 
   fi
 

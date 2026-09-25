@@ -99,6 +99,16 @@ EOF
   touch $GROK_ALIAS_STATE
 fi
 
+OMP_ALIAS_STATE=~/.local/state/ohmydebn-config/omp-alias
+if [ ! -f $OMP_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Oh My Pi (Stencil Labs) CLI coding agent, run in the current terminal
+alias omp='/usr/share/ohmydebn/bin/ohmydebn-omp-cli'
+EOF
+  touch $OMP_ALIAS_STATE
+fi
+
 OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias
 if [ ! -f $OPENCODE_CLI_ALIAS_STATE ]; then
   sed -i "s#^alias c='/usr/bin/opencode-cli'\$#alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'#" ~/.zshrc

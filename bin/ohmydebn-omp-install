@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Oh My Pi is not currently installed."
+    echo
+    echo "Continuing will install it, packaged from:"
+    echo "https://github.com/can1357/oh-my-pi"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # This runs standalone, on-demand (via ohmydebn-omp-run when Super+A's
+  # default AI assistant is Oh My Pi and it isn't installed yet),
+  # independent of install.sh/ohmydebn-update's own flow - see
+  # ohmydebn-gestures-install's/ohmydebn-opencode-install's own comments
+  # for why that means it needs its own `apt update` first.
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install ohmydebn-oh-my-pi
+
+  # Match Oh My Pi to the current OhMyDebn theme from its first launch, and
+  # keep it matched: ohmydebn-theme-set-omp only publishes into an existing
+  # agent directory, so create it first.
+  mkdir -p "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}"
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-omp --activate || true
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask omp || true
+  fi
+fi

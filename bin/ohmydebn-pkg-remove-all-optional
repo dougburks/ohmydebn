@@ -82,11 +82,11 @@ for PACKAGE in antigravity brave-browser chatgpt claude-code cloudflare-warp cod
   fi
 done
 
-# Pi, Codex, T3 Code and Grok Build don't fit the loop above - their dpkg
+# Pi, Codex, T3 Code, Grok Build and Oh My Pi don't fit the loop above - their dpkg
 # package names (ohmydebn-pi-coding-agent, ohmydebn-codex-cli,
-# ohmydebn-t3code, ohmydebn-grok-build) aren't the same string as their
+# ohmydebn-t3code, ohmydebn-grok-build, ohmydebn-oh-my-pi) aren't the same string as their
 # remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove/
-# ohmydebn-t3code-remove/ohmydebn-grok-remove (the loop assumes both are the
+# ohmydebn-t3code-remove/ohmydebn-grok-remove/ohmydebn-omp-remove (the loop assumes both are the
 # same $PACKAGE, true for every other entry there but not for these short
 # script names).
 if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
@@ -100,4 +100,7 @@ if dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
 fi
 if dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-grok-remove --skip-prompt
+fi
+if dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-omp-remove --skip-prompt
 fi

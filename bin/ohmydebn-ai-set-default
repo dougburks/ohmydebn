@@ -11,7 +11,7 @@
 # --list-installed and marks --current. Picking a tool from Apps > AI only
 # opens it - it no longer changes the default.
 #
-# Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|pi|t3code|vscode|antigravity>
+# Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|omp|pi|t3code|vscode|antigravity>
 #        ohmydebn-ai-set-default --current
 #        ohmydebn-ai-set-default --list-installed
 #   --ask             ask first, defaulting to no - this runs right after an
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
-ALL_NAMES=(opencode claude-code chatgpt codex grok pi t3code vscode antigravity)
+ALL_NAMES=(opencode claude-code chatgpt codex grok omp pi t3code vscode antigravity)
 
 display_name() {
   case "$1" in
@@ -36,6 +36,7 @@ display_name() {
   chatgpt) echo "ChatGPT" ;;
   codex) echo "Codex" ;;
   grok) echo "Grok Build" ;;
+  omp) echo "Oh My Pi" ;;
   pi) echo "Pi" ;;
   t3code) echo "T3 Code" ;;
   vscode) echo "VS Code" ;;
@@ -50,6 +51,7 @@ package_of() {
   chatgpt) echo "chatgpt" ;;
   codex) echo "ohmydebn-codex-cli" ;;
   grok) echo "ohmydebn-grok-build" ;;
+  omp) echo "ohmydebn-oh-my-pi" ;;
   pi) echo "ohmydebn-pi-coding-agent" ;;
   t3code) echo "ohmydebn-t3code" ;;
   vscode) echo "code" ;;
@@ -61,13 +63,13 @@ current_default() {
   local stored=""
   [[ -f "$DEFAULT_AI_FILE" ]] && stored=$(<"$DEFAULT_AI_FILE")
   case "$stored" in
-  opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity) echo "$stored" ;;
+  opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) echo "$stored" ;;
   *) echo "opencode" ;;
   esac
 }
 
 usage() {
-  echo "Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|pi|t3code|vscode|antigravity>" >&2
+  echo "Usage: ohmydebn-ai-set-default [--ask] <opencode|claude-code|chatgpt|codex|grok|omp|pi|t3code|vscode|antigravity>" >&2
   echo "       ohmydebn-ai-set-default --current | --list-installed" >&2
   exit 1
 }
@@ -93,7 +95,7 @@ case "${1:-}" in
 esac
 
 case "${1:-}" in
-opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity) ;;
+opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) ;;
 *) usage ;;
 esac
 NAME="$1"

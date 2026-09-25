@@ -18,7 +18,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai / bin/ohmydebn-ai-set-default ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode ohmydebn-claude-code ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-pi ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode ohmydebn-claude-code ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-omp ohmydebn-pi ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -53,6 +53,7 @@ declare -A EXPECTED=(
   [chatgpt]="ohmydebn-chatgpt"
   [codex]="ohmydebn-codex"
   [grok]="ohmydebn-grok"
+  [omp]="ohmydebn-omp"
   [pi]="ohmydebn-pi"
   [t3code]="ohmydebn-t3code"
   [vscode]="ohmydebn-code"
@@ -83,7 +84,7 @@ set_default() {
   HOME="$SCRATCH_HOME" bash "$SET_DEFAULT_SCRIPT" "$1" >/dev/null 2>&1
 }
 
-for name in opencode claude-code chatgpt codex grok pi t3code vscode antigravity; do
+for name in opencode claude-code chatgpt codex grok omp pi t3code vscode antigravity; do
   if ! set_default "$name"; then
     assert_eq "accepts valid name '$name'" "accepted" "rejected"
   else

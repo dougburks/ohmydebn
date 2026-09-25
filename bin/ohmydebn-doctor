@@ -185,14 +185,14 @@ for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
 done
 DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "(unset - opencode)")
 case "$DEFAULT_AI" in
-opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
-for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-pi-cli; do
+for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli; do
   check "wrapper $w executable" test -x "$OHMYDEBN/bin/$w"
 done
 if [ -f "$HOME/.zshrc" ]; then
-  for a in c pi codex grok claude a; do
+  for a in c pi omp codex grok claude a; do
     if grep -qE "^alias $a=" "$HOME/.zshrc"; then ok "zsh alias '$a' present"; else fail "zsh alias '$a' present"; fi
   done
 else

@@ -671,6 +671,7 @@ declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
+  [ohmydebn-omp-install]=omp
   [ohmydebn-pi-install]=pi
   [ohmydebn-t3code-install]=t3code
   [ohmydebn-code-install]=vscode
@@ -1142,6 +1143,7 @@ TITLE_OWNERS=(
   "ohmydebn-pi:Pi"
   "ohmydebn-codex:Codex"
   "ohmydebn-grok:Grok Build"
+  "ohmydebn-omp:Oh My Pi"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
   "ohmydebn-logo-gui:OhMyDebn Logo"

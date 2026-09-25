@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  echo
+  echo "Oh My Pi is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove Oh My Pi. Your Oh My Pi sessions and settings"
+    echo "in ~/.omp are kept."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge ohmydebn-oh-my-pi
+  sudo /usr/bin/apt -y autoremove
+fi

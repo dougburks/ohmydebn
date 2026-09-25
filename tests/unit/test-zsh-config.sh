@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Unit tests for install/config/zsh.sh, focused on the newest state-gated
-# blocks: PI_ALIAS_STATE, CODEX_ALIAS_STATE, GROK_ALIAS_STATE and AI_CLI_ALIAS_STATE (append the `pi`, `codex`, `grok` and `a`
+# blocks: PI_ALIAS_STATE, CODEX_ALIAS_STATE, GROK_ALIAS_STATE, OMP_ALIAS_STATE and AI_CLI_ALIAS_STATE (append the `pi`, `codex`, `grok`, `omp` and `a`
 # aliases, same shape as the pre-existing GRC_STATE/COLOR_MAN_STATE blocks -
 # deliberately NOT baked into config/.zshrc itself, so they don't double up
 # on a fresh install where ZSHRC_STATE also copies the template) and
@@ -54,6 +54,8 @@ GROK_COUNT=$(grep -Fc "alias grok='$MOCK_BIN/ohmydebn-grok-cli'" "$SCRATCH_HOME/
 assert_eq "fresh install: grok alias appears exactly once" "1" "$GROK_COUNT"
 assert_eq "fresh install: grok-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/grok-alias" ] && echo yes || echo no)"
+OMP_COUNT=$(grep -Fc "alias omp='$MOCK_BIN/ohmydebn-omp-cli'" "$SCRATCH_HOME/.zshrc")
+assert_eq "fresh install: omp alias appears exactly once" "1" "$OMP_COUNT"
 assert_eq "fresh install: opencode-cli-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/opencode-cli-alias" ] && echo yes || echo no)"
 AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
@@ -101,6 +103,8 @@ CODEX_COUNT=$(grep -Fc "alias codex='$MOCK_BIN/ohmydebn-codex-cli'" "$SCRATCH_HO
 assert_eq "pre-existing install: codex alias appended exactly once" "1" "$CODEX_COUNT"
 GROK_COUNT=$(grep -Fc "alias grok='$MOCK_BIN/ohmydebn-grok-cli'" "$SCRATCH_HOME/.zshrc")
 assert_eq "pre-existing install: grok alias appended exactly once" "1" "$GROK_COUNT"
+OMP_COUNT=$(grep -Fc "alias omp='$MOCK_BIN/ohmydebn-omp-cli'" "$SCRATCH_HOME/.zshrc")
+assert_eq "pre-existing install: omp alias appended exactly once" "1" "$OMP_COUNT"
 AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
 assert_eq "pre-existing install: a alias appended exactly once" "1" "$AI_CLI_COUNT"
 rm -rf "$SCRATCH_HOME"
@@ -150,6 +154,7 @@ touch "$SCRATCH_HOME/.local/state/ohmydebn-config/zshrc-20260116"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/pi-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/codex-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/grok-alias"
+touch "$SCRATCH_HOME/.local/state/ohmydebn-config/omp-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/opencode-cli-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias"
 cat >"$SCRATCH_HOME/.zshrc" <<'EOF'
@@ -158,6 +163,7 @@ alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'
 alias pi='/usr/share/ohmydebn/bin/ohmydebn-pi-cli'
 alias codex='/usr/share/ohmydebn/bin/ohmydebn-codex-cli'
 alias grok='/usr/share/ohmydebn/bin/ohmydebn-grok-cli'
+alias omp='/usr/share/ohmydebn/bin/ohmydebn-omp-cli'
 alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
 EOF
 HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/zsh-patched.sh" >/dev/null 2>&1
@@ -169,6 +175,8 @@ CODEX_COUNT=$(grep -c "^alias codex='/usr/share/ohmydebn/bin/ohmydebn-codex-cli'
 assert_eq "already migrated: codex alias still appears exactly once" "1" "$CODEX_COUNT"
 GROK_COUNT=$(grep -c "^alias grok='/usr/share/ohmydebn/bin/ohmydebn-grok-cli'\$" "$SCRATCH_HOME/.zshrc")
 assert_eq "already migrated: grok alias still appears exactly once" "1" "$GROK_COUNT"
+OMP_COUNT=$(grep -c "^alias omp='/usr/share/ohmydebn/bin/ohmydebn-omp-cli'\$" "$SCRATCH_HOME/.zshrc")
+assert_eq "already migrated: omp alias still appears exactly once" "1" "$OMP_COUNT"
 assert_eq "already migrated: c alias still appears exactly once" "1" "$C_COUNT"
 assert_eq "already migrated: a alias still appears exactly once" "1" "$AI_CLI_COUNT"
 rm -rf "$SCRATCH_HOME"

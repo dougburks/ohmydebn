@@ -1,0 +1,177 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-omp: publishes the current OhMyDebn theme as an Oh My Pi
+# (omp) custom theme, ~/.omp/agent/themes/ohmydebn.json. omp watches the file
+# of the theme it's showing and reloads it when it changes, so once "ohmydebn"
+# is selected (--activate, run by ohmydebn-omp-install) every later theme
+# switch follows automatically.
+#
+# The palette is a port of Omarchy's default/themed/pi.json.tpl (omp is a fork
+# of Pi and shares its theme format), plus the 15 tokens omp requires on top
+# of Pi's: pythonMode and the status line. omp validates themes against a
+# schema that requires every one of its 66 color tokens and rejects unknown
+# ones. Omarchy 4+ themes provide every semantic key used here; older themes
+# fall back to the color0-15 aliases every normalized colors.toml has (see
+# ohmydebn-theme-set-colors).
+#
+# Usage: ohmydebn-theme-set-omp [--activate] [<colors-source> <is-light-mode>]
+#   <colors-source>  normalized colors.toml (default: the current theme's)
+#   <is-light-mode>  accepted for the same call shape as the other theme
+#                    hooks, but not needed: the palette is mixed from the
+#                    theme's own background and foreground, so it already
+#                    reads correctly on a light theme
+#   --activate       also select "ohmydebn" for both of omp's theme slots
+#                    (theme.dark and theme.light - omp picks one by the
+#                    terminal's background, and this one theme already follows
+#                    OhMyDebn's light/dark mode), through omp's own
+#                    `omp config set`.
+#
+# Does nothing unless omp's agent directory already exists - creating it here
+# would leave a stray ~/.omp on machines that don't run omp.
+
+set -euo pipefail
+
+ACTIVATE=false
+if [[ "${1:-}" == "--activate" ]]; then
+  ACTIVATE=true
+  shift
+fi
+
+CURRENT_THEME="$HOME/.config/ohmydebn/current/theme"
+COLORS_SOURCE="${1:-$CURRENT_THEME/colors.toml}"
+
+OMP_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}"
+OMP_BIN=/usr/lib/ohmydebn-oh-my-pi/omp
+THEME_NAME="ohmydebn"
+THEME_FILE="$OMP_AGENT_DIR/themes/$THEME_NAME.json"
+
+[[ -d "$OMP_AGENT_DIR" ]] || exit 0
+[[ -f "$COLORS_SOURCE" ]] || exit 0
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ohmydebn-theme-set-omp: jq is required, skipping Oh My Pi theme" >&2
+  exit 0
+fi
+
+parse_color() {
+  grep -E "^\s*$1\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true
+}
+
+# First key that holds a #rrggbb color, so a missing or malformed semantic
+# key falls through to its legacy alias.
+pick() {
+  local key value
+  for key in "$@"; do
+    value=$(parse_color "$key")
+    if [[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+      echo "$value"
+      return
+    fi
+  done
+}
+
+# Same math as Omarchy's omarchy-theme-set-templates mix_color: amount of
+# the second color blended into the first.
+mix() {
+  awk -v start="${1#\#}" -v end="${2#\#}" -v amount="$3" '
+    function hex(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+    function pair(h, i) { return hex(substr(h, i, 1)) * 16 + hex(substr(h, i + 1, 1)) }
+    BEGIN {
+      printf "#%02x%02x%02x\n",
+        int(pair(start, 1) * (1 - amount) + pair(end, 1) * amount + 0.5),
+        int(pair(start, 3) * (1 - amount) + pair(end, 3) * amount + 0.5),
+        int(pair(start, 5) * (1 - amount) + pair(end, 5) * amount + 0.5)
+    }'
+}
+
+BACKGROUND=$(pick background)
+FOREGROUND=$(pick foreground)
+ACCENT=$(pick accent color4)
+if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
+  echo "ohmydebn-theme-set-omp: missing background/foreground/accent in $COLORS_SOURCE, skipping" >&2
+  exit 0
+fi
+RED=$(pick red color1)
+GREEN=$(pick green color2)
+YELLOW=$(pick yellow color3)
+BLUE=$(pick blue color4)
+MAGENTA=$(pick magenta color5)
+CYAN=$(pick cyan color6)
+RED=${RED:-$ACCENT}
+GREEN=${GREEN:-$ACCENT}
+YELLOW=${YELLOW:-$ACCENT}
+BLUE=${BLUE:-$ACCENT}
+MAGENTA=${MAGENTA:-$ACCENT}
+CYAN=${CYAN:-$ACCENT}
+
+THEME_JSON=$(jq -n \
+  --arg name "$THEME_NAME" \
+  --arg background "$BACKGROUND" \
+  --arg foreground "$FOREGROUND" \
+  --arg accent "$ACCENT" \
+  --arg selectedBackground "$(mix "$BACKGROUND" "$ACCENT" 0.22)" \
+  --arg color1 "$RED" \
+  --arg color2 "$GREEN" \
+  --arg color3 "$YELLOW" \
+  --arg color4 "$BLUE" \
+  --arg color5 "$MAGENTA" \
+  --arg color6 "$CYAN" \
+  --arg panel "$(mix "$BACKGROUND" "$FOREGROUND" 0.06)" \
+  --arg panelAlt "$(mix "$BACKGROUND" "$FOREGROUND" 0.10)" \
+  --arg panelPending "$(mix "$BACKGROUND" "$ACCENT" 0.12)" \
+  --arg panelSuccess "$(mix "$BACKGROUND" "$GREEN" 0.12)" \
+  --arg panelError "$(mix "$BACKGROUND" "$RED" 0.12)" \
+  --arg border "$(mix "$BACKGROUND" "$FOREGROUND" 0.30)" \
+  --arg borderMuted "$(mix "$BACKGROUND" "$FOREGROUND" 0.20)" \
+  --arg mutedText "$(mix "$FOREGROUND" "$BACKGROUND" 0.34)" \
+  --arg dimText "$(mix "$FOREGROUND" "$BACKGROUND" 0.52)" \
+  '{
+    name: $name,
+    vars: {
+      background: $background, foreground: $foreground, accent: $accent,
+      selectedBackground: $selectedBackground,
+      color1: $color1, color2: $color2, color3: $color3,
+      color4: $color4, color5: $color5, color6: $color6,
+      panel: $panel, panelPending: $panelPending,
+      panelSuccess: $panelSuccess, panelError: $panelError,
+      border: $border, borderMuted: $borderMuted,
+      mutedText: $mutedText, dimText: $dimText
+    },
+    colors: {
+      accent: "accent", border: "border", borderAccent: "accent", borderMuted: "borderMuted",
+      success: "color2", error: "color1", warning: "color3",
+      muted: "mutedText", dim: "dimText", text: "foreground", thinkingText: "dimText",
+      selectedBg: "selectedBackground",
+      userMessageBg: "panel", userMessageText: "foreground",
+      customMessageBg: "panel", customMessageText: "foreground", customMessageLabel: "accent",
+      toolPendingBg: "panelPending", toolSuccessBg: "panelSuccess", toolErrorBg: "panelError",
+      toolTitle: "accent", toolOutput: "foreground",
+      mdHeading: "color5", mdLink: "accent", mdLinkUrl: "color6", mdCode: "color6",
+      mdCodeBlock: "foreground", mdCodeBlockBorder: "borderMuted",
+      mdQuote: "mutedText", mdQuoteBorder: "borderMuted", mdHr: "borderMuted", mdListBullet: "color5",
+      toolDiffAdded: "color2", toolDiffRemoved: "color1", toolDiffContext: "mutedText",
+      syntaxComment: "dimText", syntaxKeyword: "color5", syntaxFunction: "color4",
+      syntaxVariable: "accent", syntaxString: "color2", syntaxNumber: "color3",
+      syntaxType: "color4", syntaxOperator: "color5", syntaxPunctuation: "mutedText",
+      thinkingOff: "borderMuted", thinkingMinimal: "accent", thinkingLow: "color4",
+      thinkingMedium: "color5", thinkingHigh: "color3", thinkingXhigh: "color1",
+      bashMode: "color3", pythonMode: "color4",
+      statusLineBg: "panel", statusLineSep: "borderMuted", statusLineModel: "accent",
+      statusLinePath: "color4", statusLineGitClean: "color2", statusLineGitDirty: "color3",
+      statusLineContext: "mutedText", statusLineSpend: "color6", statusLineStaged: "color2",
+      statusLineDirty: "color3", statusLineUntracked: "color5", statusLineOutput: "mutedText",
+      statusLineCost: "color3", statusLineSubagents: "color5"
+    },
+    export: { pageBg: $background, cardBg: $panel, infoBg: $panelAlt }
+  }')
+
+mkdir -p "$(dirname "$THEME_FILE")"
+# Written in place, not renamed over: omp's watcher follows this one path,
+# and a rename would swap the file out from under it. A reader that catches
+# the file mid-write is harmless - omp keeps the last theme that loaded
+# successfully and reloads on the next change.
+printf '%s\n' "$THEME_JSON" >"$THEME_FILE"
+
+if [[ "$ACTIVATE" == true && -x "$OMP_BIN" ]]; then
+  "$OMP_BIN" config set theme.dark "$THEME_NAME" >/dev/null
+  "$OMP_BIN" config set theme.light "$THEME_NAME" >/dev/null
+fi

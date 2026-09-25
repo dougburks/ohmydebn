@@ -21,7 +21,7 @@ name="opencode"
 if [[ -f "$DEFAULT_AI_FILE" ]]; then
   stored=$(<"$DEFAULT_AI_FILE")
   case "$stored" in
-  opencode | claude-code | chatgpt | codex | grok | pi | t3code | vscode | antigravity) name="$stored" ;;
+  opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) name="$stored" ;;
   esac
 fi
 
@@ -30,6 +30,7 @@ opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode-cli ;;
 claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code-cli ;;
 codex) exec /usr/share/ohmydebn/bin/ohmydebn-codex-cli ;;
 grok) exec /usr/share/ohmydebn/bin/ohmydebn-grok-cli ;;
+omp) exec /usr/share/ohmydebn/bin/ohmydebn-omp-cli ;;
 pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi-cli ;;
 chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt "$PWD" ;;
 t3code) exec /usr/share/ohmydebn/bin/ohmydebn-t3code ;;

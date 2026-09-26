@@ -68,10 +68,26 @@ run_notice
 assert_eq "running kernel newer than installed images: silent" "" "$OUTPUT"
 mock_cleanup
 
-# --- no vmlinuz images at all (Raspberry Pi OS keeps kernels elsewhere): silent ---
+# --- no vmlinuz images at all: silent ---
 setup "6.12.25+rpt-rpi-v8"
 run_notice
 assert_eq "no /boot/vmlinuz-*: silent" "" "$OUTPUT"
+mock_cleanup
+
+# --- Raspberry Pi OS: one image per board family, same version, only one
+# boots. "rpi-v8" sorts after "rpi-2712", which asked a Pi 5 for a reboot
+# after every update (seen on real hardware). Only the running flavor counts.
+setup "6.18.50+rpt-rpi-2712" "6.18.50+rpt-rpi-v8" "6.18.50+rpt-rpi-2712"
+run_notice
+assert_eq "Pi, other board families' images: silent" "" "$OUTPUT"
+mock_cleanup
+setup "6.18.50+rpt-rpi-2712" "6.18.50+rpt-rpi-v8" "6.18.50+rpt-rpi-2712" "6.18.60+rpt-rpi-v8" "6.18.60+rpt-rpi-2712"
+run_notice
+assert_contains "Pi, a newer kernel for this board: named" "$OUTPUT" "A newer kernel (6.18.60+rpt-rpi-2712) is installed, but 6.18.50+rpt-rpi-2712 is still running."
+mock_cleanup
+setup "6.18.50+rpt-rpi-2712" "6.18.50+rpt-rpi-2712" "6.18.60+rpt-rpi-v8"
+run_notice
+assert_eq "Pi, a newer kernel only for another board: silent" "" "$OUTPUT"
 mock_cleanup
 
 # --- the reboot-required marker, with and without a package list ---

@@ -245,10 +245,12 @@ for mount_point in "$SYSROOT/" "$HOME"; do
     fail "at least 2 GB free on $label" "$((FREE_KB / 1024)) MB free"
   fi
 done
-# The same test the update's reboot notice uses: a newer kernel installed
-# than the one running, or a package asking for a reboot.
+# The same test the update's reboot notice uses: a newer kernel of the
+# running one's flavor installed (Raspberry Pi OS installs one image per
+# board family, and only one of them boots), or a package asking for a
+# reboot.
 RUNNING_KERNEL=$(uname -r)
-NEWEST_KERNEL=$(ls "$SYSROOT"/boot/vmlinuz-* 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -n1)
+NEWEST_KERNEL=$(ls "$SYSROOT"/boot/vmlinuz-*-"${RUNNING_KERNEL##*-}" 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -n1)
 if [ -n "$NEWEST_KERNEL" ] && [ "$NEWEST_KERNEL" != "$RUNNING_KERNEL" ] &&
   [ "$(printf '%s\n%s\n' "$RUNNING_KERNEL" "$NEWEST_KERNEL" | sort -V | tail -n1)" = "$NEWEST_KERNEL" ]; then
   echo "  reboot needed: kernel $NEWEST_KERNEL is installed, $RUNNING_KERNEL is running"
@@ -403,14 +405,23 @@ else
   # records each as "custom N") are meant to differ from the txt file.
   OVERRIDDEN=" $(awk '$1 == "custom" { printf "custom-%s ", $2 }' "$USER_KEYBINDINGS_TOUCHED" 2>/dev/null)"
   WRONG=()
+  WRONG_DETAIL=()
   while IFS= read -r line; do
     n=$(echo "$line" | awk '{print $2}')
     case "$OVERRIDDEN" in *" custom-$n "*) continue ;; esac
     want=$(echo "$line" | sed -E 's/^keybinding-custom [0-9]+ "[^"]*" "([^"]*)".*/\1/')
     got=$(gs "org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$n/" command | sed -E "s/^'(.*)'$/\1/")
-    [ "$got" = "$want" ] || WRONG+=("custom-$n")
+    if [ "$got" != "$want" ]; then
+      WRONG+=("custom-$n")
+      WRONG_DETAIL+=("custom-$n runs: ${got:-(nothing)}" "  expected: $want")
+    fi
   done < <(grep '^keybinding-custom' "$KB_FILE")
-  if [ ${#WRONG[@]} -eq 0 ]; then ok "every custom keybinding runs the command keybinding-custom.txt says"; else fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"; fi
+  if [ ${#WRONG[@]} -eq 0 ]; then
+    ok "every custom keybinding runs the command keybinding-custom.txt says"
+  else
+    fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"
+    printf '      %s\n' "${WRONG_DETAIL[@]}"
+  fi
 fi
 
 # The user's own keybindings file is optional; nothing is reported when absent.

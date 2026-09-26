@@ -218,10 +218,23 @@ assert_contains "system problems: dpkg says how to fix" "$OUTPUT" "FAIL - no hal
 assert_contains "system problems: low disk named" "$OUTPUT" "FAIL - at least 2 GB free on / (878 MB free)"
 assert_contains "system problems: held package listed" "$OUTPUT" "held packages (not updated): linux-image-amd64"
 assert_contains "system problems: reboot for the new kernel" "$OUTPUT" "reboot needed: kernel 6.12.9-amd64 is installed, 6.12.1-amd64 is running"
+
 assert_contains "system problems: firewall off" "$OUTPUT" "FAIL - firewall (ufw) enabled (run: sudo ufw enable)"
 assert_contains "system problems: SPICE agent not running" "$OUTPUT" "FAIL - VM display: spice-vdagentd running"
 assert_contains "system problems: fwupd-signed missing" "$OUTPUT" "FAIL - firmware updates: fwupd's signed EFI binary installed (run: sudo apt install fwupd-signed)"
 assert_contains "system problems: DCONF_PROFILE caught" "$OUTPUT" "FAIL - DCONF_PROFILE not set in the session (DCONF_PROFILE=cosmic)"
+mock_cleanup
+
+# --- Raspberry Pi OS: another board family's image isn't a pending reboot ---
+build_machine yes
+mock_bin uname <<'EOF2'
+#!/bin/bash
+echo "6.18.50+rpt-rpi-2712"
+EOF2
+rm "$ROOT"/boot/vmlinuz-*
+: >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-v8"; : >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-2712"
+run_doctor
+assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
 mock_cleanup
 
 # --- an update that never finished, and one that's still running ---
@@ -292,6 +305,8 @@ assert_contains "broken: dangling background caught" "$OUTPUT" "FAIL - current b
 assert_contains "broken: version mismatch caught with both values" "$OUTPUT" "FAIL - package version matches VERSION file (dpkg 4.8.0 vs file 3.9.0)"
 assert_contains "broken: missing dependency named" "$OUTPUT" "missing: gir1.2-wnck-3.0"
 assert_contains "broken: wrong keybinding command named" "$OUTPUT" "differs: custom-1"
+assert_contains "broken: what the keybinding runs instead is shown" "$OUTPUT" "custom-1 runs: /usr/bin/something-else"
+assert_contains "broken: and what it should run" "$OUTPUT" "expected: /usr/share/ohmydebn/bin/ohmydebn-update-gui"
 assert_contains "broken: summary lists failures" "$OUTPUT" "  failed:"
 mock_cleanup
 

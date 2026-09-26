@@ -16,6 +16,12 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-doctor ==="
 
+# elf <file> <machine bytes, printf octal>: just enough of an ELF header for
+# the doctor's architecture check (the machine field is at byte 18).
+elf() {
+  { printf '\177ELF'; head -c 14 /dev/zero; printf "$2"; } >"$1"
+}
+
 # build_machine <systemd: yes|no>: a scratch SYSROOT + HOME describing a healthy install.
 build_machine() {
   local systemd="$1"
@@ -54,17 +60,71 @@ build_machine() {
   ln -s /usr/share/ohmydebn-themes "$H/.local/share/omarchy/themes"
   ln -s "$H/.config/ohmydebn/current" "$H/.local/state/omarchy/current"
 
+  # System: a finished update, a third-party repo with its pin, the
+  # firewall on, a VM with SPICE, UEFI with fwupd's signed binary, and the
+  # running kernel the newest one installed.
+  mkdir -p "$H/.local/state/ohmydebn-logs" "$ROOT/etc/apt/preferences.d" "$ROOT/etc/ufw" "$ROOT/dev/virtio-ports" \
+    "$ROOT/sys/firmware/efi" "$ROOT/usr/lib/fwupd/efi" "$ROOT/boot"
+  printf 'Checking for an updated ohmydebn package\nOhMyDebn update complete - version: 4.8.0\n' >"$H/.local/state/ohmydebn-logs/update-1.log"
+  ln -s "$H/.local/state/ohmydebn-logs/update-1.log" "$H/.local/state/ohmydebn-logs/update-latest.log"
+  : >"$ROOT/etc/apt/sources.list.d/tailscale.list"; : >"$ROOT/etc/apt/preferences.d/tailscale.pref"
+  echo "ENABLED=yes" >"$ROOT/etc/ufw/ufw.conf"
+  : >"$ROOT/dev/virtio-ports/com.redhat.spice.0"
+  : >"$ROOT/usr/lib/fwupd/efi/fwupdx64.efi.signed"
+  : >"$ROOT/boot/vmlinuz-6.12.1-amd64"
+
+  # Neovim: the plugin package (two plugins, a parser, a Mason tool) and this
+  # user's copy of it, with the current theme's colorscheme plugin (named
+  # "pixel" by its spec, as OhMyDebn's default theme does it).
+  local seed="$ROOT/usr/lib/ohmydebn-neovim-plugins" data="$H/.local/share/nvim"
+  mkdir -p "$seed/config" "$seed/data/site/parser" "$seed/data/mason/packages/stylua" \
+    "$data/lazy/LazyVim" "$data/lazy/blink.cmp/target/release" "$data/lazy/pixel" "$data/site/parser" "$data/mason/packages/stylua"
+  echo '{ "LazyVim": { "commit": "a" }, "blink.cmp": { "commit": "b" }, "pixel": { "commit": "c" } }' >"$seed/config/lazy-lock.json"
+  elf "$seed/data/site/parser/lua.so" '\076\000'
+  elf "$data/site/parser/lua.so" '\076\000'
+  elf "$data/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so" '\076\000'
+  sha256sum "$seed/config/lazy-lock.json" | cut -d' ' -f1 >"$H/.local/state/ohmydebn-config/nvim-plugins-seeded"
+  printf 'return {\n  { "bjarneo/pixel.nvim", name = "pixel" },\n  { "LazyVim/LazyVim", opts = { colorscheme = "pixel" } },\n}\n' \
+    >"$H/.config/ohmydebn/current/theme/neovim.lua"
+
   # External commands. dpkg knows the packages a healthy machine has.
   mock_bin dpkg <<'EOF2'
 #!/bin/bash
 case "$*" in
 "-s ohmydebn"|"-s ohmydebn-gtile"|"-s ohmydebn-themes"|"-s alacritty"|"-s bat"|"-s cinnamon-desktop-environment") exit 0 ;;
+"-s ohmydebn-neovim-plugins"|"-s ufw"|"-s fwupd") exit 0 ;;
+"--print-architecture") echo amd64; exit 0 ;;
+"--audit") [ -n "${MOCK_DPKG_AUDIT:-}" ] && echo "$MOCK_DPKG_AUDIT"; exit 0 ;;
 esac
 exit 1
 EOF2
   mock_bin dpkg-query <<'EOF2'
 #!/bin/bash
-echo "4.8.0"
+case "$*" in
+*ohmydebn-neovim) echo "0.12.5" ;;
+*) echo "4.8.0" ;;
+esac
+EOF2
+  mock_bin apt-mark <<'EOF2'
+#!/bin/bash
+[ "$1" = showhold ] && [ -n "${MOCK_HELD:-}" ] && echo "$MOCK_HELD"
+exit 0
+EOF2
+  mock_bin df <<'EOF2'
+#!/bin/bash
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 80000000 20000000 %s 25%% /\n' "${MOCK_FREE_KB:-50000000}"
+EOF2
+  mock_bin uname <<'EOF2'
+#!/bin/bash
+echo "6.12.1-amd64"
+EOF2
+  mock_bin pgrep <<'EOF2'
+#!/bin/bash
+exit "${MOCK_PGREP_EXIT:-0}"
+EOF2
+  mock_bin nvim <<'EOF2'
+#!/bin/bash
+[ "$1" = "--version" ] && printf 'NVIM v%s\nBuild type: Release\n' "${MOCK_NVIM_VERSION:-0.12.5}"
 EOF2
   mock_bin apt-cache <<'EOF2'
 #!/bin/bash
@@ -121,6 +181,99 @@ assert_contains "healthy: timer enabled under systemd" "$OUTPUT" "ok - update-ch
 assert_contains "healthy: keybindings verified" "$OUTPUT" "ok - every custom keybinding runs the command keybinding-custom.txt says"
 assert_contains "healthy: gTile booleans clean" "$OUTPUT" "ok - gTile checkbox settings are real booleans"
 assert_contains "healthy: summary counts no failures" "$OUTPUT" " 0 failed"
+assert_contains "healthy: nvim is the package's" "$OUTPUT" "ok - nvim on PATH is ohmydebn-neovim's (0.12.5)"
+assert_contains "healthy: tested plugin set installed" "$OUTPUT" "ok - the tested plugin set is installed for this user"
+assert_contains "healthy: every plugin present" "$OUTPUT" "ok - every plugin in the tested set is present"
+assert_contains "healthy: parsers present" "$OUTPUT" "ok - every treesitter parser in the set is present"
+assert_contains "healthy: Mason tools present" "$OUTPUT" "ok - every Mason tool in the set is present"
+assert_contains "healthy: theme's plugin found by its spec's name" "$OUTPUT" "ok - the current theme's Neovim plugins are installed"
+assert_contains "healthy: blink.cmp's matcher is this machine's" "$OUTPUT" "ok - ~/.local/share/nvim/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so is built for this machine"
+assert_contains "healthy: the lua parser is this machine's" "$OUTPUT" "ok - ~/.local/share/nvim/site/parser/lua.so is built for this machine"
+assert_contains "healthy: latest update completed" "$OUTPUT" "ok - the latest update completed"
+assert_contains "healthy: third-party repo pinned" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (1)"
+assert_contains "healthy: dpkg clean" "$OUTPUT" "ok - no half-installed packages (dpkg --audit)"
+assert_contains "healthy: disk space" "$OUTPUT" "ok - at least 2 GB free on / (47 GB)"
+assert_contains "healthy: home disk space" "$OUTPUT" "ok - at least 2 GB free on home directory"
+assert_not_contains "healthy: no reboot needed" "$OUTPUT" "reboot needed"
+assert_not_contains "healthy: nothing held" "$OUTPUT" "held packages"
+assert_contains "healthy: firewall on" "$OUTPUT" "ok - firewall (ufw) enabled"
+assert_contains "healthy: SPICE agent running" "$OUTPUT" "ok - VM display: spice-vdagentd running"
+assert_contains "healthy: fwupd signed binary" "$OUTPUT" "ok - firmware updates: fwupd's signed EFI binary installed"
+assert_not_contains "healthy: Debian machine skips the Ubuntu sources check" "$OUTPUT" "Ubuntu-based"
+assert_contains "healthy: no DCONF_PROFILE" "$OUTPUT" "ok - DCONF_PROFILE not set in the session"
+mock_cleanup
+
+# --- system problems: each one caught and explained ---
+build_machine yes
+printf 'Checking for an updated ohmydebn package\nCould not refresh the OhMyDebn package repository - update stopped\n' >"$H/.local/state/ohmydebn-logs/update-1.log"
+: >"$ROOT/etc/apt/sources.list.d/claude-code.list"                                 # a repo without its pin
+echo "ENABLED=no" >"$ROOT/etc/ufw/ufw.conf"
+rm "$ROOT/usr/lib/fwupd/efi/fwupdx64.efi.signed"
+: >"$ROOT/boot/vmlinuz-6.12.9-amd64"                                               # newer kernel installed
+run_doctor "MOCK_DPKG_AUDIT=The following packages are only half configured" MOCK_FREE_KB=900000 MOCK_HELD=linux-image-amd64 MOCK_PGREP_EXIT=1 DCONF_PROFILE=cosmic
+assert_eq "system problems: exits 1" "1" "$EXIT_CODE"
+assert_contains "system problems: stopped update names why" "$OUTPUT" "FAIL - the latest update completed (Could not refresh the OhMyDebn package repository - update stopped)"
+assert_contains "system problems: unpinned repo named" "$OUTPUT" "FAIL - third-party apt repos pinned to their own packages (no pin for: claude-code)"
+assert_contains "system problems: dpkg says how to fix" "$OUTPUT" "FAIL - no half-installed packages (dpkg --audit) (run: sudo dpkg --configure -a)"
+assert_contains "system problems: low disk named" "$OUTPUT" "FAIL - at least 2 GB free on / (878 MB free)"
+assert_contains "system problems: held package listed" "$OUTPUT" "held packages (not updated): linux-image-amd64"
+assert_contains "system problems: reboot for the new kernel" "$OUTPUT" "reboot needed: kernel 6.12.9-amd64 is installed, 6.12.1-amd64 is running"
+assert_contains "system problems: firewall off" "$OUTPUT" "FAIL - firewall (ufw) enabled (run: sudo ufw enable)"
+assert_contains "system problems: SPICE agent not running" "$OUTPUT" "FAIL - VM display: spice-vdagentd running"
+assert_contains "system problems: fwupd-signed missing" "$OUTPUT" "FAIL - firmware updates: fwupd's signed EFI binary installed (run: sudo apt install fwupd-signed)"
+assert_contains "system problems: DCONF_PROFILE caught" "$OUTPUT" "FAIL - DCONF_PROFILE not set in the session (DCONF_PROFILE=cosmic)"
+mock_cleanup
+
+# --- an update that never finished, and one that's still running ---
+build_machine yes
+printf 'Checking for an updated ohmydebn package\nInstalling packages\n' >"$H/.local/state/ohmydebn-logs/update-1.log"
+run_doctor
+assert_contains "unfinished update: reported" "$OUTPUT" "FAIL - the latest update completed (it didn't finish"
+sleep 60 &
+mkdir -p "$MOCK_DIR/run"; echo "$!" >"$MOCK_DIR/run/ohmydebn-update-$(id -u).lock"
+run_doctor XDG_RUNTIME_DIR="$MOCK_DIR/run"
+assert_contains "running update: skipped, not failed" "$OUTPUT" "skip - the latest update completed (an update is running now)"
+kill %1 2>/dev/null
+mock_cleanup
+
+# --- an Ubuntu-based distro with Debian's sources mixed in ---
+build_machine yes
+printf 'PRETTY_NAME="Zorin OS 18"\nID=zorin\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=noble\nUBUNTU_CODENAME=noble\n' >"$ROOT/etc/os-release"
+echo "URIs: https://deb.debian.org/debian" >"$ROOT/etc/apt/sources.list.d/debian.sources"
+run_doctor
+assert_contains "Ubuntu-based with Debian sources: caught" "$OUTPUT" "FAIL - Ubuntu-based: no Debian apt sources mixed in (deb.debian.org found in /etc/apt)"
+rm "$ROOT/etc/apt/sources.list.d/debian.sources"
+run_doctor
+assert_contains "Ubuntu-based with its own sources: ok" "$OUTPUT" "ok - Ubuntu-based: no Debian apt sources mixed in"
+mock_cleanup
+
+# --- Neovim, broken in each of the ways the doctor checks ---
+build_machine yes
+N="$H/.local/share/nvim"
+echo stale >"$H/.local/state/ohmydebn-config/nvim-plugins-seeded"                 # refresh never finished
+rm -r "$N/lazy/LazyVim"                                                            # a plugin missing
+rm "$N/site/parser/lua.so"                                                         # a parser missing
+rm -r "$N/mason/packages/stylua"                                                   # a Mason tool missing
+printf 'return { { "bjarneo/hackerman.nvim", dependencies = { "bjarneo/aether.nvim" } } }\n' >"$H/.config/ohmydebn/current/theme/neovim.lua"
+elf "$N/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so" '\267\000'         # arm64 build on amd64
+run_doctor MOCK_NVIM_VERSION=0.10.4                                                # the distro's nvim shadows it
+assert_eq "broken neovim: exits 1" "1" "$EXIT_CODE"
+assert_contains "broken neovim: shadowing nvim named" "$OUTPUT" "FAIL - nvim on PATH is ohmydebn-neovim's (nvim reports 0.10.4, package is 0.12.5"
+assert_contains "broken neovim: unfinished refresh says how to fix" "$OUTPUT" "FAIL - the tested plugin set is installed for this user (run: ohmydebn-update)"
+assert_contains "broken neovim: missing plugin named" "$OUTPUT" "FAIL - every plugin in the tested set is present (missing: LazyVim)"
+assert_contains "broken neovim: missing parser named" "$OUTPUT" "FAIL - every treesitter parser in the set is present (missing: lua)"
+assert_contains "broken neovim: missing Mason tool named" "$OUTPUT" "FAIL - every Mason tool in the set is present (missing: stylua)"
+assert_contains "broken neovim: theme plugin and its dependency named" "$OUTPUT" "FAIL - the current theme's Neovim plugins are installed (missing: bjarneo/aether.nvim bjarneo/hackerman.nvim)"
+assert_contains "broken neovim: wrong-architecture matcher caught" "$OUTPUT" "FAIL - ~/.local/share/nvim/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so is built for this machine (wrong architecture)"
+assert_contains "broken neovim: missing parser file caught" "$OUTPUT" "FAIL - ~/.local/share/nvim/site/parser/lua.so is built for this machine (missing)"
+mock_cleanup
+
+# --- no plugin package (a non-standard install): Neovim checks skipped ---
+build_machine yes
+sed -i 's/^"-s ohmydebn-neovim-plugins"|//' "$MOCK_BIN/dpkg"
+run_doctor
+assert_contains "no plugin package: Neovim checks skipped" "$OUTPUT" "skip - Neovim checks (ohmydebn-neovim-plugins not installed)"
+assert_eq "no plugin package: still exits 0" "0" "$EXIT_CODE"
 mock_cleanup
 
 # --- the same machine, broken in several specific ways ---

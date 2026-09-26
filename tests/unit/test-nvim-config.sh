@@ -79,8 +79,12 @@ teardown() {
   mock_cleanup
 }
 
+# Sourced under set -e, as install.sh does (through ohmydebn.sh and
+# install/config/all.sh), so an unguarded failing command would end the
+# install: "run finished" in the output shows it didn't.
 run() {
-  HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/nvim-patched.sh" </dev/null >"$MOCK_DIR/out" 2>&1
+  HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash -c 'set -e; source "$1"; echo "run finished"' _ "$MOCK_DIR/nvim-patched.sh" </dev/null >"$MOCK_DIR/out" 2>&1
+  assert_contains "the install carries on past nvim.sh" "$(cat "$MOCK_DIR/out")" "run finished"
 }
 
 head_of() { git -C "$1" rev-parse HEAD 2>/dev/null; }

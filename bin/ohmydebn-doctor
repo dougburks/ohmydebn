@@ -205,7 +205,9 @@ fi
 SPICE="$HOME/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
 if [ -f "$SPICE" ]; then
   ok "gTile settings file present"
-  if grep -qE '"(default|value)": *"(true|false)"' "$SPICE"; then fail "gTile checkbox settings are real booleans" "quoted \"true\"/\"false\" found - a string \"false\" is truthy"; else ok "gTile checkbox settings are real booleans"; fi
+  # A checkbox stored as the string "false" acts as on (it's truthy in
+  # JavaScript); ohmydebn-update converts the ones 4.8.0 and earlier seeded.
+  if jq -e 'any(.[]; type == "object" and .type == "checkbox" and ((.default | type) == "string" or (.value | type) == "string"))' "$SPICE" >/dev/null 2>&1; then fail "gTile checkbox settings are real booleans" "some are stored as text, where \"false\" acts as on - run: ohmydebn-update"; else ok "gTile checkbox settings are real booleans"; fi
 else
   fail "gTile settings file present" "$SPICE"
 fi

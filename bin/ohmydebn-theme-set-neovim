@@ -1,0 +1,129 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-neovim: gives a theme that ships no neovim.lua of its own
+# one generated from its colors - the aether colorscheme, as Omarchy does it -
+# so Neovim matches the theme instead of falling back to LazyVim's default
+# colors. Each user's ~/.config/nvim/lua/plugins/theme.lua links to the
+# current theme's neovim.lua (install/config/nvim.sh).
+#
+# Usage: ohmydebn-theme-set-neovim <theme-dir>
+#   Reads <theme-dir>/colors.toml (normalized by ohmydebn-theme-set-colors)
+#   and writes <theme-dir>/neovim.lua, but only when there isn't one: a
+#   theme's own neovim.lua always wins.
+#
+# The output is Lua that Neovim runs at startup, and colors.toml can come
+# from a theme installed from anywhere (whose own *.lua ohmydebn-theme-set
+# refuses to use for that reason). So only #rrggbb values are ever taken
+# from it; anything else counts as missing and falls back like a missing
+# key. Missing keys follow Omarchy's cascade (bin/omarchy-theme-color):
+# ANSI colorN aliases, then shades mixed from the base colors. Without a
+# usable background and foreground nothing is written, and Neovim keeps
+# LazyVim's default colors as before.
+
+set -euo pipefail
+
+THEME_DIR="${1:?Usage: ohmydebn-theme-set-neovim <theme-dir>}"
+COLORS_FILE="$THEME_DIR/colors.toml"
+OUTPUT="$THEME_DIR/neovim.lua"
+TEMPLATE=/usr/share/ohmydebn/config/nvim/neovim.lua.tpl
+
+[[ -f "$OUTPUT" ]] && exit 0
+[[ -f "$COLORS_FILE" && -f "$TEMPLATE" ]] || exit 0
+
+declare -A C=()
+while IFS='=' read -r key value; do
+  key="${key//[\"\' ]/}"
+  [[ $key =~ ^[a-z0-9_]+$ ]] || continue
+  value="${value#*[\"\']}"
+  value="${value%%[\"\']*}"
+  # The first valid definition wins, as a later duplicate key can't override
+  # it in Omarchy either.
+  [[ $value =~ ^#[0-9A-Fa-f]{6}$ && -z "${C[$key]:-}" ]] && C[$key]="$value"
+done <"$COLORS_FILE"
+
+# first <key>...: the first key that has a color
+first() {
+  local key
+  for key in "$@"; do
+    if [[ -n "${C[$key]:-}" ]]; then
+      echo "${C[$key]}"
+      return
+    fi
+  done
+}
+
+# Same math as Omarchy's mix_color: <amount> of the second color blended
+# into the first.
+mix() {
+  awk -v start="${1#\#}" -v end="${2#\#}" -v amount="$3" '
+    function hex(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+    function pair(h, i) { return hex(substr(h, i, 1)) * 16 + hex(substr(h, i + 1, 1)) }
+    BEGIN {
+      printf "#%02x%02x%02x\n",
+        int(pair(start, 1) * (1 - amount) + pair(end, 1) * amount + 0.5),
+        int(pair(start, 3) * (1 - amount) + pair(end, 3) * amount + 0.5),
+        int(pair(start, 5) * (1 - amount) + pair(end, 5) * amount + 0.5)
+    }'
+}
+
+# set_default <key> <value>: fill a key that has no color yet
+set_default() {
+  [[ -n "${C[$1]:-}" || -z "$2" ]] || C[$1]="$2"
+}
+
+C[background]=$(first background bg color0)
+C[foreground]=$(first foreground fg color7)
+[[ -n "${C[background]}" && -n "${C[foreground]}" ]] || exit 0
+
+set_default dark_background "$(first dark_bg)"
+set_default darker_background "$(first darker_bg)"
+set_default lighter_background "$(first lighter_bg)"
+set_default dark_foreground "$(first dark_fg)"
+set_default light_foreground "$(first light_fg)"
+set_default bright_foreground "$(first bright_fg)"
+for pair in red:color1 green:color2 yellow:color3 blue:color4 magenta:color5 cyan:color6 \
+  bright_red:color9 bright_green:color10 bright_yellow:color11 bright_blue:color12 \
+  bright_magenta:color13 bright_cyan:color14; do
+  set_default "${pair%%:*}" "$(first "${pair#*:}")"
+done
+set_default magenta "$(first purple)"
+set_default bright_magenta "$(first bright_purple)"
+# A theme without some base color gets its foreground there, as
+# ohmydebn-theme-set-colors does for alacritty.toml-derived themes.
+for key in red green yellow blue magenta cyan; do
+  set_default "$key" "${C[foreground]}"
+done
+set_default accent "$(first blue)"
+
+set_default light_foreground "$(first color7 foreground)"
+set_default bright_foreground "$(first color15 foreground)"
+set_default lighter_background "$(first color0 background)"
+set_default dark_foreground "$(first color8 foreground)"
+set_default muted "$(first color8 dark_foreground)"
+set_default selection "$(first selection_background color8 color0 background)"
+set_default selection_background "${C[selection]}"
+set_default selection_foreground "${C[bright_foreground]}"
+set_default orange "${C[yellow]}"
+set_default brown "$(mix "${C[orange]}" "#000000" 0.5)"
+set_default dark_background "$(mix "${C[background]}" "#000000" 0.25)"
+set_default darker_background "$(mix "${C[background]}" "#000000" 0.5)"
+for key in red yellow green cyan blue magenta; do
+  set_default "bright_$key" "$(mix "${C[$key]}" "#ffffff" 0.2)"
+done
+
+# Fill the template. Every value is a validated #rrggbb, so it can't break
+# out of the Lua string it lands in.
+LUA=$(<"$TEMPLATE")
+for key in "${!C[@]}"; do
+  LUA="${LUA//"{{ $key }}"/${C[$key]}}"
+done
+# Anything left unfilled would be a broken theme file: write nothing instead.
+if [[ "$LUA" == *"{{"* ]]; then
+  echo "ohmydebn-theme-set-neovim: $COLORS_FILE lacks colors the template needs, skipping" >&2
+  exit 0
+fi
+
+TMP=$(mktemp "$THEME_DIR/.neovim.lua.XXXXXX")
+printf '%s\n' "$LUA" >"$TMP"
+chmod 644 "$TMP"
+mv "$TMP" "$OUTPUT"

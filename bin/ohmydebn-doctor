@@ -12,12 +12,14 @@ set -uo pipefail
 # output. Everything it asserts is a fact the install/config layer
 # establishes, or a common reason an update fails: packages, apt sources
 # and third-party repo pins, state markers and the last update's result,
-# the gTile extension and its settings, the theme, dpkg state, disk space,
-# the firewall, the VM display agent and firmware-update support, Neovim's
-# tested plugin set, the login session default, the systemd timer (or its
-# absence without systemd), the AI wrappers and skill links, the custom
-# keybindings, the Aether/omarchy compatibility layer, and the tools other
-# scripts rely on.
+# the gTile extension and its settings, the theme and whether the terminal
+# and theme config files parse, dpkg state, disk space, the firewall, the
+# kernel-module blocks, the clock, the VM display agent and firmware-update
+# support, Neovim's tested plugin set, the login session default, the
+# systemd timer (or its absence without systemd), the default browser and AI
+# assistant, the AI wrappers and skill links, the custom keybindings, the
+# Aether/omarchy compatibility layer, and the tools other scripts rely on
+# (Oh My Zsh and the menu launcher among them).
 #
 # For the unit test, OHMYDEBN_DOCTOR_SYSROOT prefixes every absolute
 # system path (/usr/share/ohmydebn, /etc, /run/systemd/system, ...) and
@@ -222,6 +224,15 @@ fi
 check "current theme colors.toml has an accent" grep -qE '^\s*accent\s*=' "$CONFIG/current/theme/colors.toml"
 PICKER="$CONFIG/current/picker-colors"
 if [ -f "$PICKER" ] && [ "$(grep -cE '^(bg0|bg1|bg3|fg0)=' "$PICKER")" -eq 4 ]; then ok "picker-colors has bg0/bg1/bg3/fg0"; else fail "picker-colors has bg0/bg1/bg3/fg0" "$PICKER"; fi
+# Nearly every OhMyDebn terminal window is Alacritty, which won't start on a
+# config file that doesn't parse; the theme's colors.toml feeds every other
+# app's theming.
+BROKEN_TOML=()
+for f in "$HOME/.config/alacritty/alacritty.toml" "$CONFIG/current/theme/alacritty.toml" "$CONFIG/current/theme/colors.toml"; do
+  [ -f "$f" ] || continue
+  python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f" >/dev/null 2>&1 || BROKEN_TOML+=("${f/#"$HOME"/\~}")
+done
+if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal and theme config files parse"; else fail "terminal and theme config files parse" "broken: ${BROKEN_TOML[*]}"; fi
 BG_LINK="$CONFIG/current/background"
 if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
 
@@ -257,6 +268,45 @@ if [ -n "$NEWEST_KERNEL" ] && [ "$NEWEST_KERNEL" != "$RUNNING_KERNEL" ] &&
 elif [ -f "$SYSROOT/run/reboot-required" ]; then
   echo "  reboot needed: an updated package asked for one"
 fi
+# install/config/modprobe.sh blocks kernel modules with known exploitable
+# vulnerabilities from loading (algif_aead; esp4/esp6/rxrpc). A module
+# loaded before the block went in stays until a reboot.
+MISSING=()
+LOADED=()
+for conf in disable-algif-aead.conf disable-esp4-esp6-rxrpc.conf; do
+  [ -f "$SYSROOT/etc/modprobe.d/$conf" ] || MISSING+=("$conf")
+done
+for module in algif_aead esp4 esp6 rxrpc; do
+  grep -q "^$module " "$SYSROOT/proc/modules" 2>/dev/null && LOADED+=("$module")
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+  fail "vulnerable kernel modules blocked" "missing /etc/modprobe.d/${MISSING[*]} - run: ohmydebn-update"
+elif [ ${#LOADED[@]} -gt 0 ]; then
+  fail "vulnerable kernel modules blocked" "still loaded: ${LOADED[*]} - reboot to unload"
+else
+  ok "vulnerable kernel modules blocked"
+fi
+# A clock that's off makes apt refuse the repositories ("Release file ... is
+# not valid yet"), which looks like a broken update. chrony (a dependency;
+# ohmydebn-update runs `chronyc makestep`) is asked first: timedatectl's
+# "synchronized" is the kernel's flag, which chrony doesn't always set even
+# when it's in sync (seen in a VM with rtcsync on), so it's only the
+# fallback when chrony can't answer.
+if CHRONY=$(chronyc tracking 2>/dev/null) && [ -n "$CHRONY" ]; then
+  if grep -qE '^Leap status *: *Normal' <<<"$CHRONY"; then ok "clock synchronized"; else fail "clock synchronized" "chronyc tracking: $(sed -n 's/^Leap status *: *//p' <<<"$CHRONY")"; fi
+else
+  NTP_SYNCED=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)
+  if [ "$NTP_SYNCED" = yes ]; then
+    ok "clock synchronized"
+  elif [ "$NTP_SYNCED" = no ]; then
+    fail "clock synchronized" "timedatectl says it isn't"
+  else
+    skip "clock synchronized" "neither chronyc nor timedatectl could tell"
+  fi
+fi
+# From apt's cached package lists (nothing is refreshed here).
+PENDING=$(apt list --upgradable 2>/dev/null | sed -n 's#^\(ohmydebn[^/]*\)/.*#\1#p' | tr '\n' ' ')
+[ -n "$PENDING" ] && echo "  OhMyDebn updates available: $PENDING- run: ohmydebn-update"
 # install/config/ufw.sh turns the firewall on (deny incoming). ufw.conf is
 # readable without root, unlike `ufw status`.
 if dpkg -s ufw >/dev/null 2>&1; then
@@ -365,6 +415,42 @@ else
 fi
 check "ohmydebn-power wrapper present" test -x "$OHMYDEBN/bin/ohmydebn-power"
 
+# --------------------------------------------------------------- defaults
+section "Defaults"
+# Super+B opens the default browser (ohmydebn-browser), falling back to
+# x-www-browser when the default's .desktop file is gone - so it only does
+# nothing when neither is there.
+DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+BROWSER_ID=$(xdg-settings get default-web-browser 2>/dev/null || true)
+BROWSER_FILE=""
+if [ -n "$BROWSER_ID" ]; then
+  IFS=: read -r -a DIRS <<<"$DATA_DIRS"
+  for dir in "${XDG_DATA_HOME:-$HOME/.local/share}" "${DIRS[@]/#/$SYSROOT}"; do
+    if [ -n "$dir" ] && [ -f "$dir/applications/$BROWSER_ID" ]; then
+      BROWSER_FILE="$dir/applications/$BROWSER_ID"
+      break
+    fi
+  done
+fi
+if [ -n "$BROWSER_FILE" ]; then
+  ok "default browser installed ($BROWSER_ID)"
+elif [ -e "$SYSROOT/usr/bin/x-www-browser" ]; then
+  ok "Super+B opens a browser (x-www-browser)"
+  echo "  default browser ${BROWSER_ID:-(none set)} not found - choose one in Setup > Defaults > Browser"
+else
+  fail "Super+B opens a browser" "the default (${BROWSER_ID:-none set}) isn't installed and there's no x-www-browser - choose one in Setup > Defaults > Browser"
+fi
+# Super+A opens the default AI assistant, installing it first if it isn't
+# (each ohmydebn-<tool> does), so a missing one is a note, not a failure.
+if [ -x "$OHMYDEBN/bin/ohmydebn-ai-set-default" ]; then
+  AI_DEFAULT=$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --current 2>/dev/null || echo opencode)
+  if "$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1 | grep -qx "$AI_DEFAULT"; then
+    ok "default AI assistant installed ($AI_DEFAULT)"
+  else
+    echo "  default AI assistant ($AI_DEFAULT) isn't installed - Super+A offers to install it"
+  fi
+fi
+
 # --------------------------------------------------------------------- AI
 section "AI tools"
 SKILL_SRC="/usr/share/ohmydebn/config/ohmydebn-skill"
@@ -460,6 +546,15 @@ check "omarchy CLI shim present (Aether >= 4.29.9)" test -x "$OHMYDEBN/bin/omarc
 
 # ------------------------------------------------------------------ tools
 section "Tools other scripts rely on"
+# install/config/ohmyzsh.sh downloads Oh My Zsh at install time; if that
+# failed, OhMyDebn's ~/.zshrc sources a file that isn't there.
+if grep -q 'oh-my-zsh.sh' "$HOME/.zshrc" 2>/dev/null; then
+  # The tilde is descriptive, not a path to expand.
+  # shellcheck disable=SC2088
+  check "~/.oh-my-zsh installed (~/.zshrc uses it)" test -f "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+fi
+# shellcheck disable=SC2088
+check "~/.local/share/applications/ohmydebn-menu.desktop present (the OhMyDebn Menu launcher)" test -f "$HOME/.local/share/applications/ohmydebn-menu.desktop"
 for t in toilet ttfx alacritty gdbus notify-send script flock; do
   check "$t on PATH" command -v "$t"
 done

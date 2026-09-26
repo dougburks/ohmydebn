@@ -73,6 +73,27 @@ build_machine() {
   : >"$ROOT/usr/lib/fwupd/efi/fwupdx64.efi.signed"
   : >"$ROOT/boot/vmlinuz-6.12.1-amd64"
 
+  # Defaults, config files, shell and kernel mitigations: a browser that
+  # resolves, an installed default AI, parseable TOML, Oh My Zsh, the menu
+  # launcher, and both module blocks in place with none of them loaded.
+  mkdir -p "$ROOT/usr/share/applications" "$H/.config/alacritty" "$H/.oh-my-zsh" "$H/.local/share/applications" \
+    "$ROOT/etc/modprobe.d" "$ROOT/proc"
+  : >"$ROOT/usr/share/applications/firefox-esr.desktop"
+  printf '[general]\nimport = ["~/.config/ohmydebn/current/theme/alacritty.toml"]\n' >"$H/.config/alacritty/alacritty.toml"
+  printf 'source $ZSH/oh-my-zsh.sh\n' >>"$H/.zshrc"
+  : >"$H/.oh-my-zsh/oh-my-zsh.sh"
+  : >"$H/.local/share/applications/ohmydebn-menu.desktop"
+  : >"$ROOT/etc/modprobe.d/disable-algif-aead.conf"; : >"$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
+  printf 'ext4 1000 1 - Live 0x0\nvirtio_net 100 0 - Live 0x0\n' >"$ROOT/proc/modules"
+  cat >"$OMD/bin/ohmydebn-ai-set-default" <<'EOF2'
+#!/bin/bash
+case "$1" in
+--current) cat "$HOME/.config/ohmydebn/current/default-ai" 2>/dev/null || echo opencode ;;
+--list-installed) printf '%s\tOne\n' ${MOCK_AI_INSTALLED:-opencode} ;;
+esac
+EOF2
+  chmod +x "$OMD/bin/ohmydebn-ai-set-default"
+
   # Neovim: the plugin package (two plugins, a parser, a Mason tool) and this
   # user's copy of it, with the current theme's colorscheme plugin (named
   # "pixel" by its spec, as OhMyDebn's default theme does it).
@@ -149,8 +170,29 @@ case "$*" in
 *) echo "''" ;;
 esac
 EOF2
+  # The GTK typelib checks pass; the TOML checks really parse (python3's
+  # own tomllib).
   mock_bin python3 <<'EOF2'
 #!/bin/bash
+case "$*" in *tomllib*) exec /usr/bin/python3 "$@" ;; esac
+exit 0
+EOF2
+  mock_bin xdg-settings <<'EOF2'
+#!/bin/bash
+echo "${MOCK_BROWSER-firefox-esr.desktop}"
+EOF2
+  mock_bin chronyc <<'EOF2'
+#!/bin/bash
+[ -n "${MOCK_NO_CHRONY:-}" ] && exit 1
+printf 'Reference ID    : 05A16FBE\nLeap status     : %s\n' "${MOCK_LEAP:-Normal}"
+EOF2
+  mock_bin timedatectl <<'EOF2'
+#!/bin/bash
+echo "${MOCK_NTP-yes}"
+EOF2
+  mock_bin apt <<'EOF2'
+#!/bin/bash
+[ "$*" = "list --upgradable" ] && [ -n "${MOCK_UPGRADABLE:-}" ] && printf '%s/trixie 9.9 all [upgradable from: 1.0]\n' $MOCK_UPGRADABLE
 exit 0
 EOF2
   for t in toilet ttfx alacritty gdbus notify-send script flock loginctl; do
@@ -201,6 +243,14 @@ assert_contains "healthy: SPICE agent running" "$OUTPUT" "ok - VM display: spice
 assert_contains "healthy: fwupd signed binary" "$OUTPUT" "ok - firmware updates: fwupd's signed EFI binary installed"
 assert_not_contains "healthy: Debian machine skips the Ubuntu sources check" "$OUTPUT" "Ubuntu-based"
 assert_contains "healthy: no DCONF_PROFILE" "$OUTPUT" "ok - DCONF_PROFILE not set in the session"
+assert_contains "healthy: config files parse" "$OUTPUT" "ok - terminal and theme config files parse"
+assert_contains "healthy: module blocks in place" "$OUTPUT" "ok - vulnerable kernel modules blocked"
+assert_contains "healthy: clock synchronized (chrony)" "$OUTPUT" "ok - clock synchronized"
+assert_not_contains "healthy: no OhMyDebn updates waiting" "$OUTPUT" "updates available"
+assert_contains "healthy: default browser installed" "$OUTPUT" "ok - default browser installed (firefox-esr.desktop)"
+assert_contains "healthy: default AI installed" "$OUTPUT" "ok - default AI assistant installed (opencode)"
+assert_contains "healthy: Oh My Zsh installed" "$OUTPUT" "ok - ~/.oh-my-zsh installed"
+assert_contains "healthy: menu launcher present" "$OUTPUT" "ok - ~/.local/share/applications/ohmydebn-menu.desktop present"
 mock_cleanup
 
 # --- system problems: each one caught and explained ---
@@ -235,6 +285,38 @@ rm "$ROOT"/boot/vmlinuz-*
 : >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-v8"; : >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-2712"
 run_doctor
 assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
+mock_cleanup
+
+# --- defaults, config, shell and security problems: each caught and explained ---
+build_machine yes
+printf '[general\nbroken = ' >"$H/.config/alacritty/alacritty.toml"                 # unparseable
+rm "$H/.oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desktop"
+rm "$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
+run_doctor MOCK_BROWSER=gone.desktop MOCK_AI_INSTALLED=codex MOCK_LEAP="Not synchronised" "MOCK_UPGRADABLE=ohmydebn ohmydebn-neovim"
+assert_eq "defaults etc: exits 1" "1" "$EXIT_CODE"
+assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal and theme config files parse (broken: ~/.config/alacritty/alacritty.toml)"
+assert_contains "defaults etc: Super+B does nothing" "$OUTPUT" "FAIL - Super+B opens a browser (the default (gone.desktop) isn't installed and there's no x-www-browser"
+assert_contains "defaults etc: uninstalled default AI is a note, not a failure" "$OUTPUT" "default AI assistant (opencode) isn't installed - Super+A offers to install it"
+assert_not_contains "defaults etc: no FAIL for the AI default" "$OUTPUT" "FAIL - default AI assistant"
+assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - ~/.oh-my-zsh installed"
+assert_contains "defaults etc: missing menu launcher caught" "$OUTPUT" "FAIL - ~/.local/share/applications/ohmydebn-menu.desktop present"
+assert_contains "defaults etc: missing module block named" "$OUTPUT" "FAIL - vulnerable kernel modules blocked (missing /etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
+assert_contains "defaults etc: unsynced clock caught" "$OUTPUT" "FAIL - clock synchronized (chronyc tracking: Not synchronised)"
+assert_contains "defaults etc: waiting OhMyDebn updates listed" "$OUTPUT" "OhMyDebn updates available: ohmydebn ohmydebn-neovim - run: ohmydebn-update"
+mock_cleanup
+
+# --- a default browser that's gone, with x-www-browser to fall back on; a
+# loaded blocked module; timedatectl when chrony can't answer ---
+build_machine yes
+mkdir -p "$ROOT/usr/bin"; : >"$ROOT/usr/bin/x-www-browser"
+echo "esp4 5000 0 - Live 0x0" >>"$ROOT/proc/modules"
+run_doctor MOCK_BROWSER=gone.desktop MOCK_NO_CHRONY=1 MOCK_NTP=no
+assert_contains "fallback browser: Super+B still works" "$OUTPUT" "ok - Super+B opens a browser (x-www-browser)"
+assert_contains "fallback browser: says the default is gone" "$OUTPUT" "default browser gone.desktop not found - choose one in Setup > Defaults > Browser"
+assert_contains "loaded module: needs a reboot" "$OUTPUT" "FAIL - vulnerable kernel modules blocked (still loaded: esp4 - reboot to unload)"
+assert_contains "no chrony: timedatectl's answer used" "$OUTPUT" "FAIL - clock synchronized (timedatectl says it isn't)"
+run_doctor MOCK_BROWSER=gone.desktop MOCK_NO_CHRONY=1 MOCK_NTP=""
+assert_contains "no chrony, no timedatectl answer: skipped" "$OUTPUT" "skip - clock synchronized (neither chronyc nor timedatectl could tell)"
 mock_cleanup
 
 # --- an update that never finished, and one that's still running ---

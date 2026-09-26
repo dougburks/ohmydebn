@@ -22,7 +22,12 @@ PACKAGES=(
   fastfetch
   gedit
   keepassxc
-  neovim
+  # Neovim and its tested LazyVim plugins from OhMyDebn's repo rather than the
+  # distro's neovim (0.10 in Debian 13, 0.9 in Ubuntu 24.04): ohmydebn-neovim
+  # replaces it, and ohmydebn-neovim-plugins is what install/config/nvim.sh
+  # sets up each user's Neovim from.
+  ohmydebn-neovim
+  ohmydebn-neovim-plugins
 
   # Cinnamon desktop + theming
   cinnamon-desktop-environment

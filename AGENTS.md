@@ -86,7 +86,7 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 2. The distro check in `install.sh`, the supported list in its warning text, and the same check in `bin/ohmydebn-doctor`.
 3. The apt-sources step in `install.sh` must leave the distro's own sources alone.
 4. A case in `tests/unit/test-install-distro-detection.sh` using the distro's real `os-release`.
-5. `installation.md` and `requirements.md` in `ohmydebn-docs`, then test the whole install in a VM.
+5. `installation.md` and `requirements.md` in `ohmydebn-docs`, and a line under Supported distros in the release notes, then test the whole install in a VM.
 
 ### Updating Neovim or its plugins
 
@@ -102,7 +102,7 @@ Add an `ohmydebn-theme-set-<app>` hook, call it from `bin/ohmydebn-theme-set`, a
 
 ## Release notes
 
-Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are New, Improvements, Fixes and Updated components. An updated component is just its name and new version.
+Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are Supported distros (only when the release adds one; it comes first, since it's what decides whether a reader can use the release at all), New, Improvements, Fixes and Updated components. An updated component is just its name and new version.
 
 ## Release checklist
 

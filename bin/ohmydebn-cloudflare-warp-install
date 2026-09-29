@@ -2,6 +2,33 @@
 
 set -euo pipefail
 
+WARP_KEYRING=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+WARP_LIST=/etc/apt/sources.list.d/cloudflare-client.list
+WARP_PREF=/etc/apt/preferences.d/cloudflare-client.pref
+
+# Cloudflare's repo has Debian and Ubuntu release names only (trixie,
+# noble, resolute...), not derivatives' own: `lsb_release -cs` gave
+# kali-rolling, excalibur, gigi or zena, which it doesn't serve, and apt
+# update then failed on every run - including every ohmydebn-update. Use
+# the Ubuntu base where there is one (Ubuntu, Mint, Pop - UBUNTU_CODENAME,
+# or VERSION_CODENAME on Ubuntu itself), and otherwise trixie, the one
+# Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Devuan, LCOS).
+warp_codename() {
+  local os_release="${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}"
+  (
+    ID="" ID_LIKE="" VERSION_CODENAME="" UBUNTU_CODENAME=""
+    # shellcheck disable=SC1090
+    . "$os_release"
+    if [ -n "$UBUNTU_CODENAME" ]; then
+      echo "$UBUNTU_CODENAME"
+    elif [ "$ID" = ubuntu ] || [[ " $ID_LIKE " == *" ubuntu "* ]]; then
+      echo "$VERSION_CODENAME"
+    else
+      echo trixie
+    fi
+  )
+}
+
 if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   echo
   echo "Cloudflare Warp is not currently installed."
@@ -14,10 +41,10 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
 
   curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg |
-    sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+    sudo gpg --yes --dearmor --output "$WARP_KEYRING"
 
-  echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" |
-    sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+  echo "deb [signed-by=$WARP_KEYRING] https://pkg.cloudflareclient.com/ $(warp_codename) main" |
+    sudo tee "$WARP_LIST"
 
   # Restricts this repo to the one package it's actually needed for
   # (confirmed via `apt-cache depends cloudflare-warp` - no same-repo
@@ -27,8 +54,17 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   # apt prefer it on some later, completely unrelated `apt install`/
   # upgrade.
   printf 'Package: *\nPin: origin "pkg.cloudflareclient.com"\nPin-Priority: -1\n\nPackage: cloudflare-warp\nPin: origin "pkg.cloudflareclient.com"\nPin-Priority: 500\n' |
-    sudo tee /etc/apt/preferences.d/cloudflare-client.pref >/dev/null
+    sudo tee "$WARP_PREF" >/dev/null
 
-  sudo /usr/bin/apt update
+  # A source apt can't refresh fails every later apt update, and with it
+  # every ohmydebn-update, until it's removed - so if this one can't be
+  # refreshed, take it back out rather than leave it behind.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f "$WARP_LIST" "$WARP_PREF" "$WARP_KEYRING"
+    echo
+    echo "Couldn't refresh the package lists, so Cloudflare WARP's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
   sudo /usr/bin/apt -y install cloudflare-warp
 fi

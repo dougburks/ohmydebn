@@ -264,7 +264,6 @@ ohmydebn-theme-install <url>     # Install from git repo
 - GUI: OhMyDebn Menu → Style → Theme or hotkey `Ctrl + Super + T`
 - Background switching: `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`
 - Build custom themes: `Ctrl + Shift + A` (Aether theme builder)
-- Install all Omarchy extra themes via menu option
 - Browse more themes: press B in the theme carousel (`Ctrl + Super + T`)
 
 ### Keybindings
@@ -441,7 +440,6 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets
 - "Build a theme from this wallpaper" -> `Ctrl + Shift + A` (Aether theme builder)
-- "Install all Omarchy extra themes" -> OhMyDebn Menu → Style → Theme → "Install All Omarchy Extra Themes"
 - "Reset all configurations to defaults" -> `ohmydebn-reset-config`
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)

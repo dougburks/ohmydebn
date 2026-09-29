@@ -235,6 +235,19 @@ done
 if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal and theme config files parse"; else fail "terminal and theme config files parse" "broken: ${BROKEN_TOML[*]}"; fi
 BG_LINK="$CONFIG/current/background"
 if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
+# ohmydebn-theme-set-fastfetch links fastfetch's config to the current
+# theme's config.jsonc (or OhMyDebn's default); a dangling link leaves
+# fastfetch (Ctrl+Shift+S) on its own defaults, without OhMyDebn's lines.
+if dpkg -s fastfetch >/dev/null 2>&1; then
+  if [ -f "$(readlink -f "$HOME/.config/fastfetch/config.jsonc")" ]; then
+    # The tilde is descriptive, not a path to expand.
+    # shellcheck disable=SC2088
+    ok "~/.config/fastfetch/config.jsonc resolves to a file"
+  else
+    # shellcheck disable=SC2088
+    fail "~/.config/fastfetch/config.jsonc resolves to a file" "run: /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch"
+  fi
+fi
 
 # ----------------------------------------------------------------- system
 section "System"
@@ -551,6 +564,36 @@ check "~/.local/share/omarchy/themes -> /usr/share/ohmydebn-themes" test "$(read
 # shellcheck disable=SC2088
 check "~/.local/state/omarchy/current -> ~/.config/ohmydebn/current" test "$(readlink "$HOME/.local/state/omarchy/current" 2>/dev/null)" = "$HOME/.config/ohmydebn/current"
 check "omarchy CLI shim present (Aether >= 4.29.9)" test -x "$OHMYDEBN/bin/omarchy"
+
+# ---------------------------------------------------------- optional apps
+# An optional app whose package is installed but not what it needs to run:
+# Debian's uxplay pulls in almost none of the GStreamer plugins UxPlay
+# requires (it wouldn't start on Linux Mint), and podman only recommends
+# the rootless extras (seen missing on LCOS). The -installed helpers own
+# each list, as they do for the installers and launchers.
+if dpkg -s uxplay >/dev/null 2>&1 || dpkg -s podman >/dev/null 2>&1; then
+  section "Optional apps"
+  if dpkg -s uxplay >/dev/null 2>&1; then
+    if APP_MISSING=$("$OHMYDEBN/bin/ohmydebn-uxplay-installed" --missing); then
+      ok "UxPlay has the GStreamer plugins it needs"
+    else
+      fail "UxPlay has the GStreamer plugins it needs" "missing: ${APP_MISSING//$'\n'/ } - run: ohmydebn-uxplay-install"
+    fi
+  fi
+  if dpkg -s podman >/dev/null 2>&1; then
+    if APP_MISSING=$("$OHMYDEBN/bin/ohmydebn-podman-installed" --missing); then
+      ok "Podman has what rootless containers need"
+    else
+      fail "Podman has what rootless containers need" "missing: ${APP_MISSING//$'\n'/ } - run: ohmydebn-podman-install"
+    fi
+    # SO-CRATES wrote this line before 4.9.0; it turns IPv6 off in every
+    # rootless container. Only a note: the user may have set it themselves.
+    if grep -qxF 'pasta_options = ["-4"]' "$HOME/.config/containers/containers.conf" 2>/dev/null; then
+      echo '  IPv6 is off in all your Podman containers (pasta_options = ["-4"] in ~/.config/containers/containers.conf,'
+      echo "  added by SO-CRATES before OhMyDebn 4.9.0) - delete that line unless you set it yourself"
+    fi
+  fi
+fi
 
 # ------------------------------------------------------------------ tools
 section "Tools other scripts rely on"

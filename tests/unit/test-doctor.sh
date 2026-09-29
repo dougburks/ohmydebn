@@ -59,6 +59,11 @@ build_machine() {
   ln -s "$H/.config/ohmydebn" "$H/.config/omarchy"
   ln -s /usr/share/ohmydebn-themes "$H/.local/share/omarchy/themes"
   ln -s "$H/.config/ohmydebn/current" "$H/.local/state/omarchy/current"
+  mkdir -p "$H/.config/fastfetch"; : >"$H/.config/ohmydebn/current/theme/config.jsonc"
+  ln -s "$H/.config/ohmydebn/current/theme/config.jsonc" "$H/.config/fastfetch/config.jsonc"
+  # The real -installed helpers, so the doctor checks the same lists the
+  # installers use (they ask the mocked dpkg).
+  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$OMD/bin/"
 
   # System: a finished update, a third-party repo with its pin, the
   # firewall on, a VM with SPICE, UEFI with fwupd's signed binary, and the
@@ -113,8 +118,9 @@ EOF2
 #!/bin/bash
 case "$*" in
 "-s ohmydebn"|"-s ohmydebn-gtile"|"-s ohmydebn-themes"|"-s alacritty"|"-s bat"|"-s cinnamon-desktop-environment") exit 0 ;;
-"-s ohmydebn-neovim-plugins"|"-s ufw"|"-s fwupd") exit 0 ;;
+"-s ohmydebn-neovim-plugins"|"-s ufw"|"-s fwupd"|"-s fastfetch") exit 0 ;;
 "-s chrony") [ -n "${MOCK_CHRONY_INSTALLED:-}" ] && exit 0 ;;
+-s\ *) [[ " ${MOCK_EXTRA_PKGS:-} " == *" $2 "* ]] && exit 0 ;;
 "--print-architecture") echo amd64; exit 0 ;;
 "--audit") [ -n "${MOCK_DPKG_AUDIT:-}" ] && echo "$MOCK_DPKG_AUDIT"; exit 0 ;;
 esac
@@ -293,6 +299,32 @@ build_machine yes
 rm "$H/.config/ohmydebn/current/default-ai"
 run_doctor
 assert_contains "no default AI: valid, with its fallback" "$OUTPUT" "ok - default AI is valid (unset - opencode)"
+
+# --- fastfetch's config link dangling: caught, with the command that fixes it ---
+build_machine yes
+rm "$H/.config/ohmydebn/current/theme/config.jsonc"
+run_doctor
+assert_contains "fastfetch link dangling: says how to fix" "$OUTPUT" "FAIL - ~/.config/fastfetch/config.jsonc resolves to a file (run: /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch)"
+mock_cleanup
+
+# --- optional apps: only checked when installed, and their gaps named ---
+build_machine yes
+run_doctor
+assert_contains "healthy: fastfetch config resolves" "$OUTPUT" "ok - ~/.config/fastfetch/config.jsonc resolves to a file"
+assert_not_contains "no optional apps: no section for them" "$OUTPUT" "== Optional apps =="
+run_doctor "MOCK_EXTRA_PKGS=uxplay gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-x podman uidmap passt"
+assert_contains "UxPlay complete: ok" "$OUTPUT" "ok - UxPlay has the GStreamer plugins it needs"
+assert_contains "Podman complete: ok" "$OUTPUT" "ok - Podman has what rootless containers need"
+assert_not_contains "no containers.conf: no IPv6 note" "$OUTPUT" "IPv6 is off"
+run_doctor "MOCK_EXTRA_PKGS=uxplay gstreamer1.0-plugins-base podman uidmap"
+assert_contains "UxPlay without plugins: names them" "$OUTPUT" "FAIL - UxPlay has the GStreamer plugins it needs (missing: gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-x - run: ohmydebn-uxplay-install)"
+assert_contains "Podman without passt: names it" "$OUTPUT" "FAIL - Podman has what rootless containers need (missing: passt - run: ohmydebn-podman-install)"
+mkdir -p "$H/.config/containers"
+printf '\n[network]\npasta_options = ["-4"]\n' >"$H/.config/containers/containers.conf"
+run_doctor "MOCK_EXTRA_PKGS=podman uidmap passt"
+assert_contains "old SO-CRATES IPv6 line: a note" "$OUTPUT" "IPv6 is off in all your Podman containers"
+assert_not_contains "old SO-CRATES IPv6 line: not a failure" "$OUTPUT" "FAIL - Podman"
+mock_cleanup
 
 # --- defaults, config, shell and security problems: each caught and explained ---
 build_machine yes

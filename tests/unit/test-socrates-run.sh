@@ -1,16 +1,12 @@
 #!/bin/bash
 #
-# Unit tests for bin/ohmydebn-socrates-run's ensure_pasta_ipv4() guard.
-# Rootless podman's pasta network backend forwards published ports on both
-# IPv4 and IPv6; on systems where "localhost" resolves to ::1 before
-# 127.0.0.1 (the default on most current Debian-family systems, Kali
-# included), the browser connects over IPv6 while the so-crates container
-# only listens on IPv4, so port 8000 looks unreachable. ensure_pasta_ipv4()
-# forces pasta to IPv4-only via ~/.config/containers/containers.conf -
-# these tests cover the four shapes that file can already be in: missing,
-# present with a [network] section but no pasta_options, present with
-# pasta_options already set (must not be clobbered), and present with no
-# [network] section at all.
+# Unit tests for bin/ohmydebn-socrates-run. SO-CRATES is published on
+# 127.0.0.1 only: nothing else on the network needs it, and it shows the
+# user's packet captures. Before 4.9.0 it was published on every interface
+# and wrote pasta_options = ["-4"] into ~/.config/containers/containers.conf
+# (so "localhost" over ::1 wouldn't hang), which turned off IPv6 in every
+# rootless container the user runs. It must no longer write that file, and
+# must leave a line from an older release alone.
 
 set -uo pipefail
 
@@ -44,92 +40,41 @@ EOF
 
 # Runs the patched script end-to-end (real podman/cleanup calls stubbed
 # out, `read -r` at the end fed EOF via /dev/null so it returns instead of
-# hanging) so this exercises ensure_pasta_ipv4() exactly as socrates-run
-# actually calls it, not in isolation.
+# hanging).
 run_socrates() {
   HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/socrates-run-patched.sh" </dev/null >/dev/null 2>&1
 }
 
 CONF_REL=".config/containers/containers.conf"
 
-# Scenario 1: no containers.conf at all -> one gets created with a
-# [network] section forcing pasta to IPv4-only.
+# Scenario 1: published on this computer only.
 mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
 run_socrates
-CONF="$SCRATCH_HOME/$CONF_REL"
-assert_contains "no conf: creates one with pasta_options" "$(cat "$CONF" 2>/dev/null)" 'pasta_options = ["-4"]'
+assert_contains "port 8000 published on 127.0.0.1 only" "$(cat "$MOCK_CALLS")" "-p 127.0.0.1:8000:8000"
+assert_not_contains "not published on every interface" "$(cat "$MOCK_CALLS")" "-p 8000:8000"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# Scenario 2: [network] section exists but no pasta_options -> the key is
-# inserted into that section, everything else in the file is preserved.
+# Scenario 2: no containers.conf -> none is created.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+run_socrates
+assert_eq "no containers.conf is written" "no" "$([[ -e "$SCRATCH_HOME/$CONF_REL" ]] && echo yes || echo no)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 3: the -4 line an older release wrote -> left exactly as it is.
 mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
 mkdir -p "$SCRATCH_HOME/.config/containers"
-CONF="$SCRATCH_HOME/$CONF_REL"
-cat >"$CONF" <<'EOF'
-[containers]
-log_size_max = 10000
-
-[network]
-default_network = "podman"
-
-[engine]
-EOF
+printf '\n[network]\npasta_options = ["-4"]\n' >"$SCRATCH_HOME/$CONF_REL"
+BEFORE=$(cat "$SCRATCH_HOME/$CONF_REL")
 run_socrates
-RESULT=$(cat "$CONF")
-assert_contains "existing [network], no key: pasta_options added" "$RESULT" 'pasta_options = ["-4"]'
-assert_contains "existing [network], no key: default_network preserved" "$RESULT" 'default_network = "podman"'
-assert_contains "existing [network], no key: unrelated [containers] section preserved" "$RESULT" "log_size_max = 10000"
-rm -rf "$SCRATCH_HOME"
-mock_cleanup
-
-# Scenario 3: pasta_options already set to something else -> left alone,
-# not overwritten with -4.
-mock_init
-setup_mocks
-SCRATCH_HOME=$(mktemp -d)
-mkdir -p "$SCRATCH_HOME/.config/containers"
-CONF="$SCRATCH_HOME/$CONF_REL"
-cat >"$CONF" <<'EOF'
-[network]
-pasta_options = ["-t", "auto"]
-EOF
-run_socrates
-assert_eq "existing pasta_options: untouched" '[network]
-pasta_options = ["-t", "auto"]' "$(cat "$CONF")"
-rm -rf "$SCRATCH_HOME"
-mock_cleanup
-
-# Scenario 4: containers.conf exists but has no [network] section at all
-# -> a new [network] section is appended, existing content preserved.
-mock_init
-setup_mocks
-SCRATCH_HOME=$(mktemp -d)
-mkdir -p "$SCRATCH_HOME/.config/containers"
-CONF="$SCRATCH_HOME/$CONF_REL"
-cat >"$CONF" <<'EOF'
-[engine]
-runtime = "crun"
-EOF
-run_socrates
-RESULT=$(cat "$CONF")
-assert_contains "no [network] section: one is appended with pasta_options" "$RESULT" 'pasta_options = ["-4"]'
-assert_contains "no [network] section: existing [engine] section preserved" "$RESULT" 'runtime = "crun"'
-rm -rf "$SCRATCH_HOME"
-mock_cleanup
-
-# Scenario 5: podman still gets invoked with the expected image/port args
-# (ensure_pasta_ipv4 runs before it, doesn't short-circuit the rest of the
-# script).
-mock_init
-setup_mocks
-SCRATCH_HOME=$(mktemp -d)
-run_socrates
-assert_contains "podman still invoked after the containers.conf guard" "$(cat "$MOCK_CALLS")" "-p 8000:8000"
+assert_eq "an existing containers.conf is left alone" "$BEFORE" "$(cat "$SCRATCH_HOME/$CONF_REL")"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

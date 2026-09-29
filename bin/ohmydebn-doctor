@@ -225,14 +225,17 @@ check "current theme colors.toml has an accent" grep -qE '^\s*accent\s*=' "$CONF
 PICKER="$CONFIG/current/picker-colors"
 if [ -f "$PICKER" ] && [ "$(grep -cE '^(bg0|bg1|bg3|fg0)=' "$PICKER")" -eq 4 ]; then ok "picker-colors has bg0/bg1/bg3/fg0"; else fail "picker-colors has bg0/bg1/bg3/fg0" "$PICKER"; fi
 # Nearly every OhMyDebn terminal window is Alacritty, which won't start on a
-# config file that doesn't parse; the theme's colors.toml feeds every other
-# app's theming.
+# config file that doesn't parse. Not colors.toml: everything that reads it
+# goes line by line, and one converted before 4.9.0 by
+# ohmydebn-theme-set-colors can repeat a key (strict TOML's "Cannot
+# overwrite a value", seen with every Aether theme) while still theming
+# every app correctly - the accent check above is what matters for it.
 BROKEN_TOML=()
-for f in "$HOME/.config/alacritty/alacritty.toml" "$CONFIG/current/theme/alacritty.toml" "$CONFIG/current/theme/colors.toml"; do
+for f in "$HOME/.config/alacritty/alacritty.toml" "$CONFIG/current/theme/alacritty.toml"; do
   [ -f "$f" ] || continue
   python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f" >/dev/null 2>&1 || BROKEN_TOML+=("${f/#"$HOME"/\~}")
 done
-if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal and theme config files parse"; else fail "terminal and theme config files parse" "broken: ${BROKEN_TOML[*]}"; fi
+if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal config files parse"; else fail "terminal config files parse" "broken: ${BROKEN_TOML[*]}"; fi
 BG_LINK="$CONFIG/current/background"
 if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
 # ohmydebn-theme-set-fastfetch links fastfetch's config to the current

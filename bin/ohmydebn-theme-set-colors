@@ -59,13 +59,23 @@ if [[ -f "$THEME_PATH/colors.toml" ]]; then
     ACCENT=${ACCENT:-$BLUE}
 
     # Preserve all original semantic keys (e.g. `mode`, `orange`, `brown`)
-    # then append the derived legacy aliases.
+    # then append the derived legacy aliases - only those the theme doesn't
+    # set itself. Aether's themes (4.29.9+) already have
+    # selection_foreground, and appending it again made a colors.toml that
+    # strict TOML parsers reject ("Cannot overwrite a value") - the doctor
+    # and the theme carousel's accent. color0-15 are never present here
+    # (their presence is what marks the legacy format above).
+    has_key() {
+      grep -qE "^\s*$1\s*=" "$SEMANTIC_TOML"
+    }
     cat "$SEMANTIC_TOML" >"$TEMP_COLORS_TOML"
+    {
+      echo
+      has_key cursor || echo "cursor = \"$BRIGHT_FOREGROUND\""
+      has_key selection_foreground || echo "selection_foreground = \"$BRIGHT_FOREGROUND\""
+      has_key selection_background || echo "selection_background = \"$SELECTION\""
+    } >>"$TEMP_COLORS_TOML"
     cat >>"$TEMP_COLORS_TOML" <<EOF
-
-cursor = "$BRIGHT_FOREGROUND"
-selection_foreground = "$BRIGHT_FOREGROUND"
-selection_background = "$SELECTION"
 
 color0 = "$BACKGROUND"
 color1 = "$RED"

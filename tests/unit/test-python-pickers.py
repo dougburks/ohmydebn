@@ -759,6 +759,18 @@ try:
         tc.theme_accent_color("zeta"), "#e68e0d",
     )
 
+    # A colors.toml with a repeated key (as ohmydebn-theme-set-colors wrote
+    # for Aether themes before 4.9.0), which strict TOML (tomllib) refuses;
+    # the accent must still be read, as every other colors.toml reader (all
+    # line by line) manages.
+    os.makedirs(os.path.join(user_dir, "aether-dup"))
+    with open(os.path.join(user_dir, "aether-dup", "colors.toml"), "w", encoding="utf-8") as f:
+        f.write('mode = "dark"\naccent = "#6473dc"\nselection_foreground = "#0b020f"\nselection_foreground = "#f9e9c5"\n')
+    check_eq(
+        "theme_accent_color: reads the accent from a colors.toml that repeats a key",
+        tc.theme_accent_color("aether-dup"), "#6473dc",
+    )
+
     # "alpha" has a colors.toml with no accent key at all - must fall back
     # rather than crash on the missing key.
     with open(os.path.join(user_dir, "alpha", "colors.toml"), "w", encoding="utf-8") as f:

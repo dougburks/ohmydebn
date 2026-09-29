@@ -70,6 +70,7 @@ import subprocess
 import sys
 import tempfile
 import queue
+import re
 import threading
 import time
 import tomllib
@@ -349,10 +350,19 @@ def theme_accent_color(slug):
     path = os.path.join(theme_dir(slug), "colors.toml")
     try:
         with open(path, "rb") as f:
-            data = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
+            raw = f.read()
+    except OSError:
         return DEFAULT_ACCENT
-    accent = data.get("accent")
+    try:
+        accent = tomllib.loads(raw.decode("utf-8")).get("accent")
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        # Not strict TOML - e.g. a theme applied before 4.9.0, whose
+        # colors.toml ohmydebn-theme-set-colors gave a repeated key (every
+        # Aether theme), or a hand-made theme. Every other reader goes line
+        # by line, so do the same for the one key needed here rather than
+        # drop to plain white.
+        match = re.search(r'^\s*accent\s*=\s*"([^"]*)"', raw.decode("utf-8", "replace"), re.MULTILINE)
+        accent = match.group(1) if match else None
     if not isinstance(accent, str):
         return DEFAULT_ACCENT
     accent = accent.strip()

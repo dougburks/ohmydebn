@@ -250,7 +250,7 @@ assert_contains "healthy: SPICE agent running" "$OUTPUT" "ok - VM display: spice
 assert_contains "healthy: fwupd signed binary" "$OUTPUT" "ok - firmware updates: fwupd's signed EFI binary installed"
 assert_not_contains "healthy: Debian machine skips the Ubuntu sources check" "$OUTPUT" "Ubuntu-based"
 assert_contains "healthy: no DCONF_PROFILE" "$OUTPUT" "ok - DCONF_PROFILE not set in the session"
-assert_contains "healthy: config files parse" "$OUTPUT" "ok - terminal and theme config files parse"
+assert_contains "healthy: config files parse" "$OUTPUT" "ok - terminal config files parse"
 assert_contains "healthy: module blocks in place" "$OUTPUT" "ok - vulnerable kernel modules blocked"
 assert_contains "healthy: clock synchronized (chrony)" "$OUTPUT" "ok - clock synchronized"
 assert_not_contains "healthy: no OhMyDebn updates waiting" "$OUTPUT" "updates available"
@@ -300,6 +300,16 @@ rm "$H/.config/ohmydebn/current/default-ai"
 run_doctor
 assert_contains "no default AI: valid, with its fallback" "$OUTPUT" "ok - default AI is valid (unset - opencode)"
 
+# --- a colors.toml with a repeated key (as ohmydebn-theme-set-colors wrote for
+# Aether themes before 4.9.0): not a failure - every reader of colors.toml
+# goes line by line; only strict TOML refuses it ---
+build_machine yes
+printf 'accent = "#6473dc"\nselection_foreground = "#0b020f"\nselection_foreground = "#f9e9c5"\n' >"$H/.config/ohmydebn/current/theme/colors.toml"
+run_doctor
+assert_contains "Aether repeated key: config files still ok" "$OUTPUT" "ok - terminal config files parse"
+assert_not_contains "Aether repeated key: no FAIL lines" "$OUTPUT" "FAIL -"
+mock_cleanup
+
 # --- fastfetch's config link dangling: caught, with the command that fixes it ---
 build_machine yes
 rm "$H/.config/ohmydebn/current/theme/config.jsonc"
@@ -333,7 +343,7 @@ rm "$H/.oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desk
 rm "$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
 run_doctor MOCK_BROWSER=gone.desktop MOCK_AI_INSTALLED=codex MOCK_LEAP="Not synchronised" "MOCK_UPGRADABLE=ohmydebn ohmydebn-neovim"
 assert_eq "defaults etc: exits 1" "1" "$EXIT_CODE"
-assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal and theme config files parse (broken: ~/.config/alacritty/alacritty.toml)"
+assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal config files parse (broken: ~/.config/alacritty/alacritty.toml)"
 assert_contains "defaults etc: Super+B does nothing" "$OUTPUT" "FAIL - Super+B opens a browser (the default (gone.desktop) isn't installed and there's no x-www-browser"
 assert_contains "defaults etc: uninstalled default AI is a note, not a failure" "$OUTPUT" "default AI assistant (opencode) isn't installed - Super+A offers to install it"
 assert_not_contains "defaults etc: no FAIL for the AI default" "$OUTPUT" "FAIL - default AI assistant"

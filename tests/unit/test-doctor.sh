@@ -287,6 +287,12 @@ run_doctor
 assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
 mock_cleanup
 
+# --- no default AI chosen yet: valid, falling back to OpenCode ---
+build_machine yes
+rm "$H/.config/ohmydebn/current/default-ai"
+run_doctor
+assert_contains "no default AI: valid, with its fallback" "$OUTPUT" "ok - default AI is valid (unset - opencode)"
+
 # --- defaults, config, shell and security problems: each caught and explained ---
 build_machine yes
 printf '[general\nbroken = ' >"$H/.config/alacritty/alacritty.toml"                 # unparseable

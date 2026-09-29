@@ -10,7 +10,7 @@ This file is for developing OhMyDebn. The skill in `config/ohmydebn-skill/` is d
 - `install.sh` - the bootstrap: checks the distro, sets up apt sources and the OhMyDebn repo, installs the `ohmydebn` package, then runs `ohmydebn.sh`.
 - `ohmydebn.sh` - sources `install/{packaging,config,cleanup,finalization}/all.sh`. A new file under `install/` must be sourced from its directory's `all.sh`.
 - `config/` - default configs, `*.tpl` templates rendered per theme, `tile-rules.json`, and the user-facing agent skill.
-- `themes/` - built-in themes, shipped as the separate `ohmydebn-themes` package.
+- `themes/` - the built-in OhMyDebn theme, shipped as the separate `ohmydebn-themes` package. The Omarchy themes are packaged from the omarchy repo by `build-package-ohmydebn-themes-omarchy.sh` in `ohmydebn-package-build`.
 - `tests/` - the test suite (see below).
 - `VERSION` - the `ohmydebn` package version.
 

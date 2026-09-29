@@ -60,7 +60,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
-- **OpenCode AI**: CLI (`opencode-cli`, `Super + A`) + GUI versions, kept current via `ohmydebn-update`
+- **AI assistants**: optional installs from Apps > AI (OpenCode, Claude Code, Codex, Grok Build, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
 - **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps
 
 ## System Architecture
@@ -69,7 +69,7 @@ OhMyDebn is built on:
 
 | Component | Purpose | Config Location |
 |-----------|---------|-----------------|
-| **Debian 13** | Base OS | `/etc/`, `~/.config/` |
+| **Debian 13 or a supported derivative** | Base OS | `/etc/`, `~/.config/` |
 | **Cinnamon** | Desktop environment | `~/.config/cinnamon/` |
 | **Nemo** | File manager | `~/.config/nemo/` |
 | **Cinnamon Panel** | Taskbar/applets | `gsettings` (`org.cinnamon`), applet/desklet instance configs under `~/.config/cinnamon/spices/` |
@@ -100,7 +100,7 @@ cat $(which ohmydebn-theme-set)
 
 | Prefix | Purpose | Example |
 |--------|---------|---------|
-| `ohmydebn-reset-config` | Reset all configs to defaults (backs up first) | `ohmydebn-reset-config` |
+| `ohmydebn-reset-config` | Reset OhMyDebn's app configs to defaults (backs them up first) | `ohmydebn-reset-config` |
 | `ohmydebn-theme-*` | Theme management | `ohmydebn-theme-set <name>` |
 | `ohmydebn-pkg-*` | Package management | `ohmydebn-pkg-install <pkg>` |
 | `ohmydebn-update-*` | System updates | `ohmydebn-update` |
@@ -241,9 +241,10 @@ When customizations go wrong:
 ohmydebn-reset-config
 
 # The reset-config command:
-# 1. Backs up current configs with timestamp
-# 2. Copies defaults from /usr/share/ohmydebn/config/
-# 3. Restarts affected components
+# 1. Renames ~/.config/{aether,alacritty,bat,btop,cava,nvim,starship.toml},
+#    ~/.oh-my-zsh and ~/.zshrc to *-backup-<timestamp>
+# 2. Deletes OhMyDebn's state markers (~/.local/state/ohmydebn*)
+# 3. Re-runs OhMyDebn's configuration (ohmydebn.sh), which writes fresh defaults
 ```
 
 ## Common Tasks
@@ -261,10 +262,10 @@ ohmydebn-theme-install <url>     # Install from git repo
 
 **Theme Management:**
 - GUI: OhMyDebn Menu → Style → Theme or hotkey `Ctrl + Super + T`
-- Background switching: `Ctrl + Super + B` or "Next Background" in menu
+- Background switching: `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`
 - Build custom themes: `Ctrl + Shift + A` (Aether theme builder)
 - Install all Omarchy extra themes via menu option
-- Browse Aether themes collection via menu option
+- Browse more themes: press B in the theme carousel (`Ctrl + Super + T`)
 
 ### Keybindings
 
@@ -273,8 +274,9 @@ ohmydebn.org/hotkeys lists them); a *keybinding* is the configuration that ties
 a key to an action. Menus, commands and files say keybinding.
 
 **Preferred: the user's own keybindings file.** `~/.config/ohmydebn/keybindings.txt`
-is applied on top of the stock keybindings by every `ohmydebn-update`, whenever
-it changes, and by `ohmydebn-keybindings-apply`. It survives updates and can be
+is applied on top of the stock keybindings by every `ohmydebn-update`, when the
+editor opened by `ohmydebn-keybindings-edit` closes, and by
+`ohmydebn-keybindings-apply`. It survives updates and can be
 copied to another OhMyDebn machine. Stock keybindings are addressed by NAME (the
 first quoted field in `/usr/share/ohmydebn/install/keybinding/keybinding-custom.txt`),
 never by slot number. Three verbs:
@@ -377,7 +379,7 @@ Additional tools available in OhMyDebn:
 ### System
 
 ```bash
-ohmydebn-update                  # Full system update (includes OpenCode AI)
+ohmydebn-update                  # Full system update (also updates installed AI tools such as OpenCode)
 ohmydebn-version                 # Show OhMyDebn version
 ```
 
@@ -434,7 +436,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 ## Example Requests
 
 - "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
-- "Add a keybinding for Super+E to open file manager" -> Check existing bindings first, then create custom keybinding in Cinnamon Settings
+- "Add a keybinding for Super+E to open file manager" -> Super+E is already GMail, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Customizing keybindings above) and run `ohmydebn-keybindings-apply`
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets
@@ -444,8 +446,8 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Space`
-- "Launch AI assistant" -> `Super + A` (OpenCode CLI) or from Apps Menu
-- "Update OpenCode to latest version" -> `ohmydebn-update` (system update includes OpenCode)
+- "Launch AI assistant" -> `Super + A` (the default assistant, set in Setup > Defaults > Agent) or from Apps > AI
+- "Update OpenCode to latest version" -> `ohmydebn-update` (updates OpenCode if it's installed)
 - "Open apps menu" -> `Super + R` (GTK app launcher)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`
 - "Show system summary" -> `Ctrl + Shift + S` (fastfetch GUI)

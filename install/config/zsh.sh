@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "zsh" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116

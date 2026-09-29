@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "btop" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 OHMYDEBN_STATE=~/.local/state/ohmydebn-config

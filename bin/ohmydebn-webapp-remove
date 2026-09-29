@@ -23,7 +23,9 @@ if [ "$#" -eq 0 ]; then
       exit 1
     fi
 
-    mapfile -t SORTED_WEB_APPS < <(sort <<<"${WEB_APPS[*]}")
+    # One name per line: "${WEB_APPS[*]}" would join them all into a single
+    # line, and so a single entry in the picker naming no launcher at all.
+    mapfile -t SORTED_WEB_APPS < <(printf '%s\n' "${WEB_APPS[@]}" | sort)
     APP_NAMES_STRING=$(gum choose --no-limit --header "Select web app to remove..." --selected-prefix="✗ " "${SORTED_WEB_APPS[@]}")
     # Convert newline-separated string to array
     APP_NAMES=()
@@ -50,6 +52,10 @@ for APP_NAME in "${APP_NAMES[@]}"; do
   # typed directly on the command line, the untrusted-input case.
   if [[ "$#" -ne 0 && "$APP_NAME" == */* ]]; then
     echo "Skipping '$APP_NAME': app name must not contain '/'."
+    continue
+  fi
+  if [[ ! -f "$DESKTOP_DIR/$APP_NAME.desktop" ]]; then
+    echo "No web app named '$APP_NAME'."
     continue
   fi
   rm -f "$DESKTOP_DIR/$APP_NAME.desktop"

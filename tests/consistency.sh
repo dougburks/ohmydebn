@@ -1261,5 +1261,20 @@ for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
 done
 
 echo
+echo "-- install steps neither exit nor change shell options --"
+# Every file under install/ is sourced into install.sh's own shell (through
+# ohmydebn.sh and each layer's all.sh), not run as a child. An `exit` there
+# ends the whole install or update right there, still reporting success,
+# with every later step skipped - a step that has nothing to do returns
+# instead. A `set -u` or `set -o pipefail` there stays on for every step
+# after it: updates.sh once turned on set -u, and finale.sh then died on an
+# unset $XDG_CURRENT_DESKTOP in any update run over ssh or from a TTY.
+while IFS= read -r HIT; do
+  echo "  FAIL - $HIT (sourced into install.sh; see this check's comment)"
+  FAIL=$((FAIL + 1))
+done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##")
+echo "  checked every file under install/"
+
+echo
 echo "$FAIL failure(s)"
 [[ $FAIL -eq 0 ]]

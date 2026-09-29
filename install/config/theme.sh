@@ -34,8 +34,13 @@ if [ ! -f $OMARCHY_THEME_URL_HANDLER_STATE ]; then
 
   # Aether reads the active theme name and background from Omarchy's
   # state dir; point it at OhMyDebn's real one.
+  # A plain ln -s failed, stopping the install on every update, when the
+  # link was already there (a run interrupted before the marker below).
+  # A real directory there is left alone rather than linked into.
   mkdir -p ~/.local/state/omarchy
-  ln -s ~/.config/ohmydebn/current ~/.local/state/omarchy/current
+  if [ ! -d ~/.local/state/omarchy/current ] || [ -L ~/.local/state/omarchy/current ]; then
+    ln -sfn ~/.config/ohmydebn/current ~/.local/state/omarchy/current
+  fi
 
   touch $OMARCHY_THEME_URL_HANDLER_STATE
 fi

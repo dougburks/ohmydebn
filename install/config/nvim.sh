@@ -53,9 +53,20 @@ if dpkg -s "ohmydebn-neovim-plugins" >/dev/null 2>&1; then
     touch $TRANSPARENCY_STATE
   fi
 
+  # Plain line numbers instead of LazyVim's relative ones, once: the
+  # package's options.lua already has this, so it's only for configs made
+  # before it did. Checked on every run, it put the line back each time a
+  # user changed it, and its append stopped the install when a config of the
+  # user's own had no lua/config directory. Any relativenumber line of the
+  # user's means they chose, and is left alone.
   NVIM_OPTIONS=$NVIM_CONFIG_DIR/lua/config/options.lua
-  if ! grep -q "vim.opt.relativenumber = false" $NVIM_OPTIONS >/dev/null 2>&1; then
-    echo "vim.opt.relativenumber = false" >>$NVIM_OPTIONS
+  NVIM_RELATIVENUMBER_STATE=$NVIM_STATE_DIR/nvim-relativenumber-20260929
+  if [ ! -f $NVIM_RELATIVENUMBER_STATE ]; then
+    if ! grep -q "relativenumber" $NVIM_OPTIONS >/dev/null 2>&1; then
+      mkdir -p $NVIM_CONFIG_DIR/lua/config
+      echo "vim.opt.relativenumber = false" >>$NVIM_OPTIONS
+    fi
+    touch $NVIM_RELATIVENUMBER_STATE
   fi
 
   ALL_THEMES=$NVIM_PLUGINS/all-themes.lua

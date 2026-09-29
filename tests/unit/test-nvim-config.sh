@@ -200,4 +200,24 @@ assert_eq "new set: the user's own plugin still untouched" "$MINE" "$(head_of "$
 assert_eq "new set: the migration isn't repeated" "1" "$(compgen -G "$CFG/lua/plugins/core.lua.disabled-*" | wc -l)"
 teardown
 
+# --- a config of the user's own with no lua/config: the install carries on ---
+setup yes
+mkdir -p "$CFG"
+echo 'print("mine")' >"$CFG/init.lua"
+run
+assert_eq "own config: plain line numbers set once" "vim.opt.relativenumber = false" "$(cat "$CFG/lua/config/options.lua")"
+assert_eq "own config: init.lua untouched" 'print("mine")' "$(cat "$CFG/init.lua")"
+teardown
+
+# --- a user who turned relative numbers back on keeps them ---
+setup yes
+run
+sed -i 's/relativenumber = false/relativenumber = true/' "$CFG/lua/config/options.lua"
+run
+assert_eq "relativenumber: the user's choice isn't overridden" "0" "$(grep -c 'relativenumber = false' "$CFG/lua/config/options.lua")"
+rm -f "$STATE/nvim-relativenumber-20260929" # e.g. a config made before the marker existed
+run
+assert_eq "relativenumber: a line of the user's is left alone" "0" "$(grep -c 'relativenumber = false' "$CFG/lua/config/options.lua")"
+teardown
+
 test_summary

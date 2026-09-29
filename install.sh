@@ -94,7 +94,7 @@ if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22.3, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, and Ubuntu 24.04/26.04.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 

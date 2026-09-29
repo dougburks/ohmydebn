@@ -114,6 +114,7 @@ EOF2
 case "$*" in
 "-s ohmydebn"|"-s ohmydebn-gtile"|"-s ohmydebn-themes"|"-s alacritty"|"-s bat"|"-s cinnamon-desktop-environment") exit 0 ;;
 "-s ohmydebn-neovim-plugins"|"-s ufw"|"-s fwupd") exit 0 ;;
+"-s chrony") [ -n "${MOCK_CHRONY_INSTALLED:-}" ] && exit 0 ;;
 "--print-architecture") echo amd64; exit 0 ;;
 "--audit") [ -n "${MOCK_DPKG_AUDIT:-}" ] && echo "$MOCK_DPKG_AUDIT"; exit 0 ;;
 esac
@@ -323,6 +324,12 @@ assert_contains "loaded module: needs a reboot" "$OUTPUT" "FAIL - vulnerable ker
 assert_contains "no chrony: timedatectl's answer used" "$OUTPUT" "FAIL - clock synchronized (timedatectl says it isn't)"
 run_doctor MOCK_BROWSER=gone.desktop MOCK_NO_CHRONY=1 MOCK_NTP=""
 assert_contains "no chrony, no timedatectl answer: skipped" "$OUTPUT" "skip - clock synchronized (neither chronyc nor timedatectl could tell)"
+# chrony installed but never started (Kali leaves new services off): say how
+# to turn it on, for systemd and for sysvinit.
+run_doctor MOCK_NO_CHRONY=1 MOCK_NTP=no MOCK_CHRONY_INSTALLED=1 MOCK_PGREP_EXIT=1
+assert_contains "chrony not running: says how to start it" "$OUTPUT" "FAIL - clock synchronized (chrony isn't running - run: sudo systemctl enable --now chrony)"
+run_doctor MOCK_NTP=yes MOCK_NO_CHRONY=1 MOCK_CHRONY_INSTALLED=1 MOCK_PGREP_EXIT=1
+assert_contains "chrony not running but synced by something else: ok" "$OUTPUT" "ok - clock synchronized"
 mock_cleanup
 
 # --- an update that never finished, and one that's still running ---
@@ -425,6 +432,8 @@ assert_contains "no systemd: timer check skipped, not failed" "$OUTPUT" "skip - 
 assert_contains "no systemd: loginctl checked instead" "$OUTPUT" "ok - elogind's loginctl present for the power menu"
 assert_contains "no systemd: SLiM session alternative checked" "$OUTPUT" "ok - SLiM: x-session-manager alternative is cinnamon-session"
 assert_not_contains "no systemd: no FAIL lines" "$OUTPUT" "FAIL -"
+run_doctor MOCK_NO_CHRONY=1 MOCK_NTP=no MOCK_CHRONY_INSTALLED=1 MOCK_PGREP_EXIT=1
+assert_contains "no systemd, chrony not running: sysvinit's way to start it" "$OUTPUT" "FAIL - clock synchronized (chrony isn't running - run: sudo update-rc.d chrony enable && sudo service chrony start)"
 mock_cleanup
 
 # --- SLiM with the alternative still on XFCE: the default-session bug shape ---

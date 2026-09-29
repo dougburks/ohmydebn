@@ -298,6 +298,14 @@ else
   NTP_SYNCED=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)
   if [ "$NTP_SYNCED" = yes ]; then
     ok "clock synchronized"
+  elif dpkg -s chrony >/dev/null 2>&1 && ! pgrep -x chronyd >/dev/null 2>&1; then
+    # Installed but never started: Kali leaves the services it installs
+    # turned off. Turning it on is the user's call, so say how.
+    if is_systemd; then
+      fail "clock synchronized" "chrony isn't running - run: sudo systemctl enable --now chrony"
+    else
+      fail "clock synchronized" "chrony isn't running - run: sudo update-rc.d chrony enable && sudo service chrony start"
+    fi
   elif [ "$NTP_SYNCED" = no ]; then
     fail "clock synchronized" "timedatectl says it isn't"
   else

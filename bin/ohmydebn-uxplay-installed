@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# Exit 0 when UxPlay is installed *with* the GStreamer plugins it needs to
+# show and play anything, non-zero otherwise. With --missing, also prints
+# the missing package names one per line. The single place the list lives:
+# ohmydebn-uxplay-install installs what it reports, and ohmydebn-uxplay uses
+# it as its "already installed?" gate instead of checking uxplay alone.
+#
+# Debian's uxplay package depends only on gstreamer1.0-libav (sound) and
+# recommends nothing, while UxPlay's README lists plugins-base, -good and
+# -bad (h264 video decoding) as required, and -x for X11 output. Without
+# plugins-bad it won't start at all (seen on Linux Mint 22); distros that
+# happened to have the plugins from some other app hid the gap.
+
+PACKAGES=(uxplay gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-x)
+
+missing=()
+for pkg in "${PACKAGES[@]}"; do
+  dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+done
+
+if [[ "${1:-}" == "--missing" && ${#missing[@]} -gt 0 ]]; then
+  printf '%s\n' "${missing[@]}"
+fi
+
+[[ ${#missing[@]} -eq 0 ]]

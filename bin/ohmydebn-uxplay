@@ -2,11 +2,14 @@
 
 set -euo pipefail
 
-if ! dpkg -s "uxplay" >/dev/null 2>&1; then
+# "Installed" means uxplay plus the GStreamer plugins it needs - see
+# ohmydebn-uxplay-installed. One missing them is sent through the
+# installer to pick them up.
+if ! /usr/share/ohmydebn/bin/ohmydebn-uxplay-installed; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "UxPlay" /usr/share/ohmydebn/bin/ohmydebn-uxplay-install
 fi
 
-if dpkg -s "uxplay" >/dev/null 2>&1; then
+if /usr/share/ohmydebn/bin/ohmydebn-uxplay-installed; then
   # UxPlay isn't a CLI tool you look up usage for like tcpdump/tshark - it's
   # a long-running foreground receiver that waits for an AirPlay
   # connection and displays the mirrored video itself, so it just runs

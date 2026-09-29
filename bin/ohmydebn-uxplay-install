@@ -7,10 +7,20 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-if ! dpkg -s "uxplay" >/dev/null 2>&1; then
+# UxPlay plus the GStreamer plugins it needs, not just the uxplay package -
+# see ohmydebn-uxplay-installed, which owns the list. This installs
+# whatever part of it is missing, so it also repairs a UxPlay installed
+# earlier without them.
+mapfile -t MISSING < <(/usr/share/ohmydebn/bin/ohmydebn-uxplay-installed --missing || true)
+
+if [ ${#MISSING[@]} -gt 0 ]; then
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "UxPlay AirPlay Receiver is not currently installed."
+    if dpkg -s "uxplay" >/dev/null 2>&1; then
+      echo "UxPlay AirPlay Receiver is installed but is missing packages it needs: ${MISSING[*]}"
+    else
+      echo "UxPlay AirPlay Receiver is not currently installed."
+    fi
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
@@ -20,5 +30,5 @@ if ! dpkg -s "uxplay" >/dev/null 2>&1; then
   fi
 
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install uxplay
+  sudo /usr/bin/apt -y install "${MISSING[@]}"
 fi

@@ -13,5 +13,9 @@ if dpkg -s "uxplay" >/dev/null 2>&1; then
   # directly here (no --help, no dropping into a shell afterward): when
   # the user closes it (Ctrl+C), the terminal should close with it, not
   # leave a bare shell prompt behind.
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "UxPlay" "uxplay"
+  # -p 6000 pins UxPlay to TCP and UDP ports 6000-6002, the ports the docs
+  # (media.md) say to open in the firewall. Without it UxPlay picks random
+  # ports on every run, which ufw's default deny-incoming blocks, so no
+  # Apple device could connect.
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "UxPlay" "uxplay -p 6000"
 fi

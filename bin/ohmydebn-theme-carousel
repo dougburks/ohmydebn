@@ -1849,6 +1849,21 @@ class Carousel(Gtk.Window):
         # this provider.
         Gtk.StyleContext.reset_widgets(Gdk.Screen.get_default())
 
+    def _show_bg_neighbors(self, bg_n):
+        """The above/below background thumbnails for a theme with bg_n
+        backgrounds. Below (the next one) shows whenever there's another
+        background to move to; above (the previous one) only from three
+        up - with two, previous and next are the same image, and showing it
+        twice read as a glitch (Up still switches, like Down). With one,
+        neither is drawn: an empty bordered box read as something missing.
+        A frame not shown is transparent (opacity 0) rather than hidden, so
+        it keeps its space and the card doesn't jump up and down while
+        browsing (see make_fixed_thumb_frame()), and insensitive, so it
+        can't be clicked or light up on hover."""
+        for button, show in ((self.bg_above_btn, bg_n > 2), (self.bg_below_btn, bg_n > 1)):
+            button.set_sensitive(show)
+            button.set_opacity(1.0 if show else 0.0)
+
     def render(self):
         n = len(self.slugs)
         if n == 0:
@@ -1937,8 +1952,7 @@ class Carousel(Gtk.Window):
         else:
             self._request_image(self.bg_above_image, "bg_above", None, 0, 0, keep_previous=False)
             self._request_image(self.bg_below_image, "bg_below", None, 0, 0, keep_previous=False)
-        self.bg_above_btn.set_sensitive(bg_n > 1)
-        self.bg_below_btn.set_sensitive(bg_n > 1)
+        self._show_bg_neighbors(bg_n)
 
         # Grey out (rather than hide) arrows with nothing to move to -
         # hiding them would change card_stack's/row's allocated size and

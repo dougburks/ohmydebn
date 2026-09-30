@@ -4,8 +4,9 @@
 # git repo (via ohmydebn-theme-install). A theme cloned from a stranger's repo
 # is held to a short allow-list - color and image files only - because Neovim
 # loads a theme's neovim.lua at startup, Alacritty's alacritty.toml names the
-# program a new terminal launches, and vscode.json names a VS Code extension
-# ohmydebn-theme-set-vscode installs. A theme the user wrote themselves (no
+# program a new terminal launches, vscode.json names a VS Code extension
+# ohmydebn-theme-set-vscode installs, and config.jsonc becomes fastfetch's
+# config, whose "command" modules run shell commands. A theme the user wrote themselves (no
 # .git left behind) is not filtered at all. Every downstream theming script is
 # stubbed out here so this only exercises what gets staged into
 # ~/.config/ohmydebn/current/theme, not the scripts that read it afterward.
@@ -20,7 +21,7 @@ echo "=== bin/ohmydebn-theme-set (installed-theme staging) ==="
 
 setup_mocks() {
   for cmd in ohmydebn-theme-set-templates ohmydebn-theme-bg-next \
-    ohmydebn-theme-set-cinnamon ohmydebn-theme-set-picker ohmydebn-theme-set-claude \
+    ohmydebn-theme-set-cinnamon ohmydebn-theme-set-picker ohmydebn-theme-set-claude ohmydebn-theme-set-t3code ohmydebn-theme-set-omp \
     ohmydebn-theme-set-colors-delete ohmydebn-theme-set-icon ohmydebn-theme-set-terminal \
     ohmydebn-theme-set-btop ohmydebn-theme-set-gedit ohmydebn-theme-set-starship \
     ohmydebn-theme-set-antigravity ohmydebn-theme-set-cava ohmydebn-theme-set-eza \
@@ -77,6 +78,7 @@ TOML
 printf 'vim.cmd("os.execute(id)")\n' >"$hostile/neovim.lua"
 printf '[terminal.shell]\nprogram = "pwned"\n' >"$hostile/alacritty.toml"
 printf '{"name":"x","extension":"pub.ext"}\n' >"$hostile/vscode.json"
+printf '{"modules":[{"type":"command","text":"id"}]}\n' >"$hostile/config.jsonc"
 printf 'Yaru-red\n' >"$hostile/icons.theme"
 printf 'png\n' >"$hostile/backgrounds/1-real.png"
 printf '# notes\n' >"$hostile/README.md"
@@ -92,6 +94,7 @@ fi
 
 [[ ! -e $(staged neovim.lua) ]] && assert_eq "neovim.lua is not staged (Lua runs at startup)" "yes" "yes" || assert_eq "neovim.lua is not staged (Lua runs at startup)" "yes" "no"
 [[ ! -e $(staged alacritty.toml) ]] && assert_eq "alacritty.toml is not staged (names the shell to launch)" "yes" "yes" || assert_eq "alacritty.toml is not staged (names the shell to launch)" "yes" "no"
+[[ ! -e $(staged config.jsonc) ]] && assert_eq "config.jsonc is not staged (fastfetch command modules run shell)" "yes" "yes" || assert_eq "config.jsonc is not staged (fastfetch command modules run shell)" "yes" "no"
 [[ ! -e $(staged vscode.json) ]] && assert_eq "vscode.json is not staged (names an extension to install)" "yes" "yes" || assert_eq "vscode.json is not staged (names an extension to install)" "yes" "no"
 [[ ! -e $(staged unlock.png) ]] && assert_eq "a symlink is not followed out of the theme" "yes" "yes" || assert_eq "a symlink is not followed out of the theme" "yes" "no"
 [[ ! -e $(staged .git) ]] && assert_eq "the clone's own .git directory is never staged" "yes" "yes" || assert_eq "the clone's own .git directory is never staged" "yes" "no"

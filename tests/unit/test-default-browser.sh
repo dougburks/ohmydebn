@@ -6,8 +6,8 @@
 # browser is present the default - Brave Origin first - on new installs
 # only), bin/ohmydebn-browser-set-default (the one place the default is
 # actually set: alternatives, xdg-settings, scheme handlers, PDF viewer -
-# for mimetypes.sh, for the installers' prompt and for the menu's Browsers
-# > Set Default), every bin/ohmydebn-<browser>-install's "make it your
+# for mimetypes.sh, for the installers' prompt and for the menu's Setup >
+# Defaults > Browser), every bin/ohmydebn-<browser>-install's "make it your
 # default?" question after an install picked from the menu (never under
 # --skip-prompt, and defaulting to no), and bin/ohmydebn-firefox-esr, the
 # launcher that replaced the menu's bare `apt install firefox-esr`.
@@ -186,8 +186,24 @@ assert_contains "existing install, no PDF marker: PDF step still runs" "$CALLS" 
 mock_cleanup
 
 # --- ohmydebn-chromium-install: real script; apt logged, os-release and the seed source patched ---
+# setup_chromium <distro ID> [apt has a real "chromium" package: yes|no]
+# (default: no on ubuntu, yes elsewhere - the installer asks apt, via
+# apt-cache policy, rather than going by the distro name)
 setup_chromium() {
   setup
+  local has_chromium="${2:-}"
+  [[ -z "$has_chromium" ]] && { [[ "$1" == "ubuntu" ]] && has_chromium=no || has_chromium=yes; }
+  if [[ "$has_chromium" == "yes" ]]; then
+    mock_bin apt-cache <<'EOF2'
+#!/bin/bash
+printf 'chromium:\n  Installed: (none)\n  Candidate: 1.0-1\n'
+EOF2
+  else
+    mock_bin apt-cache <<'EOF2'
+#!/bin/bash
+exit 0
+EOF2
+  fi
   ROOT="$MOCK_DIR/root"
   mkdir -p "$ROOT/usr/share/ohmydebn/config/chromium/External Extensions" "$ROOT/etc"
   echo '{}' >"$ROOT/usr/share/ohmydebn/config/chromium/External Extensions/x.json"
@@ -237,6 +253,21 @@ mock_cleanup
 setup_chromium ubuntu
 run "$MOCK_DIR/chromium-install.sh" --skip-prompt
 assert_contains "ubuntu: installs chromium-browser" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y --no-install-recommends install chromium-browser"
+mock_cleanup
+
+# Mint reports ID_LIKE=ubuntu but ships a real Chromium deb (and blocks
+# snapd): apt's answer wins over the Ubuntu-like name
+setup_chromium linuxmint yes
+run "$MOCK_DIR/chromium-install.sh" --skip-prompt
+assert_contains "mint (apt has chromium): installs chromium" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y --no-install-recommends install chromium"
+assert_not_contains "mint (apt has chromium): not the snap package" "$(cat "$MOCK_CALLS")" "chromium-browser"
+mock_cleanup
+
+# An Ubuntu derivative with no chromium package of its own (e.g. Zorin OS):
+# the transitional chromium-browser, as on Ubuntu itself
+setup_chromium zorin no
+run "$MOCK_DIR/chromium-install.sh" --skip-prompt
+assert_contains "ubuntu derivative without chromium: installs chromium-browser" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y --no-install-recommends install chromium-browser"
 mock_cleanup
 
 # Debian, already installed, no profile yet: no apt, uBlock seed applied
@@ -403,7 +434,7 @@ for answer in "" "n" "N"; do
   EXIT_CODE=$?
   assert_eq "--ask '$answer': exits zero" "0" "$EXIT_CODE"
   assert_eq "--ask '$answer': nothing configured" "" "$(cat "$MOCK_CALLS")"
-  assert_contains "--ask '$answer': says where to change it later" "$OUT" "OhMyDebn Menu > Apps > Browsers > Set Default"
+  assert_contains "--ask '$answer': says where to change it later" "$OUT" "OhMyDebn Menu > Setup > Defaults > Browser"
   mock_cleanup
 done
 

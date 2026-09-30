@@ -58,6 +58,18 @@ check_eq("wrong action is refused", outcome[0], "refuse")
 outcome = guard.build_confirmation("aether://apply?mode=dark")
 check_eq("no payload param is refused", outcome[0], "refuse")
 
+# --- A repeated parameter is refused: the dialog and Aether could each read
+# a different one (dict() keeps the last, Aether may take the first) ---
+outcome = guard.build_confirmation(
+    f"aether://apply?colors=https://evil.example.com/x.json&colors=https://{KNOWN_HOST}/y.json"
+)
+check_eq("a repeated colors= is refused", outcome[0], "refuse")
+check("the refusal names the repeated parameter", "colors=" in outcome[1])
+outcome = guard.build_confirmation(
+    f"aether://apply?colors=https://{KNOWN_HOST}/y.json&as_omarchy_theme=a&as_omarchy_theme=b"
+)
+check_eq("any repeated parameter is refused", outcome[0], "refuse")
+
 # --- A known-good payload host: calm title, no warning marker ---
 url = f"aether://apply?colors=https://{KNOWN_HOST}/omarchy-themes/x/colors.toml&silent=true&as_omarchy_theme=cool"
 outcome = guard.build_confirmation(url)
@@ -234,6 +246,21 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
         # thread instead, and no less real a test: it's the same main-loop
         # shutdown path window.close()'s own "destroy" handler triggers.
         from gi.repository import GLib
+
+        # Enter must pick Cancel, not Apply: the first button has the focus.
+        focused = {}
+        done = threading.Event()
+
+        def read_focus():
+            for win in guard.Gtk.Window.list_toplevels():
+                if win.get_name() == "guard-window" and win.get_focus() is not None:
+                    focused["label"] = win.get_focus().get_label()
+            done.set()
+            return False
+
+        GLib.idle_add(read_focus)
+        done.wait(timeout=2)
+        check_eq("the first button (Cancel) has the keyboard focus", focused.get("label"), "Cancel")
 
         GLib.idle_add(guard.Gtk.main_quit)
 

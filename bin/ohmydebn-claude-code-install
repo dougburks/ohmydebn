@@ -35,4 +35,12 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
 
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install claude-code
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask claude-code || true
+  fi
 fi

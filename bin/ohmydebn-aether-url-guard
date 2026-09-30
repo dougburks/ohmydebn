@@ -143,7 +143,16 @@ def build_confirmation(raw_url):
     if action != "apply":
         return ("refuse", f"Unsupported Aether action {action!r} (expected 'apply').")
 
-    params = dict(parse_qsl(parts.query, keep_blank_values=True))
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    # A repeated parameter means two readings of one link: dict() keeps the
+    # last value, while Aether may use the first, so this dialog could show
+    # the gallery's host for colors= while Aether fetches another. The real
+    # gallery never repeats one, so refuse rather than guess which Aether uses.
+    names = [name for name, _ in pairs]
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        return ("refuse", f"This Aether link repeats {', '.join(repeated)}=, which the theme gallery never does.")
+    params = dict(pairs)
 
     payloads = [(name, params[name]) for name in PAYLOAD_PARAMS if params.get(name)]
     if not payloads:
@@ -175,9 +184,11 @@ def build_confirmation(raw_url):
 def show_dialog(title, body, button_labels):
     """Undecorated, theme-colored, square-cornered modal dialog, centered on
     screen, matching ohmydebn-menu-picker's own look (same CSS-provider +
-    picker-colors mechanism). button_labels are shown left-to-right; returns
-    the index of the clicked one, or None if the window closed without a
-    click (Escape, window-manager close, no display available).
+    picker-colors mechanism). button_labels are shown left-to-right, and the
+    first gets the keyboard focus, so a reflexive Enter picks it: callers
+    put the safe choice (Cancel) first. Returns the index of the clicked
+    one, or None if the window closed without a click (Escape,
+    window-manager close, no display available).
     """
     if not Gtk.init_check()[0]:
         return None
@@ -233,7 +244,8 @@ def show_dialog(title, body, button_labels):
         btn = Gtk.Button(label=label)
         btn.connect("clicked", on_click, i)
         button_box.pack_start(btn, False, False, 0)
-        default_button = btn
+        if default_button is None:
+            default_button = btn
 
     def on_key(_widget, event):
         if event.keyval == Gdk.KEY_Escape:

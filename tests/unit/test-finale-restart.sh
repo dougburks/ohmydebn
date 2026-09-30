@@ -101,4 +101,43 @@ assert_not_contains "no flag: no restart" "$CALLS" "cinnamon --replace"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
+# Scenario 4: an update run over ssh or from a TTY has no
+# XDG_CURRENT_DESKTOP at all. finale.sh must still finish under set -u
+# (which install.sh's steps must never leave on, but a step once did), and
+# must not tell the user to switch to Cinnamon: with no desktop in this
+# session there's nothing to judge, and they're most likely on Cinnamon.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+env -u XDG_CURRENT_DESKTOP HOME="$SCRATCH_HOME" PATH="$(mock_path)" MOCK_CINNAMON_RUNNING=false \
+  bash -eu "$MOCK_DIR/finale-patched.sh" </dev/null >/dev/null 2>&1
+assert_eq "no XDG_CURRENT_DESKTOP under set -u: finishes" "0" "$?"
+assert_not_contains "no XDG_CURRENT_DESKTOP: no log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 5: run from inside another desktop (e.g. Pop's COSMIC): tell the
+# user to log out and pick Cinnamon, naming what they're running now.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+OUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" XDG_CURRENT_DESKTOP=COSMIC MOCK_CINNAMON_RUNNING=false \
+  bash -eu "$MOCK_DIR/finale-patched.sh" </dev/null 2>&1)
+assert_contains "another desktop: log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+assert_contains "another desktop: names it" "$OUT" "You're currently running COSMIC."
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 6: run from Cinnamon: no advice.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+RESTART_NEEDED="" MOCK_CINNAMON_RUNNING=false run_script
+assert_not_contains "Cinnamon: no log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
 test_summary

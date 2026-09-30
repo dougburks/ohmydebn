@@ -34,8 +34,13 @@ if [ ! -f $OMARCHY_THEME_URL_HANDLER_STATE ]; then
 
   # Aether reads the active theme name and background from Omarchy's
   # state dir; point it at OhMyDebn's real one.
+  # A plain ln -s failed, stopping the install on every update, when the
+  # link was already there (a run interrupted before the marker below).
+  # A real directory there is left alone rather than linked into.
   mkdir -p ~/.local/state/omarchy
-  ln -s ~/.config/ohmydebn/current ~/.local/state/omarchy/current
+  if [ ! -d ~/.local/state/omarchy/current ] || [ -L ~/.local/state/omarchy/current ]; then
+    ln -sfn ~/.config/ohmydebn/current ~/.local/state/omarchy/current
+  fi
 
   touch $OMARCHY_THEME_URL_HANDLER_STATE
 fi
@@ -60,6 +65,19 @@ if [ ! -f $FASTFETCH_CONFIG_BACKFILL_STATE ]; then
     /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch
   fi
   touch $FASTFETCH_CONFIG_BACKFILL_STATE
+fi
+
+# Backfill a generated neovim.lua for an already-active theme that ships
+# none (seven of Omarchy's, and any installed from a git repository, which
+# may not ship one): Neovim fell back to LazyVim's default colors for those.
+# ohmydebn-theme-set now generates one on every theme switch; this covers
+# the theme that's active now. It does nothing when the theme has its own.
+NVIM_THEME_BACKFILL_STATE=~/.local/state/ohmydebn-config/nvim-theme-backfill-20260926
+if [ ! -f $NVIM_THEME_BACKFILL_STATE ]; then
+  if [ -d ~/.config/ohmydebn/current/theme ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-neovim ~/.config/ohmydebn/current/theme || true
+  fi
+  touch $NVIM_THEME_BACKFILL_STATE
 fi
 
 # Backfill the GTK pickers' color file for installs that already had a theme

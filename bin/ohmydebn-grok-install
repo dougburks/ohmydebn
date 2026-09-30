@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Grok Build is not currently installed."
+    echo
+    echo "Continuing will install it, packaged from xAI's release:"
+    echo "https://x.ai/cli"
+    echo
+    echo "Grok Build needs a SuperGrok or X Premium+ subscription (sign in with"
+    echo "'grok login'), or an xAI API key from https://console.x.ai."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # This runs standalone, on-demand (via ohmydebn-grok-run when Super+A's
+  # default AI assistant is Grok Build and it isn't installed yet),
+  # independent of install.sh/ohmydebn-update's own flow - see
+  # ohmydebn-gestures-install's/ohmydebn-opencode-install's own comments
+  # for why that means it needs its own `apt update` first.
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install ohmydebn-grok-build
+
+  # Follow the OhMyDebn theme: Grok's "terminal" theme derives its colors
+  # from the terminal's palette, which ohmydebn-theme-set already keeps in
+  # sync. It's still rolling out, so it also needs its feature flag. Only
+  # written when Grok has no config yet - never over the user's own.
+  GROK_CONFIG="$HOME/.grok/config.toml"
+  if [ ! -e "$GROK_CONFIG" ]; then
+    mkdir -p "$(dirname "$GROK_CONFIG")"
+    printf '[ui]\ntheme = "terminal"\n\n[features]\nterminal_theme = true\n' >"$GROK_CONFIG"
+  fi
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask grok || true
+  fi
+fi

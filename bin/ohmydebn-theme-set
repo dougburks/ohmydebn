@@ -16,11 +16,13 @@ set -euo pipefail
 # neovim.lua at startup (so any *.lua is denied outright), Alacritty's
 # alacritty.toml names the program a new terminal launches, and vscode.json
 # names a VS Code extension that ohmydebn-theme-set-vscode installs - a VS
-# Code extension being arbitrary JavaScript. Everything else a theme ships is
-# color and is kept. A theme the user wrote themselves in
+# Code extension being arbitrary JavaScript - and config.jsonc becomes
+# fastfetch's config, whose "command" modules run shell commands. Without the
+# theme's own, config.jsonc is rendered from OhMyDebn's template instead.
+# Everything else a theme ships is color and is kept. A theme the user wrote themselves in
 # ~/.config/ohmydebn/themes (no .git dir left behind by a clone) is not held
 # to this list - it's their machine and their file.
-INSTALLED_THEME_DENIED=(alacritty.toml vscode.json)
+INSTALLED_THEME_DENIED=(alacritty.toml config.jsonc vscode.json)
 IGNORED_THEME_FILES=()
 
 is_denied_installed_theme_file() {
@@ -84,7 +86,7 @@ stage_installed_theme() {
 report_ignored_theme_files() {
   ((${#IGNORED_THEME_FILES[@]} > 0)) || return 0
   echo "Ignored in $THEME_PATH: ${IGNORED_THEME_FILES[*]}" >&2
-  echo "A theme installed from a git repo cannot supply Lua, alacritty.toml, or vscode.json." >&2
+  echo "A theme installed from a git repo cannot supply Lua, alacritty.toml, config.jsonc, or vscode.json." >&2
 }
 
 BG_ARG=""
@@ -242,6 +244,12 @@ fi
 
 # Use COLORS_SOURCE to update the Claude Code theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-claude "$THEME_NAME" "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
+# Use COLORS_SOURCE to update the T3 Code theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-t3code "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
+# Use COLORS_SOURCE to update the Oh My Pi theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-omp "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
 # If COLORS_SOURCE was dynamically generated, delete it
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"

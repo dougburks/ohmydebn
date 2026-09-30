@@ -4,11 +4,14 @@
 # kernel installed by finalization/updates.sh's full-upgrade sits unused
 # until some unrelated reboot, with nothing ever saying why. Two signals:
 #
-#  - the newest installed kernel image (/boot/vmlinuz-<version>, newest
-#    by version sort) isn't the one running (uname -r). Debian, Devuan,
-#    Kali, Mint/LMDE and Ubuntu all name kernel images this way; Raspberry
-#    Pi OS keeps its kernels under /boot/firmware instead, so with no
-#    /boot/vmlinuz-* at all this signal simply stays quiet.
+#  - the newest installed kernel image of the running kernel's flavor
+#    (/boot/vmlinuz-<version>-<flavor>, newest by version sort) isn't the
+#    one running (uname -r). Debian, Devuan, Kali, Mint/LMDE, Ubuntu and
+#    Raspberry Pi OS all name kernel images this way. The flavor (the last
+#    "-" part: amd64, generic, 2712...) matters because Raspberry Pi OS
+#    installs one image per board family, all the same version, and only
+#    one of them boots: comparing across flavors ("rpi-v8" sorts after
+#    "rpi-2712") asked for a reboot after every update.
 #  - the /run/reboot-required marker (written by Ubuntu/Mint's
 #    update-notifier-common and by needrestart where installed), with the
 #    package list beside it when there is one.
@@ -29,7 +32,7 @@ REBOOT_HEADLINE="A reboot is needed to finish this update"
 
 reboot_reason() {
   local newest
-  newest=$(ls "$BOOT_DIR"/vmlinuz-* 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -n1)
+  newest=$(ls "$BOOT_DIR"/vmlinuz-*-"${RUNNING_KERNEL##*-}" 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -n1)
   if [ -n "$newest" ] && [ "$newest" != "$RUNNING_KERNEL" ] &&
     [ "$(printf '%s\n%s\n' "$RUNNING_KERNEL" "$newest" | sort -V | tail -n1)" = "$newest" ]; then
     echo "A newer kernel ($newest) is installed, but $RUNNING_KERNEL is still running."

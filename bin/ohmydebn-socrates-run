@@ -1,35 +1,5 @@
 #!/bin/bash
 
-# Rootless podman's default network backend (pasta) forwards published
-# ports on both IPv4 and IPv6. On systems where /etc/hosts resolves
-# "localhost" to ::1 before 127.0.0.1 (the default on most current
-# Debian-family systems, Kali included), the browser connects over IPv6 -
-# but the so-crates container's server only listens on IPv4 inside the
-# container, so that connection just hangs/refuses and port 8000 looks
-# unreachable even though the container is up. Forcing pasta to IPv4-only
-# sidesteps the mismatch; nothing this script publishes needs IPv6.
-ensure_pasta_ipv4() {
-  local conf="$HOME/.config/containers/containers.conf"
-
-  # Already configured (by this script or by hand) - leave it alone rather
-  # than fight a value someone deliberately chose.
-  if [[ -f "$conf" ]] && grep -q '^[[:space:]]*pasta_options[[:space:]]*=' "$conf"; then
-    return
-  fi
-
-  mkdir -p "$(dirname "$conf")"
-
-  if [[ -f "$conf" ]] && grep -q '^\[network\]' "$conf"; then
-    # Insert right after the existing [network] header so this lands in
-    # that section instead of floating in whichever one happens to be last.
-    sed -i '/^\[network\]/a pasta_options = ["-4"]' "$conf"
-  else
-    printf '\n[network]\npasta_options = ["-4"]\n' >>"$conf"
-  fi
-}
-
-ensure_pasta_ipv4
-
 # Rootless podman can't unpack the image without subordinate UID/GID
 # ranges for this user, and some installs (Devuan's, for one) leave them
 # out - backfill before the pull rather than let it fail on /etc/gshadow.
@@ -38,7 +8,7 @@ ensure_pasta_ipv4
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:46a00109c013e0f46df2d8bfe3c26d687a8357ad7dddd966e3fe71d1e9cf515f"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:e747b73054a2a29c8ec08037c369e3e7041a57dad1bcea2c5bb5c9eaf91f8c38"
 
 if [[ -n "$1" ]]; then
   IMAGE="$IMAGE_REPO:$1"
@@ -53,7 +23,17 @@ PODMAN_ARGS=(
   --userns=keep-id
   --user "$(id -u):$(id -g)"
   -v ~/socrates-data:/data
-  -p 8000:8000
+  # This computer only: SO-CRATES shows the packet captures it's given, and
+  # nothing else on the network needs to reach it, firewall or not.
+  # Listening on 127.0.0.1 alone also keeps "localhost" working where it
+  # resolves to ::1 first (most Debian-family systems): with nothing
+  # listening on ::1 the browser is refused at once and falls back to
+  # 127.0.0.1. With -p 8000:8000, pasta accepted on ::1 and the connection
+  # hung, since the server listens only on IPv4 - which releases before
+  # 4.9.0 worked around by setting pasta_options = ["-4"] in the user's
+  # containers.conf, turning off IPv6 in every rootless container they
+  # run. That line is no longer written; one already there is left alone.
+  -p 127.0.0.1:8000:8000
 )
 
 # Best-effort: only mount if OhMyDebn has ever set a theme.

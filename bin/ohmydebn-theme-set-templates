@@ -64,4 +64,8 @@ if [[ -f $COLORS_FILE ]]; then
   done
 
   rm "$sed_script"
+
+  # A theme without its own neovim.lua gets one generated from its colors
+  # (anything that runs as code is built only from validated colors there).
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-neovim "$NEXT_THEME_DIR" || true
 fi

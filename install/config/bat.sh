@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "bat" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 BAT_BIN=/usr/local/bin/bat

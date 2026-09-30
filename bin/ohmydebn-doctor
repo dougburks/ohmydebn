@@ -10,11 +10,16 @@ set -uo pipefail
 # supported distro), and support - the checks are the questions a "my
 # install is weird" conversation asks first, so users can paste the
 # output. Everything it asserts is a fact the install/config layer
-# establishes: packages, apt sources, state markers, the gTile extension
-# and its settings, the theme, the login session default, the systemd
-# timer (or its absence without systemd), the AI wrappers and skill links,
-# the custom keybindings, the Aether/omarchy compatibility layer, and the
-# tools other scripts rely on.
+# establishes, or a common reason an update fails: packages, apt sources
+# and third-party repo pins, state markers and the last update's result,
+# the gTile extension and its settings, the theme and whether the terminal
+# and theme config files parse, dpkg state, disk space, the firewall, the
+# kernel-module blocks, the clock, the VM display agent and firmware-update
+# support, Neovim's tested plugin set, the login session default, the
+# systemd timer (or its absence without systemd), the default browser and AI
+# assistant, the AI wrappers and skill links, the custom keybindings, the
+# Aether/omarchy compatibility layer, and the tools other scripts rely on
+# (Oh My Zsh and the menu launcher among them).
 #
 # For the unit test, OHMYDEBN_DOCTOR_SYSROOT prefixes every absolute
 # system path (/usr/share/ohmydebn, /etc, /run/systemd/system, ...) and
@@ -72,8 +77,15 @@ if [ -f "$OS_RELEASE" ]; then
   linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
+  pop) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
   esac
   if [ "$DISTRO_OK" = true ]; then ok "supported distro"; else fail "supported distro" "install.sh would warn: unsupported"; fi
+  # install.sh adds Debian's sources on Debian-based distros only: mixing
+  # them into an Ubuntu-based one (Zorin OS, elementary OS, ...) breaks its
+  # packages.
+  if [ "${ID:-}" = ubuntu ] || [[ " ${ID_LIKE:-} " == *" ubuntu "* ]]; then
+    if grep -rqs "deb\.debian\.org" "$SYSROOT/etc/apt/sources.list" "$SYSROOT/etc/apt/sources.list.d"; then fail "Ubuntu-based: no Debian apt sources mixed in" "deb.debian.org found in /etc/apt"; else ok "Ubuntu-based: no Debian apt sources mixed in"; fi
+  fi
 else
   fail "/etc/os-release present"
 fi
@@ -91,7 +103,9 @@ else
 fi
 check "ohmydebn-gtile package installed" dpkg -s ohmydebn-gtile
 check "ohmydebn-themes package installed" dpkg -s ohmydebn-themes
-check "apt source for packages.ohmydebn.org present" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
+OHMYDEBN_CHANNEL="stable"
+grep -q 'packages-testing\.ohmydebn\.org' "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources" 2>/dev/null && OHMYDEBN_CHANNEL="testing"
+check "OhMyDebn apt source present ($OHMYDEBN_CHANNEL channel)" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
 check "ohmydebn repo keyring present" test -s "$SYSROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
 CANDIDATE=$(apt-cache policy ohmydebn 2>/dev/null | sed -n 's/^ *Candidate: *//p' | head -1)
 if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "(none)" ]; then ok "apt knows a candidate ohmydebn ($CANDIDATE)"; else fail "apt knows a candidate ohmydebn" "run: sudo apt update"; fi
@@ -107,6 +121,29 @@ if [ -f "$DEPS_FILE" ]; then
 else
   fail "dependencies.sh present in the installed tree"
 fi
+# Each third-party repo an OhMyDebn installer adds is pinned to that
+# vendor's own packages, so it can't replace anyone else's. VS Code's and
+# Chrome's repos are added by the vendors' own packages (.list or .sources).
+PINS=(
+  "antigravity:antigravity.pref"
+  "brave-browser-release:brave-browser-release.pref"
+  "claude-code:claude-code.pref"
+  "cloudflare-client:cloudflare-client.pref"
+  "google-chrome:google-chrome.pref"
+  "helium:helium.pref"
+  "microsoft-prod:powershell.pref"
+  "tailscale:tailscale.pref"
+  "vscode:code.pref"
+)
+PINNED=0
+MISSING=()
+for entry in "${PINS[@]}"; do
+  source_name=${entry%%:*}
+  pref=${entry#*:}
+  [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.list" ] || [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.sources" ] || continue
+  if [ -f "$SYSROOT/etc/apt/preferences.d/$pref" ]; then PINNED=$((PINNED + 1)); else MISSING+=("$source_name"); fi
+done
+if [ ${#MISSING[@]} -gt 0 ]; then fail "third-party apt repos pinned to their own packages" "no pin for: ${MISSING[*]}"; elif [ "$PINNED" -gt 0 ]; then ok "third-party apt repos pinned to their own packages ($PINNED)"; fi
 
 # ----------------------------------------------------------- install state
 section "Install state"
@@ -114,11 +151,35 @@ check "installation-complete marker (~/.local/state/ohmydebn)" test -f "$STATE/o
 MARKERS=$(ls "$STATE/ohmydebn-config" 2>/dev/null | wc -l)
 if [ "$MARKERS" -gt 0 ]; then ok "config state markers present ($MARKERS)"; else fail "config state markers present" "none under ~/.local/state/ohmydebn-config"; fi
 LATEST_LOG="$STATE/ohmydebn-logs/update-latest.log"
-if [ -e "$LATEST_LOG" ]; then echo "  latest update log: $(readlink -f "$LATEST_LOG")"; else echo "  (no update log yet - none until the first ohmydebn-update)"; fi
+if [ -e "$LATEST_LOG" ]; then
+  echo "  latest update log: $(readlink -f "$LATEST_LOG")"
+  # ohmydebn-update's lock file holds the pid of the update running now.
+  UPDATE_LOCK="${XDG_RUNTIME_DIR:-/tmp}/ohmydebn-update-$(id -u).lock"
+  UPDATE_PID=$(cat "$UPDATE_LOCK" 2>/dev/null || true)
+  STOPPED=$(grep -a "update stopped" "$LATEST_LOG" 2>/dev/null | tail -1 | tr -d '\r')
+  if grep -aq "OhMyDebn update complete" "$LATEST_LOG" 2>/dev/null; then
+    ok "the latest update completed"
+  elif [ -n "$STOPPED" ]; then
+    fail "the latest update completed" "$STOPPED"
+  elif [[ "$UPDATE_PID" =~ ^[0-9]+$ ]] && kill -0 "$UPDATE_PID" 2>/dev/null; then
+    skip "the latest update completed" "an update is running now"
+  else
+    fail "the latest update completed" "it didn't finish (interrupted, or failed partway) - see the log"
+  fi
+else
+  echo "  (no update log yet - none until the first ohmydebn-update)"
+fi
 
 # ---------------------------------------------------------------- session
 section "Login session"
 if [ "${XDG_CURRENT_DESKTOP:-}" = "X-Cinnamon" ]; then ok "running inside a Cinnamon session"; else skip "running inside a Cinnamon session" "XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-unset}; desktop checks below may skip"; fi
+# A DCONF_PROFILE left over from another desktop (Pop!_OS's COSMIC sets one)
+# points Cinnamon at a different settings database, so it seems to lose its
+# settings; ohmydebn.sh clears it for the install, and it must not be set in
+# the session either.
+if [ "${XDG_CURRENT_DESKTOP:-}" = "X-Cinnamon" ]; then
+  if [ -z "${DCONF_PROFILE:-}" ]; then ok "DCONF_PROFILE not set in the session"; else fail "DCONF_PROFILE not set in the session" "DCONF_PROFILE=$DCONF_PROFILE"; fi
+fi
 DM=$(cat "$SYSROOT/etc/X11/default-display-manager" 2>/dev/null || echo "none")
 echo "  display manager: $DM"
 XSM=$(update-alternatives --query x-session-manager 2>/dev/null | sed -n 's/^Value: //p')
@@ -146,7 +207,9 @@ fi
 SPICE="$HOME/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
 if [ -f "$SPICE" ]; then
   ok "gTile settings file present"
-  if grep -qE '"(default|value)": *"(true|false)"' "$SPICE"; then fail "gTile checkbox settings are real booleans" "quoted \"true\"/\"false\" found - a string \"false\" is truthy"; else ok "gTile checkbox settings are real booleans"; fi
+  # A checkbox stored as the string "false" acts as on (it's truthy in
+  # JavaScript); ohmydebn-update converts the ones 4.8.0 and earlier seeded.
+  if jq -e 'any(.[]; type == "object" and .type == "checkbox" and ((.default | type) == "string" or (.value | type) == "string"))' "$SPICE" >/dev/null 2>&1; then fail "gTile checkbox settings are real booleans" "some are stored as text, where \"false\" acts as on - run: ohmydebn-update"; else ok "gTile checkbox settings are real booleans"; fi
 else
   fail "gTile settings file present" "$SPICE"
 fi
@@ -161,8 +224,210 @@ fi
 check "current theme colors.toml has an accent" grep -qE '^\s*accent\s*=' "$CONFIG/current/theme/colors.toml"
 PICKER="$CONFIG/current/picker-colors"
 if [ -f "$PICKER" ] && [ "$(grep -cE '^(bg0|bg1|bg3|fg0)=' "$PICKER")" -eq 4 ]; then ok "picker-colors has bg0/bg1/bg3/fg0"; else fail "picker-colors has bg0/bg1/bg3/fg0" "$PICKER"; fi
+# Nearly every OhMyDebn terminal window is Alacritty, which won't start on a
+# config file that doesn't parse. Not colors.toml: everything that reads it
+# goes line by line, and one converted before 4.9.0 by
+# ohmydebn-theme-set-colors can repeat a key (strict TOML's "Cannot
+# overwrite a value", seen with every Aether theme) while still theming
+# every app correctly - the accent check above is what matters for it.
+BROKEN_TOML=()
+for f in "$HOME/.config/alacritty/alacritty.toml" "$CONFIG/current/theme/alacritty.toml"; do
+  [ -f "$f" ] || continue
+  python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f" >/dev/null 2>&1 || BROKEN_TOML+=("${f/#"$HOME"/\~}")
+done
+if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal config files parse"; else fail "terminal config files parse" "broken: ${BROKEN_TOML[*]}"; fi
 BG_LINK="$CONFIG/current/background"
 if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
+# ohmydebn-theme-set-fastfetch links fastfetch's config to the current
+# theme's config.jsonc (or OhMyDebn's default); a dangling link leaves
+# fastfetch (Ctrl+Shift+S) on its own defaults, without OhMyDebn's lines.
+if dpkg -s fastfetch >/dev/null 2>&1; then
+  if [ -f "$(readlink -f "$HOME/.config/fastfetch/config.jsonc")" ]; then
+    # The tilde is descriptive, not a path to expand.
+    # shellcheck disable=SC2088
+    ok "~/.config/fastfetch/config.jsonc resolves to a file"
+  else
+    # shellcheck disable=SC2088
+    fail "~/.config/fastfetch/config.jsonc resolves to a file" "run: /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch"
+  fi
+fi
+
+# ----------------------------------------------------------------- system
+section "System"
+# Updates fail, often confusingly, on a half-configured package or a full
+# disk, so both are checked before anything else goes wrong.
+DPKG_AUDIT=$(dpkg --audit 2>/dev/null)
+if [ -z "$DPKG_AUDIT" ]; then ok "no half-installed packages (dpkg --audit)"; else fail "no half-installed packages (dpkg --audit)" "run: sudo dpkg --configure -a"; fi
+HELD=$(apt-mark showhold 2>/dev/null | tr '\n' ' ')
+[ -n "$HELD" ] && echo "  held packages (not updated): $HELD"
+MIN_FREE_KB=$((2 * 1024 * 1024))
+for mount_point in "$SYSROOT/" "$HOME"; do
+  label=$([ "$mount_point" = "$HOME" ] && echo "home directory" || echo "/")
+  FREE_KB=$(df -Pk "$mount_point" 2>/dev/null | awk 'NR == 2 { print $4 }')
+  if ! [[ "$FREE_KB" =~ ^[0-9]+$ ]]; then
+    skip "at least 2 GB free on $label" "df gave no answer"
+  elif [ "$FREE_KB" -ge "$MIN_FREE_KB" ]; then
+    ok "at least 2 GB free on $label ($((FREE_KB / 1024 / 1024)) GB)"
+  else
+    fail "at least 2 GB free on $label" "$((FREE_KB / 1024)) MB free"
+  fi
+done
+# The same test the update's reboot notice uses: a newer kernel of the
+# running one's flavor installed (Raspberry Pi OS installs one image per
+# board family, and only one of them boots), or a package asking for a
+# reboot.
+RUNNING_KERNEL=$(uname -r)
+NEWEST_KERNEL=$(ls "$SYSROOT"/boot/vmlinuz-*-"${RUNNING_KERNEL##*-}" 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -n1)
+if [ -n "$NEWEST_KERNEL" ] && [ "$NEWEST_KERNEL" != "$RUNNING_KERNEL" ] &&
+  [ "$(printf '%s\n%s\n' "$RUNNING_KERNEL" "$NEWEST_KERNEL" | sort -V | tail -n1)" = "$NEWEST_KERNEL" ]; then
+  echo "  reboot needed: kernel $NEWEST_KERNEL is installed, $RUNNING_KERNEL is running"
+elif [ -f "$SYSROOT/run/reboot-required" ]; then
+  echo "  reboot needed: an updated package asked for one"
+fi
+# install/config/modprobe.sh blocks kernel modules with known exploitable
+# vulnerabilities from loading (algif_aead; esp4/esp6/rxrpc). A module
+# loaded before the block went in stays until a reboot.
+MISSING=()
+LOADED=()
+for conf in disable-algif-aead.conf disable-esp4-esp6-rxrpc.conf; do
+  [ -f "$SYSROOT/etc/modprobe.d/$conf" ] || MISSING+=("$conf")
+done
+for module in algif_aead esp4 esp6 rxrpc; do
+  grep -q "^$module " "$SYSROOT/proc/modules" 2>/dev/null && LOADED+=("$module")
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+  fail "vulnerable kernel modules blocked" "missing /etc/modprobe.d/${MISSING[*]} - run: ohmydebn-update"
+elif [ ${#LOADED[@]} -gt 0 ]; then
+  fail "vulnerable kernel modules blocked" "still loaded: ${LOADED[*]} - reboot to unload"
+else
+  ok "vulnerable kernel modules blocked"
+fi
+# A clock that's off makes apt refuse the repositories ("Release file ... is
+# not valid yet"), which looks like a broken update. chrony (a dependency;
+# ohmydebn-update runs `chronyc makestep`) is asked first: timedatectl's
+# "synchronized" is the kernel's flag, which chrony doesn't always set even
+# when it's in sync (seen in a VM with rtcsync on), so it's only the
+# fallback when chrony can't answer.
+if CHRONY=$(chronyc tracking 2>/dev/null) && [ -n "$CHRONY" ]; then
+  if grep -qE '^Leap status *: *Normal' <<<"$CHRONY"; then ok "clock synchronized"; else fail "clock synchronized" "chronyc tracking: $(sed -n 's/^Leap status *: *//p' <<<"$CHRONY")"; fi
+else
+  NTP_SYNCED=$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)
+  if [ "$NTP_SYNCED" = yes ]; then
+    ok "clock synchronized"
+  elif dpkg -s chrony >/dev/null 2>&1 && ! pgrep -x chronyd >/dev/null 2>&1; then
+    # Installed but never started: Kali leaves the services it installs
+    # turned off. Turning it on is the user's call, so say how.
+    if is_systemd; then
+      fail "clock synchronized" "chrony isn't running - run: sudo systemctl enable --now chrony"
+    else
+      fail "clock synchronized" "chrony isn't running - run: sudo update-rc.d chrony enable && sudo service chrony start"
+    fi
+  elif [ "$NTP_SYNCED" = no ]; then
+    fail "clock synchronized" "timedatectl says it isn't"
+  else
+    skip "clock synchronized" "neither chronyc nor timedatectl could tell"
+  fi
+fi
+# From apt's cached package lists (nothing is refreshed here).
+PENDING=$(apt list --upgradable 2>/dev/null | sed -n 's#^\(ohmydebn[^/]*\)/.*#\1#p' | tr '\n' ' ')
+[ -n "$PENDING" ] && echo "  OhMyDebn updates available: $PENDING- run: ohmydebn-update"
+# install/config/ufw.sh turns the firewall on (deny incoming). ufw.conf is
+# readable without root, unlike `ufw status`.
+if dpkg -s ufw >/dev/null 2>&1; then
+  if grep -qE '^ENABLED=yes' "$SYSROOT/etc/ufw/ufw.conf" 2>/dev/null; then ok "firewall (ufw) enabled"; else fail "firewall (ufw) enabled" "run: sudo ufw enable"; fi
+else
+  skip "firewall (ufw) enabled" "ufw not installed"
+fi
+# In a VM with a SPICE display, spice-vdagentd resizes the desktop with the
+# window (install/packaging/spice-vdagent.sh starts it right after
+# installing; before, it started only at the next boot).
+if [ -e "$SYSROOT/dev/virtio-ports/com.redhat.spice.0" ]; then
+  if pgrep -x spice-vdagentd >/dev/null 2>&1; then ok "VM display: spice-vdagentd running"; else fail "VM display: spice-vdagentd running" "the display won't resize with the VM window"; fi
+fi
+# Update > Firmware on a UEFI machine needs fwupd's Secure Boot-signed EFI
+# binary (fwupd-signed), which isn't installed with fwupd where recommended
+# packages are off (MX Linux).
+if [ -d "$SYSROOT/sys/firmware/efi" ] && dpkg -s fwupd >/dev/null 2>&1; then
+  if compgen -G "$SYSROOT/usr/lib*/fwupd/efi/fwupd*.efi.signed" >/dev/null; then ok "firmware updates: fwupd's signed EFI binary installed"; else fail "firmware updates: fwupd's signed EFI binary installed" "run: sudo apt install fwupd-signed"; fi
+fi
+
+# ----------------------------------------------------------------- neovim
+section "Neovim"
+# Neovim comes from ohmydebn-neovim, and install/config/nvim.sh copies
+# ohmydebn-neovim-plugins' tested plugins, parsers and Mason tools into each
+# user's ~/.local/share/nvim, so nothing downloads when Neovim starts or the
+# theme changes. These check that copy without starting Neovim (which would
+# write state, and download anything missing).
+NVIM_SEED="$SYSROOT/usr/lib/ohmydebn-neovim-plugins"
+NVIM_DATA="$HOME/.local/share/nvim"
+if ! dpkg -s ohmydebn-neovim-plugins >/dev/null 2>&1; then
+  skip "Neovim checks" "ohmydebn-neovim-plugins not installed"
+else
+  NVIM_PKG_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-neovim 2>/dev/null || echo "?")
+  NVIM_VERSION=$(nvim --version 2>/dev/null | sed -n '1s/^NVIM v//p')
+  if [ "$NVIM_VERSION" = "$NVIM_PKG_VERSION" ]; then ok "nvim on PATH is ohmydebn-neovim's ($NVIM_VERSION)"; else fail "nvim on PATH is ohmydebn-neovim's" "nvim reports ${NVIM_VERSION:-nothing}, package is $NVIM_PKG_VERSION: $(command -v nvim || echo 'no nvim on PATH')"; fi
+
+  NVIM_SEED_SUM=$(sha256sum "$NVIM_SEED/config/lazy-lock.json" 2>/dev/null | cut -d' ' -f1)
+  if [ -n "$NVIM_SEED_SUM" ] && [ "$(cat "$STATE/ohmydebn-config/nvim-plugins-seeded" 2>/dev/null)" = "$NVIM_SEED_SUM" ]; then ok "the tested plugin set is installed for this user"; else fail "the tested plugin set is installed for this user" "run: ohmydebn-update"; fi
+
+  MISSING=()
+  while IFS= read -r plugin; do
+    [ -d "$NVIM_DATA/lazy/$plugin" ] || MISSING+=("$plugin")
+  done < <(jq -r 'keys[]' "$NVIM_SEED/config/lazy-lock.json" 2>/dev/null)
+  if [ ${#MISSING[@]} -eq 0 ]; then ok "every plugin in the tested set is present"; else fail "every plugin in the tested set is present" "missing: ${MISSING[*]}"; fi
+
+  MISSING=()
+  for f in "$NVIM_SEED"/data/site/parser/*.so; do
+    [ -e "$f" ] || continue
+    [ -f "$NVIM_DATA/site/parser/$(basename "$f")" ] || MISSING+=("$(basename "$f" .so)")
+  done
+  if [ ${#MISSING[@]} -eq 0 ]; then ok "every treesitter parser in the set is present"; else fail "every treesitter parser in the set is present" "missing: ${MISSING[*]}"; fi
+  MISSING=()
+  for d in "$NVIM_SEED"/data/mason/packages/*/; do
+    [ -d "$d" ] || continue
+    [ -d "$NVIM_DATA/mason/packages/$(basename "$d")" ] || MISSING+=("$(basename "$d")")
+  done
+  if [ ${#MISSING[@]} -eq 0 ]; then ok "every Mason tool in the set is present"; else fail "every Mason tool in the set is present" "missing: ${MISSING[*]}"; fi
+
+  # The current theme's neovim.lua names its colorscheme plugin (and any
+  # dependency) as "owner/repo"; lazy.nvim keeps each in a directory named
+  # after the repo, or after the spec's `name` when it sets one.
+  THEME_NVIM="$CONFIG/current/theme/neovim.lua"
+  if [ -f "$THEME_NVIM" ]; then
+    THEME_NAMES=" $(sed -n 's/.*name *= *"\([^"]*\)".*/\1/p' "$THEME_NVIM" | tr '\n' ' ') "
+    MISSING=()
+    while IFS= read -r repo; do
+      name=${repo#*/}
+      [ -d "$NVIM_DATA/lazy/$name" ] && continue
+      FOUND=false
+      for n in $THEME_NAMES; do [ -d "$NVIM_DATA/lazy/$n" ] && FOUND=true; done
+      [ "$FOUND" = true ] || MISSING+=("$repo")
+    done < <(grep -oE '"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"' "$THEME_NVIM" | tr -d '"' | grep -v '^LazyVim/LazyVim$' | sort -u)
+    if [ ${#MISSING[@]} -eq 0 ]; then ok "the current theme's Neovim plugins are installed"; else fail "the current theme's Neovim plugins are installed" "missing: ${MISSING[*]}"; fi
+  else
+    skip "the current theme's Neovim plugins are installed" "no $THEME_NVIM"
+  fi
+
+  # Native code is built per architecture; the ELF header's machine field
+  # (bytes 18-19) says which one a file was built for.
+  case "$(dpkg --print-architecture 2>/dev/null)" in
+  amd64) WANT_MACHINE="3e 00" ;;
+  arm64) WANT_MACHINE="b7 00" ;;
+  *) WANT_MACHINE="" ;;
+  esac
+  for f in "$NVIM_DATA/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so" "$NVIM_DATA/site/parser/lua.so"; do
+    label="${f/#"$HOME"/\~}"
+    if [ -z "$WANT_MACHINE" ]; then
+      skip "$label is built for this machine" "unknown architecture"
+    elif [ ! -f "$f" ]; then
+      fail "$label is built for this machine" "missing"
+    elif [ "$(od -An -tx1 -j18 -N2 "$f" | tr -s ' ' | sed 's/^ //;s/ $//')" = "$WANT_MACHINE" ]; then
+      ok "$label is built for this machine"
+    else
+      fail "$label is built for this machine" "wrong architecture"
+    fi
+  done
+fi
 
 # ---------------------------------------------------------- init / timers
 section "Init system"
@@ -174,22 +439,58 @@ else
 fi
 check "ohmydebn-power wrapper present" test -x "$OHMYDEBN/bin/ohmydebn-power"
 
+# --------------------------------------------------------------- defaults
+section "Defaults"
+# Super+B opens the default browser (ohmydebn-browser), falling back to
+# x-www-browser when the default's .desktop file is gone - so it only does
+# nothing when neither is there.
+DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+BROWSER_ID=$(xdg-settings get default-web-browser 2>/dev/null || true)
+BROWSER_FILE=""
+if [ -n "$BROWSER_ID" ]; then
+  IFS=: read -r -a DIRS <<<"$DATA_DIRS"
+  for dir in "${XDG_DATA_HOME:-$HOME/.local/share}" "${DIRS[@]/#/$SYSROOT}"; do
+    if [ -n "$dir" ] && [ -f "$dir/applications/$BROWSER_ID" ]; then
+      BROWSER_FILE="$dir/applications/$BROWSER_ID"
+      break
+    fi
+  done
+fi
+if [ -n "$BROWSER_FILE" ]; then
+  ok "default browser installed ($BROWSER_ID)"
+elif [ -e "$SYSROOT/usr/bin/x-www-browser" ]; then
+  ok "Super+B opens a browser (x-www-browser)"
+  echo "  default browser ${BROWSER_ID:-(none set)} not found - choose one in Setup > Defaults > Browser"
+else
+  fail "Super+B opens a browser" "the default (${BROWSER_ID:-none set}) isn't installed and there's no x-www-browser - choose one in Setup > Defaults > Browser"
+fi
+# Super+A opens the default AI assistant, installing it first if it isn't
+# (each ohmydebn-<tool> does), so a missing one is a note, not a failure.
+if [ -x "$OHMYDEBN/bin/ohmydebn-ai-set-default" ]; then
+  AI_DEFAULT=$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --current 2>/dev/null || echo opencode)
+  if "$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1 | grep -qx "$AI_DEFAULT"; then
+    ok "default AI assistant installed ($AI_DEFAULT)"
+  else
+    echo "  default AI assistant ($AI_DEFAULT) isn't installed - Super+A offers to install it"
+  fi
+fi
+
 # --------------------------------------------------------------------- AI
 section "AI tools"
 SKILL_SRC="/usr/share/ohmydebn/config/ohmydebn-skill"
 for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
   if [ "$(readlink "$HOME/$d/ohmydebn" 2>/dev/null)" = "$SKILL_SRC" ]; then ok "skill link ~/$d/ohmydebn"; else fail "skill link ~/$d/ohmydebn" "missing or not -> $SKILL_SRC"; fi
 done
-DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "(unset - opencode)")
+DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "unset - opencode")
 case "$DEFAULT_AI" in
-opencode | claude-code | chatgpt | codex | pi | vscode | antigravity | "(unset - opencode)") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
-for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-pi-cli; do
+for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli; do
   check "wrapper $w executable" test -x "$OHMYDEBN/bin/$w"
 done
 if [ -f "$HOME/.zshrc" ]; then
-  for a in c pi codex claude a; do
+  for a in c pi omp codex grok claude a; do
     if grep -qE "^alias $a=" "$HOME/.zshrc"; then ok "zsh alias '$a' present"; else fail "zsh alias '$a' present"; fi
   done
 else
@@ -214,14 +515,23 @@ else
   # records each as "custom N") are meant to differ from the txt file.
   OVERRIDDEN=" $(awk '$1 == "custom" { printf "custom-%s ", $2 }' "$USER_KEYBINDINGS_TOUCHED" 2>/dev/null)"
   WRONG=()
+  WRONG_DETAIL=()
   while IFS= read -r line; do
     n=$(echo "$line" | awk '{print $2}')
     case "$OVERRIDDEN" in *" custom-$n "*) continue ;; esac
     want=$(echo "$line" | sed -E 's/^keybinding-custom [0-9]+ "[^"]*" "([^"]*)".*/\1/')
     got=$(gs "org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$n/" command | sed -E "s/^'(.*)'$/\1/")
-    [ "$got" = "$want" ] || WRONG+=("custom-$n")
+    if [ "$got" != "$want" ]; then
+      WRONG+=("custom-$n")
+      WRONG_DETAIL+=("custom-$n runs: ${got:-(nothing)}" "  expected: $want")
+    fi
   done < <(grep '^keybinding-custom' "$KB_FILE")
-  if [ ${#WRONG[@]} -eq 0 ]; then ok "every custom keybinding runs the command keybinding-custom.txt says"; else fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"; fi
+  if [ ${#WRONG[@]} -eq 0 ]; then
+    ok "every custom keybinding runs the command keybinding-custom.txt says"
+  else
+    fail "every custom keybinding runs the command keybinding-custom.txt says" "differs: ${WRONG[*]}"
+    printf '      %s\n' "${WRONG_DETAIL[@]}"
+  fi
 fi
 
 # The user's own keybindings file is optional; nothing is reported when absent.
@@ -258,8 +568,47 @@ check "~/.local/share/omarchy/themes -> /usr/share/ohmydebn-themes" test "$(read
 check "~/.local/state/omarchy/current -> ~/.config/ohmydebn/current" test "$(readlink "$HOME/.local/state/omarchy/current" 2>/dev/null)" = "$HOME/.config/ohmydebn/current"
 check "omarchy CLI shim present (Aether >= 4.29.9)" test -x "$OHMYDEBN/bin/omarchy"
 
+# ---------------------------------------------------------- optional apps
+# An optional app whose package is installed but not what it needs to run:
+# Debian's uxplay pulls in almost none of the GStreamer plugins UxPlay
+# requires (it wouldn't start on Linux Mint), and podman only recommends
+# the rootless extras (seen missing on LCOS). The -installed helpers own
+# each list, as they do for the installers and launchers.
+if dpkg -s uxplay >/dev/null 2>&1 || dpkg -s podman >/dev/null 2>&1; then
+  section "Optional apps"
+  if dpkg -s uxplay >/dev/null 2>&1; then
+    if APP_MISSING=$("$OHMYDEBN/bin/ohmydebn-uxplay-installed" --missing); then
+      ok "UxPlay has the GStreamer plugins it needs"
+    else
+      fail "UxPlay has the GStreamer plugins it needs" "missing: ${APP_MISSING//$'\n'/ } - run: ohmydebn-uxplay-install"
+    fi
+  fi
+  if dpkg -s podman >/dev/null 2>&1; then
+    if APP_MISSING=$("$OHMYDEBN/bin/ohmydebn-podman-installed" --missing); then
+      ok "Podman has what rootless containers need"
+    else
+      fail "Podman has what rootless containers need" "missing: ${APP_MISSING//$'\n'/ } - run: ohmydebn-podman-install"
+    fi
+    # SO-CRATES wrote this line before 4.9.0; it turns IPv6 off in every
+    # rootless container. Only a note: the user may have set it themselves.
+    if grep -qxF 'pasta_options = ["-4"]' "$HOME/.config/containers/containers.conf" 2>/dev/null; then
+      echo '  IPv6 is off in all your Podman containers (pasta_options = ["-4"] in ~/.config/containers/containers.conf,'
+      echo "  added by SO-CRATES before OhMyDebn 4.9.0) - delete that line unless you set it yourself"
+    fi
+  fi
+fi
+
 # ------------------------------------------------------------------ tools
 section "Tools other scripts rely on"
+# install/config/ohmyzsh.sh downloads Oh My Zsh at install time; if that
+# failed, OhMyDebn's ~/.zshrc sources a file that isn't there.
+if grep -q 'oh-my-zsh.sh' "$HOME/.zshrc" 2>/dev/null; then
+  # The tilde is descriptive, not a path to expand.
+  # shellcheck disable=SC2088
+  check "~/.oh-my-zsh installed (~/.zshrc uses it)" test -f "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+fi
+# shellcheck disable=SC2088
+check "~/.local/share/applications/ohmydebn-menu.desktop present (the OhMyDebn Menu launcher)" test -f "$HOME/.local/share/applications/ohmydebn-menu.desktop"
 for t in toilet ttfx alacritty gdbus notify-send script flock; do
   check "$t on PATH" command -v "$t"
 done

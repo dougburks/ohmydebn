@@ -16,11 +16,13 @@
 #
 # Callers: install/config/mimetypes.sh (a new install's default),
 # each ohmydebn-<browser>-install's "make it your default?" question after
-# a browser is installed from the menu (--ask), and OhMyDebn Menu > Apps >
-# Browsers > Set Default (bin/ohmydebn-menu). Every entry in that menu is
+# a browser is installed from the menu (--ask), and OhMyDebn Menu > Setup >
+# Defaults > Browser (bin/ohmydebn-menu's pick_default_browser), which lists
+# --list-installed and marks --current. Every browser in Apps > Browsers is
 # in the table below.
 #
 # Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <package>
+#        ohmydebn-browser-set-default --current | --list-installed
 #   <package>   the apt package name: brave-origin, brave-browser, chromium,
 #               google-chrome-stable, helium-bin or firefox-esr. "chromium"
 #               covers Ubuntu's snap too (see bin/ohmydebn-chromium-install).
@@ -31,13 +33,21 @@
 #               later.
 #   --pdf-only  only the PDF viewer - mimetypes.sh's one-time catch-up for
 #               installs from before the PDF handler was ever set.
+#   --current   print the package of the current default browser (the
+#               xdg-settings one), or nothing if it isn't one of these.
+#   --list-installed
+#               print "package<TAB>name" for each installed browser.
 
 set -uo pipefail
+
+ALL_PACKAGES=(brave-origin brave-browser chromium firefox-esr google-chrome-stable helium-bin)
 
 MODE=full
 case "${1:-}" in
 --ask) MODE=ask; shift ;;
 --pdf-only) MODE=pdf; shift ;;
+--current) MODE=current ;;
+--list-installed) MODE=list ;;
 esac
 PACKAGE="${1:-}"
 
@@ -48,36 +58,64 @@ PACKAGE="${1:-}"
 # a second, separate entry. Desktop ids are the primary .desktop each
 # package ships; Brave and Chrome also ship a reverse-DNS duplicate
 # (com.brave.Origin.desktop, com.google.Chrome.desktop) that isn't used.
-case "$PACKAGE" in
-brave-origin)
-  NAME="Brave Origin"; BIN=/usr/bin/brave-origin-stable; DESKTOP=brave-origin.desktop ;;
-brave-browser)
-  NAME="Brave Browser"; BIN=/usr/bin/brave-browser-stable; DESKTOP=brave-browser.desktop ;;
-chromium)
-  # Debian's deb, or Ubuntu's strictly-confined snap: no /usr/bin/chromium,
-  # a /snap/bin dispatcher symlink, and a snapd-scheme desktop id.
-  NAME="Chromium"
-  if snap list chromium >/dev/null 2>&1 && ! dpkg -s chromium >/dev/null 2>&1; then
-    BIN=/snap/bin/chromium; DESKTOP=chromium_chromium.desktop
-  else
-    BIN=/usr/bin/chromium; DESKTOP=chromium.desktop
-  fi ;;
-google-chrome-stable)
-  NAME="Google Chrome"; BIN=/usr/bin/google-chrome-stable; DESKTOP=google-chrome.desktop ;;
-helium-bin)
-  NAME="Helium"; BIN=/usr/bin/helium; DESKTOP=helium.desktop ;;
-firefox-esr)
-  NAME="Firefox"; BIN=/usr/bin/firefox-esr; DESKTOP=firefox-esr.desktop ;;
-*)
-  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr>" >&2
-  exit 1 ;;
-esac
+# lookup() sets NAME, BIN and DESKTOP for one package and fails for an
+# unknown one.
+lookup() {
+  case "$1" in
+  brave-origin)
+    NAME="Brave Origin"; BIN=/usr/bin/brave-origin-stable; DESKTOP=brave-origin.desktop ;;
+  brave-browser)
+    NAME="Brave Browser"; BIN=/usr/bin/brave-browser-stable; DESKTOP=brave-browser.desktop ;;
+  chromium)
+    # Debian's deb, or Ubuntu's strictly-confined snap: no /usr/bin/chromium,
+    # a /snap/bin dispatcher symlink, and a snapd-scheme desktop id.
+    NAME="Chromium"
+    if snap list chromium >/dev/null 2>&1 && ! dpkg -s chromium >/dev/null 2>&1; then
+      BIN=/snap/bin/chromium; DESKTOP=chromium_chromium.desktop
+    else
+      BIN=/usr/bin/chromium; DESKTOP=chromium.desktop
+    fi ;;
+  google-chrome-stable)
+    NAME="Google Chrome"; BIN=/usr/bin/google-chrome-stable; DESKTOP=google-chrome.desktop ;;
+  helium-bin)
+    NAME="Helium"; BIN=/usr/bin/helium; DESKTOP=helium.desktop ;;
+  firefox-esr)
+    NAME="Firefox"; BIN=/usr/bin/firefox-esr; DESKTOP=firefox-esr.desktop ;;
+  *) return 1 ;;
+  esac
+}
 
 installed() {
-  dpkg -s "$PACKAGE" >/dev/null 2>&1 && return 0
-  [ "$PACKAGE" = chromium ] && snap list chromium >/dev/null 2>&1
+  dpkg -s "$1" >/dev/null 2>&1 && return 0
+  [ "$1" = chromium ] && snap list chromium >/dev/null 2>&1
 }
-if ! installed; then
+
+if [ "$MODE" = list ]; then
+  for pkg in "${ALL_PACKAGES[@]}"; do
+    if installed "$pkg" && lookup "$pkg"; then
+      printf '%s\t%s\n' "$pkg" "$NAME"
+    fi
+  done
+  exit 0
+fi
+
+if [ "$MODE" = current ]; then
+  current_desktop=$(xdg-settings get default-web-browser 2>/dev/null)
+  for pkg in "${ALL_PACKAGES[@]}"; do
+    if lookup "$pkg" && [ "$DESKTOP" = "$current_desktop" ]; then
+      echo "$pkg"
+      break
+    fi
+  done
+  exit 0
+fi
+
+if ! lookup "$PACKAGE"; then
+  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr> | --current | --list-installed" >&2
+  exit 1
+fi
+
+if ! installed "$PACKAGE"; then
   echo "$NAME is not installed. Install it first: OhMyDebn Menu > Apps > Browsers." >&2
   exit 1
 fi
@@ -89,7 +127,7 @@ if [ "$MODE" = ask ]; then
   printf 'Make %s your default web browser? [y/N] ' "$NAME"
   read -r answer
   if [[ "${answer,,}" != y* ]]; then
-    echo "Keeping your current default browser. Change it any time: OhMyDebn Menu > Apps > Browsers > Set Default."
+    echo "Keeping your current default browser. Change it any time: OhMyDebn Menu > Setup > Defaults > Browser."
     exit 0
   fi
 fi

@@ -31,13 +31,13 @@ else
 fi
 
 # OhMyDebn is built around the Cinnamon desktop. If the session that ran
-# this install isn't Cinnamon, the user won't see any of it until they
-# switch sessions at the login screen.
-if [ "$XDG_CURRENT_DESKTOP" != "X-Cinnamon" ]; then
+# this install is another desktop, the user won't see any of it until they
+# switch sessions at the login screen. Run over ssh or from a TTY there's no
+# desktop to judge (XDG_CURRENT_DESKTOP is unset), so say nothing rather
+# than tell a Cinnamon user to switch to Cinnamon.
+if [ -n "${XDG_CURRENT_DESKTOP:-}" ] && [ "$XDG_CURRENT_DESKTOP" != "X-Cinnamon" ]; then
   echo
   /usr/share/ohmydebn/bin/ohmydebn-headline "Log out and select Cinnamon"
-  if [ -n "$XDG_CURRENT_DESKTOP" ]; then
-    echo "You're currently running $XDG_CURRENT_DESKTOP."
-  fi
+  echo "You're currently running $XDG_CURRENT_DESKTOP."
   echo "Log out, then choose the Cinnamon session from your login screen before logging back in."
 fi

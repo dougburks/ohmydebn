@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# Runs Oh My Pi in the current terminal with its arguments, installing it
+# first if needed.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-omp-install
+fi
+
+exec /usr/lib/ohmydebn-oh-my-pi/omp "$@"

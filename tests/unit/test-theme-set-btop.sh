@@ -56,13 +56,13 @@ mock_cleanup
 
 mock_init
 run_with_btop_version "1.3.1"
-assert_contains "btop 1.3.1 (hot-reload added): SIGUSR2 sent" "$(cat "$MOCK_CALLS")" "pkill -SIGUSR2 btop"
+assert_contains "btop 1.3.1 (hot-reload added): SIGUSR2 sent to btop by exact name" "$(cat "$MOCK_CALLS")" "pkill -x -SIGUSR2 btop"
 assert_not_contains "btop 1.3.1: fallback path not taken" "$(cat "$MOCK_CALLS")" "pgrep"
 mock_cleanup
 
 mock_init
 run_with_btop_version "1.3.2"
-assert_contains "btop 1.3.2 (newer than hot-reload): SIGUSR2 sent" "$(cat "$MOCK_CALLS")" "pkill -SIGUSR2 btop"
+assert_contains "btop 1.3.2 (newer than hot-reload): SIGUSR2 sent to btop by exact name" "$(cat "$MOCK_CALLS")" "pkill -x -SIGUSR2 btop"
 mock_cleanup
 
 mock_init
@@ -72,7 +72,7 @@ mock_cleanup
 
 mock_init
 run_with_btop_version "2.0.0"
-assert_contains "btop 2.0.0 (future major): SIGUSR2 sent" "$(cat "$MOCK_CALLS")" "pkill -SIGUSR2 btop"
+assert_contains "btop 2.0.0 (future major): SIGUSR2 sent to btop by exact name" "$(cat "$MOCK_CALLS")" "pkill -x -SIGUSR2 btop"
 mock_cleanup
 
 # btop missing/unparseable --version output: skip broad signaling rather

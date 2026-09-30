@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "gedit" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 STATE_DIR=~/.local/state/ohmydebn-config

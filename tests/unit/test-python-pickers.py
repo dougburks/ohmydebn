@@ -759,6 +759,18 @@ try:
         tc.theme_accent_color("zeta"), "#e68e0d",
     )
 
+    # A colors.toml with a repeated key (as ohmydebn-theme-set-colors wrote
+    # for Aether themes before 4.9.0), which strict TOML (tomllib) refuses;
+    # the accent must still be read, as every other colors.toml reader (all
+    # line by line) manages.
+    os.makedirs(os.path.join(user_dir, "aether-dup"))
+    with open(os.path.join(user_dir, "aether-dup", "colors.toml"), "w", encoding="utf-8") as f:
+        f.write('mode = "dark"\naccent = "#6473dc"\nselection_foreground = "#0b020f"\nselection_foreground = "#f9e9c5"\n')
+    check_eq(
+        "theme_accent_color: reads the accent from a colors.toml that repeats a key",
+        tc.theme_accent_color("aether-dup"), "#6473dc",
+    )
+
     # "alpha" has a colors.toml with no accent key at all - must fall back
     # rather than crash on the missing key.
     with open(os.path.join(user_dir, "alpha", "colors.toml"), "w", encoding="utf-8") as f:
@@ -902,6 +914,48 @@ check_eq(
 zero_bmh = _MoveHarness(["a"], 0, backgrounds=[], bg_index=0)
 tc.Carousel.move_background(zero_bmh, -1)
 check_eq("move_background: no-op with zero backgrounds", (zero_bmh.bg_index, zero_bmh.render_calls), (0, 0))
+
+
+class _FakeButton:
+    def __init__(self):
+        self.sensitive = True
+        self.opacity = 1.0
+
+    def set_sensitive(self, value):
+        self.sensitive = value
+
+    def set_opacity(self, value):
+        self.opacity = value
+
+
+class _BgNeighborHarness:
+    def __init__(self):
+        self.bg_above_btn = _FakeButton()
+        self.bg_below_btn = _FakeButton()
+
+
+# The above/below background boxes: one background - neither drawn (an
+# empty bordered box read as something missing); two - only below, since
+# previous and next are the same image; three or more - both. A box not
+# shown keeps its space (opacity 0, so the card doesn't jump) and can't be
+# clicked.
+def _neighbors(bg_n):
+    nh = _BgNeighborHarness()
+    tc.Carousel._show_bg_neighbors(nh, bg_n)
+    return [(b.opacity, b.sensitive) for b in (nh.bg_above_btn, nh.bg_below_btn)]
+
+
+check_eq("_show_bg_neighbors: one background - neither box drawn nor clickable",
+         _neighbors(1), [(0.0, False), (0.0, False)])
+check_eq("_show_bg_neighbors: two backgrounds - only the box below, not the same image twice",
+         _neighbors(2), [(0.0, False), (1.0, True)])
+check_eq("_show_bg_neighbors: three backgrounds - both boxes",
+         _neighbors(3), [(1.0, True), (1.0, True)])
+nh = _BgNeighborHarness()
+tc.Carousel._show_bg_neighbors(nh, 1)
+tc.Carousel._show_bg_neighbors(nh, 3)
+check_eq("_show_bg_neighbors: boxes come back after a single-background theme",
+         [(b.opacity, b.sensitive) for b in (nh.bg_above_btn, nh.bg_below_btn)], [(1.0, True), (1.0, True)])
 
 
 class _BgLoadHarness:

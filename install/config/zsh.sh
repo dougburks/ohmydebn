@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "zsh" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 ZSHRC_STATE=~/.local/state/ohmydebn-config/zshrc-20260116
@@ -87,6 +87,26 @@ if [ ! -f $CODEX_ALIAS_STATE ]; then
 alias codex='/usr/share/ohmydebn/bin/ohmydebn-codex-cli'
 EOF
   touch $CODEX_ALIAS_STATE
+fi
+
+GROK_ALIAS_STATE=~/.local/state/ohmydebn-config/grok-alias
+if [ ! -f $GROK_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Grok Build (xAI) CLI coding agent, run in the current terminal
+alias grok='/usr/share/ohmydebn/bin/ohmydebn-grok-cli'
+EOF
+  touch $GROK_ALIAS_STATE
+fi
+
+OMP_ALIAS_STATE=~/.local/state/ohmydebn-config/omp-alias
+if [ ! -f $OMP_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Oh My Pi (Stencil Labs) CLI coding agent, run in the current terminal
+alias omp='/usr/share/ohmydebn/bin/ohmydebn-omp-cli'
+EOF
+  touch $OMP_ALIAS_STATE
 fi
 
 OPENCODE_CLI_ALIAS_STATE=~/.local/state/ohmydebn-config/opencode-cli-alias

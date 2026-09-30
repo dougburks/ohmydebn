@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "keepassxc" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 if [ ! -d ~/.config/keepassxc ]; then

@@ -96,7 +96,7 @@ assert_contains "ohmydebn-logo: the rain list climbs to the accent" "$CALLS" " 0
 assert_contains "ohmydebn-logo: still renders the branding name via toilet" "$CALLS" "toilet -f mono12 OhMyDebn"
 
 : >"$MOCK_CALLS"
-OUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_BIN/ohmydebn-show-logo" 2>/dev/null)
+OUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_BIN/ohmydebn-show-logo" </dev/null 2>/dev/null)
 assert_contains "ohmydebn-show-logo: opens a truecolor escape with the accent" "$OUT" $'\e[38;2;17;170;34m'
 assert_contains "ohmydebn-show-logo: logo text follows" "$OUT" "LOGO-TEXT"
 assert_contains "ohmydebn-show-logo: resets the color afterwards" "$OUT" $'\e[0m'

@@ -17,7 +17,9 @@ if [ "$#" -eq 0 ]; then
       exit 1
     fi
 
-    mapfile -t SORTED_TUIS < <(sort <<<"${TUIS[*]}")
+    # One name per line: "${TUIS[*]}" would join them all into a single
+    # line, and so a single entry in the picker naming no launcher at all.
+    mapfile -t SORTED_TUIS < <(printf '%s\n' "${TUIS[@]}" | sort)
     APP_NAMES_STRING=$(gum choose --no-limit --header "Select TUI to remove..." --selected-prefix="✗ " "${SORTED_TUIS[@]}")
     # Convert newline-separated string to array
     APP_NAMES=()
@@ -41,6 +43,10 @@ fi
 for APP_NAME in "${APP_NAMES[@]}"; do
   if [[ "$APP_NAME" == */* ]]; then
     echo "Skipping '$APP_NAME': app name must not contain '/'."
+    continue
+  fi
+  if [[ ! -f "$DESKTOP_DIR/$APP_NAME.desktop" ]]; then
+    echo "No TUI named '$APP_NAME'."
     continue
   fi
   rm -f "$DESKTOP_DIR/$APP_NAME.desktop"

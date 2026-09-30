@@ -54,6 +54,48 @@ if [ ! -f $GTILE_CONFIG_STATE ]; then
   touch $GTILE_CONFIG_STATE
 fi
 
+# 20260926 The gTile settings seeded by 4.8.0 and earlier stored five
+# checkbox defaults/values as the strings "true"/"false". gTile reads them
+# raw, and in JavaScript the string "false" is truthy, so "UI always centered
+# on monitor" and "Show UI on all monitors" acted as on while the settings
+# dialog showed them off. The seed has real booleans now, but it's copied
+# only once, so existing users' files are converted here, once. Cinnamon's
+# dialog always writes real booleans, so a string was never the user's own
+# choice. gTile reads its settings when it loads, so Cinnamon is restarted
+# at the end of the run (finalization/finale.sh).
+GTILE_BOOLEANS_STATE=~/.local/state/ohmydebn-config/gtile-booleans-20260926
+GTILE_SETTINGS=~/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json
+if [ ! -f $GTILE_BOOLEANS_STATE ]; then
+  # jq -e: 0 = some checkbox is stored as text, 1 = none is, anything else
+  # = jq couldn't tell (missing, or an unreadable file) - retried next run.
+  # Its status is caught with || because install.sh runs under set -e and
+  # sources this, so a bare non-zero status would end the whole install.
+  GTILE_BOOLEANS_CHECK=1
+  if [ -f $GTILE_SETTINGS ]; then
+    GTILE_BOOLEANS_CHECK=0
+    jq -e 'any(.[]; type == "object" and .type == "checkbox" and
+      ((.default | type) == "string" or (.value | type) == "string"))' $GTILE_SETTINGS >/dev/null 2>&1 ||
+      GTILE_BOOLEANS_CHECK=$?
+  fi
+  if [ $GTILE_BOOLEANS_CHECK -eq 0 ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Fixing gTile checkbox settings stored as text"
+    if jq 'map_values(if type == "object" and .type == "checkbox" then
+          with_entries(if (.key == "default" or .key == "value") and (.value == "true" or .value == "false")
+            then .value = (.value == "true") else . end)
+        else . end)' $GTILE_SETTINGS >$GTILE_SETTINGS.tmp; then
+      mv $GTILE_SETTINGS.tmp $GTILE_SETTINGS
+      export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
+      GTILE_BOOLEANS_CHECK=1
+    else
+      rm -f $GTILE_SETTINGS.tmp
+    fi
+  fi
+  if [ $GTILE_BOOLEANS_CHECK -eq 1 ]; then
+    mkdir -p ~/.local/state/ohmydebn-config
+    touch $GTILE_BOOLEANS_STATE
+  fi
+fi
+
 # The ohmydebn-gtile minimum-version warning and the "restart Cinnamon if
 # the installed version changed" check both live in
 # install/finalization/gtile-restart-flag.sh, not here - this script runs

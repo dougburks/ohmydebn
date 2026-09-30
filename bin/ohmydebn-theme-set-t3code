@@ -1,0 +1,179 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-t3code: publishes the current OhMyDebn theme as a T3
+# Code "environment theme". T3 Code watches ~/.t3/userdata/themes/ and
+# retints its open windows whenever a published theme file changes, so
+# once T3 Code has selected the "ohmydebn" theme (--activate, run by
+# ohmydebn-t3code-install) every later theme switch follows automatically.
+#
+# The palette is a port of Omarchy's own default/themed/t3code.json.tpl,
+# including its `mix` blends, so T3 Code looks the same on both. Omarchy 4+
+# themes provide every semantic key it uses; older themes fall back to the
+# color0-15 aliases every normalized colors.toml has (see
+# ohmydebn-theme-set-colors).
+#
+# Usage: ohmydebn-theme-set-t3code [--activate] [<colors-source> <is-light-mode>]
+#   <colors-source>  normalized colors.toml (default: the current theme's)
+#   <is-light-mode>  'true' or 'false' (default: from the theme)
+#   --activate       also make "ohmydebn" T3 Code's theme, the same edit
+#                    `t3 theme set ohmydebn` makes: T3 Code applies it once,
+#                    so a theme picked in its own Settings afterwards sticks.
+#
+# Does nothing unless T3 Code's state directory already exists - creating it
+# here would leave a stray ~/.t3 on machines that don't run T3 Code.
+
+set -euo pipefail
+
+ACTIVATE=false
+if [[ "${1:-}" == "--activate" ]]; then
+  ACTIVATE=true
+  shift
+fi
+
+CURRENT_THEME="$HOME/.config/ohmydebn/current/theme"
+COLORS_SOURCE="${1:-$CURRENT_THEME/colors.toml}"
+IS_LIGHT_MODE="${2:-}"
+
+T3CODE_HOME="${T3CODE_HOME:-$HOME/.t3}"
+T3CODE_STATE_DIR="$T3CODE_HOME/userdata"
+THEME_ID="ohmydebn"
+THEME_FILE="$T3CODE_STATE_DIR/themes/$THEME_ID.json"
+SETTINGS_FILE="$T3CODE_STATE_DIR/settings.json"
+
+[[ -d "$T3CODE_STATE_DIR" ]] || exit 0
+[[ -f "$COLORS_SOURCE" ]] || exit 0
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ohmydebn-theme-set-t3code: jq is required, skipping T3 Code theme" >&2
+  exit 0
+fi
+
+parse_color() {
+  grep -E "^\s*$1\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true
+}
+
+# First key that holds a #rrggbb color, so a missing or malformed semantic
+# key falls through to its legacy alias.
+pick() {
+  local key value
+  for key in "$@"; do
+    value=$(parse_color "$key")
+    if [[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+      echo "$value"
+      return
+    fi
+  done
+}
+
+# Same math as Omarchy's omarchy-theme-set-templates mix_color: amount of
+# the second color blended into the first.
+mix() {
+  awk -v start="${1#\#}" -v end="${2#\#}" -v amount="$3" '
+    function hex(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+    function pair(h, i) { return hex(substr(h, i, 1)) * 16 + hex(substr(h, i + 1, 1)) }
+    BEGIN {
+      printf "#%02x%02x%02x\n",
+        int(pair(start, 1) * (1 - amount) + pair(end, 1) * amount + 0.5),
+        int(pair(start, 3) * (1 - amount) + pair(end, 3) * amount + 0.5),
+        int(pair(start, 5) * (1 - amount) + pair(end, 5) * amount + 0.5)
+    }'
+}
+
+BACKGROUND=$(pick background)
+FOREGROUND=$(pick foreground)
+ACCENT=$(pick accent color4)
+if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
+  echo "ohmydebn-theme-set-t3code: missing background/foreground/accent in $COLORS_SOURCE, skipping" >&2
+  exit 0
+fi
+MUTED=$(pick muted color8)
+MUTED=${MUTED:-$FOREGROUND}
+DARK_BACKGROUND=$(pick dark_background)
+DARK_BACKGROUND=${DARK_BACKGROUND:-$BACKGROUND}
+SELECTION=$(pick selection selection_background)
+SELECTION=${SELECTION:-$MUTED}
+BRIGHT_FOREGROUND=$(pick bright_foreground color15)
+BRIGHT_FOREGROUND=${BRIGHT_FOREGROUND:-$FOREGROUND}
+DARK_FOREGROUND=$(pick dark_foreground color8)
+DARK_FOREGROUND=${DARK_FOREGROUND:-$MUTED}
+RED=$(pick red color1)
+RED=${RED:-$ACCENT}
+YELLOW=$(pick yellow color3)
+YELLOW=${YELLOW:-$ACCENT}
+
+if [[ -z "$IS_LIGHT_MODE" ]]; then
+  IS_LIGHT_MODE=false
+  if grep -qE '^\s*mode\s*=\s*"light"' "$COLORS_SOURCE" || [[ -f "$CURRENT_THEME/light.mode" ]]; then
+    IS_LIGHT_MODE=true
+  fi
+fi
+MODE=dark
+[[ "$IS_LIGHT_MODE" == "true" ]] && MODE=light
+
+mkdir -p "$(dirname "$THEME_FILE")"
+# T3 Code retints every open window as soon as this file changes, so it
+# must never see a half-written one: write alongside, then rename.
+TMP=$(mktemp "$THEME_FILE.XXXXXX")
+jq -n \
+  --arg mode "$MODE" \
+  --arg background "$BACKGROUND" \
+  --arg foreground "$FOREGROUND" \
+  --arg accent "$ACCENT" \
+  --arg muted "$MUTED" \
+  --arg dark_background "$DARK_BACKGROUND" \
+  --arg selection "$SELECTION" \
+  --arg bright_foreground "$BRIGHT_FOREGROUND" \
+  --arg dark_foreground "$DARK_FOREGROUND" \
+  --arg row_hover "$(mix "$DARK_BACKGROUND" "$FOREGROUND" 0.06)" \
+  --arg row_active "$(mix "$DARK_BACKGROUND" "$ACCENT" 0.18)" \
+  --arg error "$(mix "$RED" "$FOREGROUND" 0.35)" \
+  --arg warning "$(mix "$YELLOW" "$FOREGROUND" 0.35)" \
+  '{
+    name: "OhMyDebn",
+    appearance: $mode,
+    canvas: $background,
+    accent: $accent,
+    colors: {
+      chrome: $background,
+      toolbar: $background,
+      toolbarForeground: $foreground,
+      toolbarBorder: $muted,
+      text: $foreground,
+      border: $muted,
+      focus: $accent,
+      sidebar: $dark_background,
+      sidebarForeground: $foreground,
+      sidebarBorder: $muted,
+      sidebarRowHover: $row_hover,
+      sidebarRowActive: $row_active,
+      sidebarRowSelected: $selection,
+      error: $error,
+      warning: $warning,
+      codeBackground: $dark_background,
+      codeForeground: $foreground,
+      terminalBackground: $background,
+      terminalForeground: $foreground,
+      terminalCursor: $bright_foreground,
+      terminalSelection: $selection,
+      terminalScrollbar: $muted,
+      terminalScrollbarHover: $dark_foreground
+    }
+  }' >"$TMP"
+chmod 644 "$TMP"
+mv "$TMP" "$THEME_FILE"
+
+if [[ "$ACTIVATE" == true ]]; then
+  # Only the two theme keys are touched, so settings this version of the
+  # script doesn't know about survive. defaultThemeSetAt is what makes T3
+  # Code apply the theme again even when defaultTheme is unchanged.
+  CURRENT_SETTINGS='{}'
+  [[ -s "$SETTINGS_FILE" ]] && CURRENT_SETTINGS=$(<"$SETTINGS_FILE")
+  TMP=$(mktemp "$SETTINGS_FILE.XXXXXX")
+  if jq --arg id "$THEME_ID" --arg at "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+    '.defaultTheme = $id | .defaultThemeSetAt = $at' <<<"$CURRENT_SETTINGS" >"$TMP"; then
+    chmod 600 "$TMP"
+    mv "$TMP" "$SETTINGS_FILE"
+  else
+    rm -f "$TMP"
+    echo "ohmydebn-theme-set-t3code: $SETTINGS_FILE isn't valid JSON, not selecting the OhMyDebn theme" >&2
+  fi
+fi

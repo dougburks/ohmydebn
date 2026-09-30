@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
+  echo
+  echo "T3 Code is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove T3 Code. Your T3 Code projects and settings"
+    echo "in ~/.t3 are kept."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge ohmydebn-t3code
+  sudo /usr/bin/apt -y autoremove
+fi

@@ -1,0 +1,83 @@
+#!/bin/bash
+#
+# ohmydebn-update-firmware: updates device firmware (system BIOS/UEFI,
+# docks, SSDs, some peripherals) with fwupd, from the Linux Vendor
+# Firmware Service (LVFS). OhMyDebn Menu > Update > Firmware runs this in a
+# presentation terminal.
+#
+# Unlike Omarchy's version, nothing is copied into the EFI system
+# partition by hand: fwupd puts its EFI updater on the ESP itself when a
+# UEFI capsule update needs it. That updater has to be the Secure
+# Boot-signed one (fwupd-signed), though, and Debian's fwupd only
+# *recommends* it - MX Linux doesn't install recommends, so fwupd arrives
+# there without it. So on UEFI machines it's installed explicitly
+# (fwupd-signed is a real package on Ubuntu and a virtual one on Debian,
+# where apt picks its one provider, fwupd-amd64-signed or
+# fwupd-arm64-signed), and checked for by its file rather than a package
+# name for the same reason.
+#
+# fwupdmgr's exit status 2 means "nothing to do" - no devices it can update
+# (every VM, and much consumer hardware), or no updates for them - which is
+# a normal outcome here, not a failure. fwupdmgr's own prompts (which
+# updates to apply, whether to reboot) are left in place: firmware updates
+# are exactly where a person should confirm each step.
+
+set -euo pipefail
+
+EFI_SYSFS=/sys/firmware/efi
+SIGNED_EFI_GLOB="/usr/lib*/fwupd/efi/fwupd*.efi.signed"
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Updating firmware"
+echo "Firmware updates come from the Linux Vendor Firmware Service (LVFS), so"
+echo "only devices whose makers publish their updates there are covered."
+echo
+echo "Keep your computer plugged in and don't turn it off while firmware is"
+echo "updating. Some updates are installed during the next restart."
+echo
+
+APT_UPDATED=false
+if ! command -v fwupdmgr >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Installing fwupd"
+  sudo /usr/bin/apt update
+  APT_UPDATED=true
+  sudo /usr/bin/apt -y install fwupd
+fi
+
+if [[ -d "$EFI_SYSFS" ]] && ! compgen -G "$SIGNED_EFI_GLOB" >/dev/null; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Installing fwupd's Secure Boot-signed UEFI updater"
+  [[ "$APT_UPDATED" == true ]] || sudo /usr/bin/apt update
+  if ! sudo /usr/bin/apt -y install fwupd-signed; then
+    echo
+    echo "Could not install fwupd-signed. Other firmware can still be updated, but"
+    echo "UEFI (BIOS) updates may not install at restart while Secure Boot is on."
+    echo
+  fi
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Downloading the latest firmware information"
+if ! sudo fwupdmgr refresh --force; then
+  echo
+  echo "Could not download firmware information from LVFS. Check your Internet"
+  echo "connection and try again."
+  exit 1
+fi
+
+/usr/share/ohmydebn/bin/ohmydebn-headline "Checking your devices for firmware updates"
+STATUS=0
+sudo fwupdmgr update || STATUS=$?
+case "$STATUS" in
+0)
+  echo
+  echo "Firmware update finished. If an update needs a restart, fwupd said so above."
+  ;;
+2)
+  echo
+  echo "Your firmware is up to date. (This is also the result when none of your"
+  echo "devices get firmware updates through LVFS, such as in a virtual machine.)"
+  ;;
+*)
+  echo
+  echo "The firmware update didn't complete. See the messages above."
+  exit 1
+  ;;
+esac

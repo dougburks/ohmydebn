@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if ! dpkg -s "alacritty" >/dev/null 2>&1; then
-  exit 0
+  return 0
 fi
 
 ALACRITTY_DIR=~/.config/alacritty
@@ -14,9 +14,14 @@ if grep -q "alacritty/catppuccin-mocha.toml" $ALACRITTY_CONFIG >/dev/null 2>&1; 
   mv $ALACRITTY_DIR $ALACRITTY_DIR-backup-$TIMESTAMP
 fi
 
-# Some installations got a broken config, so let's fix it
+# Some installations got a broken config, so let's fix it. The alacritty
+# directory may not exist (or the block above may have just moved it), and
+# a failed mv here would stop the whole install.
 if [ -f ~/.config/alacritty.toml ]; then
-  mv $ALACRITTY_DIR $ALACRITTY_DIR-backup-$TIMESTAMP
+  if [ -d $ALACRITTY_DIR ]; then
+    mv $ALACRITTY_DIR $ALACRITTY_DIR-backup-$TIMESTAMP
+  fi
+  mkdir -p $ALACRITTY_DIR-backup-$TIMESTAMP
   mv ~/.config/alacritty.toml $ALACRITTY_DIR-backup-$TIMESTAMP/alacritty.toml-backup-$TIMESTAMP
 fi
 

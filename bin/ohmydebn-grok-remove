@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
+  echo
+  echo "Grok Build is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove Grok Build. Your Grok sessions and settings"
+    echo "in ~/.grok are kept."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge ohmydebn-grok-build
+  sudo /usr/bin/apt -y autoremove
+fi

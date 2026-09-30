@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 if [ "${OHMYDEBN_SKIP_UPGRADE:-}" = "1" ]; then
   # install.sh --skip-upgrade - see its comment. Only the full upgrade is
   # skipped; everything else in this stage still runs.

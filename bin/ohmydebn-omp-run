@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# Runs Oh My Pi in a fresh ~/omp-sessions directory (like Pi's and Codex's
+# runners), installing it first if needed. The package installs no
+# /usr/bin symlink, only /usr/lib/ohmydebn-oh-my-pi/omp.
+
+set -euo pipefail
+
+if ! dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  /usr/share/ohmydebn/bin/ohmydebn-omp-install
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+
+if dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
+  mkdir -p ~/omp-sessions && cd "$(mktemp -d ~/omp-sessions/session-XXXXXX)"
+  exec /usr/lib/ohmydebn-oh-my-pi/omp
+fi

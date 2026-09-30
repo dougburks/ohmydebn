@@ -1,8 +1,9 @@
 # Your own OhMyDebn keybindings.
 #
 # This file lives at ~/.config/ohmydebn/keybindings.txt. It is applied on top of
-# the stock keybindings every time ohmydebn-update runs, whenever you change it,
-# and whenever you run ohmydebn-keybindings-apply. Copy it to another OhMyDebn
+# the stock keybindings every time ohmydebn-update runs, when you close the
+# editor opened by ohmydebn-keybindings-edit, and whenever you run
+# ohmydebn-keybindings-apply. Copy it to another OhMyDebn
 # machine and run ohmydebn-keybindings-apply there to get the same keybindings.
 #
 # Edit it with:   ohmydebn-keybindings-edit   (OhMyDebn menu > Setup > Keybindings)

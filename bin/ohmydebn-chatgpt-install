@@ -23,4 +23,10 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1
   fi
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask chatgpt || true
 fi

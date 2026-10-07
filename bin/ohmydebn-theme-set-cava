@@ -99,10 +99,13 @@ get_theme_color() {
 
 # Main function to update cava config
 update_cava_theme() {
-    # Check if cava config exists
+    # Nothing to theme is not an error: ohmydebn-theme-set runs every hook
+    # under set -e, so a failure here would skip all the hooks after this one.
+    # Someone who had their own ~/.config/cava before OhMyDebn keeps it
+    # (install/config/cava.sh), and it may have no config or no [color].
     if [[ ! -f "$CAVA_CONFIG" ]]; then
-        echo "Cava config not found at $CAVA_CONFIG"
-        return 1
+        echo "Cava config not found at $CAVA_CONFIG, not theming cava" >&2
+        return 0
     fi
     
     # Get theme colors
@@ -181,8 +184,8 @@ update_cava_theme() {
         # Reload cava colors if it's running
         reload_cava_colors
     else
-        echo "No [color] section found in cava config"
-        return 1
+        echo "No [color] section found in cava config, not theming cava" >&2
+        return 0
     fi
 }
 

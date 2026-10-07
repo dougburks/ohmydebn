@@ -7,7 +7,7 @@
 # schema that requires every one of its color tokens and rejects unknown
 # ones, so the generated theme must match that list exactly -
 # OMP_REQUIRED_TOKENS below is the schema's list for the packaged release
-# (18.3.1); update it when a new omp release changes the schema. dpkg/sudo/
+# (18.8.0); update it when a new omp release changes the schema. dpkg/sudo/
 # apt and the omp binary are mocked and the agent directory is a scratch
 # one, so nothing here touches the real system or ~/.omp.
 

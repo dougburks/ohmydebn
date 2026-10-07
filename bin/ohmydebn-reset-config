@@ -5,20 +5,24 @@ set -e
 echo "WARNING!"
 echo "Continuing will back up config files and reset them to OhMyDebn defaults."
 echo
-echo "Press Enter to continue or Ctrl-c to cancel."
+echo "Press Enter to continue or Ctrl-C to cancel."
 read -r
 
 # Backup existing config files
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 for i in ~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc; do
-  if [ -e $i ]; then
+  if [ -e "$i" ]; then
     echo "Renaming $i to $i-backup-$TIMESTAMP"
     mv "$i" "$i-backup-$TIMESTAMP"
   fi
 done
 
-# Remove all ohmydebn state files
-rm -rf ~/.local/state/ohmydebn*
+# Remove all ohmydebn state files, except the update logs: they're what
+# to look at (or send) if something goes wrong, after a reset as much as
+# before it.
+find ~/.local/state -mindepth 1 -maxdepth 1 -name 'ohmydebn*' ! -name ohmydebn-logs -exec rm -rf {} +
 
-# Write new config files
-bash /usr/share/ohmydebn/ohmydebn.sh
+# Write new config files. Run the way install.sh runs it: with errexit (a
+# failed step stops the reset rather than being skipped, leaving it half
+# done) and with OhMyDebn's bin directory on PATH.
+PATH="/usr/share/ohmydebn/bin:$PATH" bash -e /usr/share/ohmydebn/ohmydebn.sh

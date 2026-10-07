@@ -35,6 +35,7 @@ if ! dpkg -s "$CHROMIUM_PACKAGE" >/dev/null 2>&1; then
   # --no-install-recommends, as when Chromium was part of the default
   # install (via ohmydebn-pkg-install-optional): its one Recommends,
   # chromium-sandbox, isn't needed on a kernel with user namespaces.
+  sudo /usr/bin/apt update
   sudo /usr/bin/apt -y --no-install-recommends install "$CHROMIUM_PACKAGE"
 
   # Installed by hand, from the menu, onto a system that already has a

@@ -28,7 +28,12 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
 
   sudo /usr/bin/apt update && sudo /usr/bin/apt -y install helium-bin
 
-  cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/
+  # Seeded only into a profile that doesn't exist yet, as the Brave
+  # installers do: a purge leaves ~/.config alone, so a reinstall used to
+  # overwrite the user's own Helium preferences with OhMyDebn's defaults.
+  if [ ! -d ~/.config/net.imput.helium ]; then
+    cp -av /usr/share/ohmydebn/config/net.imput.helium ~/.config/
+  fi
 
   # Installed onto a system that already has a default browser: ask before
   # taking it over (defaults to no - see ohmydebn-browser-set-default). A

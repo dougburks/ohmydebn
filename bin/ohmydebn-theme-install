@@ -39,16 +39,20 @@ fi
 
 THEME_PATH="$THEMES_DIR/$THEME_NAME"
 
-# Remove existing theme if present
-if [ -d "$THEME_PATH" ]; then
-  rm -rf "$THEME_PATH"
-fi
-
-# Clone the repo directly to ~/.config/ohmydebn/themes
-if ! git clone -- "$REPO_URL" "$THEME_PATH"; then
+# Cloned into a temporary directory beside themes/ first (not inside it,
+# where theme lists would see it), and only swapped in for an existing copy
+# once the clone has worked: removing the installed theme before cloning
+# lost it whenever the clone failed (no network, a mistyped URL).
+mkdir -p "$THEMES_DIR"
+CLONE_DIR=$(mktemp -d "$THEMES_DIR/../.theme-install-XXXXXX")
+if ! git clone -- "$REPO_URL" "$CLONE_DIR/$THEME_NAME"; then
+  rm -rf "$CLONE_DIR"
   echo "Error: Failed to clone theme repo."
   exit 1
 fi
+rm -rf "$THEME_PATH"
+mv "$CLONE_DIR/$THEME_NAME" "$THEME_PATH"
+rm -rf "$CLONE_DIR"
 
 # Apply the new theme with ohmydebn-theme-set, which stages only the files a
 # theme installed from a git repo is allowed to contribute and names anything

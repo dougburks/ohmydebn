@@ -223,9 +223,23 @@ Signed-By: /usr/share/keyrings/ohmydebn-keyring.gpg
 EOF
 fi
 
-if [ ! -f /usr/share/keyrings/ohmydebn-keyring.gpg ]; then
-  curl -fsSL https://packages.ohmydebn.org/repo-key.asc |
-    sudo gpg --dearmor -o /usr/share/keyrings/ohmydebn-keyring.gpg
+# Fetched and dearmored in a private temp directory, and only put in place
+# once it's a real, non-empty key: gpg --dearmor creates its output file even
+# when the download fails, and an empty keyring used to stick - every rerun
+# saw the file, skipped this, and apt kept failing with NO_PUBKEY. -s (not
+# -f) also repairs a machine that already has the empty file.
+KEYRING="${OHMYDEBN_TEST_KEYRING:-/usr/share/keyrings/ohmydebn-keyring.gpg}"
+if [ ! -s "$KEYRING" ]; then
+  KEY_DIR=$(mktemp -d)
+  if ! curl -fsSL https://packages.ohmydebn.org/repo-key.asc -o "$KEY_DIR/repo-key.asc" ||
+    ! gpg --homedir "$KEY_DIR" --dearmor -o "$KEY_DIR/ohmydebn-keyring.gpg" "$KEY_DIR/repo-key.asc" ||
+    [ ! -s "$KEY_DIR/ohmydebn-keyring.gpg" ]; then
+    rm -rf "$KEY_DIR"
+    echo "Couldn't download the OhMyDebn repository key. Check your Internet connection and run the installer again." >&2
+    exit 1
+  fi
+  sudo install -m 644 "$KEY_DIR/ohmydebn-keyring.gpg" "$KEYRING"
+  rm -rf "$KEY_DIR"
 fi
 
 if ! dpkg -s "ohmydebn" >/dev/null 2>&1; then

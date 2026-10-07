@@ -20,7 +20,9 @@ setup_mocks() {
 #!/bin/bash
 echo "git $*" >>"$MOCK_CALLS"
 if [[ "$1" == "clone" ]]; then
+  [[ -n "${MOCK_GIT_FAIL:-}" ]] && exit 128
   mkdir -p "${*: -1}"
+  echo new >"${*: -1}/colors.toml"
 fi
 exit 0
 EOF
@@ -36,7 +38,7 @@ EOF
 
 install_theme() {
   : >"$MOCK_CALLS"
-  HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/theme-install-patched.sh" "$1" >/dev/null 2>&1
+  HOME="$SCRATCH_HOME" MOCK_GIT_FAIL="${MOCK_GIT_FAIL:-}" PATH="$(mock_path)" bash "$MOCK_DIR/theme-install-patched.sh" "$1" >/dev/null 2>&1
 }
 
 fresh_scratch_home() {
@@ -75,14 +77,32 @@ fresh_scratch_home
 install_theme "host:-s/foo.git"
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "passes the URL after --" "$CALLS" "-- host:-s/foo.git"
-assert_contains "derives 'foo', not '.git'" "$CALLS" "/themes/foo"
+assert_eq "derives 'foo', not '.git'" "yes" "$([ -d "$SCRATCH_HOME/.config/ohmydebn/themes/foo" ] && echo yes || echo no)"
 
 # --- The ordinary case still works ---
 fresh_scratch_home
 install_theme "https://github.com/example/omarchy-cool-theme.git"
 CALLS=$(cat "$MOCK_CALLS")
-assert_contains "clones a normal URL" "$CALLS" "/themes/cool"
+assert_eq "clones a normal URL into themes/cool" "new" "$(cat "$SCRATCH_HOME/.config/ohmydebn/themes/cool/colors.toml" 2>/dev/null)"
 assert_contains "applies the theme it installed" "$CALLS" "ohmydebn-theme-set cool"
+assert_eq "leaves no temporary clone directory behind" "" \
+  "$(find "$SCRATCH_HOME/.config/ohmydebn" -maxdepth 1 -name '.theme-install-*')"
+
+# --- Reinstalling over an existing copy: a failed clone keeps it ---
+# The installed theme used to be removed before cloning, so a clone that
+# failed (no network, a mistyped URL) lost it.
+fresh_scratch_home
+mkdir -p "$SCRATCH_HOME/.config/ohmydebn/themes/cool"
+echo old >"$SCRATCH_HOME/.config/ohmydebn/themes/cool/colors.toml"
+MOCK_GIT_FAIL=1 install_theme "https://github.com/example/omarchy-cool-theme.git"
+assert_eq "failed clone: the installed theme is kept" "old" "$(cat "$SCRATCH_HOME/.config/ohmydebn/themes/cool/colors.toml" 2>/dev/null)"
+assert_not_contains "failed clone: theme not applied" "$(cat "$MOCK_CALLS")" "ohmydebn-theme-set"
+assert_eq "failed clone: no temporary clone directory left" "" \
+  "$(find "$SCRATCH_HOME/.config/ohmydebn" -maxdepth 1 -name '.theme-install-*')"
+
+# --- ...and a clone that works replaces it ---
+install_theme "https://github.com/example/omarchy-cool-theme.git"
+assert_eq "working clone: replaces the installed theme" "new" "$(cat "$SCRATCH_HOME/.config/ohmydebn/themes/cool/colors.toml" 2>/dev/null)"
 
 rm -rf "$SCRATCH_HOME"
 mock_cleanup

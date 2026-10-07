@@ -1,10 +1,20 @@
 #!/bin/bash
 
+set -euo pipefail
+
 THEMES_DIR="$HOME/.config/ohmydebn/themes/"
 OHMYDEBN_THEMES_DIR="/usr/share/ohmydebn-themes/"
-CURRENT_THEME_LINK="$HOME/.config/ohmydebn/current/theme"
+# ohmydebn-theme-set records the name it switched to here. current/theme
+# itself is a real directory (a copy), not a symlink to the theme, so it
+# can't tell us which theme is current.
+CURRENT_THEME_NAME_FILE="$HOME/.config/ohmydebn/current/theme.name"
 
-mapfile -t THEMES < <({ find "$THEMES_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) 2>/dev/null; find "$OHMYDEBN_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null; } | sort)
+# By name, the way ohmydebn-theme-list and ohmydebn-theme-set see them: a
+# user theme with the same name as a shipped one is the same theme.
+mapfile -t THEMES < <({
+  find "$THEMES_DIR" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -printf '%f\n' 2>/dev/null
+  find "$OHMYDEBN_THEMES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null
+} | sort -u)
 TOTAL=${#THEMES[@]}
 
 if [[ "$TOTAL" -eq 0 ]]; then
@@ -12,29 +22,17 @@ if [[ "$TOTAL" -eq 0 ]]; then
   exit 1
 fi
 
-# Get current theme from symlink
-if [[ -L "$CURRENT_THEME_LINK" ]]; then
-  CURRENT_THEME=$(realpath "$CURRENT_THEME_LINK")
-else
-  # Default to first theme if no symlink exists
-  CURRENT_THEME=$(realpath "${THEMES[0]}")
-fi
+CURRENT_THEME=$(cat "$CURRENT_THEME_NAME_FILE" 2>/dev/null || true)
 
-# Find current theme index
-INDEX=0
+# Unknown or unset current theme: start from the first one.
+NEXT_INDEX=0
 for i in "${!THEMES[@]}"; do
-  THEMES[i]=$(realpath "${THEMES[$i]}")
-
   if [[ "${THEMES[$i]}" == "$CURRENT_THEME" ]]; then
-    INDEX=$i
+    NEXT_INDEX=$(((i + 1) % TOTAL))
     break
   fi
 done
-
-# Get next theme (wrap around)
-NEXT_INDEX=$(((INDEX + 1) % TOTAL))
-NEW_THEME=${THEMES[$NEXT_INDEX]}
-NEW_THEME_NAME=$(basename "$NEW_THEME")
+NEW_THEME_NAME=${THEMES[$NEXT_INDEX]}
 
 /usr/share/ohmydebn/bin/ohmydebn-theme-set "$NEW_THEME_NAME"
 if command -v notify-send >/dev/null 2>&1; then

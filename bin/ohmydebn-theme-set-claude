@@ -165,5 +165,17 @@ if [[ ! -f "$CLAUDE_SETTINGS" ]]; then
   echo '{}' >"$CLAUDE_SETTINGS"
 fi
 
-TMP_SETTINGS=$(mktemp)
-jq --arg theme "custom:${SLUG}" '.theme = $theme' "$CLAUDE_SETTINGS" >"$TMP_SETTINGS" && mv "$TMP_SETTINGS" "$CLAUDE_SETTINGS"
+# Written next to the real file (a dotfiles symlink is followed, not replaced)
+# and renamed over it, so Claude Code never reads a half-written file. A
+# settings.json that isn't valid JSON is left alone rather than failing:
+# ohmydebn-theme-set runs every hook under set -e, so a failure here would
+# skip all the hooks after this one.
+SETTINGS_TARGET=$(readlink -f -- "$CLAUDE_SETTINGS")
+TMP_SETTINGS=$(mktemp "$SETTINGS_TARGET.XXXXXX")
+if jq --arg theme "custom:${SLUG}" '.theme = $theme' "$SETTINGS_TARGET" >"$TMP_SETTINGS"; then
+  chmod --reference="$SETTINGS_TARGET" "$TMP_SETTINGS"
+  mv "$TMP_SETTINGS" "$SETTINGS_TARGET"
+else
+  rm -f "$TMP_SETTINGS"
+  echo "ohmydebn-theme-set-claude: $CLAUDE_SETTINGS isn't valid JSON, not selecting the OhMyDebn theme" >&2
+fi

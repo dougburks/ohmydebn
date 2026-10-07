@@ -38,7 +38,8 @@ done
 # unlogged rather than not at all. OHMYDEBN_UPDATE_LOG marks the inner,
 # already-logged run (and tells later steps where the log is);
 # OHMYDEBN_UPDATE_NO_LOG=1 opts out. The newest KEEP_LOGS runs are kept;
-# update-latest.log always points at the current one. The log dir sits
+# update-latest.log points at the newest run that actually started (see
+# below, after the confirmation). The log dir sits
 # beside ~/.local/state/ohmydebn-config (~/.local/state/ohmydebn itself
 # is the "installation complete" marker file, not a directory).
 LOG_DIR="$HOME/.local/state/ohmydebn-logs"
@@ -50,7 +51,6 @@ if [ -z "${OHMYDEBN_UPDATE_LOG:-}" ] && [ "${OHMYDEBN_UPDATE_NO_LOG:-}" != "1" ]
   # so with this run there are at most KEEP_LOGS. The [0-9] keeps the
   # update-latest.log symlink out of the candidate list.
   ls -1t "$LOG_DIR"/update-[0-9]*.log 2>/dev/null | tail -n +"$KEEP_LOGS" | xargs -r rm -f --
-  ln -sfn "$OHMYDEBN_UPDATE_LOG" "$LOG_DIR/update-latest.log"
   export OHMYDEBN_UPDATE_LOG
   WRAPPED_CMD=$(printf '%q ' bash "$0" "$@")
   exec script -qefc "$WRAPPED_CMD" "$OHMYDEBN_UPDATE_LOG"
@@ -133,8 +133,15 @@ EOF
 fi
 
 # Announced after the confirmation, not before it, so the prompt text is
-# the last thing on screen while waiting for Enter.
+# the last thing on screen while waiting for Enter. update-latest.log moves
+# to this run only now, past the lock and the confirmation: a run cancelled
+# at the prompt, or refused because another update holds the lock, changed
+# nothing, and pointing it at that unfinished log made ohmydebn-doctor
+# report a failed update - even after the real one completed.
 if [ -n "${OHMYDEBN_UPDATE_LOG:-}" ]; then
+  if [[ "$OHMYDEBN_UPDATE_LOG" == "$LOG_DIR"/* ]]; then
+    ln -sfn "$OHMYDEBN_UPDATE_LOG" "$LOG_DIR/update-latest.log"
+  fi
   echo
   echo "Logging this update to:"
   echo "$OHMYDEBN_UPDATE_LOG"

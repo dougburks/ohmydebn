@@ -45,7 +45,7 @@ if [[ "${MOCK_CINNAMON_RUNNING:-true}" == "true" ]]; then
 fi
 exit 1
 EOF
-  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g" "$SCRIPT" >"$MOCK_DIR/finale-patched.sh"
+  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g; s#/etc/lightdm/lightdm.conf#$MOCK_DIR/lightdm.conf#g" "$SCRIPT" >"$MOCK_DIR/finale-patched.sh"
 }
 
 run_script() {
@@ -139,5 +139,38 @@ RESTART_NEEDED="" MOCK_CINNAMON_RUNNING=false run_script
 assert_not_contains "Cinnamon: no log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
+
+# Scenario 7: Raspberry Pi OS - LightDM logs this user in automatically and
+# finalization/lightdm.sh has pointed that at Cinnamon: there's no login
+# screen to pick a session from, so the advice is to reboot.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+printf '[Seat:*]\nautologin-user=pi\nautologin-session=cinnamon\nuser-session=cinnamon\n' >"$MOCK_DIR/lightdm.conf"
+OUT=$(HOME="$SCRATCH_HOME" USER=pi PATH="$(mock_path)" XDG_CURRENT_DESKTOP=labwc:wlroots MOCK_CINNAMON_RUNNING=false \
+  bash -eu "$MOCK_DIR/finale-patched.sh" </dev/null 2>&1)
+assert_contains "autologin into Cinnamon: reboot advice" "$(cat "$MOCK_CALLS")" "Reboot to start Cinnamon"
+assert_not_contains "autologin into Cinnamon: no log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+assert_contains "autologin into Cinnamon: names the current desktop" "$OUT" "You're currently running labwc:wlroots."
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 8: autologin is set up for someone else (or commented out): this
+# user still logs in at the greeter, so the advice stays log out and pick.
+for CONF in '[Seat:*]\nautologin-user=someone\nautologin-session=cinnamon\n' \
+  '[Seat:*]\n#autologin-user=pi\n#autologin-session=cinnamon\n'; do
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+  printf "$CONF" >"$MOCK_DIR/lightdm.conf"
+  HOME="$SCRATCH_HOME" USER=pi PATH="$(mock_path)" XDG_CURRENT_DESKTOP=XFCE MOCK_CINNAMON_RUNNING=false \
+    bash -eu "$MOCK_DIR/finale-patched.sh" </dev/null >/dev/null 2>&1
+  assert_contains "no autologin for this user: log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+  assert_not_contains "no autologin for this user: no reboot advice" "$(cat "$MOCK_CALLS")" "Reboot to start Cinnamon"
+  rm -rf "$SCRATCH_HOME"
+  mock_cleanup
+done
 
 test_summary

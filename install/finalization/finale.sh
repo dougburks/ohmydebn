@@ -35,9 +35,20 @@ fi
 # switch sessions at the login screen. Run over ssh or from a TTY there's no
 # desktop to judge (XDG_CURRENT_DESKTOP is unset), so say nothing rather
 # than tell a Cinnamon user to switch to Cinnamon.
+# Raspberry Pi OS logs its user in automatically, and finalization/lightdm.sh
+# has just pointed that autologin at Cinnamon, so there's no login screen to
+# pick a session from: a reboot is all it takes.
+LIGHTDM_CONF=/etc/lightdm/lightdm.conf
 if [ -n "${XDG_CURRENT_DESKTOP:-}" ] && [ "$XDG_CURRENT_DESKTOP" != "X-Cinnamon" ]; then
   echo
-  /usr/share/ohmydebn/bin/ohmydebn-headline "Log out and select Cinnamon"
-  echo "You're currently running $XDG_CURRENT_DESKTOP."
-  echo "Log out, then choose the Cinnamon session from your login screen before logging back in."
+  if grep -qE "^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*${USER:-$(id -un)}[[:space:]]*$" $LIGHTDM_CONF 2>/dev/null &&
+    grep -qE '^[[:space:]]*autologin-session[[:space:]]*=[[:space:]]*cinnamon[[:space:]]*$' $LIGHTDM_CONF; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Reboot to start Cinnamon"
+    echo "You're currently running $XDG_CURRENT_DESKTOP."
+    echo "You'll be logged into Cinnamon automatically after you reboot."
+  else
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Log out and select Cinnamon"
+    echo "You're currently running $XDG_CURRENT_DESKTOP."
+    echo "Log out, then choose the Cinnamon session from your login screen before logging back in."
+  fi
 fi

@@ -1,16 +1,26 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Rootless podman can't unpack the image without subordinate UID/GID
 # ranges for this user, and some installs (Devuan's, for one) leave them
 # out - backfill before the pull rather than let it fail on /etc/gshadow.
-/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure
+# If that didn't work (its sudo declined, say), stop here: the pull would
+# only fail with the lchown error this exists to prevent.
+if ! /usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure; then
+  echo
+  echo "SO-CRATES can't start without subordinate UID/GID ranges for $(id -un)."
+  echo "Press Enter to close this window."
+  read -r || true
+  exit 1
+fi
 
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
 DEFAULT_IMAGE="$IMAGE_REPO@sha256:008e9cb64985da47106072c8bf4eedaf1ec8f6c0746143fbfc7442cd791dab36"
 
-if [[ -n "$1" ]]; then
+if [[ -n "${1:-}" ]]; then
   IMAGE="$IMAGE_REPO:$1"
 else
   IMAGE="$DEFAULT_IMAGE"
@@ -44,11 +54,14 @@ if [[ -d "$OHMYDEBN_CURRENT_DIR" ]]; then
   )
 fi
 
+# Stopping SO-CRATES with Ctrl-C (or a failed pull) makes podman exit
+# non-zero; the cleanup and the pause below still run, so its output stays
+# readable.
 /usr/bin/podman "${PODMAN_ARGS[@]}" \
-  "$IMAGE"
+  "$IMAGE" || true
 
 echo
-/usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup
+/usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup || true
 echo
 echo "Press Enter to close this window."
-read -r
+read -r || true

@@ -90,4 +90,39 @@ assert_eq "subids-ensure runs before podman" "ohmydebn-podman-subids-ensure" "$(
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
+# Scenario 7: the backfill failed (its sudo declined, say) -> podman never
+# runs; the pull would only die with the lchown error the backfill prevents.
+mock_init
+setup_mocks
+mock_bin ohmydebn-podman-subids-ensure <<'EOF'
+#!/bin/bash
+echo "ohmydebn-podman-subids-ensure $*" >>"$MOCK_CALLS"
+exit 1
+EOF
+SCRATCH_HOME=$(mktemp -d)
+OUTPUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/socrates-run-patched.sh" </dev/null 2>&1)
+STATUS=$?
+assert_not_contains "failed subids backfill: podman not run" "$(cat "$MOCK_CALLS")" "podman run"
+assert_contains "failed subids backfill: says why" "$OUTPUT" "subordinate UID/GID ranges"
+assert_eq "failed subids backfill: exits non-zero" "1" "$STATUS"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 8: podman exits non-zero (SO-CRATES stopped with Ctrl-C, or a
+# failed pull) -> the cleanup still runs and the script ends normally.
+mock_init
+setup_mocks
+mock_bin podman <<'EOF'
+#!/bin/bash
+echo "podman $*" >>"$MOCK_CALLS"
+exit 130
+EOF
+SCRATCH_HOME=$(mktemp -d)
+run_socrates
+STATUS=$?
+assert_contains "podman stopped: cleanup still runs" "$(cat "$MOCK_CALLS")" "ohmydebn-socrates-cleanup"
+assert_eq "podman stopped: script ends normally" "0" "$STATUS"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
 test_summary

@@ -9,7 +9,14 @@ set -euo pipefail
 
 if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-show-logo
-  /usr/share/ohmydebn/bin/ohmydebn-claude-code-install
+  # A failed install would otherwise end the script here (set -e) and close
+  # the terminal before its error could be read.
+  if ! /usr/share/ohmydebn/bin/ohmydebn-claude-code-install; then
+    echo
+    echo "The install didn't finish - see the messages above."
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+    exit 1
+  fi
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi
 if dpkg -s "claude-code" >/dev/null 2>&1; then

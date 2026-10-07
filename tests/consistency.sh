@@ -1075,7 +1075,10 @@ CHECKED=0
 for f in "$REPO_ROOT"/bin/*-install; do
   name=$(basename "$f")
   [[ " ${INSTALL_APT_UPDATE_EXEMPT[*]} " == *" $name "* ]] && continue
-  if grep -qE 'apt (-y )?install' "$f" 2>/dev/null; then
+  # Any options may come before "install" (-y, --no-install-recommends):
+  # ohmydebn-chromium-install's `apt -y --no-install-recommends install`
+  # slipped past an `apt (-y )?install` match without an apt update.
+  if grep -qE 'apt( -[-a-zA-Z0-9=]+)* install' "$f" 2>/dev/null; then
     CHECKED=$((CHECKED + 1))
     # /usr/bin/apt update specifically (the invocation style used
     # everywhere in this codebase), not a bare "apt update" - a comment

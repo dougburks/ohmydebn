@@ -3,9 +3,8 @@ name: ohmydebn
 description: >
   REQUIRED for ANY changes to Linux desktop, window manager, or system config.
   Use when editing ~/.config/cinnamon/, ~/.config/nemo/, ~/.config/gtk-3.0/,
-  ~/.config/gtk-4.0/, ~/.config/terminator/, ~/.config/gnome-terminal/,
-  ~/.config/mate-terminal/, ~/.config/xfce4-terminal/,
-  or ~/.config/ohmydebn/. Triggers: Cinnamon desktop, applets, desklets, extensions,
+  ~/.config/gtk-4.0/, ~/.config/alacritty/, ~/.config/terminator/,
+  ~/.config/xfce4/terminal/, or ~/.config/ohmydebn/. Triggers: Cinnamon desktop, applets, desklets, extensions,
   panels, keybindings, themes, wallpapers, fonts, window management, terminal config,
   startup applications, notifications, power management, screensaver, app launcher,
   or any ohmydebn-* commands.
@@ -36,14 +35,11 @@ Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stab
 
 **NEVER modify anything in `/usr/share/ohmydebn/`** - but READING is safe and encouraged.
 
-This directory contains OhMyDebn's source files managed by the ohmydebn deb package. Any changes will be:
-- Lost on next `ohmydebn-update` or package upgrade
-- Cause conflicts with upstream
-- Break the system's package management
+This directory contains OhMyDebn's source files managed by the ohmydebn deb package. Any changes will be lost on the next `ohmydebn-update` or package upgrade, conflict with upstream, and break the system's package management.
 
 ```
 /usr/share/ohmydebn/          # READ-ONLY - NEVER EDIT (reading is OK)
-├── bin/                      # Source scripts (symlinked to PATH)
+├── bin/                      # Source scripts (added to PATH)
 ├── config/                   # Default config templates
 └── install/                  # Installation scripts
 ```
@@ -51,8 +47,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 **Reading these directories is SAFE and useful** - do it freely to:
 - Understand how ohmydebn commands work: `cat $(which ohmydebn-theme-set)`
 - See default Cinnamon settings before customizing: `cat /usr/share/ohmydebn/install/config/cinnamon.sh` (Cinnamon settings are applied via `gsettings`, not a flat config file)
-- Check stock theme files to copy for customization: `ls /usr/share/ohmydebn-themes/`
-- Check original Omarchy themes: `ls /usr/share/ohmydebn-themes/`
+- Check stock theme files (the OhMyDebn theme and the original Omarchy themes) to copy for customization: `ls /usr/share/ohmydebn-themes/`
 
 **Always use these safe locations instead:**
 - `~/.config/` - User configuration (safe to edit)
@@ -61,7 +56,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
 - **AI assistants**: optional installs from Apps > AI (OpenCode, Claude Code, Codex, Grok Build, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
-- **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps
+- **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps → Other Apps
 
 ## System Architecture
 
@@ -71,7 +66,7 @@ OhMyDebn is built on:
 |-----------|---------|-----------------|
 | **Debian 13 or a supported derivative** | Base OS | `/etc/`, `~/.config/` |
 | **Cinnamon** | Desktop environment | `~/.config/cinnamon/` |
-| **Nemo** | File manager | `~/.config/nemo/` |
+| **Nemo** | File manager | `gsettings` (`org.nemo`) |
 | **Cinnamon Panel** | Taskbar/applets | `gsettings` (`org.cinnamon`), applet/desklet instance configs under `~/.config/cinnamon/spices/` |
 | **GTK3/GTK4** | Widget toolkit | `~/.config/gtk-3.0/`, `~/.config/gtk-4.0/` |
 | **ohmydebn-menu-picker** | App launcher / menu search (GTK, not rofi) | `~/.config/ohmydebn/current/picker-colors` (theming only) |
@@ -102,8 +97,8 @@ cat $(which ohmydebn-theme-set)
 |--------|---------|---------|
 | `ohmydebn-reset-config` | Reset OhMyDebn's app configs to defaults (backs them up first) | `ohmydebn-reset-config` |
 | `ohmydebn-theme-*` | Theme management | `ohmydebn-theme-set <name>` |
-| `ohmydebn-pkg-*` | Package management | `ohmydebn-pkg-install <pkg>` |
-| `ohmydebn-update-*` | System updates | `ohmydebn-update` |
+| `ohmydebn-pkg-*` | Package management | `ohmydebn-pkg-install` (interactive picker; to install a known package, use `sudo /usr/bin/apt install <pkg>`) |
+| `ohmydebn-update*` | System updates | `ohmydebn-update` |
 
 ## Configuration Locations
 
@@ -111,17 +106,11 @@ cat $(which ohmydebn-theme-set)
 
 ```
 ~/.config/cinnamon/
-├── panels/                 # Panel configurations
-│   └── panel1/            # Top panel settings (OhMyDebn's default, single panel)
-├── applets/               # Applet configurations
-├── desklets/              # Desklet configurations
-├── extensions/            # Extension configurations
-├── spices/                # Spice (extension/applet/desklet) configs
-└── background-chooser.log # Background selection logs
+└── spices/                # Per-instance configs for applets, desklets and extensions (e.g. spices/gTile@OhMyDebn/)
 ```
 
-Core Cinnamon settings (panels, effects, keybindings, window management, etc.)
-are **not** stored in a flat file — they live in the dconf database under the
+Core Cinnamon settings (panel layout, which applets are enabled, effects,
+keybindings, window management, etc.) are **not** stored in a flat file — they live in the dconf database under the
 `org.cinnamon` schemas. Read/write them with `gsettings get|set org.cinnamon ...`
 or browse everything with `dconf-editor` / `dconf dump /org/cinnamon/`.
 
@@ -132,14 +121,11 @@ or browse everything with `dconf-editor` / `dconf dump /org/cinnamon/`.
 
 ### Nemo File Manager
 
-```
-~/.config/nemo/
-├── nemo-actions          # Custom context menu actions
-├── bookmarks             # Bookmarks
-└── nemo_preferences      # File manager preferences
-```
+- Preferences: dconf, under `org.nemo` (e.g. `gsettings get org.nemo.preferences default-folder-viewer`)
+- Bookmarks: `~/.config/gtk-3.0/bookmarks`
+- Custom context menu actions: `~/.local/share/nemo/actions/`
 
-**Nemo auto-reloads on config save.**
+**Nemo picks up `gsettings` changes immediately.**
 
 ### GTK Theme Configuration
 
@@ -174,16 +160,12 @@ Restart terminal applications by closing and reopening the window or using the a
 
 ```
 ~/.config/terminator/config
-~/.config/gnome-terminal/
-├── accels                # Keyboard shortcuts
-├── profiles/             # Terminal profiles
-└── settings              # General settings
-~/.config/mate-terminal/
-├── profiles/             # Terminal profiles
-└── mate-terminal.rc      # Configuration
 ~/.config/xfce4/terminal/
 └── terminalrc            # Configuration
 ```
+
+gnome-terminal and mate-terminal keep their settings in dconf, not in files:
+`dconf dump /org/gnome/terminal/` and `dconf dump /org/mate/terminal/`.
 
 ### Other Configs
 
@@ -193,10 +175,10 @@ Restart terminal applications by closing and reopening the window or using the a
 | fastfetch | `~/.config/fastfetch/config.jsonc` |
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
-| git | `~/.config/git/config` |
+| git | `~/.gitconfig` (written by `git config --global`) |
 | zsh | `~/.zshrc`, `~/.config/zsh/` |
 | oh my zsh | `~/.oh-my-zsh/` |
-| zoxide | `~/.config/zoxide/` |
+| zoxide | No config folder; started by `eval "$(zoxide init zsh)"` in `~/.zshrc` |
 | eza | Configured via shell aliases |
 | bat | `~/.config/bat/config` |
 | cava | `~/.config/cava/config` |
@@ -229,8 +211,9 @@ cp ~/.config/alacritty/alacritty.toml ~/.config/alacritty/alacritty.toml.bak.$(d
 2. See how existing themes are done via:
    - `/usr/share/ohmydebn-themes/ohmydebn/` for the native OhMyDebn theme
    - `/usr/share/ohmydebn-themes/tokyo-night/` for original Omarchy themes (interpreted for Cinnamon)
-3. Download a matching background (or several) from the internet and put them in ~/.config/ohmydebn/themes/[name-of-new-theme]
-4. When done with the theme, run ohmydebn-theme-set "Name of new theme"
+3. Add a `colors.toml` (or `alacritty.toml`) to the theme directory. It is required: `ohmydebn-theme-set` refuses a theme without one.
+4. Download a matching background (or several) from the internet and put them in ~/.config/ohmydebn/themes/[name-of-new-theme]/backgrounds/
+5. When done with the theme, run ohmydebn-theme-set "Name of new theme"
 
 ### Pattern 3: Reset to Defaults -- ALWAYS SEEK USER CONFIRMATION BEFORE RUNNING
 
@@ -254,7 +237,7 @@ ohmydebn-reset-config
 ```bash
 ohmydebn-theme-list              # Show available themes
 ohmydebn-theme-current           # Show current theme
-ohmydebn-theme-set <name>        # Apply theme (use "Tokyo Night" not "tokyo-night")
+ohmydebn-theme-set <name>        # Apply theme ("Tokyo Night" and "tokyo-night" both work)
 ohmydebn-theme-next              # Cycle to next theme
 ohmydebn-theme-bg-next           # Cycle wallpaper
 ohmydebn-theme-install <url>     # Install from git repo
@@ -340,6 +323,9 @@ For advanced window management, additional extensions can be installed from Cinn
 - Combine arrows for corner tiling (e.g., Super + Up then Right for upper right)
 - No window gaps, maximizes screen area
 
+**Automatic Tiling (gTile):**
+- `Super + L`: Cycle automatic tiling mode (`Super + Shift + L` cycles backward)
+
 **Advanced Window Tiling (gTile Extension):**
 - `Ctrl + Shift + G`: Display gTile overlay
 - Grid options: 2x2, 3x2, 4x4, or 6x6 (press 1, 2, 3, or 4 to select)
@@ -347,11 +333,11 @@ For advanced window management, additional extensions can be installed from Cinn
 - Press same letter twice for single tile (e.g., 'a' twice for upper left corner)
 
 **gTile Hotkeys with Window Gaps:**
-- `Ctrl + Shift + 1/2/3 (numpad)`: Bottom corners/half with gaps
+- `Ctrl + Shift + 1/2/3 (numpad)`: Bottom corners/half with gaps (`Ctrl + Shift + Down` also tiles to the bottom half)
 - `Ctrl + Shift + 4 (numpad) or H`: Left half with gaps
 - `Ctrl + Shift + 5 (numpad) or Enter`: Full screen with gaps
 - `Ctrl + Shift + 6 (numpad) or L`: Right half with gaps
-- `Ctrl + Shift + 7/8/9 (numpad)`: Top corners/half with gaps
+- `Ctrl + Shift + 7/8/9 (numpad)`: Top corners/half with gaps (`Ctrl + Shift + Up` also tiles to the top half)
 
 **Configure gTile:**
 - System Settings → Extensions → gTile → Configure → Behavior tab
@@ -402,9 +388,9 @@ sudo /usr/bin/apt install --reinstall ohmydebn
 When user requests system changes:
 
 1. **Is it a stock ohmydebn command?** Use it directly
-2. **Is it a config edit?** Edit in `~/.config/`, never `~/.local/share/ohmydebn/`
+2. **Is it a config edit?** Edit in `~/.config/`, never in the read-only `/usr/share/ohmydebn/`
 3. **Is it a theme customization?** Create a NEW custom theme directory
-4. **Is it a package install?** Use `apt` or `ohmydebn-pkg-install`
+4. **Is it a package install?** Use `sudo /usr/bin/apt install <pkg>` (`ohmydebn-pkg-install` is an interactive picker for the user, and takes no arguments)
 5. **Unsure if command exists?** Search with `ls /usr/share/ohmydebn/bin/ | grep ohmydebn`
 
 ## Development (AI Agents)
@@ -420,11 +406,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - Existing configurations are preserved unless explicitly updated
 - Dependencies are checked and installed as needed
 
-**Development workflow:**
-1. Make changes to the OhMyDebn source code in `/usr/share/ohmydebn/`
-2. Test the changes by running the install scripts
-3. Users get updates by running `ohmydebn-update`
-4. The install process automatically handles applying new settings, dependencies, and configurations
+**Development workflow:** OhMyDebn's source is the git repository at https://github.com/dougburks/ohmydebn. Changes go through that repository, following its `AGENTS.md`. Never edit `/usr/share/ohmydebn/` on an installed system to make a change: it is overwritten on the next update. Users get released changes by running `ohmydebn-update`.
 
 **Installation scripts** in `/usr/share/ohmydebn/install/` handle:
 - Installing system dependencies via apt
@@ -435,7 +417,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 ## Example Requests
 
 - "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
-- "Add a keybinding for Super+E to open file manager" -> Super+E is already GMail, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Customizing keybindings above) and run `ohmydebn-keybindings-apply`
+- "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "GMail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets

@@ -35,17 +35,21 @@ fi
 # switch sessions at the login screen. Run over ssh or from a TTY there's no
 # desktop to judge (XDG_CURRENT_DESKTOP is unset), so say nothing rather
 # than tell a Cinnamon user to switch to Cinnamon.
-# Raspberry Pi OS logs its user in automatically, and finalization/lightdm.sh
-# has just pointed that autologin at Cinnamon, so there's no login screen to
-# pick a session from: a reboot is all it takes.
+# Two cases need a reboot instead, since LightDM only reads lightdm.conf when
+# it starts and there's no session to pick: Raspberry Pi OS (its pi-greeter,
+# whose lightdm.conf finalization/lightdm.sh has just pointed at Cinnamon -
+# seen on Raspberry Pi OS for x86 with autologin off), and LightDM logging
+# this user straight into Cinnamon.
 LIGHTDM_CONF=/etc/lightdm/lightdm.conf
 if [ -n "${XDG_CURRENT_DESKTOP:-}" ] && [ "$XDG_CURRENT_DESKTOP" != "X-Cinnamon" ]; then
   echo
-  if grep -qE "^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*${USER:-$(id -un)}[[:space:]]*$" $LIGHTDM_CONF 2>/dev/null &&
-    grep -qE '^[[:space:]]*autologin-session[[:space:]]*=[[:space:]]*cinnamon[[:space:]]*$' $LIGHTDM_CONF; then
+  if grep -qE '^[[:space:]]*greeter-session[[:space:]]*=[[:space:]]*pi-greeter' $LIGHTDM_CONF 2>/dev/null || {
+    grep -qE "^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*${USER:-$(id -un)}[[:space:]]*$" $LIGHTDM_CONF 2>/dev/null &&
+      grep -qE '^[[:space:]]*autologin-session[[:space:]]*=[[:space:]]*cinnamon[[:space:]]*$' $LIGHTDM_CONF
+  }; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Reboot to start Cinnamon"
     echo "You're currently running $XDG_CURRENT_DESKTOP."
-    echo "You'll be logged into Cinnamon automatically after you reboot."
+    echo "Reboot, and you'll start in Cinnamon from then on."
   else
     /usr/share/ohmydebn/bin/ohmydebn-headline "Log out and select Cinnamon"
     echo "You're currently running $XDG_CURRENT_DESKTOP."

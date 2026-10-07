@@ -140,9 +140,9 @@ assert_not_contains "Cinnamon: no log-out advice" "$(cat "$MOCK_CALLS")" "Log ou
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# Scenario 7: Raspberry Pi OS - LightDM logs this user in automatically and
-# finalization/lightdm.sh has pointed that at Cinnamon: there's no login
-# screen to pick a session from, so the advice is to reboot.
+# Scenario 7: LightDM logs this user straight into Cinnamon (autologin
+# without pi-greeter): there's no login screen to pick a session from, so
+# the advice is to reboot.
 mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
@@ -156,8 +156,25 @@ assert_contains "autologin into Cinnamon: names the current desktop" "$OUT" "You
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# Scenario 8: autologin is set up for someone else (or commented out): this
-# user still logs in at the greeter, so the advice stays log out and pick.
+# Scenario 7b: Raspberry Pi OS with autologin off (seen on Raspberry Pi OS
+# for x86 in a VM): pi-greeter, autologin-user commented out, and the
+# autologin-session/user-session lines finalization/lightdm.sh switched from
+# rpd-labwc. LightDM only rereads lightdm.conf at boot, so still reboot.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+printf '[Seat:*]\ngreeter-session=pi-greeter-labwc\nuser-session=cinnamon\n#autologin-user=\nautologin-session=cinnamon\n' >"$MOCK_DIR/lightdm.conf"
+HOME="$SCRATCH_HOME" USER=doug PATH="$(mock_path)" XDG_CURRENT_DESKTOP=labwc:wlroots MOCK_CINNAMON_RUNNING=false \
+  bash -eu "$MOCK_DIR/finale-patched.sh" </dev/null >/dev/null 2>&1
+assert_contains "pi-greeter, no autologin: reboot advice" "$(cat "$MOCK_CALLS")" "Reboot to start Cinnamon"
+assert_not_contains "pi-greeter, no autologin: no log-out advice" "$(cat "$MOCK_CALLS")" "Log out and select Cinnamon"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 8: autologin is set up for someone else (or commented out) and
+# the greeter isn't pi-greeter: this user still logs in at a greeter with a
+# session menu, so the advice stays log out and pick.
 for CONF in '[Seat:*]\nautologin-user=someone\nautologin-session=cinnamon\n' \
   '[Seat:*]\n#autologin-user=pi\n#autologin-session=cinnamon\n'; do
   mock_init

@@ -2,7 +2,10 @@
 
 set -euo pipefail
 
-if ! pgrep keepassxc; then
+# -x: keepassxc-proxy, which keeps running while a browser uses the
+# KeePassXC extension, would otherwise count as KeePassXC being open, and
+# the window search below finds nothing to activate.
+if ! pgrep -x keepassxc >/dev/null; then
 	/usr/bin/keepassxc &
 else
 	/usr/bin/xdotool search --name ".*- KeePassXC" windowactivate

@@ -3,7 +3,7 @@
 # Unit tests for bin/ohmydebn-update's run logging: every run re-execs
 # itself under `script` so the whole session lands in
 # ~/.local/state/ohmydebn-logs/update-<stamp>.log (with update-latest.log
-# pointing at it), the child's exit status still comes back through the
+# pointing at it once the run is confirmed and holds the lock), the child's exit status still comes back through the
 # wrapper, only the newest KEEP_LOGS runs are kept, the inner run never
 # wraps itself a second time, and OHMYDEBN_UPDATE_NO_LOG=1 opts out.
 #
@@ -98,6 +98,35 @@ assert_eq "rotation: the three oldest were removed" "no" \
   "$([ -e "$LOG_DIR/update-20260101000100.log" ] || [ -e "$LOG_DIR/update-20260101000200.log" ] || [ -e "$LOG_DIR/update-20260101000300.log" ] && echo yes || echo no)"
 assert_eq "rotation: the newest old log survived" "yes" "$([ -e "$LOG_DIR/update-20260101001200.log" ] && echo yes || echo no)"
 assert_eq "rotation: update-latest.log symlink still present" "yes" "$([ -L "$LOG_DIR/update-latest.log" ] && echo yes || echo no)"
+mock_cleanup
+
+# --- cancelled at the prompt: update-latest.log keeps pointing at the last
+# real run (EOF on stdin ends the `read`, as Ctrl-C would) ---
+setup
+run_update
+PREVIOUS=$(readlink "$LOG_DIR/update-latest.log")
+sleep 1 # a new log name (timestamped to the second)
+OUTPUT=$(HOME="$FAKE_HOME" PATH="$(mock_path)" bash "$SCRIPT" </dev/null 2>&1)
+assert_eq "cancelled run: update-latest.log still points at the last real run" "$PREVIOUS" \
+  "$(readlink "$LOG_DIR/update-latest.log")"
+mock_cleanup
+
+# --- refused by the lock: update-latest.log isn't taken over either ---
+setup
+run_update
+PREVIOUS=$(readlink "$LOG_DIR/update-latest.log")
+sleep 1
+flock "$MOCK_DIR/ohmydebn-update-$(id -u).lock" sleep 5 &
+HOLDER=$!
+sleep 0.3
+OUTPUT=$(HOME="$FAKE_HOME" XDG_RUNTIME_DIR="$MOCK_DIR" PATH="$(mock_path)" bash "$SCRIPT" --yes </dev/null 2>&1)
+STATUS=$?
+kill "$HOLDER" 2>/dev/null
+wait "$HOLDER" 2>/dev/null
+assert_eq "refused run: exits 1" "1" "$STATUS"
+assert_contains "refused run: says another update is running" "$OUTPUT" "Another OhMyDebn update is already running"
+assert_eq "refused run: update-latest.log still points at the last real run" "$PREVIOUS" \
+  "$(readlink "$LOG_DIR/update-latest.log")"
 mock_cleanup
 
 # --- opt-out: no log directory, no wrapping, update still runs ---

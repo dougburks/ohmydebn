@@ -16,11 +16,13 @@ CONFIGS=(~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.co
 # so the steps write them again: bat.sh and btop.sh copy their configs only
 # once; zsh.sh writes .zshrc and then adds its own lines to it (grc, man
 # colors, the AI tool aliases); nvim.sh adds its transparency file to a
-# config. Alacritty, cava, Oh My Zsh and Neovim's base config are recreated
-# whenever they're missing, and the Starship config comes from the theme,
-# reapplied below. tests/unit/test-reset-config.sh checks that every marker
-# those four steps use is listed here.
-CONFIG_MARKERS=(bat-20251110 btop-config-20250916
+# config; ohmydebn-theme-set-starship writes the Starship config once, when
+# the theme is reapplied below (missing its marker here left Starship on
+# its built-in prompt after a reset). Alacritty, cava, Oh My Zsh and
+# Neovim's base config are recreated whenever they're missing.
+# tests/unit/test-reset-config.sh checks that every marker those steps and
+# the theme hooks use is listed here.
+CONFIG_MARKERS=(bat-20251110 btop-config-20250916 starship-20251109
   zshrc-20260116 grc color-man pi-alias codex-alias grok-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias
   nvim-transparency-20260308 nvim-relativenumber-20260929 nvim-plugins-20260926)
 

@@ -35,6 +35,7 @@ setup() {
   : >"$S/ohmydebn-config/btop-config-20250916"
   : >"$S/ohmydebn-config/zshrc-20260116"
   : >"$S/ohmydebn-config/claude-alias"
+  : >"$S/ohmydebn-config/starship-20251109"
   echo log >"$S/ohmydebn-logs/update-1.log"
   echo mine >"$H/.config/btop/btop.conf"
   echo "tokyo-night" >"$H/.config/ohmydebn/current/theme.name"
@@ -59,7 +60,7 @@ assert_contains "reset: says what it resets" "$OUTPUT" "Aether, Alacritty, bat, 
 assert_contains "reset: says what it leaves alone" "$OUTPUT" "Your desktop, panel, keybindings, theme and default apps are not changed."
 assert_contains "reset: reruns the config layer" "$OUTPUT" "config layer ran"
 assert_eq "reset: btop config backed up" "mine" "$(cat "$H"/.config/btop-backup-*/btop.conf 2>/dev/null)"
-for marker in btop-config-20250916 zshrc-20260116 claude-alias; do
+for marker in btop-config-20250916 zshrc-20260116 claude-alias starship-20251109; do
   assert_eq "reset: config marker $marker cleared (so its step writes the file again)" "no" \
     "$([ -e "$S/ohmydebn-config/$marker" ] && echo yes || echo no)"
 done
@@ -84,16 +85,20 @@ mock_cleanup
 
 # Every marker the steps behind those config files use is in the reset's
 # list - a marker added to one of these steps later would otherwise leave
-# its part of the config unwritten after a reset. nvim-plugins-seeded is
-# the exception: it tracks Neovim's plugin data, which a reset keeps.
+# its part of the config unwritten after a reset. That includes the theme
+# hooks the reset reapplies: ohmydebn-theme-set-starship's marker was
+# missed once, and Starship came back on its built-in prompt.
+# nvim-plugins-seeded is the exception: it tracks Neovim's plugin data,
+# which a reset keeps.
 mapfile -t STEP_MARKERS < <(grep -ohE 'ohmydebn-config/[A-Za-z0-9._-]+|\$NVIM_STATE_DIR/[A-Za-z0-9._-]+' \
-  "$REPO_ROOT"/install/config/{bat,btop,zsh,nvim}.sh | sed 's#.*/##' | grep -vx 'nvim-plugins-seeded' | sort -u)
+  "$REPO_ROOT"/install/config/{bat,btop,zsh,nvim}.sh "$REPO_ROOT"/bin/ohmydebn-theme-set* |
+  sed 's#.*/##' | grep -vx 'nvim-plugins-seeded' | sort -u)
 LISTED=$(sed -n '/^CONFIG_MARKERS=(/,/)/p' "$SCRIPT")
 MISSING=""
 for marker in "${STEP_MARKERS[@]}"; do
   grep -qw -- "$marker" <<<"$LISTED" || MISSING+="$marker "
 done
-assert_eq "every marker of the bat, btop, zsh and nvim steps is in CONFIG_MARKERS" "" "$MISSING"
+assert_eq "every marker of the bat, btop, zsh and nvim steps and the theme hooks is in CONFIG_MARKERS" "" "$MISSING"
 assert_eq "the step markers were found at all" "yes" "$([ "${#STEP_MARKERS[@]}" -ge 10 ] && echo yes || echo no)"
 
 test_summary

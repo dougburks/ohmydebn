@@ -175,6 +175,15 @@ TMP_SETTINGS=$(mktemp "$SETTINGS_TARGET.XXXXXX")
 if jq --arg theme "custom:${SLUG}" '.theme = $theme' "$SETTINGS_TARGET" >"$TMP_SETTINGS"; then
   chmod --reference="$SETTINGS_TARGET" "$TMP_SETTINGS"
   mv "$TMP_SETTINGS" "$SETTINGS_TARGET"
+  # Remove the files of OhMyDebn themes applied before: one was written
+  # for every theme ever applied and none was removed. Only now that
+  # settings.json points at the new one, and only OhMyDebn's own
+  # (ohmydebn-*); themes of the user's own are left alone.
+  for OLD_THEME in "$CLAUDE_THEMES_DIR"/ohmydebn-*.json; do
+    if [[ -f "$OLD_THEME" && "$OLD_THEME" != "$THEME_FILE" ]]; then
+      rm -f "$OLD_THEME"
+    fi
+  done
 else
   rm -f "$TMP_SETTINGS"
   echo "ohmydebn-theme-set-claude: $CLAUDE_SETTINGS isn't valid JSON, not selecting the OhMyDebn theme" >&2

@@ -47,6 +47,30 @@ assert_eq "claude, symlinked settings.json: theme set, other keys kept" "custom:
   "$(jq -r '"\(.theme) \(.model)"' "$MOCK_DIR/home/dotfiles/claude-settings.json")"
 mock_cleanup
 
+# --- claude: themes from earlier switches go once the new one is selected ---
+mock_init
+mkdir -p "$MOCK_DIR/home/.claude/themes"
+echo '{}' >"$MOCK_DIR/home/.claude/settings.json"
+for old in ohmydebn-gruvbox ohmydebn-a-aerial-view-of-a-snowy-mountain-palette; do
+  echo '{}' >"$MOCK_DIR/home/.claude/themes/$old.json"
+done
+echo '{}' >"$MOCK_DIR/home/.claude/themes/my-own.json"
+HOME="$MOCK_DIR/home" bash "$REPO_ROOT/bin/ohmydebn-theme-set-claude" ohmydebn "$COLORS" false </dev/null >/dev/null 2>&1
+assert_eq "claude: only the current OhMyDebn theme file is left, the user's own kept" \
+  "my-own.json ohmydebn-ohmydebn.json" "$(cd "$MOCK_DIR/home/.claude/themes" && ls | tr '\n' ' ' | sed 's/ $//')"
+mock_cleanup
+
+# --- claude: settings.json not valid -> no theme file removed, since
+# Claude Code may still be pointing at one of them ---
+mock_init
+mkdir -p "$MOCK_DIR/home/.claude/themes"
+echo '{ not json' >"$MOCK_DIR/home/.claude/settings.json"
+echo '{}' >"$MOCK_DIR/home/.claude/themes/ohmydebn-gruvbox.json"
+HOME="$MOCK_DIR/home" bash "$REPO_ROOT/bin/ohmydebn-theme-set-claude" ohmydebn "$COLORS" false </dev/null >/dev/null 2>&1
+assert_eq "claude, settings not updated: the earlier theme file is kept" "yes" \
+  "$([ -f "$MOCK_DIR/home/.claude/themes/ohmydebn-gruvbox.json" ] && echo yes || echo no)"
+mock_cleanup
+
 # --- cava: no config / no [color] section, hook succeeds ---
 mock_init
 mkdir -p "$MOCK_DIR/home/.config/ohmydebn/current/theme"

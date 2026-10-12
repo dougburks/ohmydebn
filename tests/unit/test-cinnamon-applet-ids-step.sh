@@ -2,8 +2,10 @@
 #
 # Unit tests for install/config/cinnamon-applet-ids.sh: it runs
 # ohmydebn-cinnamon-applet-ids (with a headline) only when the dry run
-# reports duplicate applet IDs, and never fails the install. The script
-# itself is mocked; its planning is tested in test-cinnamon-applet-ids.py.
+# reports duplicate applet IDs, asks for the Cinnamon restart that clears
+# the running panel's stale copy of a renumbered applet, and never fails
+# the install. The script itself is mocked; its planning is tested in
+# test-cinnamon-applet-ids.py.
 
 set -uo pipefail
 
@@ -35,8 +37,11 @@ STUB
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$STEP" >"$MOCK_DIR/step.sh"
 }
 
+# Sourced, as ohmydebn.sh sources it, so the restart request it leaves
+# behind can be read.
 run_step() {
-  PATH="$(mock_path)" bash -e "$MOCK_DIR/step.sh" </dev/null >/dev/null 2>&1
+  RESTART=$(env -u OHMYDEBN_CINNAMON_RESTART_NEEDED PATH="$(mock_path)" bash -ec \
+    'source "$1" >/dev/null 2>&1; echo "${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}"' _ "$MOCK_DIR/step.sh" </dev/null)
   STATUS=$?
 }
 
@@ -46,16 +51,19 @@ assert_eq "duplicates: install continues" "0" "$STATUS"
 assert_eq "duplicates: announced, then fixed" "dry-run
 headline Giving each panel applet its own ID
 fix" "$(cat "$MOCK_CALLS")"
+assert_eq "duplicates: Cinnamon restart requested (the panel shows the old copy until then)" "1" "$RESTART"
 mock_cleanup
 
 setup "" 0
 run_step
 assert_eq "unique IDs already: only the dry run, nothing announced or changed" "dry-run" "$(cat "$MOCK_CALLS")"
+assert_eq "unique IDs already: no restart requested" "" "$RESTART"
 mock_cleanup
 
 setup "Panel applet network@cinnamon.org: ID 10 -> 17" 1
 run_step
 assert_eq "the fix failing never fails the install" "0" "$STATUS"
+assert_eq "the fix failing: no restart requested" "" "$RESTART"
 mock_cleanup
 
 test_summary

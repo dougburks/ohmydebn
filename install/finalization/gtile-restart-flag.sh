@@ -25,8 +25,8 @@
 # (finalization/keybinding.sh used to schedule one too, before it learned
 # to make Cinnamon reload keybindings live). Instead this just sets
 # OHMYDEBN_CINNAMON_RESTART_NEEDED, a plain shell variable shared across
-# every finalization script sourced into this same process (see
-# ohmydebn.sh/all.sh) - finalization/finale.sh, the last step, does the
+# every step sourced into this same process (see ohmydebn.sh, which clears
+# it before the first one) - finalization/finale.sh, the last step, does the
 # one actual restart at the very end if anything asked for it.
 
 GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/null)

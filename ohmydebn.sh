@@ -24,6 +24,14 @@ OHMYDEBN_INSTALL=/usr/share/ohmydebn/install
 # the rest stayed at Cinnamon's defaults and nothing ever retried.
 unset DCONF_PROFILE
 
+# Steps that need Cinnamon restarted (to load an upgraded gTile, or a panel
+# or extension setting it only reads at startup) set this instead of
+# restarting it themselves, and finalization/finale.sh does the one restart
+# at the end. Cleared here, before any step runs, so a value left in the
+# environment never causes a restart nothing asked for, while a request
+# from a config step still reaches finale.sh.
+unset OHMYDEBN_CINNAMON_RESTART_NEEDED
+
 # Packaging
 source $OHMYDEBN_INSTALL/packaging/all.sh
 

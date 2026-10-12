@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# One consolidated restart for anything earlier in finalization that
-# asked for it (today only finalization/gtile-restart-flag.sh; the
-# keybinding step used to as well, until it learned to make Cinnamon
-# reload live) - a step sets OHMYDEBN_CINNAMON_RESTART_NEEDED rather than
+# One consolidated restart for any earlier step that asked for it
+# (finalization/gtile-restart-flag.sh, and config/cinnamon.sh's gTile
+# checkbox fix and config/cinnamon-applet-ids.sh; the keybinding step used
+# to as well, until it learned to make Cinnamon reload live) - a step sets
+# OHMYDEBN_CINNAMON_RESTART_NEEDED (cleared at the top of ohmydebn.sh) rather than
 # restarting immediately, so two independent restarts in the same run
 # can't race each other. Done
 # here, before the "update complete"/"installation complete" messaging

@@ -41,9 +41,11 @@ fi
 echo "Fetching speed test endpoints..."
 fast_token="YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm"
 fast_api_url="https://api.fast.com/netflix/speedtest/v2?https=true&token=$fast_token&urlCount=$url_count"
-fast_urls=$(curl -fsS "$fast_api_url" 2>/dev/null | jq -r '.targets[]?.url // empty')
+# --max-time: a connection that stalls would otherwise hang here for good.
+# mapfile: the URLs carry ? and &, which an unquoted list would glob.
+mapfile -t fast_urls < <(curl -fsS --max-time 15 "$fast_api_url" 2>/dev/null | jq -r '.targets[]?.url // empty')
 
-if [[ -z "$fast_urls" ]]; then
+if [[ ${#fast_urls[@]} -eq 0 ]]; then
   echo "Failed to fetch speed test endpoints - check your connection." >&2
   exec bash
 fi
@@ -82,7 +84,7 @@ run_direction() {
   traffic_pids=()
   local i
   for ((i = 0; i < parallel; i++)); do
-    /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-worker "$direction" $fast_urls &
+    /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-worker "$direction" "${fast_urls[@]}" &
     traffic_pids+=("$!")
   done
 

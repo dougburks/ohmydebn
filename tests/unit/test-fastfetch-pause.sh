@@ -44,6 +44,21 @@ PID_FILE_STATE="gone"
 [ -f "$PID_FILE" ] && PID_FILE_STATE="still present"
 assert_eq "pidfile removed on exit" "gone" "$PID_FILE_STATE"
 
+# Two windows: the second's PID is in the file, and the first closing
+# must leave it, or a theme change no longer refreshes the one still open.
+HOME="$SCRATCH_HOME" bash "$MOCK_DIR/fastfetch-pause-patched.sh" >/dev/null 2>&1 &
+FIRST_PID=$!
+sleep 0.3
+HOME="$SCRATCH_HOME" bash "$MOCK_DIR/fastfetch-pause-patched.sh" >/dev/null 2>&1 &
+SECOND_PID=$!
+sleep 0.3
+kill "$FIRST_PID" 2>/dev/null
+wait "$FIRST_PID" 2>/dev/null
+sleep 0.2
+assert_eq "two windows: closing the first keeps the second's pidfile" "$SECOND_PID" "$(cat "$PID_FILE" 2>/dev/null)"
+kill "$SECOND_PID" 2>/dev/null
+wait "$SECOND_PID" 2>/dev/null
+
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

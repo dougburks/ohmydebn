@@ -19,7 +19,10 @@
 PID_FILE=~/.cache/ohmydebn/fastfetch-pause.pid
 mkdir -p "$(dirname "$PID_FILE")"
 echo $$ >"$PID_FILE"
-trap 'rm -f "$PID_FILE"' EXIT
+# Only while it's still ours: with two windows open the second writes its
+# own PID here, and the first closing used to delete it, so a theme change
+# no longer refreshed the window still open.
+trap '[ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$PID_FILE"' EXIT
 
 render() {
   clear

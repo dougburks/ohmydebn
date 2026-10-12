@@ -15,7 +15,11 @@ fzf_args=(
 pkg_names=$(dpkg -l | awk '/^ii/ {print $2}' | fzf "${fzf_args[@]}")
 
 if [[ -n "$pkg_names" ]]; then
-  # Convert newline-separated selections to space-separated for apt
-  echo "$pkg_names" | tr '\n' ' ' | xargs sudo /usr/bin/apt -y purge
+  mapfile -t pkgs <<<"$pkg_names"
+  # No -y: apt lists everything it will remove - which can be far more than
+  # what was picked, since packages that depend on those go too - and asks
+  # before going ahead. With -y it used to purge all of it straight away.
+  # Run directly, not through xargs, which gives apt no terminal to ask on.
+  sudo /usr/bin/apt purge "${pkgs[@]}"
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi

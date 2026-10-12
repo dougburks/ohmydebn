@@ -306,28 +306,6 @@ if [[ -f "$INDEX_THEME" ]]; then
   sed -i "s/MetacityTheme=$TEMPLATE_NAME/MetacityTheme=$GENERATED_THEME_NAME/g" "$INDEX_THEME"
 fi
 
-# Also generate hdpi and xhdpi variants if they exist
-for suffix in "-hdpi" "-xhdpi"; do
-  TEMPLATE_VARIANT="$HOME/.themes/${TEMPLATE_NAME}${suffix}"
-  OUTPUT_VARIANT="$HOME/.themes/${GENERATED_THEME_NAME}${suffix}"
-
-  if [[ -d "$TEMPLATE_VARIANT" ]]; then
-    rm -rf "$OUTPUT_VARIANT"
-    cp -r "$TEMPLATE_VARIANT" "$OUTPUT_VARIANT"
-
-    # Update index.theme in variant
-    VARIANT_INDEX="$OUTPUT_VARIANT/index.theme"
-    if [[ -f "$VARIANT_INDEX" ]]; then
-      sed -i "s/Name=${TEMPLATE_NAME}${suffix}/Name=${GENERATED_THEME_NAME}${suffix}/g" "$VARIANT_INDEX"
-    fi
-
-    # Set proper ownership for variant
-    if [[ -d "$OUTPUT_VARIANT" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
-      chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_VARIANT" 2>/dev/null || true
-    fi
-  fi
-done
-
 # Set proper ownership for the generated theme directory
 if [[ -d "$OUTPUT_DIR" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
   chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_DIR" 2>/dev/null || true
@@ -350,10 +328,7 @@ gsettings set org.cinnamon.theme name "$GENERATED_THEME_NAME"
 # theme regenerates its folder. A symlink is someone's own and is left
 # alone.
 for GENERATED in "$HOME"/.themes/ohmydebn-*; do
-  case "$(basename "$GENERATED")" in
-  "$GENERATED_THEME_NAME" | "$GENERATED_THEME_NAME-hdpi" | "$GENERATED_THEME_NAME-xhdpi") continue ;;
-  esac
-  if [[ -d "$GENERATED" && ! -L "$GENERATED" ]]; then
+  if [[ "$(basename "$GENERATED")" != "$GENERATED_THEME_NAME" && -d "$GENERATED" && ! -L "$GENERATED" ]]; then
     rm -rf "$GENERATED"
   fi
 done

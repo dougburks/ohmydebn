@@ -33,7 +33,7 @@ STUB
 for old in ohmydebn-gruvbox ohmydebn-a-aerial-view-of-a-snowy-mountain-palette ohmydebn-gruvbox-hdpi; do
   mkdir -p "$T/$old"
 done
-mkdir -p "$T/ohmydebn-nord-hdpi" "$T/My-Own-Theme" "$MOCK_DIR/dev-theme"
+mkdir -p "$T/My-Own-Theme" "$MOCK_DIR/dev-theme"
 ln -s "$MOCK_DIR/dev-theme" "$T/ohmydebn-dev-link"
 
 sed "s#/usr/share/ohmydebn-templates#$TEMPLATES#g" "$REPO_ROOT/bin/ohmydebn-theme-set-cinnamon" >"$MOCK_DIR/hook"
@@ -43,7 +43,6 @@ STATUS=$?
 assert_eq "applies: exits 0" "0" "$STATUS"
 assert_contains "applies: Cinnamon is switched to the new theme" "$(cat "$MOCK_CALLS")" "gsettings set org.cinnamon.theme name ohmydebn-nord"
 assert_eq "the new theme is generated" "yes" "$([ -f "$T/ohmydebn-nord/index.theme" ] && echo yes || echo no)"
-assert_eq "the new theme's hdpi variant is kept" "yes" "$([ -d "$T/ohmydebn-nord-hdpi" ] && echo yes || echo no)"
 for old in ohmydebn-gruvbox ohmydebn-a-aerial-view-of-a-snowy-mountain-palette ohmydebn-gruvbox-hdpi; do
   assert_eq "an older generated theme is removed: $old" "no" "$([ -e "$T/$old" ] && echo yes || echo no)"
 done

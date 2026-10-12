@@ -563,11 +563,8 @@ def _cache_path(path, target_w, target_h):
     future change to load_cover_pixbuf's own crop/scale math) naturally
     misses the cache and re-decodes, with no separate invalidation logic
     needed: the old entry is simply never looked up again, just an orphaned
-    file under CAROUSEL_CACHE_DIR from then on - same tradeoff
-    ohmydebn-menu-picker's own icon cache already makes (no eviction there
-    either), acceptable here too since even every theme/background/size
-    combination this repo ships ever getting cached at once tops out
-    around 40-90MB of JPEGs, measured by hand.  Returns None (skip caching
+    file under CAROUSEL_CACHE_DIR until _evict_cache() trims the folder
+    back to CAROUSEL_CACHE_MAX_BYTES (oldest first).  Returns None (skip caching
     entirely for this call) rather than raising when the source file
     vanishes out from under a caller mid-decode - orphaned symlinks in a
     user's backgrounds/ override dir aren't this function's problem to
@@ -851,7 +848,7 @@ def make_fixed_thumb_frame(w, h, css_name="carousel-side", opacity=SIDE_OPACITY)
     fix; this carousel doesn't letterbox anything any more, on the theory
     that the real desktop background gets cropped to fill the screen
     either way (Cinnamon's default "zoom" picture-options - confirmed via
-    ohmydebn-theme-bg-next's own gsettings call, no picture-options
+    ohmydebn-theme-bg-set's own gsettings call, no picture-options
     override anywhere in this repo), so a smaller preview that shows the
     full, uncropped frame was never actually representative of what
     Enter's about to do, on top of visibly changing size theme to theme
@@ -2091,8 +2088,6 @@ class Carousel(Gtk.Window):
             return None
 
         self._decoder.submit(1, lambda: generation == self._prefetch_gen, collect, enqueue)
-
-        threading.Thread(target=work, daemon=True).start()
 
     def on_key_press(self, widget, event):
         keyval = event.keyval

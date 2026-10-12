@@ -3,7 +3,8 @@
 # Note: We cannot use `jq` to update settings.json because it’s JSONC (allows comments),
 # which jq doesn’t support.
 
-# Parameters: EDITOR_CMD SETTINGS_PATH SKIP_FLAG EDITOR_NAME
+# Parameters: [EDITOR_CMD] [SETTINGS_PATH] [SKIP_FLAG], VS Code's by default
+# (ohmydebn-theme-set-antigravity passes Antigravity's)
 EDITOR_CMD="${1:-code}"
 SETTINGS_PATH="${2:-$HOME/.config/Code/User/settings.json}"
 SKIP_FLAG="${3:-$HOME/.local/state/ohmydebn/toggles/skip-vscode-theme-changes}"

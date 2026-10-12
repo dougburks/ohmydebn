@@ -1,11 +1,17 @@
 #!/bin/bash
 #
-# ohmydebn-theme-set-colors-delete: Delete temporary colors source if in /tmp
+# ohmydebn-theme-set-colors-delete: Delete the temporary colors source
+# ohmydebn-theme-set-colors made, never a theme's own file
 # Usage: ohmydebn-theme-set-colors-delete <colors-source>
 #
+# The temporary file comes from `mktemp`, which puts it in $TMPDIR when
+# that's set; this only looked in /tmp, so with TMPDIR set the file was
+# left behind on every theme switch.
 
 set -e
 
-if [[ -n "$1" && -f "$1" && "$1" == /tmp/* ]]; then
+TEMP_DIR="${TMPDIR:-/tmp}"
+TEMP_DIR="${TEMP_DIR%/}"
+if [[ -n "${1:-}" && -f "$1" && "$1" == "$TEMP_DIR"/* ]]; then
   rm -f "$1"
 fi

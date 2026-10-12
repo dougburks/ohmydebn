@@ -60,8 +60,30 @@ has_session_bus() { gsettings list-schemas >/dev/null 2>&1; }
 gs() { gsettings get "$@" 2>/dev/null; }
 is_systemd() { [ -d "$SYSROOT/run/systemd/system" ]; }
 
+# The display scale Cinnamon is using, for the header: 2 on a HiDPI
+# screen at 200%, which changes how gTile sizes its grid and gaps. Asked
+# of Cinnamon itself (global.ui_scale), since the scaling-factor setting
+# is usually 0, meaning "auto"; that setting is the fallback when
+# Cinnamon can't be asked (no session, or over ssh).
+ui_scale() {
+  local scale raw
+  scale=$(gdbus call --session --timeout 3 --dest org.Cinnamon --object-path /org/Cinnamon \
+    --method org.Cinnamon.Eval global.ui_scale 2>/dev/null | sed -n "s/^(true, '\([0-9.]*\)')\$/\1/p")
+  if [ -n "$scale" ]; then
+    echo "$scale"
+    return
+  fi
+  raw=$(gs org.cinnamon.desktop.interface scaling-factor)
+  raw=${raw##* }
+  case "$raw" in
+  0) echo "auto" ;;
+  *[!0-9]* | "") echo "unknown" ;;
+  *) echo "$raw" ;;
+  esac
+}
+
 echo "OhMyDebn doctor - $(date '+%Y-%m-%d %H:%M')"
-echo "user: $(id -un)  home: $HOME  desktop: ${XDG_CURRENT_DESKTOP:-none}  display: ${DISPLAY:-none}"
+echo "user: $(id -un)  home: $HOME  desktop: ${XDG_CURRENT_DESKTOP:-none}  display: ${DISPLAY:-none}  scale: $(ui_scale)"
 
 # ---------------------------------------------------------------- distro
 section "Distro"

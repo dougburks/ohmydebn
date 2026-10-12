@@ -171,6 +171,7 @@ EOF2
 case "$*" in
 "list-schemas") exit 0 ;;
 "get org.cinnamon enabled-extensions") echo "['gTile@OhMyDebn']" ;;
+"get org.cinnamon.desktop.interface scaling-factor") [ -n "${MOCK_SCALING_FACTOR:-}" ] && echo "uint32 $MOCK_SCALING_FACTOR" || echo "''" ;;
 "get org.cinnamon.desktop.keybindings custom-list") echo "['custom-0', 'custom-1'${MOCK_EXTRA_LIST:-}]" ;;
 *custom-0/\ command) echo "'/usr/share/ohmydebn/bin/ohmydebn-browser-tiled'" ;;
 *custom-1/\ command) echo "'${MOCK_CUSTOM1:-/usr/share/ohmydebn/bin/ohmydebn-update-gui}'" ;;
@@ -202,7 +203,16 @@ EOF2
 [ "$*" = "list --upgradable" ] && [ -n "${MOCK_UPGRADABLE:-}" ] && printf '%s/trixie 9.9 all [upgradable from: 1.0]\n' $MOCK_UPGRADABLE
 exit 0
 EOF2
-  for t in toilet ttfx alacritty gdbus notify-send script flock loginctl; do
+  # gdbus answers only the doctor's display-scale question, and only when
+  # a test sets MOCK_UI_SCALE (as Cinnamon's Eval would reply).
+  mock_bin gdbus <<'EOF2'
+#!/bin/bash
+if [[ "$*" == *org.Cinnamon.Eval* && -n "${MOCK_UI_SCALE:-}" ]]; then
+  echo "(true, '$MOCK_UI_SCALE')"
+fi
+exit 0
+EOF2
+  for t in toilet ttfx alacritty notify-send script flock loginctl; do
     mock_bin "$t" <<'EOF2'
 #!/bin/bash
 exit 0
@@ -524,6 +534,19 @@ PATH="$(mock_path)" bash "$MOCK_BIN/ohmydebn-doctor-pause" </dev/null >/dev/null
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "doctor-pause: runs the doctor" "$CALLS" "ohmydebn-doctor"
 assert_contains "doctor-pause: keeps the window open afterwards even when the doctor reports failures" "$CALLS" "ohmydebn-headline Press Enter to close this window"
+mock_cleanup
+
+# --- the header's display scale: Cinnamon's own answer, else the setting ---
+build_machine yes
+run_doctor MOCK_UI_SCALE=2
+assert_contains "scale: Cinnamon's ui_scale shown (a 2x HiDPI screen)" "$OUTPUT" "display: :0  scale: 2"
+run_doctor MOCK_SCALING_FACTOR=0
+assert_contains "scale: Cinnamon can't be asked, setting 0 shows as auto" "$OUTPUT" "scale: auto"
+run_doctor MOCK_SCALING_FACTOR=2
+assert_contains "scale: Cinnamon can't be asked, a fixed setting is shown" "$OUTPUT" "scale: 2"
+run_doctor
+assert_contains "scale: nothing to ask shows unknown" "$OUTPUT" "scale: unknown"
+assert_eq "scale: the header line changes no result" "0" "$EXIT_CODE"
 mock_cleanup
 
 test_summary

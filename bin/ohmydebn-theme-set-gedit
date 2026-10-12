@@ -12,7 +12,7 @@ set -e
 # silently skipped instead of aborting this script under its own `set -e`,
 # which would in turn abort ohmydebn-theme-set (also `set -e`) and skip
 # every theming step queued after gedit: starship, antigravity, cava, eza,
-# fastfetch, opencode, vscode. This runs on every theme switch, so a warning
+# fastfetch, logo, opencode, vscode. This runs on every theme switch, so a warning
 # here would repeat every time - not worth it for a known, permanent version
 # gate that isn't actionable.
 

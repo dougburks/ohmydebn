@@ -15,4 +15,9 @@
 
 set -euo pipefail
 
+if [ $# -lt 1 ]; then
+  echo "Usage: ohmydebn-launch-webapp <url>" >&2
+  exit 1
+fi
+
 exec /usr/share/ohmydebn/bin/ohmydebn-launch-tiled 2 2 1 0 1 2 -- /usr/share/ohmydebn/bin/ohmydebn-launch-webapp-worker "$1"

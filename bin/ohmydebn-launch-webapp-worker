@@ -13,8 +13,9 @@ DEFAULT_BROWSER=$(xdg-settings get default-web-browser)
 
 # Check if the default browser is Firefox, Chromium, or a Chromium-based
 # fork - all of these can open a dedicated window with no tabs (--app= for
-# the Chromium family, --kiosk for Firefox, which has no --app=), unlike a plain xdg-open which just opens a normal tab in
-# whatever's already running. Each fork is still a separate binary though,
+# the Chromium family, --kiosk for Firefox, which has no --app=), unlike a
+# plain xdg-open which just opens a normal tab in whatever's already
+# running. Each fork is still a separate binary though,
 # so the desktop-id substring has to map to the right one rather than
 # lumping every Chromium-family browser into a literal `chromium` call:
 # Google Chrome's own .desktop file is "google-chrome.desktop" regardless

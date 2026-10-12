@@ -98,7 +98,7 @@ if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
     RC=$?
   fi
   [ "$RC" -eq 213 ] || exit "$RC"
-  $DIR/bin/ohmydebn-headline "Another OhMyDebn update is already running"
+  "$DIR/bin/ohmydebn-headline" "Another OhMyDebn update is already running"
   HOLDER=$(cat "$LOCK_FILE" 2>/dev/null || echo '?')
   if [[ "$HOLDER" =~ ^[0-9]+$ ]] && ! kill -0 "$HOLDER" 2>/dev/null; then
     # A machine still on the old descriptor-based lock got here with a
@@ -116,9 +116,9 @@ if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
 fi
 echo "$$" >"$LOCK_FILE"
 
-VERSION=$($DIR/bin/ohmydebn-version)
+VERSION=$("$DIR/bin/ohmydebn-version")
 
-$DIR/bin/ohmydebn-headline "OhMyDebn Update - current OhMyDebn version: $VERSION"
+"$DIR/bin/ohmydebn-headline" "OhMyDebn Update - current OhMyDebn version: $VERSION"
 
 if [ "$ASSUME_YES" = false ]; then
   cat <<EOF
@@ -174,7 +174,7 @@ sudo /usr/bin/chronyc makestep >/dev/null 2>&1 || true
 # "Err:"/"Failed to fetch" lines are matchable in any locale.
 OHMYDEBN_REPO_HOSTS="packages(-testing)?\.ohmydebn\.org"
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
-  $DIR/bin/ohmydebn-headline "Checking for an updated ohmydebn package"
+  "$DIR/bin/ohmydebn-headline" "Checking for an updated ohmydebn package"
   APT_UPDATE_OUT=$(mktemp)
   # apt prints "WARNING: apt does not have a stable CLI interface" whenever
   # its stdout isn't a terminal, and the tee below makes it a pipe.
@@ -188,22 +188,23 @@ if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   FAILED_SOURCES=$(grep -E '^(Err:|W: Failed to fetch )' "$APT_UPDATE_OUT" | grep -oE 'https?://[^ ]+' | sort -u || true)
   rm -f "$APT_UPDATE_OUT"
   if [ "$APT_UPDATE_STATUS" -ne 0 ] || grep -qE "$OHMYDEBN_REPO_HOSTS" <<<"$FAILED_SOURCES"; then
-    $DIR/bin/ohmydebn-headline "Could not refresh the OhMyDebn package repository - update stopped"
+    "$DIR/bin/ohmydebn-headline" "Could not refresh the OhMyDebn package repository - update stopped"
     echo "Nothing has been changed. Check your Internet connection and the apt output"
     echo "above, then run ohmydebn-update again."
     exit 1
   fi
   if [ -n "$FAILED_SOURCES" ]; then
-    $DIR/bin/ohmydebn-headline "Some package repositories could not be refreshed - continuing"
+    "$DIR/bin/ohmydebn-headline" "Some package repositories could not be refreshed - continuing"
     echo "These sources failed and were skipped (their packages won't update this run):"
-    printf '  %s\n' $FAILED_SOURCES
+    mapfile -t FAILED_LIST <<<"$FAILED_SOURCES"
+    printf '  %s\n' "${FAILED_LIST[@]}"
     echo "If one of them is no longer needed, remove it from /etc/apt/sources.list.d/."
   fi
   if ! sudo /usr/bin/apt -y install ohmydebn; then
-    $DIR/bin/ohmydebn-headline "Could not install the latest ohmydebn package - update stopped"
+    "$DIR/bin/ohmydebn-headline" "Could not install the latest ohmydebn package - update stopped"
     echo "See the apt output above, then run ohmydebn-update again."
     exit 1
   fi
 fi
 
-bash $DIR/install.sh
+bash "$DIR/install.sh"

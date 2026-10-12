@@ -1,9 +1,8 @@
 #!/bin/bash
 #
 # ohmydebn-file-manager: launches the user's default file manager with no
-# path (opens at its own default, usually home). Mirrors ohmydebn-browser's
-# own resolve-then-launch approach: ask xdg-mime which app handles
-# directories, hand its .desktop id to gtk-launch, falling back to nemo
+# path (opens at its own default, usually home): ask xdg-mime which app
+# handles directories, hand its .desktop id to gtk-launch, falling back to nemo
 # directly (Cinnamon's own file manager, already required by this
 # desktop) if that lookup or launch fails.
 

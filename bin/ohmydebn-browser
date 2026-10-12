@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # ohmydebn-browser: launches the user's default web browser with no URL,
-# for a plain "just open my browser" keypress. Bound to Super+B (see
-# install/keybinding/keybinding-custom.txt), replacing the old hardcoded
+# for a plain "just open my browser" keypress. Super+B runs it through
+# ohmydebn-browser-tiled (see install/keybinding/keybinding-custom.txt), replacing the old hardcoded
 # /usr/bin/gnome-www-browser target - a Debian alternatives name GNOME
 # stopped shipping years ago, so on most systems it's unset and the
 # keybinding silently did nothing.

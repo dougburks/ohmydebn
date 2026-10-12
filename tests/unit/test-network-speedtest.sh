@@ -33,8 +33,16 @@ sed -e "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" -e 's/^duration=.*/duration=1/' -
 
 # A directory a glob of that URL would match, in the directory it runs from.
 mkdir -p "$MOCK_DIR/cwd/https:/example.com/xya=1&b=2"
-(cd "$MOCK_DIR/cwd" && PATH="$(mock_path)" bash "$MOCK_DIR/speedtest" </dev/null >/dev/null 2>&1)
+# A shell left waiting on stdin would hang here: the run used to end in
+# `exec bash`, from when it had a window of its own.
+mkfifo "$MOCK_DIR/tty"
+exec 3<>"$MOCK_DIR/tty"
+OUTPUT=$(cd "$MOCK_DIR/cwd" && PATH="$(mock_path)" timeout 20 bash "$MOCK_DIR/speedtest" <&3 2>&1)
+STATUS=$?
+exec 3<&-
 CALLS=$(cat "$MOCK_CALLS")
+assert_eq "ends by itself, without a nested shell" "0" "$STATUS"
+assert_contains "says it's done" "$OUTPUT" "Speed test complete."
 assert_contains "the endpoint fetch has a time limit" "$CALLS" "curl -fsS --max-time"
 assert_contains "the worker gets the URL exactly, not globbed" "$CALLS" "worker down args=2 url=https://example.com/*?a=1&b=2"
 

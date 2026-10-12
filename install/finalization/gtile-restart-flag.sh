@@ -38,7 +38,7 @@ GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/nu
 GTILE_MIN_VERSION="2.3.1"
 if [ -z "$GTILE_INSTALLED_VERSION" ] || ! dpkg --compare-versions "$GTILE_INSTALLED_VERSION" ge "$GTILE_MIN_VERSION"; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "WARNING: ohmydebn-gtile is out of date"
-  echo "Installed: ${GTILE_INSTALLED_VERSION:-none}, need >= $GTILE_MIN_VERSION - apps launched via hotkeys/menu won't auto-tile until it's upgraded."
+  echo "Installed: ${GTILE_INSTALLED_VERSION:-none}, need >= $GTILE_MIN_VERSION - apps launched from keybindings or the menu won't auto-tile until it's upgraded."
   echo "Run: sudo apt install --only-upgrade ohmydebn-gtile"
 fi
 

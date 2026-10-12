@@ -88,6 +88,8 @@ EOF
 
 chmod +x "$DESKTOP_FILE"
 
-if [ "$#" -ne 4 ]; then
+# Only when asked interactively, like ohmydebn-webapp-install: with the
+# details given as arguments (3, or the older 4), the caller is a script.
+if [ "$#" -ne 3 ] && [ "$#" -ne 4 ]; then
   echo -e "You can now find $APP_NAME using the app launcher (SUPER + R)\n"
 fi

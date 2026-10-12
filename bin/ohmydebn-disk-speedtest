@@ -20,7 +20,7 @@ set -uo pipefail
 
 if [[ -n "${1:-}" && ! -d "$1" ]]; then
   echo "Usage: ohmydebn-disk-speedtest [target-dir]" >&2
-  exec bash
+  exit 1
 fi
 target_dir="${1:-${XDG_CACHE_HOME:-$HOME/.cache}/ohmydebn}"
 parallel=4
@@ -62,21 +62,17 @@ cleanup() {
   stop_workers
   rm -f ${chunk_file:+"$chunk_file"} "${test_files[@]:-}"
 }
-# Only a safety net for this process being killed before it reaches its
-# own exit path below - every one of those paths ends in `exec bash`, not
-# a normal `exit`, precisely so a failure or Ctrl+D still hands back a
-# real shell instead of the whole terminal window closing - and `exec`
-# replaces this process outright rather than exiting it, which never
-# fires an EXIT trap. Confirmed live: without an explicit `cleanup` call
-# right before every one of those `exec bash`es (see finish() below),
-# every scratch file this run created was left behind on the disk it had
-# just finished measuring.
+# Removes this run's scratch files however it ends - finishing, failing, or
+# being interrupted.
 trap cleanup EXIT
 
-# The one real exit path every branch below funnels through.
+# The one exit path every branch below funnels through: 1 for a failure,
+# 0 at the end. It used to end in `exec bash`, from when this ran in a
+# window of its own that had to stay open; it's run from the user's own
+# terminal now (the menu opens the graphical version), where that left a
+# nested shell behind.
 finish() {
-  cleanup
-  exec bash
+  exit "${1:-0}"
 }
 
 format_mbps() {
@@ -95,7 +91,7 @@ source_dev=${source_dev%%\[*} # Strip a btrfs subvolume suffix: /dev/sda2[/@home
 
 if [[ "$source_dev" != /dev/* ]]; then
   echo "Cannot find a disk behind $target_dir" >&2
-  finish
+  finish 1
 fi
 
 dev=$(readlink -f "$source_dev")
@@ -103,13 +99,13 @@ dev=${dev##*/}
 
 if [[ ! -r "/sys/class/block/$dev/stat" ]]; then
   echo "No I/O statistics for $dev" >&2
-  finish
+  finish 1
 fi
 
 available_mb=$(df --output=avail -m "$target_dir" | tail -1 | tr -d ' ')
 if ((available_mb < parallel * file_mb * 2)); then
   echo "Need at least $((parallel * file_mb * 2))MB free on $target_dir" >&2
-  finish
+  finish 1
 fi
 
 # Names the physical disk under test, walking dm-crypt/LVM layers and the
@@ -155,7 +151,7 @@ worker_pids=()
 
 if ((stage_failed)) || [[ ! -s "${test_files[0]}" ]]; then
   echo "Direct disk I/O is not available on $target_dir" >&2
-  finish
+  finish 1
 fi
 
 device_sectors() {
@@ -217,5 +213,5 @@ run_phase read "Read"
 run_phase write "Write"
 
 echo
-echo "Speed test complete. Press Ctrl+D or type 'exit' to close."
+echo "Speed test complete."
 finish

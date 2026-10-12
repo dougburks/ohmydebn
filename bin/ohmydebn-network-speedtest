@@ -35,7 +35,7 @@ iface=$(ip route get "$probe" 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if 
 
 if [[ -z "$iface" || ! -r "/sys/class/net/$iface/statistics/rx_bytes" || ! -r "/sys/class/net/$iface/statistics/tx_bytes" ]]; then
   echo "No active network interface found." >&2
-  exec bash
+  exit 1
 fi
 
 echo "Fetching speed test endpoints..."
@@ -47,7 +47,7 @@ mapfile -t fast_urls < <(curl -fsS --max-time 15 "$fast_api_url" 2>/dev/null | j
 
 if [[ ${#fast_urls[@]} -eq 0 ]]; then
   echo "Failed to fetch speed test endpoints - check your connection." >&2
-  exec bash
+  exit 1
 fi
 
 traffic_pids=()
@@ -123,5 +123,4 @@ run_direction down "Download" rx
 run_direction up "Upload" tx
 
 echo
-echo "Speed test complete. Press Ctrl+D or type 'exit' to close."
-exec bash
+echo "Speed test complete."

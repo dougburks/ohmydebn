@@ -550,7 +550,10 @@ def acquire_instance_lock(path):
     fd open for as long as the instance lives, closing it releases the
     lock - or (None, holder_pid) when another live process holds it
     (holder_pid may be None if its pid couldn't be read)."""
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    # O_NOFOLLOW: in the /tmp fallback (no XDG_RUNTIME_DIR) another user
+    # could plant this name as a link to a file of ours, which the
+    # truncate below would then empty.
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:

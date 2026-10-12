@@ -15,7 +15,7 @@ read -r
 
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
 
-curl -s $URL | grep github.com | cut -d\" -f2 | while read -r REPO_URL; do
+curl -s "$URL" | grep github.com | cut -d\" -f2 | while read -r REPO_URL; do
   # Same guard as ohmydebn-theme-install: the page this scrapes is a
   # substring match, not a real HTML parse, so a URL here is only as
   # trustworthy as the page's content.

@@ -12,10 +12,14 @@ if ! dpkg -s "powershell" >/dev/null 2>&1; then
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
   sudo mkdir -p /usr/share/keyrings
-  TMPDIR=$(mktemp -d)
-  curl -fsSL -o "$TMPDIR/packages-microsoft-prod.deb" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
-  sudo /usr/bin/dpkg -i "$TMPDIR/packages-microsoft-prod.deb"
-  rm -rf "$TMPDIR"
+  # Microsoft's Debian 13 repo on every supported distro, Ubuntu-based ones
+  # included, on purpose: it's the only one of its repos with PowerShell
+  # for both amd64 and arm64 (checked 2026-10-12 - the Ubuntu 26.04 repo
+  # has no PowerShell at all and the 24.04 one has no arm64 build), and it
+  # carries the newer 7.6 line. Its package only depends on libraries
+  # Ubuntu provides under the same names (libgcc1, libssl3 via the t64
+  # packages, and any libicu from 60 to 106).
+  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "Microsoft's package repository setup" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
 
   # packages-microsoft-prod.deb self-registers packages.microsoft.com as
   # an apt source (see /etc/apt/sources.list.d/microsoft-prod.list) - same

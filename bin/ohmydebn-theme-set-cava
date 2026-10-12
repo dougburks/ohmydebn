@@ -141,8 +141,27 @@ update_cava_theme() {
     # Update cava config
     # First, check if there's already a color section with gradient settings
     if grep -q "^\[color\]" "$CAVA_CONFIG"; then
-        # Backup original config
-        cp "$CAVA_CONFIG" "$CAVA_CONFIG.backup.$(date +%Y%m%d-%H%M%S)"
+        # One backup, of the config as it was before OhMyDebn first changed
+        # its colors - a config of the user's own survives that way. This
+        # used to copy the whole config before EVERY theme switch, piling
+        # up config.backup.<time> files without limit (151 on one machine).
+        # Those older per-switch backups are folded in here: the oldest one
+        # is that pre-OhMyDebn config, so it becomes the single backup, and
+        # the rest go. Reruns harmlessly, so it needs no marker.
+        local first_backup="$CAVA_CONFIG.backup-before-ohmydebn"
+        local -a old_backups=("$CAVA_CONFIG".backup.[0-9]*)
+        if [[ ${#old_backups[@]} -gt 0 ]]; then
+            if [[ ! -e "$first_backup" ]]; then
+                mv "${old_backups[0]}" "$first_backup"
+                old_backups=("${old_backups[@]:1}")
+            fi
+            if [[ ${#old_backups[@]} -gt 0 ]]; then
+                rm -f "${old_backups[@]}"
+            fi
+        fi
+        if [[ ! -e "$first_backup" ]]; then
+            cp "$CAVA_CONFIG" "$first_backup"
+        fi
         
         # Remove old gradient and background settings from the color section
         sed -i '/^\[color\]/,/^\[/ { /^background\s*=/d; /^gradient\s*=/d; /^gradient_color_[0-9]\+\s*=/d; /^$/d; }' "$CAVA_CONFIG"

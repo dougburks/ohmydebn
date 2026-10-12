@@ -185,6 +185,17 @@ window {{
 }}
 """
 
+# The rows shown instead of VMs, as short fixed lines rather than one
+# wrapped label: a wrapping label's height depends on the width GTK settles
+# on, and the window's height was worked out for one line, so the second
+# was cut off at the bottom (seen in a VM).
+NO_VIRSH_MESSAGE = (
+    "Virtual Machine Manager isn't installed.\n"
+    "Install it from Apps > Virtualization,\n"
+    "then create a virtual machine."
+)
+NO_VMS_MESSAGE = "There are no virtual machines yet."
+
 STATUS_LABELS = {
     "passt": ("Using passt", "status-ok"),
     "needs_upgrade": ("Not using passt", "status-needs-upgrade"),
@@ -248,23 +259,19 @@ class PasstUpgradeWindow(Gtk.Window):
         # without virsh (no Virtual Machine Manager or Boxes) this used to
         # fail at startup with no window at all.
         if not os.path.exists(VIRSH):
-            self.listbox.add(self._message_row(
-                "Virtual Machine Manager isn't installed. Install it from "
-                "Apps > Virtualization, then create a virtual machine."
-            ))
+            self.listbox.add(self._message_row(NO_VIRSH_MESSAGE))
         else:
             names = list_vm_names()
             for name in names:
                 self.listbox.add(self._build_row(name))
             if not names:
-                self.listbox.add(self._message_row("There are no virtual machines yet."))
+                self.listbox.add(self._message_row(NO_VMS_MESSAGE))
         self.listbox.show_all()
 
     def _message_row(self, text):
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
         label = Gtk.Label(label=text, xalign=0)
-        label.set_line_wrap(True)
         label.get_style_context().add_class("vm-state")
         row.add(label)
         return row

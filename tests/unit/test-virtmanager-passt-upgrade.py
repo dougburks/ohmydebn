@@ -209,6 +209,13 @@ finally:
     os.environ["HOME"] = old_home if old_home is not None else ""
     shutil.rmtree(fake_home)
 
+# The message rows aren't wrapped (a wrapped one was cut off at the
+# bottom), so each line has to fit the window's 560px default width on its
+# own: about 48 characters of the 11pt monospace font, after the padding.
+for name in ("NO_VIRSH_MESSAGE", "NO_VMS_MESSAGE"):
+    longest = max(len(line) for line in getattr(pu, name).split("\n"))
+    check(f"{name}: every line fits the window unwrapped ({longest} characters)", longest <= 48)
+
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 raise SystemExit(0 if TESTS_FAILED == 0 else 1)

@@ -113,6 +113,19 @@ if [ ! -f $KEYBINDING_STATE ]; then
   touch $KEYBINDING_STATE
 fi
 
+# The Super + K keybinding was renamed from "Hotkeys" to "Keybindings" in
+# 4.9.0 without a new marker above, so installs from before still show the
+# old name in Cinnamon's keyboard settings. Rename just that, rather than
+# bumping the marker, which would rewrite every stock keybinding - and
+# only while the slot still opens OhMyDebn's hotkeys page, so a slot a
+# user gave another job keeps the name they gave it. Runs on every update
+# and changes nothing once renamed.
+HOTKEYS_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-4/"
+if [ "$(gsettings get "$HOTKEYS_SLOT" name 2>/dev/null)" = "'Hotkeys'" ] &&
+  [[ "$(gsettings get "$HOTKEYS_SLOT" command 2>/dev/null)" == *"ohmydebn.org/hotkeys"* ]]; then
+  gsettings set "$HOTKEYS_SLOT" name "Keybindings" || true
+fi
+
 # The user's own keybindings (~/.config/ohmydebn/keybindings.txt), layered on
 # top of the stock ones. Outside the state gate on purpose: it has to run when
 # the user's file changed even though the stock keybindings didn't. It gates itself

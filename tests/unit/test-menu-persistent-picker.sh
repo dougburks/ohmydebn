@@ -24,6 +24,14 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-menu persistent picker ==="
 
+# A scratch HOME for the whole file: the menu caches its search index in
+# ~/.local/state/ohmydebn-config, keyed by the menu script's path, and these
+# tests run patched copies from temporary paths - so every run used to leave
+# two more cache files in the real home directory.
+TEST_HOME=$(mktemp -d)
+export HOME="$TEST_HOME"
+trap 'rm -rf "$TEST_HOME"' EXIT
+
 # Strips the script's last line, its top-level `show_main_menu` call, so
 # sourcing this file only defines functions - doesn't immediately try to
 # show a real menu.

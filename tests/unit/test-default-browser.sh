@@ -308,12 +308,18 @@ setup_installer() {
   for name in ohmydebn-headline ohmydebn-brave-repo; do
     ln -sf "$MOCK_BIN/$name" "$ROOT/usr/share/ohmydebn/bin/$name"
   done
-  for name in curl gpg; do
-    mock_bin "$name" <<'EOF2'
+  mock_bin gpg <<'EOF2'
 #!/bin/bash
 exit 0
 EOF2
-  done
+  # Writes whatever -o names, as the real curl would, so a downloaded .deb
+  # exists for ohmydebn-apt-install-deb (the real helper, copied in below).
+  mock_bin curl <<'EOF2'
+#!/bin/bash
+while [ $# -gt 0 ]; do [ "$1" = "-o" ] && : >"$2"; shift; done
+exit 0
+EOF2
+  cp "$REPO_ROOT/bin/ohmydebn-apt-install-deb" "$ROOT/usr/share/ohmydebn/bin/"
   mock_bin uname <<'EOF2'
 #!/bin/bash
 echo x86_64
@@ -333,9 +339,11 @@ for spec in "ohmydebn-brave-origin-install brave-origin skip" \
   setup_installer "$installer"
   run_input "" "$MOCK_DIR/installer.sh"
   CALLS=$(cat "$MOCK_CALLS")
-  assert_eq "$installer: installs the package" "yes" "$(grep -qE "apt -y install $pkg|dpkg -i" "$MOCK_CALLS" && echo yes || echo no)"
+  # A vendor .deb (Google Chrome) goes through ohmydebn-apt-install-deb,
+  # so it shows up as an apt install of the downloaded file.
+  assert_eq "$installer: installs the package" "yes" "$(grep -qE "apt -y install ($pkg|.*\.deb)" "$MOCK_CALLS" && echo yes || echo no)"
   assert_eq "$installer: asks about the default browser, after the install" "yes" \
-    "$(grep -A99 -E "apt -y install|dpkg -i" "$MOCK_CALLS" | grep -q "ohmydebn-browser-set-default --ask $pkg" && echo yes || echo no)"
+    "$(grep -A99 -E "apt -y install" "$MOCK_CALLS" | grep -q "ohmydebn-browser-set-default --ask $pkg" && echo yes || echo no)"
   mock_cleanup
 
   setup_installer "$installer"

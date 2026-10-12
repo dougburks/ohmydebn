@@ -1066,11 +1066,10 @@ echo "-- *-install scripts run apt update before apt install (regression guard) 
 # power-user.sh, and every on-demand script that uses it) - adding its own
 # apt update would multiply redundant network calls per run instead of
 # running once, so it relies by design on the same early update
-# install.sh's own flow already guarantees. ohmydebn-code-install never
-# actually calls apt install at all (a raw dpkg -i on a downloaded .deb) -
-# a plain string match would otherwise be fooled by its own comment
-# mentioning "apt install" in prose.
-INSTALL_APT_UPDATE_EXEMPT=("ohmydebn-pkg-install-optional" "ohmydebn-code-install")
+# install.sh's own flow already guarantees. An installer that hands a
+# vendor .deb to ohmydebn-apt-install-deb is covered too: the helper runs
+# apt update itself before it installs.
+INSTALL_APT_UPDATE_EXEMPT=("ohmydebn-pkg-install-optional")
 CHECKED=0
 for f in "$REPO_ROOT"/bin/*-install; do
   name=$(basename "$f")
@@ -1086,7 +1085,7 @@ for f in "$REPO_ROOT"/bin/*-install; do
     # update"`) would otherwise satisfy a looser match without the script
     # actually calling it, exactly the false-negative this guard exists to
     # prevent.
-    if ! grep -q '/usr/bin/apt update' "$f"; then
+    if ! grep -q '/usr/bin/apt update' "$f" && ! grep -q '/usr/share/ohmydebn/bin/ohmydebn-apt-install-deb' "$f"; then
       echo "  FAIL - $name calls apt install without apt update first"
       FAIL=$((FAIL + 1))
     fi

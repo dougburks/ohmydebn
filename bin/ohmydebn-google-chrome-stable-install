@@ -19,11 +19,9 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
 
-  TEMP=$(mktemp)
-  echo "Downloading Google Chrome..."
-  curl -fSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o "$TEMP"
-  sudo /usr/bin/dpkg -i "$TEMP"
-  rm -f "$TEMP"
+  # Through apt, so its dependencies come too - see
+  # ohmydebn-apt-install-deb. Google publishes no checksum for this file.
+  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "Google Chrome" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 
   # Google Chrome's own postinst self-registers dl.google.com as an apt
   # source (see /etc/apt/sources.list.d/google-chrome.sources) - same

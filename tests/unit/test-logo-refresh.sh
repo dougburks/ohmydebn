@@ -69,6 +69,21 @@ sleep 0.8
 assert_eq "a key closes the window" "no" "$(kill -0 "$LOGO_PID" 2>/dev/null && echo yes || echo no)"
 wait "$LOGO_PID" 2>/dev/null
 assert_eq "pidfile removed on exit" "gone" "$([ -f "$PID_FILE" ] && echo 'still present' || echo gone)"
+
+# Two windows: the second's PID is in the file, and the first closing must
+# leave it, or a theme change no longer refreshes the one still open.
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/logo-patched.sh" <&7 >/dev/null 2>&1 &
+FIRST_PID=$!
+sleep 0.4
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/logo-patched.sh" <&7 >/dev/null 2>&1 &
+SECOND_PID=$!
+sleep 0.4
+kill "$FIRST_PID" 2>/dev/null
+wait "$FIRST_PID" 2>/dev/null
+sleep 0.2
+assert_eq "two windows: closing the first keeps the second's pidfile" "$SECOND_PID" "$(cat "$PID_FILE" 2>/dev/null)"
+kill "$SECOND_PID" 2>/dev/null
+wait "$SECOND_PID" 2>/dev/null
 exec 7>&-
 rm -rf "$SCRATCH_HOME"
 mock_cleanup

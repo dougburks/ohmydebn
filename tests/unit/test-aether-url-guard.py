@@ -269,6 +269,27 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
 else:
     print("  (skip - no DISPLAY/WAYLAND_DISPLAY available)")
 
+# A malformed picker-colors value keeps the default for that key: the
+# guard's own parser used to raise, so the dialog never appeared and the
+# Aether link silently did nothing.
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+
+old_home = os.environ.get("HOME")
+fake_home = tempfile.mkdtemp(prefix="ohmydebn-test-home-")
+try:
+    os.environ["HOME"] = fake_home
+    colors_dir = os.path.join(fake_home, ".config", "ohmydebn", "current")
+    os.makedirs(colors_dir)
+    with open(os.path.join(colors_dir, "picker-colors"), "w", encoding="utf-8") as f:
+        f.write("bg0=#zz1418\nbg1=#2e3440\n")
+    colors = guard.load_theme_colors()
+    check_eq("load_theme_colors: a malformed value keeps the default", colors["bg0"], "rgba(20, 20, 24, 0.949)")
+    check_eq("load_theme_colors: a valid value applies", colors["bg1"], "rgba(46, 52, 64, 1.000)")
+finally:
+    os.environ["HOME"] = old_home if old_home is not None else ""
+    shutil.rmtree(fake_home)
+
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

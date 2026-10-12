@@ -54,8 +54,12 @@ class FakeCompleted:
         self.returncode = returncode
 
 
+VIRSH_ENVS = []
+
+
 def fake_run_returning(stdout, returncode=0):
-    def _fake(argv, capture_output=True, text=True, check=False):
+    def _fake(argv, capture_output=True, text=True, check=False, env=None):
+        VIRSH_ENVS.append((env or {}).get("LC_ALL"))
         return FakeCompleted(stdout, returncode)
 
     return _fake
@@ -151,6 +155,9 @@ try:
 
     pu.subprocess.run = fake_run_returning("")
     check_eq("get_vm_state: empty output falls back to 'unknown' rather than ''", pu.get_vm_state("mystery-vm"), "unknown")
+
+    # virsh's output is compared ("shut off"), so it's always run untranslated.
+    check_eq("every virsh call runs with LC_ALL=C", set(VIRSH_ENVS), {"C"})
 
     upgrade_calls = []
 

@@ -390,8 +390,14 @@ def decode_icon_pixbuf(path, size=32):
             os.makedirs(ICON_CACHE_DIR, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=ICON_CACHE_DIR, suffix=".png")
             os.close(fd)
-            pixbuf.savev(tmp, "png", [], [])
-            os.replace(tmp, cache_path)
+            try:
+                pixbuf.savev(tmp, "png", [], [])
+                os.replace(tmp, cache_path)
+            finally:
+                # Gone after a successful replace; otherwise (a full disk,
+                # say) every launcher open used to leave ~300 of these.
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
         except (GLib.Error, OSError):
             pass
     return pixbuf
@@ -424,10 +430,14 @@ def record_app_usage(desktop_id):
     try:
         os.makedirs(os.path.dirname(APP_USAGE_FILE), exist_ok=True)
         tmp = f"{APP_USAGE_FILE}.tmp{os.getpid()}"
-        with open(tmp, "w", encoding="utf-8") as f:
-            for did, count in counts.items():
-                f.write(f"{did}\t{count}\n")
-        os.replace(tmp, APP_USAGE_FILE)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                for did, count in counts.items():
+                    f.write(f"{did}\t{count}\n")
+            os.replace(tmp, APP_USAGE_FILE)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
     except OSError:
         pass
 

@@ -23,11 +23,6 @@ setup() {
 #!/bin/bash
 printf 'ii  cowsay  1.0  all  x\nii  fortune-mod  1.0  amd64  x\n'
 STUB
-  mock_bin fzf <<'STUB'
-#!/bin/bash
-cat >/dev/null
-cat "$MOCK_DIR/picked"
-STUB
   mock_bin sudo <<'STUB'
 #!/bin/bash
 [[ "$*" == *"apt update"* ]] && exit 0
@@ -37,7 +32,15 @@ exit "${MOCK_APT_STATUS:-0}"
 STUB
   mock_bin apt <<'STUB'
 #!/bin/bash
+echo "WARNING: apt does not have a stable CLI interface." >&2
+echo "Listing..."
 echo "cowsay/stable 1.0 all"
+STUB
+  # fzf returns the pick, and keeps its choices for the install picker check.
+  mock_bin fzf <<'STUB'
+#!/bin/bash
+cat >"$MOCK_DIR/fzf-input"
+cat "$MOCK_DIR/picked"
 STUB
   mock_bin ohmydebn-show-done <<'STUB'
 #!/bin/bash
@@ -74,6 +77,7 @@ OUTPUT=$(MOCK_APT_STATUS=100 PATH="$(mock_path)" bash "$MOCK_DIR/pkg-install" </
 assert_contains "install: the picked package is installed" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install cowsay"
 assert_contains "install: apt failing is reported" "$OUTPUT" "The install didn't finish"
 assert_contains "install: the window still waits to be closed" "$(cat "$MOCK_CALLS")" "show-done"
+assert_eq "install: the picker lists packages only, not apt's Listing... header" "cowsay" "$(cat "$MOCK_DIR/fzf-input")"
 mock_cleanup
 
 test_summary

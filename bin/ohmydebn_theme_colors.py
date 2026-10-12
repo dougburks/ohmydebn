@@ -16,8 +16,8 @@
 
 import os
 
-# Identical to ohmydebn-menu-picker's DEFAULT_COLORS, hex-encoded - the
-# shared "no theme applied yet" fallback look.
+# The shared "no theme applied yet" fallback look (the menu picker's
+# original defaults, hex-encoded).
 DEFAULT_THEME_COLORS = {
     "bg0": "#141418F2",
     "bg1": "#141418",

@@ -20,7 +20,10 @@ fzf_args=(
 # one to install.
 sudo /usr/bin/apt update
 
-pkg_names=$(apt list | awk -F/ '{print $1}' | sort -u | fzf "${fzf_args[@]}")
+# Only the "name/suite version arch" lines: apt list also prints a
+# "Listing..." header (and a warning about its CLI on stderr), and the
+# header used to show up in the picker as a package that couldn't install.
+pkg_names=$(apt list 2>/dev/null | awk -F/ 'NF > 1 {print $1}' | sort -u | fzf "${fzf_args[@]}")
 
 if [[ -n "$pkg_names" ]]; then
   mapfile -t pkgs <<<"$pkg_names"

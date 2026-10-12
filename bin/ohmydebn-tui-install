@@ -1,8 +1,17 @@
 #!/bin/bash
 
-if [ "$#" -ne 4 ]; then
+# Usage: ohmydebn-tui-install <name> <exec-command> <icon-url>
+# The older four-argument form, <name> <exec-command> <window-style>
+# <icon-url>, still works: the window style (float/tile, from Omarchy) is
+# ignored. It picked a TUI.float or TUI.tile window class that no tile
+# rule ever used, so it never changed anything here.
+if [ "$#" -eq 3 ] || [ "$#" -eq 4 ]; then
+  APP_NAME="$1"
+  APP_EXEC="$2"
+  ICON_URL="${!#}"
+else
   if ! command -v gum >/dev/null 2>&1; then
-    echo "Usage: ohmydebn-tui-install <name> <exec-command> <window-style> <icon-url>" >&2
+    echo "Usage: ohmydebn-tui-install <name> <exec-command> <icon-url>" >&2
     exit 1
   fi
 
@@ -10,11 +19,6 @@ if [ "$#" -ne 4 ]; then
   APP_NAME=$(gum input --prompt "Name> " --placeholder "My TUI")
   APP_EXEC=$(gum input --prompt "Launch Command> " --placeholder "lazydocker or bash -c 'dust; read -n 1 -s'")
   ICON_URL=$(gum input --prompt "Icon URL> " --placeholder "See https://dashboardicons.com (must use PNG!)")
-else
-  APP_NAME="$1"
-  APP_EXEC="$2"
-  WINDOW_STYLE="$3"
-  ICON_URL="$4"
 fi
 
 if [[ -z "$APP_NAME" || -z "$APP_EXEC" || -z "$ICON_URL" ]]; then
@@ -38,18 +42,12 @@ if ! curl -sL -o "$ICON_PATH" "$ICON_URL"; then
   exit 1
 fi
 
-if [[ $WINDOW_STYLE == "float" ]]; then
-  APP_CLASS="TUI.float"
-else
-  APP_CLASS="TUI.tile"
-fi
-
 cat >"$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Version=1.0
 Name=$APP_NAME
 Comment=$APP_NAME
-Exec=/usr/share/ohmydebn/bin/ohmydebn-terminal --class $APP_CLASS --title "$APP_NAME" -e $APP_EXEC
+Exec=/usr/share/ohmydebn/bin/ohmydebn-terminal --class TUI --title "$APP_NAME" -e $APP_EXEC
 Terminal=false
 Type=Application
 Icon=$ICON_PATH

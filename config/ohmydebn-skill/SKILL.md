@@ -117,7 +117,7 @@ or browse everything with `dconf-editor` / `dconf dump /org/cinnamon/`.
 **Key behaviors:**
 - Cinnamon auto-reloads most settings changes (no restart needed)
 - Use `Ctrl + Alt + Escape` to restart Cinnamon desktop
-- Use `ohmydebn-reset-config` to reset all configs to defaults
+- Use `ohmydebn-reset-config` to reset OhMyDebn's app config files (terminal, shell, editor and the like) to defaults; desktop settings are left alone
 
 ### Nemo File Manager
 
@@ -226,8 +226,11 @@ ohmydebn-reset-config
 # The reset-config command:
 # 1. Renames ~/.config/{aether,alacritty,bat,btop,cava,nvim,starship.toml},
 #    ~/.oh-my-zsh and ~/.zshrc to *-backup-<timestamp>
-# 2. Deletes OhMyDebn's state markers (~/.local/state/ohmydebn*)
+# 2. Clears only the state markers of the steps that write those files
 # 3. Re-runs OhMyDebn's configuration (ohmydebn.sh), which writes fresh defaults
+# 4. Reapplies the current theme (keeping the background)
+# Desktop settings, panel, extensions, keybindings, theme, firewall and
+# default apps are not changed.
 ```
 
 ## Common Tasks
@@ -422,7 +425,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets
 - "Build a theme from this wallpaper" -> `Ctrl + Shift + A` (Aether theme builder)
-- "Reset all configurations to defaults" -> `ohmydebn-reset-config`
+- "Reset my terminal/shell/editor configs to defaults" -> `ohmydebn-reset-config`
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Space`

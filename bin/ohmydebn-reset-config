@@ -2,27 +2,60 @@
 
 set -e
 
+# Resets OhMyDebn's app config files to their defaults, keeping the current
+# ones as backups. Only these files: it used to delete every OhMyDebn state
+# marker and rerun the whole setup as a new install, which also replaced
+# the panel layout, switched off other Cinnamon extensions, reset
+# keybindings, theme, cursor and sounds, turned the firewall back on,
+# rewrote git aliases, and changed the default browser and terminal - far
+# more than "reset your config files to OhMyDebn defaults".
+CONFIGS=(~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim
+  ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc)
+
+# The state markers of the install steps that write those configs, cleared
+# so the steps write them again: bat.sh and btop.sh copy their configs only
+# once; zsh.sh writes .zshrc and then adds its own lines to it (grc, man
+# colors, the AI tool aliases); nvim.sh adds its transparency file to a
+# config. Alacritty, cava, Oh My Zsh and Neovim's base config are recreated
+# whenever they're missing, and the Starship config comes from the theme,
+# reapplied below. tests/unit/test-reset-config.sh checks that every marker
+# those four steps use is listed here.
+CONFIG_MARKERS=(bat-20251110 btop-config-20250916
+  zshrc-20260116 grc color-man pi-alias codex-alias grok-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias
+  nvim-transparency-20260308 nvim-relativenumber-20260929 nvim-plugins-20260926)
+
 echo "WARNING!"
-echo "Continuing will back up config files and reset them to OhMyDebn defaults."
+echo "Continuing will reset these config files to OhMyDebn defaults:"
+echo "Aether, Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc."
+echo "Your current ones are kept as backups (renamed to <name>-backup-<date>)."
+echo "Your desktop, panel, keybindings, theme and default apps are not changed."
 echo
 echo "Press Enter to continue or Ctrl-C to cancel."
 read -r
 
 # Backup existing config files
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-for i in ~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc; do
+for i in "${CONFIGS[@]}"; do
   if [ -e "$i" ]; then
     echo "Renaming $i to $i-backup-$TIMESTAMP"
     mv "$i" "$i-backup-$TIMESTAMP"
   fi
 done
 
-# Remove all ohmydebn state files, except the update logs: they're what
-# to look at (or send) if something goes wrong, after a reset as much as
-# before it.
-find ~/.local/state -mindepth 1 -maxdepth 1 -name 'ohmydebn*' ! -name ohmydebn-logs -exec rm -rf {} +
+for MARKER in "${CONFIG_MARKERS[@]}"; do
+  rm -f ~/.local/state/ohmydebn-config/"$MARKER"
+done
 
 # Write new config files. Run the way install.sh runs it: with errexit (a
 # failed step stops the reset rather than being skipped, leaving it half
-# done) and with OhMyDebn's bin directory on PATH.
+# done) and with OhMyDebn's bin directory on PATH. Every other step finds
+# its marker and changes nothing, as on an update.
 PATH="/usr/share/ohmydebn/bin:$PATH" bash -e /usr/share/ohmydebn/ohmydebn.sh
+
+# Reapply the current theme (keeping the background) so the files it
+# generates - the Starship config, and the theme pieces of the others -
+# are written for the fresh configs.
+THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || true)
+if [ -n "$THEME_NAME" ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set --keep-background "$THEME_NAME"
+fi

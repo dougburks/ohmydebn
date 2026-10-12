@@ -3,7 +3,7 @@
 # ohmydebn-ai-cli: launches the user's default AI assistant in-place - the
 # shape the `a` shell alias needs, matching how
 # ohmydebn-opencode-cli/ohmydebn-claude-code-cli/ohmydebn-codex-cli/
-# ohmydebn-pi-cli run their
+# ohmydebn-grok-cli/ohmydebn-omp-cli/ohmydebn-pi-cli run their
 # tool in the caller's existing terminal instead of opening a new window the
 # way ohmydebn-ai (Super+A) does. Three of the defaults (chatgpt/vscode/
 # antigravity) are GUI editors with no terminal-native form, so those are

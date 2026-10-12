@@ -51,7 +51,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **Always use these safe locations instead:**
 - `~/.config/` - User configuration (safe to edit)
-- `~/.config/ohmydebn/themes/<custom-name>/` - Custom themes (must be real directories)
+- `~/.config/ohmydebn/themes/<custom-name>/` - Custom themes (a directory, or a link to one kept elsewhere)
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
@@ -224,10 +224,10 @@ When customizations go wrong:
 ohmydebn-reset-config
 
 # The reset-config command:
-# 1. Renames ~/.config/{aether,alacritty,bat,btop,cava,nvim,starship.toml},
+# 1. Renames ~/.config/{alacritty,bat,btop,cava,nvim,starship.toml},
 #    ~/.oh-my-zsh and ~/.zshrc to *-backup-<timestamp>
 # 2. Clears only the state markers of the steps that write those files
-# 3. Re-runs OhMyDebn's configuration (ohmydebn.sh), which writes fresh defaults
+# 3. Re-runs OhMyDebn's configuration (ohmydebn.sh, without the system upgrade), which writes fresh defaults
 # 4. Reapplies the current theme (keeping the background)
 # Desktop settings, panel, extensions, keybindings, theme, firewall and
 # default apps are not changed.

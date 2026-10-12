@@ -47,9 +47,16 @@ if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
   # paths, root-run hooks) and session mode avoids that entirely for a
   # single-user desktop.
   sudo adduser "$USER" kvm
-
-  # Restart cinnamon desktop to make the kvm group change take effect
-  setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+  # A new group only applies from the next login (restarting Cinnamon,
+  # which this used to do "to make the kvm group change take effect",
+  # doesn't change the session's groups - it only interrupted the desktop).
+  # With systemd-logind the user at the screen already has access to
+  # /dev/kvm through its ACL, so there's nothing to wait for there; say to
+  # log out only when VMs couldn't use KVM yet.
+  KVM_NEEDS_LOGIN=false
+  if [ ! -w /dev/kvm ]; then
+    KVM_NEEDS_LOGIN=true
+  fi
 
   # System mode ships a default storage pool automatically; session mode
   # doesn't, so the first "create VM" in virt-manager would otherwise fail
@@ -78,4 +85,11 @@ You can start Virtual Machine Manager from the menu or by pressing:
 Ctrl + Alt + V
 
 EOF
+  if [ "$KVM_NEEDS_LOGIN" = true ]; then
+    cat <<EOF
+Log out and back in before starting a virtual machine, so it can use KVM
+(hardware acceleration). Until then, virtual machines run much more slowly.
+
+EOF
+  fi
 fi

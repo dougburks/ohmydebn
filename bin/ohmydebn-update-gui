@@ -147,27 +147,96 @@ STALL_SECONDS = 90
 # the stall hint and the revealed terminal like any other.
 CONSENT_PROMPT_MARKER = "Ctrl-c to cancel"
 
-# How an abort proceeds: (delay ms, signal) sent to the child's whole
-# process group, in order, each skipped if the child is already gone.
-# SIGINT is the Ctrl-C the terminal flow would deliver, which apt handles
-# as gracefully as an interrupt can be - but alone it's not enough: sudo
-# catches it and exits normally, and bash's cooperative-SIGINT rule lets
-# the script march on to its next command (seen live: cancelling the
-# password dialog killed only the prompt and the update carried on). So
-# SIGTERM follows after a grace period. Deliberately NO SIGKILL: the
-# group includes apt and dpkg, and killing dpkg mid-configure is exactly
-# the inconsistent state the abort dialog warns about. If the child is
-# still running after ABORT_PATIENCE_MS, apt is finishing a package - the
-# GUI says so and waits for it (see _abort); the window closes when the
-# process really exits.
-ABORT_ESCALATION = ((0, signal.SIGINT), (2000, signal.SIGTERM))
+# How an abort proceeds. SIGINT goes to the child's whole process group
+# at once: it's the Ctrl-C the terminal flow would deliver, which apt
+# handles as gracefully as an interrupt can - it finishes the package
+# dpkg is on and stops there. SIGINT alone doesn't stop the update,
+# though: sudo catches it and exits normally, and bash's cooperative-SIGINT
+# rule lets the script march on to its next command (seen live:
+# cancelling the password dialog killed only the prompt and the update
+# carried on). So SIGTERM follows - but only once no apt or dpkg is left
+# running under the update. Sending it on a timer (2 seconds) used to
+# reach apt through sudo while dpkg was mid-unpack or mid-configure:
+# exactly the half-installed state the abort dialog warns about. Every
+# ABORT_POLL_MS the update's process tree is checked: apt/dpkg still
+# working means wait (and a newly started one gets its own SIGINT, so it
+# stops as early as it safely can); none left means SIGTERM, which stops
+# the script before its next command. Deliberately NO SIGKILL, ever. If
+# the child is still running after ABORT_PATIENCE_MS, apt is finishing a
+# package - the GUI says so and waits for it.
+ABORT_POLL_MS = 250
 ABORT_PATIENCE_MS = 8000
+# Process names (as /proc/<pid>/stat reports them) that mean "apt is
+# changing packages": an abort never sends SIGTERM while one of these is
+# running under the update. dpkg covers the maintainer scripts it runs,
+# which are its children.
+APT_PROCESS_NAMES = frozenset({"apt", "apt-get", "dpkg"})
 
 ANSI_RE = re.compile(r"\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-B])")
 
 
 def strip_ansi(text):
     return ANSI_RE.sub("", text)
+
+
+def read_process_table(proc_dir="/proc"):
+    """{pid: (ppid, name)} for every process, from /proc/<pid>/stat.
+    Readable for every user's processes, so it sees apt and dpkg running
+    as root under sudo. The name sits in parentheses and may itself
+    contain spaces or parentheses, so it's taken up to the LAST ')'."""
+    table = {}
+    try:
+        entries = os.listdir(proc_dir)
+    except OSError:
+        return table
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(os.path.join(proc_dir, entry, "stat")) as f:
+                stat = f.read()
+        except OSError:
+            continue  # exited while we looked
+        open_paren, close_paren = stat.find("("), stat.rfind(")")
+        if open_paren < 0 or close_paren < open_paren:
+            continue
+        fields = stat[close_paren + 2:].split()
+        if len(fields) < 2 or not fields[1].isdigit():
+            continue
+        table[int(entry)] = (int(fields[1]), stat[open_paren + 1:close_paren])
+    return table
+
+
+def busy_apt_pids(root_pid, table):
+    """PIDs of apt/apt-get/dpkg processes anywhere under root_pid. Found by
+    walking parent links rather than by process group: sudo gives the
+    command its own session (use_pty), so apt isn't in the update's
+    group, but it is still the update's descendant."""
+    children = {}
+    for pid, (ppid, _name) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    busy, stack, seen = set(), [root_pid], set()
+    while stack:
+        pid = stack.pop()
+        for child in children.get(pid, ()):
+            if child in seen:
+                continue
+            seen.add(child)
+            if table[child][1] in APT_PROCESS_NAMES:
+                busy.add(child)
+            stack.append(child)
+    return busy
+
+
+def abort_step(busy, interrupted, terminated):
+    """One abort poll: (action, interrupted). action is "interrupt" (a new
+    apt/dpkg started since the last SIGINT: send it one), "terminate" (no
+    apt/dpkg left: send the one SIGTERM), or "wait". interrupted is the
+    set of busy PIDs that have had a SIGINT."""
+    if busy:
+        action = "interrupt" if busy - interrupted else "wait"
+        return action, interrupted | busy
+    return ("wait" if terminated else "terminate"), interrupted
 
 
 def is_fence(line):
@@ -655,6 +724,8 @@ class UpdateWindow(Gtk.Window):
         self.password_attempts = 0
         self.last_password_prompt = None
         self.aborting = False
+        self.abort_interrupted = set()
+        self.abort_terminated = False
         self.finished = False
 
         self._build_ui()
@@ -1177,7 +1248,7 @@ class UpdateWindow(Gtk.Window):
     @guarded()
     def _on_sudo_prompt(self):
         # An abort in progress can surface one more sudo prompt before
-        # the escalation below lands (sudo catching the SIGINT is exactly
+        # its SIGTERM lands (see _abort; sudo catching the SIGINT is exactly
         # how the script survives long enough to reach its next sudo) -
         # don't stack a second password dialog on top of "Aborting...".
         if self.aborting:
@@ -1296,19 +1367,37 @@ class UpdateWindow(Gtk.Window):
         )
 
     def _abort(self):
-        # See ABORT_ESCALATION for the signal plan and why it stops at
-        # SIGTERM. _poll_child sees the exit and routes to _finish with
-        # aborting set.
+        # See ABORT_POLL_MS's comment for the plan: SIGINT now, SIGTERM
+        # only once no apt/dpkg is left running. _poll_child sees the exit
+        # and routes to _finish with aborting set.
         if self.aborting:
             return
         self.aborting = True
         self.status_label.set_text("Aborting update...")
-        for delay_ms, sig in ABORT_ESCALATION:
-            if delay_ms == 0:
-                self._kill_child(sig)
-            else:
-                GLib.timeout_add(delay_ms, self._make_escalation(sig))
+        self.abort_interrupted = self._busy_apt()
+        self.abort_terminated = False
+        self._kill_child(signal.SIGINT)
+        GLib.timeout_add(ABORT_POLL_MS, self._on_abort_poll)
         GLib.timeout_add(ABORT_PATIENCE_MS, self._on_abort_patience)
+
+    def _busy_apt(self):
+        if self.proc is None:
+            return set()
+        return busy_apt_pids(self.proc.pid, read_process_table())
+
+    @guarded(default=GLib.SOURCE_REMOVE)
+    def _on_abort_poll(self):
+        if self.proc is None or self.proc.poll() is not None:
+            return GLib.SOURCE_REMOVE
+        action, self.abort_interrupted = abort_step(
+            self._busy_apt(), self.abort_interrupted, self.abort_terminated
+        )
+        if action == "interrupt":
+            self._kill_child(signal.SIGINT)
+        elif action == "terminate":
+            self._kill_child(signal.SIGTERM)
+            self.abort_terminated = True
+        return GLib.SOURCE_CONTINUE
 
     @guarded(default=GLib.SOURCE_REMOVE)
     def _on_abort_patience(self):
@@ -1318,19 +1407,10 @@ class UpdateWindow(Gtk.Window):
         if self._running():
             self.status_label.set_text(
                 "Still stopping - apt is finishing the current package."
-                " This window will close on its own when it's done."
+                " Wait for it to finish before you shut down."
             )
             self._set_details_revealed(True)
         return GLib.SOURCE_REMOVE
-
-    def _make_escalation(self, sig):
-        @guarded(default=GLib.SOURCE_REMOVE)
-        def escalate():
-            if self.proc is not None and self.proc.poll() is None:
-                self._kill_child(sig)
-            return GLib.SOURCE_REMOVE
-
-        return escalate
 
     def _kill_child(self, sig):
         if self.proc is None or self.proc.poll() is not None:

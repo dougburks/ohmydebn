@@ -219,21 +219,76 @@ check_eq("guarded: wrapped function actually ran", len(calls), 1)
 
 print()
 
-# --- abort escalation plan (see ABORT_ESCALATION's comment) ---
-# The child's process group includes apt and dpkg. SIGINT (apt's graceful
-# interrupt) first, SIGTERM after a grace period, and NEVER SIGKILL - a
-# killed dpkg mid-configure is the inconsistent state the abort dialog
-# warns about. Pinned here so a future "make abort faster" change can't
-# quietly reintroduce it.
-import signal as _signal  # noqa: E402
+# --- abort: SIGTERM only once apt/dpkg are done (see ABORT_POLL_MS) ---
+# The abort used to send SIGTERM on a 2-second timer, which reached apt
+# through sudo while dpkg was mid-unpack or mid-configure - the half-
+# installed state the abort dialog warns about. Now each poll decides from
+# the processes actually running under the update.
+check_eq("abort step: apt/dpkg still running - wait, never terminate",
+         gui.abort_step({300, 301}, {300, 301}, False), ("wait", {300, 301}))
+check_eq("abort step: a newly started apt gets its own SIGINT",
+         gui.abort_step({300, 400}, {300}, False), ("interrupt", {300, 400}))
+check_eq("abort step: nothing apt-ish left - the one SIGTERM",
+         gui.abort_step(set(), {300}, False), ("terminate", {300}))
+check_eq("abort step: SIGTERM sent once, then just wait for the exit",
+         gui.abort_step(set(), {300}, True), ("wait", {300}))
+check("abort: no SIGKILL anywhere in the abort path",
+      "signal.SIGKILL" not in open(os.path.join(BIN, "ohmydebn-update-gui")).read())
+check("abort: patience message comes after several polls",
+      gui.ABORT_PATIENCE_MS > 4 * gui.ABORT_POLL_MS)
 
-plan = list(gui.ABORT_ESCALATION)
-check_eq("abort plan: opens with SIGINT immediately", plan[0], (0, _signal.SIGINT))
-check_eq("abort plan: escalates to SIGTERM after a grace period", plan[1][1], _signal.SIGTERM)
-check("abort plan: grace period is positive", plan[1][0] > 0)
-check("abort plan: never SIGKILLs apt/dpkg", all(sig != _signal.SIGKILL for _d, sig in plan))
-check("abort plan: delays are ascending", all(a[0] < b[0] for a, b in zip(plan, plan[1:])))
-check("abort plan: patience wait comes after the last signal", gui.ABORT_PATIENCE_MS > plan[-1][0])
+# A fake /proc: the update (100) runs bash (101), which runs sudo (102)
+# -> sudo's monitor (103, own session under use_pty) -> apt (104) ->
+# dpkg (105) -> a maintainer script (106). An unrelated apt (200, say
+# unattended-upgrades) must not count.
+def fake_proc(entries):
+    root = tempfile.mkdtemp()
+    for pid, (ppid, name) in entries.items():
+        os.makedirs(os.path.join(root, str(pid)))
+        with open(os.path.join(root, str(pid), "stat"), "w") as f:
+            f.write(f"{pid} ({name}) S {ppid} {pid} {pid} 0 -1 4194560 0 0\n")
+    os.makedirs(os.path.join(root, "self"))  # non-numeric entries are skipped
+    return root
+
+proc_root = fake_proc({
+    100: (1, "script"), 101: (100, "bash"), 102: (101, "sudo"), 103: (102, "sudo"),
+    104: (103, "apt"), 105: (104, "dpkg"), 106: (105, "postinst"),
+    200: (1, "apt"), 300: (1, "odd) name (x"),
+})
+table = gui.read_process_table(proc_root)
+check_eq("process table: parent and name read from stat", table[104], (103, "apt"))
+check_eq("process table: a name containing ') (' is read whole", table[300], (1, "odd) name (x"))
+check_eq("busy apt: apt and dpkg under the update, through sudo's own session",
+         gui.busy_apt_pids(100, table), {104, 105})
+check_eq("busy apt: an apt that isn't the update's own doesn't count",
+         200 in gui.busy_apt_pids(100, table), False)
+check_eq("busy apt: nothing running yet - empty",
+         gui.busy_apt_pids(101, {101: (100, "bash")}), set())
+check_eq("process table: a missing /proc gives an empty table",
+         gui.read_process_table("/nonexistent-proc-dir"), {})
+
+# And against the real /proc: a process named "apt" under a shell under
+# this test is found; it's a copy of sleep, so nothing touches apt itself.
+import shutil  # noqa: E402
+import subprocess as _subprocess  # noqa: E402
+import time  # noqa: E402
+fake_bin = tempfile.mkdtemp()
+shutil.copy("/bin/sleep", os.path.join(fake_bin, "apt"))
+holder = _subprocess.Popen(["bash", "-c", f"{fake_bin}/apt 30; true"], stdin=_subprocess.DEVNULL)
+for _ in range(50):
+    found = gui.busy_apt_pids(holder.pid, gui.read_process_table())
+    if found:
+        break
+    time.sleep(0.05)
+check_eq("real /proc: an apt under the update's shell is found", len(found), 1)
+holder.kill()
+for pid in found:
+    try:
+        os.kill(pid, 15)
+    except OSError:
+        pass
+holder.wait()
+shutil.rmtree(fake_bin)
 
 
 # --- single instance: the lock and the "present yourself" poke ---

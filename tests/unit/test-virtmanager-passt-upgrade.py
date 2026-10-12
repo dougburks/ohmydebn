@@ -182,6 +182,26 @@ try:
 finally:
     pu.subprocess.run = original_run
 
+# A malformed picker-colors value keeps the default for that key: this
+# window's own copy of the parser used to raise, so it never opened.
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+
+old_home = os.environ.get("HOME")
+fake_home = tempfile.mkdtemp(prefix="ohmydebn-test-home-")
+try:
+    os.environ["HOME"] = fake_home
+    colors_dir = os.path.join(fake_home, ".config", "ohmydebn", "current")
+    os.makedirs(colors_dir)
+    with open(os.path.join(colors_dir, "picker-colors"), "w", encoding="utf-8") as f:
+        f.write("bg0=#zzzzzz\nbg1=#2e3440\n")
+    colors = pu.load_theme_colors()
+    check_eq("load_theme_colors: a malformed value keeps the default", colors["bg0"], "rgba(20, 20, 24, 0.949)")
+    check_eq("load_theme_colors: a valid value applies", colors["bg1"], "rgba(46, 52, 64, 1.000)")
+finally:
+    os.environ["HOME"] = old_home if old_home is not None else ""
+    shutil.rmtree(fake_home)
+
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 raise SystemExit(0 if TESTS_FAILED == 0 else 1)

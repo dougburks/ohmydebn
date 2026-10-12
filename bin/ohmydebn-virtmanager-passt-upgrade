@@ -43,7 +43,14 @@ from gi.repository import Gdk, GLib, Gtk
 
 import os
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
+
+# The shared palette reader sits next to this script (as ohmydebn-update-gui
+# finds it), wherever this is run from.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_theme_colors as theme_colors  # noqa: E402
+from ohmydebn_theme_colors import css_rgba  # noqa: E402
 
 VIRSH = "/usr/bin/virsh"
 VIRT_XML = "/usr/bin/virt-xml"
@@ -134,34 +141,12 @@ def upgrade_to_passt(name, macs):
         )
 
 
-def hex_to_rgba(hex_value):
-    """Same conversion ohmydebn-menu-picker uses for this same file -
-    picker-colors stores #RRGGBBAA (an 8-digit hex with alpha baked in),
-    which GTK's CSS parser rejects outright ("Junk at end of value",
-    confirmed live) since it only understands #RRGGBB or rgba(...)."""
-    hex_value = hex_value.lstrip("#")
-    r = int(hex_value[0:2], 16)
-    g = int(hex_value[2:4], 16)
-    b = int(hex_value[4:6], 16)
-    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
-    return f"rgba({r}, {g}, {b}, {a:.3f})"
-
-
 def load_theme_colors():
-    """Same small key=value file ohmydebn-theme-set-picker writes on every
-    theme change that ohmydebn-menu-picker reads - keeps this window's
-    look in sync with the active theme with no separate palette."""
-    colors = {"bg0": "#1e1e2e", "bg1": "#313244", "bg3": "#585b70", "fg0": "#cdd6f4"}
-    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key in colors and value:
-                    colors[key] = value
-    except OSError:
-        pass
-    return {key: hex_to_rgba(value) for key, value in colors.items()}
+    """The current theme's palette as CSS rgba() strings, from the shared
+    reader (ohmydebn_theme_colors.py). This window used to keep its own
+    copy of that parsing, which raised on a malformed value so the window
+    never opened; the shared one keeps the default for that key."""
+    return {key: css_rgba(value) for key, value in theme_colors.load_theme_colors().items()}
 
 
 CSS_TEMPLATE = """
@@ -226,12 +211,11 @@ class PasstUpgradeWindow(Gtk.Window):
         # the usable monitor height - past that it scrolls instead of
         # running off/behind the screen edge. propagate_natural_height
         # makes the ScrolledWindow ask for its content's real height (up
-        # to the max) instead of an arbitrary fixed one; the row count
-        # here is fixed for this window's whole lifetime (refresh() only
-        # ever updates existing rows' state/button text, never adds or
-        # removes a VM), so unlike ohmydebn-menu-picker this never needs
-        # to re-negotiate size after the window is already shown - it
-        # only has to get this right once, before the first show().
+        # to the max) instead of an arbitrary fixed one. The size is worked
+        # out once, before the first show(): refresh() rebuilds the rows
+        # from the current VM list, and when that changes while the window
+        # is open, the scroller takes up the difference rather than the
+        # window resizing.
         scroller.set_max_content_height(max(300, int(get_monitor_geometry().height * 0.7)))
         scroller.set_propagate_natural_height(True)
         outer.pack_start(scroller, True, True, 0)

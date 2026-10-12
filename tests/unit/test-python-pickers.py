@@ -281,12 +281,6 @@ try:
 finally:
     shutil.rmtree(scratch)
 
-check_eq("hex_to_rgba: 6-digit hex has full opacity", mp.hex_to_rgba("#2e3440"), "rgba(46, 52, 64, 1.000)")
-check_eq(
-    "hex_to_rgba: 8-digit hex applies the trailing alpha byte",
-    mp.hex_to_rgba("2e3440F2"), "rgba(46, 52, 64, 0.949)",
-)
-
 # load_theme_colors() reads ~/.config/ohmydebn/current/picker-colors, a
 # hardcoded path built inline (not a module constant), so this redirects
 # HOME for the duration of the test rather than monkeypatching a constant
@@ -308,10 +302,25 @@ try:
     check_eq("load_theme_colors: bg3 (accent color)", colors["bg3"], "rgba(129, 161, 193, 0.949)")
     check_eq("load_theme_colors: fg0", colors["fg0"], "rgba(216, 222, 233, 1.000)")
 
+    # A malformed value keeps the default for that key: the picker's own
+    # parser used to raise here, so the menu didn't open at all.
+    with open(picker_colors_path, "w", encoding="utf-8") as f:
+        f.write("bg0=#zzzzzz\nbg1=#2e3440\nbg3=nope\nfg0=#d8dee9\n")
+    colors = mp.load_theme_colors()
+    check_eq("load_theme_colors: a malformed bg0 keeps the default", colors["bg0"], "rgba(20, 20, 24, 0.949)")
+    check_eq("load_theme_colors: a malformed bg3 keeps the default", colors["bg3"], "rgba(90, 90, 220, 0.949)")
+    check_eq("load_theme_colors: the valid keys still apply", colors["bg1"], "rgba(46, 52, 64, 1.000)")
+
     os.remove(picker_colors_path)
     check_eq(
-        "load_theme_colors: falls back to DEFAULT_COLORS untouched when the file doesn't exist",
-        mp.load_theme_colors(), mp.DEFAULT_COLORS,
+        "load_theme_colors: the default palette when the file doesn't exist",
+        mp.load_theme_colors(),
+        {
+            "bg0": "rgba(20, 20, 24, 0.949)",
+            "bg1": "rgba(20, 20, 24, 1.000)",
+            "bg3": "rgba(90, 90, 220, 0.949)",
+            "fg0": "rgba(230, 230, 230, 1.000)",
+        },
     )
 finally:
     if old_home is None:

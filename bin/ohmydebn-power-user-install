@@ -1,13 +1,36 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-echo "This will remove the optional apps that ship in your base distro"
-echo "(Firefox, LibreOffice, etc.) and install a curated set of"
-echo "power-user extras (Virtual Machine Manager, Brave, GIMP, Podman, and"
-echo "more)."
+# Applies the power-user profile to an existing install (the same profile
+# as `install.sh --power-user`). Here only the apps the distro shipped are
+# removed, never ones installed from the OhMyDebn menu (see
+# install/packaging/power-user.sh), and the exact list is shown before
+# anything happens: it used to say "Firefox, LibreOffice, etc." and then
+# also purge every AI tool, VPN and browser the user had installed.
+REMOVE=$(/usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --distro-apps-only --list)
+
+echo "This applies the power-user profile: it removes the optional apps your"
+echo "distro came with and installs a curated set of power-user extras"
+echo "(Virtual Machine Manager, Brave Origin, GIMP, Podman, and more)."
 echo
-echo "Press Enter to continue or Ctrl-C to cancel."
-read -r
+if [ -n "$REMOVE" ]; then
+  echo "These apps will be removed:"
+  sed 's/^/  /' <<<"$REMOVE"
+else
+  echo "None of the apps it removes are installed, so nothing will be removed."
+fi
+echo
+echo "Apps you installed from the OhMyDebn menu are kept."
+echo
+printf "Continue? [y/N] "
+read -r ANSWER
+case "$ANSWER" in
+[yY] | [yY][eE][sS]) ;;
+*)
+  echo "Nothing was changed."
+  exit 0
+  ;;
+esac
 
 POWER_USER=true bash /usr/share/ohmydebn/install/packaging/power-user.sh

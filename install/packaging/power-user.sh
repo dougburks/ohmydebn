@@ -13,8 +13,17 @@
 # pass instead of needing a separate one later. A failure in any one of
 # these (e.g. a network hiccup) is non-fatal and shouldn't block the rest
 # of the install.
+#
+# On an existing install (the installation-complete marker is there, e.g.
+# ohmydebn-power-user-install), only the apps the distro shipped are
+# removed - never ones the user installed from the OhMyDebn menu (AI tools,
+# VPNs, browsers...), which the full removal used to purge too. On a fresh
+# install nothing has come from the menu yet, so the full removal only
+# meets what the distro shipped.
 if [ "${POWER_USER:-false}" = true ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --skip-prompt ||
+  REMOVE_ARGS=(--skip-prompt)
+  [ -f "$HOME/.local/state/ohmydebn" ] && REMOVE_ARGS+=(--distro-apps-only)
+  /usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional "${REMOVE_ARGS[@]}" ||
     echo "Warning: ohmydebn-pkg-remove-all-optional failed, continuing." >&2
 
   for SCRIPT in ohmydebn-virtmanager-install ohmydebn-brave-origin-install \

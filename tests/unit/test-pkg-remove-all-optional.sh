@@ -181,6 +181,74 @@ assert_contains "dedicated-remove loop: installed brave-browser (optional) gets 
 assert_not_contains "dedicated-remove loop: installed brave-origin (the default browser) is left alone" "$CALLS" "ohmydebn-brave-origin-remove"
 mock_cleanup
 
+# Scenario 5b: --distro-apps-only (the power-user profile on an existing
+# install) and --list. A machine with the distro's LibreOffice and
+# Thunderbird, plus apps installed from the OhMyDebn menu: Claude Code,
+# Pi, LocalSend, Distrobox and Docker. Only the distro's apps may go; the
+# full removal used to purge all of them. Podman, rclone and Virtual
+# Machine Manager are never purged: the power-user profile installs them
+# right after.
+setup_mixed() {
+  mock_init
+  mock_bin dpkg <<'STUB'
+#!/bin/bash
+if [[ "$1" == "-l" ]]; then
+  case "$2" in
+  "libreoffice*" | thunderbird | localsend | distrobox | docker.io | podman | rclone | virt-manager)
+    echo "ii  $2  1.0  amd64  desc"; exit 0 ;;
+  esac
+  exit 1
+fi
+if [[ "$1" == "-s" ]]; then
+  case "$2" in claude-code | ohmydebn-pi-coding-agent) exit 0 ;; esac
+fi
+exit 1
+STUB
+  mock_bin sudo <<'STUB'
+#!/bin/bash
+echo "sudo $*" >>"$MOCK_CALLS"
+STUB
+  for name in ohmydebn-claude-code-remove ohmydebn-pi-remove; do
+    mock_bin "$name" <<STUB
+#!/bin/bash
+echo "$name \$*" >>"\$MOCK_CALLS"
+STUB
+  done
+  printf 'ID=debian\n' >"$MOCK_DIR/os-release"
+  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/patched.sh"
+}
+run_mixed() {
+  OUTPUT=$(OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" PATH="$(mock_path)" bash "$MOCK_DIR/patched.sh" "$@" </dev/null 2>&1)
+}
+
+setup_mixed
+run_mixed --skip-prompt --distro-apps-only
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "distro apps only: the distro's LibreOffice and Thunderbird are purged" "$CALLS" "purge libreoffice* thunderbird"
+for app in localsend distrobox docker.io; do
+  assert_not_contains "distro apps only: $app (from the OhMyDebn menu) is kept" "$CALLS" "$app"
+done
+assert_not_contains "distro apps only: Claude Code (from the OhMyDebn menu) is kept" "$CALLS" "ohmydebn-claude-code-remove"
+assert_not_contains "distro apps only: Pi (from the OhMyDebn menu) is kept" "$CALLS" "ohmydebn-pi-remove"
+mock_cleanup
+
+setup_mixed
+run_mixed --skip-prompt
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "full removal (fresh install): OhMyDebn apps go too" "$CALLS" "purge libreoffice* thunderbird distrobox docker.io localsend"
+assert_contains "full removal: Claude Code's own remove script runs" "$CALLS" "ohmydebn-claude-code-remove --skip-prompt"
+for app in podman rclone virt-manager; do
+  assert_not_contains "never purged, the power-user profile reinstalls it: $app" "$CALLS" "$app"
+done
+mock_cleanup
+
+setup_mixed
+run_mixed --distro-apps-only --list
+assert_eq "--list: the installed apps it would remove, nothing else" "libreoffice
+thunderbird" "$OUTPUT"
+assert_eq "--list: changes nothing" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
 # Scenario 6: on Kali, Firefox is Kali's default and only preinstalled
 # browser (unlike the Debian Cinnamon ISO, which also ships other apps
 # this script removes), so it must be left alone even though it's

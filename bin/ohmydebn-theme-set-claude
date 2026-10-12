@@ -2,23 +2,50 @@
 #
 # ohmydebn-theme-set-claude: Generate a Claude Code custom theme from colors.toml and activate it
 # Usage: ohmydebn-theme-set-claude <theme-name> <colors-source> <is-light-mode>
+#        ohmydebn-theme-set-claude --current
+#   --current themes Claude Code with the theme already applied (its name,
+#   normalized colors.toml and light/dark mode from
+#   ~/.config/ohmydebn/current), for ohmydebn-claude-code-install to call
+#   right after installing it.
 #
 
 set -e
 
-if [[ $# -lt 3 ]]; then
+CURRENT_DIR="$HOME/.config/ohmydebn/current"
+if [[ "${1:-}" == "--current" ]]; then
+  THEME_NAME=$(cat "$CURRENT_DIR/theme.name" 2>/dev/null || true)
+  COLORS_SOURCE="$CURRENT_DIR/theme/colors.toml"
+  # Same rule as ohmydebn-theme-set: a `mode = "light"` key, or an older
+  # theme's light.mode marker file.
+  IS_LIGHT_MODE=false
+  if grep -qE '^\s*mode\s*=\s*"light"' "$COLORS_SOURCE" 2>/dev/null || [[ -f "$CURRENT_DIR/theme/light.mode" ]]; then
+    IS_LIGHT_MODE=true
+  fi
+  [[ -n "$THEME_NAME" ]] || exit 0
+elif [[ $# -lt 3 ]]; then
   echo "Usage: ohmydebn-theme-set-claude <theme-name> <colors-source> <is-light-mode>" >&2
+  echo "       ohmydebn-theme-set-claude --current" >&2
   echo "  colors-source: path to a normalized colors.toml (background/foreground/accent/color0-15)" >&2
   echo "  is-light-mode: 'true' or 'false'" >&2
   exit 1
+else
+  THEME_NAME="$1"
+  COLORS_SOURCE="$2"
+  IS_LIGHT_MODE="$3"
 fi
-
-THEME_NAME="$1"
-COLORS_SOURCE="$2"
-IS_LIGHT_MODE="$3"
 SKIP_FLAG="$HOME/.local/state/ohmydebn/toggles/skip-claude-theme-changes"
 
 if [[ -f "$SKIP_FLAG" ]]; then
+  exit 0
+fi
+
+# A theme hook does nothing when its app isn't installed (AGENTS.md): this
+# one used to write ~/.claude/themes and ~/.claude/settings.json for every
+# user on every theme switch. Claude Code from OhMyDebn's package, or a
+# `claude` installed some other way, counts. (~/.claude itself exists
+# either way - OhMyDebn links its skill in there for when Claude Code
+# arrives - so it's no sign Claude Code is installed.)
+if ! dpkg -s claude-code >/dev/null 2>&1 && ! command -v claude >/dev/null 2>&1; then
   exit 0
 fi
 

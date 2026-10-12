@@ -20,6 +20,10 @@ if [[ -n "$pkg_names" ]]; then
   # what was picked, since packages that depend on those go too - and asks
   # before going ahead. With -y it used to purge all of it straight away.
   # Run directly, not through xargs, which gives apt no terminal to ask on.
-  sudo /usr/bin/apt purge "${pkgs[@]}"
+  # Answering no at apt's question ends up here too.
+  if ! sudo /usr/bin/apt purge "${pkgs[@]}"; then
+    echo
+    echo "The removal didn't finish - see the messages above."
+  fi
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi

@@ -8,8 +8,10 @@ set -e
 # the panel layout, switched off other Cinnamon extensions, reset
 # keybindings, theme, cursor and sounds, turned the firewall back on,
 # rewrote git aliases, and changed the default browser and terminal - far
-# more than "reset your config files to OhMyDebn defaults".
-CONFIGS=(~/.config/aether ~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim
+# more than "reset your config files to OhMyDebn defaults". Not Aether's:
+# OhMyDebn has no default config for it, so a reset only moved the user's
+# Aether folder (with their themes in progress) aside.
+CONFIGS=(~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim
   ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc)
 
 # The state markers of the install steps that write those configs, cleared
@@ -28,8 +30,8 @@ CONFIG_MARKERS=(bat-20251110 btop-config-20250916 starship-20251109
 
 echo "WARNING!"
 echo "Continuing will reset these config files to OhMyDebn defaults:"
-echo "Aether, Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc."
-echo "Your current ones are kept as backups (renamed to <name>-backup-<date>)."
+echo "Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc."
+echo "Your current ones are kept as backups (renamed to <name>-backup-<date and time>)."
 echo "Your desktop, panel, keybindings, theme and default apps are not changed."
 echo
 echo "Press Enter to continue or Ctrl-C to cancel."
@@ -51,8 +53,11 @@ done
 # Write new config files. Run the way install.sh runs it: with errexit (a
 # failed step stops the reset rather than being skipped, leaving it half
 # done) and with OhMyDebn's bin directory on PATH. Every other step finds
-# its marker and changes nothing, as on an update.
-PATH="/usr/share/ohmydebn/bin:$PATH" bash -e /usr/share/ohmydebn/ohmydebn.sh
+# its marker and changes nothing, as on an update - except the full system
+# upgrade at the end, which an update does every time: OHMYDEBN_SKIP_UPGRADE
+# leaves it out (install.sh --skip-upgrade's switch), since a reset of
+# config files must not also upgrade the system, or fail when offline.
+OHMYDEBN_SKIP_UPGRADE=1 PATH="/usr/share/ohmydebn/bin:$PATH" bash -e /usr/share/ohmydebn/ohmydebn.sh
 
 # Reapply the current theme (keeping the background) so the files it
 # generates - the Starship config, and the theme pieces of the others -

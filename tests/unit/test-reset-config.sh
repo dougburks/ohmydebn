@@ -53,12 +53,16 @@ run() {
   STATUS=$?
 }
 
-setup 'echo "config layer ran"'
+setup 'echo "config layer ran, skip upgrade=${OHMYDEBN_SKIP_UPGRADE:-no}"'
+mkdir -p "$H/.config/aether"
+echo mine >"$H/.config/aether/theme.toml"
 run
 assert_eq "reset: exits 0" "0" "$STATUS"
-assert_contains "reset: says what it resets" "$OUTPUT" "Aether, Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc"
+assert_contains "reset: says what it resets" "$OUTPUT" "Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc"
 assert_contains "reset: says what it leaves alone" "$OUTPUT" "Your desktop, panel, keybindings, theme and default apps are not changed."
 assert_contains "reset: reruns the config layer" "$OUTPUT" "config layer ran"
+assert_contains "reset: without the full system upgrade an update does" "$OUTPUT" "skip upgrade=1"
+assert_eq "reset: Aether's folder is left where it is (OhMyDebn has no default for it)" "mine" "$(cat "$H/.config/aether/theme.toml" 2>/dev/null)"
 assert_eq "reset: btop config backed up" "mine" "$(cat "$H"/.config/btop-backup-*/btop.conf 2>/dev/null)"
 for marker in btop-config-20250916 zshrc-20260116 claude-alias starship-20251109; do
   assert_eq "reset: config marker $marker cleared (so its step writes the file again)" "no" \

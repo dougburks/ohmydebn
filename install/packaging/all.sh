@@ -13,6 +13,9 @@ source $OHMYDEBN_INSTALL/packaging/cinnamon.sh
 source $OHMYDEBN_INSTALL/packaging/dbus.sh
 source $OHMYDEBN_INSTALL/packaging/spice-vdagent.sh
 
+# Pins for vendor-added repos an older OhMyDebn left unpinned.
+source $OHMYDEBN_INSTALL/packaging/vendor-pins.sh
+
 source $OHMYDEBN_INSTALL/packaging/dependencies.sh
 
 # power-user.sh must run after dependencies.sh above (see the comment in

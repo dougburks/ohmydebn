@@ -123,12 +123,16 @@ run_installer
 assert_eq "ChatGPT, download fails: the installer fails (it used to exit 0)" "1" "$STATUS"
 assert_not_contains "ChatGPT, download fails: no default-AI question for an app that isn't there" \
   "$(cat "$MOCK_CALLS")" "ohmydebn-ai-set-default"
+assert_not_contains "ChatGPT, download fails: no pin written for a repo that isn't there" \
+  "$(cat "$MOCK_CALLS")" "chatgpt.pref"
 mock_cleanup
 
 setup_installer ok ohmydebn-chatgpt-install
 run_installer
 assert_contains "ChatGPT: the amd64 .deb is downloaded" "$(cat "$MOCK_CALLS")" "chatgpt_amd64.deb"
 assert_contains "ChatGPT: installed through apt" "$(cat "$MOCK_CALLS")" "apt -y install"
+# Its own postinst adds OpenAI's repo; the pin scopes that repo to chatgpt.
+assert_contains "ChatGPT: then pins OpenAI's repo to chatgpt" "$(cat "$MOCK_CALLS")" "tee /etc/apt/preferences.d/chatgpt.pref"
 assert_contains "ChatGPT: then asks about the default AI" "$(cat "$MOCK_CALLS")" "ohmydebn-ai-set-default --ask chatgpt"
 mock_cleanup
 

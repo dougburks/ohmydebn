@@ -1036,6 +1036,7 @@ PIN_FILE_OWNERS=(
   # Both Brave variants share one repository, set up and torn down by the
   # same helper - so writer and cleaner are the one script.
   "ohmydebn-brave-repo:ohmydebn-brave-repo:brave-browser-release.pref"
+  "ohmydebn-chatgpt-install:ohmydebn-chatgpt-remove:chatgpt.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
   "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"

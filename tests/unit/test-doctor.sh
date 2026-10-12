@@ -536,6 +536,16 @@ assert_contains "doctor-pause: runs the doctor" "$CALLS" "ohmydebn-doctor"
 assert_contains "doctor-pause: keeps the window open afterwards even when the doctor reports failures" "$CALLS" "ohmydebn-headline Press Enter to close this window"
 mock_cleanup
 
+# --- ChatGPT's repo (added by its own .deb) is checked for its pin too ---
+build_machine yes
+: >"$ROOT/etc/apt/sources.list.d/chatgpt.sources"
+run_doctor
+assert_contains "chatgpt repo without its pin: flagged" "$OUTPUT" "no pin for: chatgpt"
+: >"$ROOT/etc/apt/preferences.d/chatgpt.pref"
+run_doctor
+assert_contains "chatgpt repo with its pin: counted as pinned" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (2)"
+mock_cleanup
+
 # --- the header's display scale: Cinnamon's own answer, else the setting ---
 build_machine yes
 run_doctor MOCK_UI_SCALE=2

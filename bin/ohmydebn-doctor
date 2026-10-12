@@ -144,11 +144,13 @@ else
   fail "dependencies.sh present in the installed tree"
 fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
-# vendor's own packages, so it can't replace anyone else's. VS Code's and
-# Chrome's repos are added by the vendors' own packages (.list or .sources).
+# vendor's own packages, so it can't replace anyone else's. VS Code's,
+# Chrome's and ChatGPT's repos are added by the vendors' own packages
+# (.list or .sources).
 PINS=(
   "antigravity:antigravity.pref"
   "brave-browser-release:brave-browser-release.pref"
+  "chatgpt:chatgpt.pref"
   "claude-code:claude-code.pref"
   "cloudflare-client:cloudflare-client.pref"
   "google-chrome:google-chrome.pref"

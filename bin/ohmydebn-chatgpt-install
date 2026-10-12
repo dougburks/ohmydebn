@@ -26,6 +26,16 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   # here - see ohmydebn-apt-install-deb. OpenAI publishes no checksum.
   /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "ChatGPT" "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_$DEB_ARCH.deb"
 
+  # ChatGPT's own postinst registers OpenAI's repo as an apt source
+  # (/etc/apt/sources.list.d/chatgpt.sources, signed by
+  # /usr/share/keyrings/chatgpt-archive-keyring.gpg; its postrm removes
+  # both on purge) - same reasoning/pattern as ohmydebn-code-install's own
+  # pin: OhMyDebn never creates that source file itself, so restricting it
+  # has to happen here. A bare signed-by trusts OpenAI's key to sign any
+  # package name. Its dependencies are all ordinary distro libraries.
+  printf 'Package: *\nPin: origin "persistent.oaistatic.com"\nPin-Priority: -1\n\nPackage: chatgpt\nPin: origin "persistent.oaistatic.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/chatgpt.pref >/dev/null
+
   # Installed onto a system that may already have a default AI assistant:
   # ask before changing it (defaults to no, and says nothing when this is
   # already the default - see ohmydebn-ai-set-default). A setting that

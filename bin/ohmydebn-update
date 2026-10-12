@@ -56,6 +56,12 @@ if [ -z "${OHMYDEBN_UPDATE_LOG:-}" ] && [ "${OHMYDEBN_UPDATE_NO_LOG:-}" != "1" ]
   exec script -qefc "$WRAPPED_CMD" "$OHMYDEBN_UPDATE_LOG"
 fi
 
+# The ~/.local/share/ohmydebn fallback is for installs from before
+# OhMyDebn was a package (a git clone there): if their move onto the
+# package fails partway (see ohmydebn.sh's first lines), the next update
+# runs this script from that checkout, and $DIR/install.sh retries the
+# move. Keep it. The unit tests also use it to point an update at a scratch
+# tree.
 if dpkg -s "ohmydebn" >/dev/null 2>&1; then
   DIR=/usr/share/ohmydebn
 else

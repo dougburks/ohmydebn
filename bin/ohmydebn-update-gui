@@ -425,6 +425,9 @@ def resolve_dir():
     )
     if installed:
         return "/usr/share/ohmydebn"
+    # An install from before OhMyDebn was a package (a git clone here),
+    # mid-way onto the package - the same fallback as ohmydebn-update's
+    # $DIR, so the window runs that checkout's update. Keep it.
     return os.path.expanduser("~/.local/share/ohmydebn")
 
 

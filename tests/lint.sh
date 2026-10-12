@@ -59,7 +59,9 @@ for f in "${PY_SCRIPTS[@]}"; do
     FAIL=$((FAIL + 1))
   fi
 done
-rm -rf __pycache__ bin/__pycache__ install/__pycache__ tests/__pycache__
+# py_compile leaves a __pycache__ next to every file it compiles, in
+# whatever folder that is (tests/unit and tests/perf too) - remove them all.
+find . -path ./.git -prune -o -type d -name __pycache__ -prune -exec rm -rf {} +
 
 echo
 echo "checked $CHECKED scripts, $FAIL failure(s)"

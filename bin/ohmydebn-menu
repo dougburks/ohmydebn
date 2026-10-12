@@ -319,7 +319,7 @@ get_apps_picker_result() {
 # get_picker_result waits via `wait` on a backgrounded read rather than a
 # bare blocking read, see its own comment - $(...) here would have handed
 # right back the exact orphaned-picker problem that comment describes,
-# just one layer further out. Every one of this file's ~21 call sites
+# just one layer further out. Every one of this file's 32 call sites
 # changed together with this function for that reason.
 #
 # menu() is the one place that resolves a search into a descendant several
@@ -353,7 +353,7 @@ get_apps_picker_result() {
 # result (no " > ") is an ordinary same-level pick, set unchanged exactly
 # like before this feature existed.
 menu() {
-  # prompt ($1) is accepted but unused - kept so all ~21 existing
+  # prompt ($1) is accepted but unused - kept so all 32 existing
   # `menu "Title" "items"` call sites don't need editing further, even
   # though ohmydebn-menu-picker doesn't currently show a title anywhere
   # (no titlebar; the window is undecorated).
@@ -421,21 +421,6 @@ terminal() {
 
 present_terminal() {
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "$1" "$2"
-}
-
-install() {
-  local label pkg
-  printf -v label '%q' "Installing $1..."
-  printf -v pkg '%q' "$2"
-  present_terminal "$1" "echo $label; sudo /usr/bin/apt -y install $pkg"
-}
-
-install_and_launch() {
-  local label pkg launch
-  printf -v label '%q' "Installing $1..."
-  printf -v pkg '%q' "$2"
-  printf -v launch '%q' "$3"
-  present_terminal "$1" "echo $label; sudo /usr/bin/apt -y install $pkg && setsid gtk-launch $launch"
 }
 
 show_learn_menu() {
@@ -556,7 +541,7 @@ show_terminals_menu() {
 }
 
 show_vpn_menu() {
-  menu "VPN" "󰖂  Cloudflare Warp\n󰖂  Tailscale"
+  menu "VPN" "󰖂  Cloudflare WARP\n󰖂  Tailscale"
   case "$MENU_RESULT" in
   *Cloudflare*) /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp ;;
   *Tailscale*) /usr/share/ohmydebn/bin/ohmydebn-tailscale ;;
@@ -903,26 +888,11 @@ show_main_menu() {
 # every "${1,,}" case arm here only ever needs to match a same-level label.
 go_to_menu() {
   case "${1,,}" in
-  *office*) show_office_menu ;;
   *apps*) show_apps_menu ;;
   *trigger*) show_trigger_menu ;;
   *learn*) show_learn_menu ;;
   *style*) show_style_menu ;;
-  *theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
-  *container*) show_containers_menu ;;
-  *ai*) show_ai_menu ;;
-  *browser*) show_browsers_menu ;;
-  *capture*) show_capture_menu ;;
-  *screenshot*) show_screenshot_menu ;;
-  *screenrecord*) show_screenrecord_menu ;;
-  *speedtest*) show_speed_test_menu ;;
   *install*) show_install_menu ;;
-  *virtualization*) show_virtualization_menu ;;
-  *vpn*) show_vpn_menu ;;
-  *editor*) show_editor_menu ;;
-  *cybersecurity*) show_cybersecurity_menu ;;
-  *media*) show_media_menu ;;
-  *utility*) show_utility_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;
   *about*) /usr/share/ohmydebn/bin/ohmydebn-fastfetch-gui ;;

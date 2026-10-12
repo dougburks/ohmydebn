@@ -1,12 +1,12 @@
 #!/bin/bash
 #
 # ohmydebn-menu-tree: parses bin/ohmydebn-menu's own source at runtime,
-# powering bin/ohmydebn-menu-picker's two views: the 12 top-level categories
+# powering bin/ohmydebn-menu-picker's two views: the 11 top-level categories
 # (menu_tree_categories) and, once the user starts typing, every leaf action
 # across all ~25 nested show_*_menu functions flattened into
 # "breadcrumb<TAB>target" rows (menu_tree_flatten). Sourced only (by
-# ohmydebn-menu-picker, by ohmydebn-menu itself for eval dispatch, and by
-# tests/consistency.sh) - no set -e/-u/-o pipefail here, since those would
+# ohmydebn-menu-picker, by ohmydebn-menu itself for menu_tree_paths'
+# breadcrumbs, and by tests/consistency.sh) - no set -e/-u/-o pipefail here, since those would
 # leak into whichever caller sources this with its own, different flag
 # settings.
 
@@ -19,7 +19,7 @@ _mt_block_end() {
 # Returns the line with the function's own `menu "Title" "Options"` call,
 # not the `case "$MENU_RESULT" in` line right after it - _mt_item_labels
 # below needs the menu() call itself (that's where "Title"/"Options" live),
-# and _mt_arms/_mt_block_end's arm/esac scan starting one line early here
+# and _mt_arms/_mt_block_end's arm/esac scan starting one line earlier here
 # than strictly necessary is harmless (neither this line nor the case line
 # matches an arm pattern). Was `case \$(menu "` - see menu()'s own comment
 # for why every show_*_menu's call site changed from
@@ -156,12 +156,9 @@ _mt_walk() {
 # it builds a `local go_items="icon  Label\n..."` string (the single source
 # of truth for the picker's default view, passed to ohmydebn-menu-picker as
 # an argument) and hands it to go_to_menu() - so the Go items are pulled
-# directly off that line, then matched into go_to_menu()'s arms
-# specifically - that function has extra CLI-only arms (*theme*,
-# *screenshot*, *screenrecord*) with no corresponding Go-menu item text, so
-# the walk must start from the real Go item labels and match into
-# go_to_menu's arms, never enumerate its arms directly, or those phantom
-# entries leak into the flattened list as fake top-level rows.
+# directly off that line, then matched into go_to_menu()'s arms. The walk
+# starts from the real Go item labels rather than enumerating those arms,
+# so the Go line stays the one list of what the top level shows.
 #
 # Go-menu categories with runtime-discovered, not statically enumerable,
 # content - see show_other_apps_menu's own comment in ohmydebn-menu for
@@ -233,7 +230,7 @@ _mt_flatten_uncached() {
 # ohmydebn-menu-picker was visibly paying on every single launch, not just
 # the first. Since ohmydebn-menu's source only changes on an edit or a
 # package upgrade, caching the result and invalidating by mtime turns every
-# launch after the first back into an near-instant cache read, without
+# launch after the first back into a near-instant cache read, without
 # touching the (already well-tested) extraction logic itself.
 #
 # The cache file name is derived from the source path itself, not shared
@@ -302,7 +299,7 @@ menu_tree_paths() {
   _mt_cached_raw "$1" | grep $'^PATH\t' | cut -f2,3
 }
 
-# Emits "icon<TAB>label" for each of the 12 real Go-menu items, in order.
+# Emits "icon<TAB>label" for each of the 11 real Go-menu items, in order.
 # ohmydebn-menu-picker itself receives this data directly as an argument
 # from show_main_menu (see menu_tree_flatten's comment above) rather than
 # calling this function - this exists so tests/consistency.sh can validate

@@ -2,26 +2,32 @@
 set -euo pipefail
 
 IMAGE_PREFIX="ghcr.io/dougburks/so-crates"
+# The image ohmydebn-socrates-run starts by default, pinned by digest (the
+# same value; tests/unit/test-socrates-cleanup.sh checks they match). It's
+# always kept as well as the newest: after a run of another tag it used to
+# be removed as "older", and the next normal launch downloaded it again.
+DEFAULT_IMAGE="$IMAGE_PREFIX@sha256:008e9cb64985da47106072c8bf4eedaf1ec8f6c0746143fbfc7442cd791dab36"
 FORCE=false
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Remove old so-crates podman images, keeping only the most recent.
+Remove old so-crates podman images, keeping the most recent and the one
+SO-CRATES starts by default.
 
 Options:
   --force, -f   Remove without prompting
   --help        Show this help message
 EOF
-  exit 0
+  exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --force|-f) FORCE=true; shift ;;
     --help)     usage ;;
-    *)          echo "Unknown option: $1"; usage ;;
+    *)          echo "Unknown option: $1"; usage 1 ;;
   esac
 done
 
@@ -38,10 +44,26 @@ if [[ ${#IMAGES[@]} -le 1 ]]; then
 fi
 
 KEEP="${IMAGES[0]}"
-REMOVE=("${IMAGES[@]:1}")
-
 keep_id=$(awk -F'|' '{print $2}' <<< "$KEEP")
 keep_date=$(awk -F'|' '{print $1}' <<< "$KEEP")
+
+# The default image's full ID, if it's here (podman images lists short IDs).
+default_full_id=$(podman image inspect --format '{{.Id}}' "$DEFAULT_IMAGE" 2>/dev/null || true)
+default_id=""
+REMOVE=()
+for entry in "${IMAGES[@]:1}"; do
+  img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+  if [[ -n "$default_full_id" && "$default_full_id" == "$img_id"* ]]; then
+    default_id="$img_id"
+    continue
+  fi
+  REMOVE+=("$entry")
+done
+
+if [[ ${#REMOVE[@]} -eq 0 ]]; then
+  echo "Found ${#IMAGES[@]} image(s): the most recent and the default. Nothing to clean up."
+  exit 0
+fi
 
 STOPPED_CONTAINERS=()
 RUNNING_CONTAINERS=()
@@ -81,6 +103,10 @@ echo "=== so-crates image cleanup ==="
 echo ""
 echo "Keeping (most recent):"
 echo "  $keep_id  ($keep_date)"
+if [[ -n "$default_id" ]]; then
+  echo "Keeping (the one SO-CRATES starts by default):"
+  echo "  $default_id"
+fi
 echo ""
 echo "Removing ${#REMOVE[@]} older image(s):"
 
@@ -168,7 +194,7 @@ if [[ ${#REMOVE[@]} -gt 0 ]]; then
         if [[ -n "$dep_cid" ]]; then
           cname=$(podman container inspect --format '{{.Name}}' "$dep_cid" 2>/dev/null || echo "$dep_cid")
           echo "  removing dependent container $cname ($dep_cid)..."
-          podman rm -f "$dep_cid" &>/dev/null
+          podman rm -f "$dep_cid" &>/dev/null || true
           if podman rmi "$img_id" &>/dev/null; then
             echo "  removed $img_name ($img_id)"
           else
@@ -185,4 +211,4 @@ if [[ ${#REMOVE[@]} -gt 0 ]]; then
 fi
 
 echo ""
-echo "Done. Kept: $keep_id"
+echo "Done. Kept: $keep_id${default_id:+ and $default_id}"

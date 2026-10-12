@@ -1075,7 +1075,7 @@ class UpdateWindow(Gtk.Window):
         dialog.destroy()
         if response == Gtk.ResponseType.ACCEPT:
             self._abort()
-        return True  # never close immediately; an abort closes via _finish
+        return True  # never close immediately; an abort ends in _finish, which shows "Update aborted."
 
     @guarded(default=GLib.SOURCE_CONTINUE)
     def _on_present_signal(self):

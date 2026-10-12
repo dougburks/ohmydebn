@@ -25,7 +25,7 @@ mock_log "remove-all-optional $*"
 cat "$MOCK_DIR/list"
 STUB
   mkdir -p "$MOCK_DIR/root/install/packaging"
-  printf '#!/bin/bash\nmock_log "power-user.sh POWER_USER=$POWER_USER"\n' >"$MOCK_DIR/root/install/packaging/power-user.sh"
+  printf '#!/bin/bash\nmock_log "power-user.sh POWER_USER=$POWER_USER DISTRO_APPS_ONLY=${POWER_USER_DISTRO_APPS_ONLY:-}"\n' >"$MOCK_DIR/root/install/packaging/power-user.sh"
   sed -e "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" -e "s#/usr/share/ohmydebn/install#$MOCK_DIR/root/install#g" \
     "$REPO_ROOT/bin/ohmydebn-power-user-install" >"$MOCK_DIR/install.sh"
 }
@@ -41,7 +41,8 @@ run ""
 assert_contains "lists exactly what will be removed" "$OUTPUT" "These apps will be removed:
   libreoffice
   thunderbird"
-assert_contains "says apps from the OhMyDebn menu are kept" "$OUTPUT" "Apps you installed from the OhMyDebn menu are kept."
+assert_contains "says which apps are kept" "$OUTPUT" "Apps that only come from the OhMyDebn menu"
+assert_contains "and that listed apps go even if installed from the menu" "$OUTPUT" "removed even if you"
 assert_contains "asks first, defaulting to no" "$OUTPUT" "Continue? [y/N]"
 assert_contains "the list is the distro's apps only, and changes nothing" "$(cat "$MOCK_CALLS")" "remove-all-optional --distro-apps-only --list"
 assert_not_contains "Enter alone: nothing is applied" "$(cat "$MOCK_CALLS")" "power-user.sh"
@@ -55,7 +56,7 @@ mock_cleanup
 
 setup "libreoffice"
 run "y"
-assert_contains "'y': the profile is applied" "$(cat "$MOCK_CALLS")" "power-user.sh POWER_USER=true"
+assert_contains "'y': the profile is applied, removing only the listed apps" "$(cat "$MOCK_CALLS")" "power-user.sh POWER_USER=true DISTRO_APPS_ONLY=1"
 mock_cleanup
 
 # EOF at the prompt (Ctrl-C, or closed input): `read` fails and set -e

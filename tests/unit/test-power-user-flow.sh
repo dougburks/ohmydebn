@@ -81,4 +81,13 @@ assert_contains "existing install: removal limited to the distro's apps" "$(cat 
   "ohmydebn-pkg-remove-all-optional --skip-prompt --distro-apps-only"
 mock_cleanup
 
+# Scenario 5: from ohmydebn-power-user-install without the marker (a second
+# user, or an install that stopped early): still only the listed apps.
+mock_init
+setup_mocks
+POWER_USER=true POWER_USER_DISTRO_APPS_ONLY=1 HOME="$MOCK_DIR/home" PATH="$(mock_path)" bash "$MOCK_DIR/power-user-patched.sh" >/dev/null 2>&1
+assert_contains "asked for by ohmydebn-power-user-install: removal limited, marker or not" "$(cat "$MOCK_CALLS")" \
+  "ohmydebn-pkg-remove-all-optional --skip-prompt --distro-apps-only"
+mock_cleanup
+
 test_summary

@@ -4,10 +4,12 @@ set -euo pipefail
 
 # Applies the power-user profile to an existing install (the same profile
 # as `install.sh --power-user`). Here only the apps the distro shipped are
-# removed, never ones installed from the OhMyDebn menu (see
-# install/packaging/power-user.sh), and the exact list is shown before
-# anything happens: it used to say "Firefox, LibreOffice, etc." and then
-# also purge every AI tool, VPN and browser the user had installed.
+# removed (see install/packaging/power-user.sh), and the exact list is
+# shown before anything happens: it used to say "Firefox, LibreOffice,
+# etc." and then also purge every AI tool, VPN and browser the user had
+# installed. Some of the distro's apps (LibreOffice, Wireshark, Remmina...)
+# are in the OhMyDebn menu too, and those go whoever installed them - so
+# the message says what's kept without claiming every menu app is.
 REMOVE=$(/usr/share/ohmydebn/bin/ohmydebn-pkg-remove-all-optional --distro-apps-only --list)
 
 echo "This applies the power-user profile: it removes the optional apps your"
@@ -21,7 +23,9 @@ else
   echo "None of the apps it removes are installed, so nothing will be removed."
 fi
 echo
-echo "Apps you installed from the OhMyDebn menu are kept."
+echo "Apps that only come from the OhMyDebn menu (AI tools, VPNs, other browsers"
+echo "and so on) are kept. Apps on the list above are removed even if you"
+echo "installed them from the menu."
 echo
 printf "Continue? [y/N] "
 read -r ANSWER
@@ -33,4 +37,4 @@ case "$ANSWER" in
   ;;
 esac
 
-POWER_USER=true bash /usr/share/ohmydebn/install/packaging/power-user.sh
+POWER_USER=true POWER_USER_DISTRO_APPS_ONLY=1 bash /usr/share/ohmydebn/install/packaging/power-user.sh

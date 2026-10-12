@@ -93,7 +93,7 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 Neovim comes from `ohmydebn-neovim` (upstream's release build) and each user's LazyVim plugins, parsers and Mason tools from `ohmydebn-neovim-plugins`, both built in `ohmydebn-package-build`. The tested plugin versions are `config/nvim/lazy-lock.json` in this repo, and `install/config/nvim.sh` refreshes users' plugins whenever that lockfile changes.
 
 1. A Neovim bug-fix release: bump `VERSION` in `build-package-ohmydebn-neovim.sh` and rebuild it. The plugin package accepts any Neovim in the same minor series.
-2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. Test Neovim in a VM, then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
+2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. A plugin set that differs from the one published under the script's `VERSION` is built as a candidate in `ohmydebn-packages-candidates`, not published. Install it on a VM with `sudo apt install ./<deb>` and test Neovim, then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
 3. A new Neovim minor release (such as 0.13): do both, since the plugin package depends on the minor version it was built with.
 
 ### Theming another app

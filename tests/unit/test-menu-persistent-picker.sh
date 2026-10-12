@@ -24,11 +24,11 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-menu persistent picker ==="
 
-# Strips the trailing "if [[ -n \"\${1:-}\" ]]; then go_to_menu ...; else
-# show_main_menu; fi" dispatch block so sourcing this file only defines
-# functions - doesn't immediately try to show a real menu.
+# Strips the script's last line, its top-level `show_main_menu` call, so
+# sourcing this file only defines functions - doesn't immediately try to
+# show a real menu.
 strip_dispatch() {
-  sed '/^if \[\[ -n "\${1:-}"/,$d' "$1"
+  sed '/^show_main_menu$/d' "$1"
 }
 
 setup_mock_picker() {

@@ -13,9 +13,6 @@ source /usr/share/ohmydebn/bin/ohmydebn-menu-tree
 declare -A MENU_BREADCRUMB_OF=()
 MENU_BREADCRUMBS_LOADED=""
 
-# Set to true when going directly to a submenu, so we can exit directly
-DIRECT_ACCESS=false
-
 # Segments queued up by menu() when a search inside one submenu resolves to
 # a descendant reached through further submenus - see menu()'s comment. A
 # FILE rather than a shell variable/array - originally because every
@@ -307,23 +304,6 @@ get_apps_picker_result() {
     rm -f "$result_file"
     /usr/share/ohmydebn/bin/ohmydebn-app-launcher
     MENU_PICKER_RESULT="launched"
-  fi
-}
-
-back_to() {
-  local parent_menu="$1"
-
-  # Must never call menu() itself, directly or indirectly - menu() finds
-  # its caller via ${FUNCNAME[1]}, and back_to() calling "$parent_menu" as
-  # a plain function call (confirmed, not eval, not through a subshell)
-  # is exactly what keeps that name correct. A wrapper between a
-  # show_*_menu function and its own menu() call would break that lookup.
-  if [[ "$DIRECT_ACCESS" == "true" ]]; then
-    exit 0
-  elif [[ -n "$parent_menu" ]]; then
-    "$parent_menu"
-  else
-    show_main_menu
   fi
 }
 
@@ -800,7 +780,7 @@ show_style_menu() {
   *Tiling*) xlet-settings extension gTile@OhMyDebn ;;
   *Windows*) cinnamon-settings windows ;;
   *Workspaces*) cinnamon-settings workspaces ;;
-  *) back_to show_main_menu ;;
+  *) show_main_menu ;;
   esac
 }
 
@@ -812,7 +792,7 @@ show_system_menu() {
   *Relaunch*) /usr/bin/cinnamon --replace & ;;
   *Restart*) /usr/share/ohmydebn/bin/ohmydebn-power reboot ;;
   *Shutdown*) /usr/share/ohmydebn/bin/ohmydebn-power poweroff ;;
-  *) back_to show_main_menu ;;
+  *) show_main_menu ;;
   esac
 }
 
@@ -830,7 +810,7 @@ show_setup_menu() {
   *Power*) cinnamon-settings power ;;
   *Printers*) system-config-printer ;;
   *Sound*) cinnamon-settings sound ;;
-  *) back_to show_main_menu ;;
+  *) show_main_menu ;;
   esac
 }
 
@@ -917,10 +897,8 @@ show_main_menu() {
   go_to_menu "$MENU_RESULT"
 }
 
-# Dispatches a bare category label - used both for show_main_menu's own
-# picker result above, and directly for the DIRECT_ACCESS CLI-arg path at
-# the bottom of this script (e.g. `ohmydebn-menu install` from a
-# keybinding). menu() now resolves every searched-descendant breadcrumb
+# Dispatches a bare category label from show_main_menu's own picker result
+# above. menu() now resolves every searched-descendant breadcrumb
 # itself before anything gets here, so this never receives one anymore -
 # every "${1,,}" case arm here only ever needs to match a same-level label.
 go_to_menu() {
@@ -954,9 +932,4 @@ go_to_menu() {
   esac
 }
 
-if [[ -n "${1:-}" ]]; then
-  DIRECT_ACCESS=true
-  go_to_menu "$1"
-else
-  show_main_menu
-fi
+show_main_menu

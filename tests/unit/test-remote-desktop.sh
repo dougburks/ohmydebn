@@ -186,6 +186,14 @@ assert_contains "remove, not installed: message" "$OUT" "not currently installed
 assert_eq "remove, not installed: nothing run" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
+# --- remove after XRDP was removed some other way: the guard it left goes ---
+setup
+run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt >/dev/null
+OUT=$(MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-remove" --skip-prompt)
+assert_eq "remove, XRDP gone but guard left: guard removed" "no" "$([ -e "$DROPIN" ] && echo yes || echo no)"
+assert_contains "remove, XRDP gone but guard left: says so" "$OUT" "Removed the session guard"
+mock_cleanup
+
 # --- the session guard: loginctl answers from a table the test writes ---
 setup_guard() {
   setup

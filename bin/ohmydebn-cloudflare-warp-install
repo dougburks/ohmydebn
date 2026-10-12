@@ -44,7 +44,7 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
     sudo gpg --yes --dearmor --output "$WARP_KEYRING"
 
   echo "deb [signed-by=$WARP_KEYRING] https://pkg.cloudflareclient.com/ $(warp_codename) main" |
-    sudo tee "$WARP_LIST"
+    sudo tee "$WARP_LIST" >/dev/null
 
   # Restricts this repo to the one package it's actually needed for
   # (confirmed via `apt-cache depends cloudflare-warp` - no same-repo

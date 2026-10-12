@@ -13,7 +13,7 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   read -r
   sudo mkdir -p /usr/share/keyrings
   curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg
-  echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list
+  echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list >/dev/null
 
   # Restricts this repo to the one package it's actually needed for - a
   # bare signed-by trusts the repo's key to sign anything, so without this
@@ -26,7 +26,19 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   printf 'Package: *\nPin: origin "pkg.helium.computer"\nPin-Priority: -1\n\nPackage: helium-bin\nPin: origin "pkg.helium.computer"\nPin-Priority: 500\n' |
     sudo tee /etc/apt/preferences.d/helium.pref >/dev/null
 
-  sudo /usr/bin/apt update && sudo /usr/bin/apt -y install helium-bin
+  # Two separate commands, not `apt update && apt install`: a failed update
+  # on the left of && doesn't stop the script under set -e, so the install
+  # was skipped and the rest carried on as if it had worked. And a source
+  # apt can't refresh fails every later update, OhMyDebn's too - so it's
+  # taken out again, as ohmydebn-cloudflare-warp-install does.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f /etc/apt/sources.list.d/helium.list /etc/apt/preferences.d/helium.pref /usr/share/keyrings/helium.gpg
+    echo
+    echo "Couldn't refresh the package lists, so Helium's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
+  sudo /usr/bin/apt -y install helium-bin
 
   # Seeded only into a profile that doesn't exist yet, as the Brave
   # installers do: a purge leaves ~/.config alone, so a reinstall used to

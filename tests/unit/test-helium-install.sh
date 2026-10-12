@@ -18,13 +18,19 @@ echo "=== bin/ohmydebn-helium-bin-install: profile seeding ==="
 
 setup() {
   mock_init
-  for CMD in sudo curl; do
-    mock_bin "$CMD" <<'STUB'
+  mock_bin curl <<'STUB'
 #!/bin/bash
-cat >/dev/null 2>&1 &
 exit 0
 STUB
-  done
+  # MOCK_APT_UPDATE_FAILS=1: `apt update` fails, as when the repo can't be
+  # reached.
+  mock_bin sudo <<'STUB'
+#!/bin/bash
+cat >/dev/null 2>&1 &
+mock_log "sudo $*"
+[[ "$*" == *"apt update"* && "${MOCK_APT_UPDATE_FAILS:-}" == 1 ]] && exit 100
+exit 0
+STUB
   mock_bin dpkg <<'STUB'
 #!/bin/bash
 exit 1
@@ -41,6 +47,7 @@ STUB
 
 run() {
   HOME="$MOCK_DIR/home" PATH="$(mock_path)" bash "$MOCK_DIR/install" <<<"" >/dev/null 2>&1
+  STATUS=$?
 }
 
 setup
@@ -55,6 +62,17 @@ echo mine >"$MOCK_DIR/home/.config/net.imput.helium/Default/Preferences"
 run
 assert_eq "existing Helium profile (a reinstall): user's preferences kept" "mine" \
   "$(cat "$MOCK_DIR/home/.config/net.imput.helium/Default/Preferences")"
+mock_cleanup
+
+# apt update fails: no install attempted, the source taken out again, and
+# the script fails (it used to skip the install and carry on).
+setup
+MOCK_APT_UPDATE_FAILS=1 run
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "apt update fails: the installer fails" "1" "$STATUS"
+assert_not_contains "apt update fails: no install attempted" "$CALLS" "install helium-bin"
+assert_contains "apt update fails: Helium's source is removed again" "$CALLS" "rm -f /etc/apt/sources.list.d/helium.list"
+assert_eq "apt update fails: no profile seeded" "no" "$([ -e "$MOCK_DIR/home/.config/net.imput.helium" ] && echo yes || echo no)"
 mock_cleanup
 
 test_summary

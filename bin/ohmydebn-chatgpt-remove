@@ -13,10 +13,12 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
-  sudo /usr/bin/apt update
   # The purge runs ChatGPT's own postrm, which removes the repo it added
   # (chatgpt.sources) and its keyring; the pin is OhMyDebn's to remove.
   sudo /usr/bin/apt -y purge chatgpt
   sudo /usr/bin/apt -y autoremove
   sudo rm -f /etc/apt/preferences.d/chatgpt.pref
+  # After the repo is gone, so apt drops its package lists now rather than
+  # at the next update (an update before the purge only refreshed them).
+  sudo /usr/bin/apt update
 fi

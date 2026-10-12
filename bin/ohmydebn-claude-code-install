@@ -21,7 +21,7 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |
-    sudo tee /etc/apt/sources.list.d/claude-code.list
+    sudo tee /etc/apt/sources.list.d/claude-code.list >/dev/null
 
   # Restricts this repo to the one package it's actually needed for
   # (confirmed via `apt-cache depends claude-code` - no same-repo

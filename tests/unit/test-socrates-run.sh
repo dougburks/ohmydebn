@@ -87,6 +87,7 @@ run_socrates
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "subids-ensure invoked" "$CALLS" "ohmydebn-podman-subids-ensure"
 assert_eq "subids-ensure runs before podman" "ohmydebn-podman-subids-ensure" "$(head -n1 "$MOCK_CALLS" | cut -d' ' -f1)"
+assert_contains "the container is removed when SO-CRATES stops (--rm)" "$(grep 'podman run' "$MOCK_CALLS")" " --rm "
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

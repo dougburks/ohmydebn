@@ -20,7 +20,7 @@ if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
-    echo "Press Enter to install it or Ctrl-C to cancel."
+    echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
 
@@ -41,8 +41,10 @@ if ! dpkg -s "virt-manager" >/dev/null 2>&1; then
   sudo /usr/bin/apt -y install "$qemu_pkg" virt-manager virt-viewer libvirt-daemon-system libvirt-clients bridge-utils ovmf passt
 
   # Only add the user to the kvm group, for /dev/kvm access. Deliberately NOT
-  # adding to the libvirt group or enabling the system libvirtd: this sets up
-  # qemu:///session (per-user, unprivileged) rather than qemu:///system, since
+  # adding to the libvirt group: this sets up qemu:///session (per-user,
+  # unprivileged) rather than qemu:///system. (libvirt-daemon-system above
+  # does enable the system libvirtd and its default network from its own
+  # postinst; OhMyDebn just never points anything at them.) That's because
   # libvirt group membership is effectively root-equivalent (arbitrary disk
   # paths, root-run hooks) and session mode avoids that entirely for a
   # single-user desktop.

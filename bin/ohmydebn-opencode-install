@@ -38,9 +38,12 @@ fi
 # reported failure ("apt install ohmydebn-opencode-cli" failing until a
 # manual "apt update") on a box where this had gone a while since the last
 # ohmydebn-update. See ohmydebn-gestures-install's own comment for the
-# general reasoning.
-sudo /usr/bin/apt update
-sudo /usr/bin/apt -y install ohmydebn-opencode-cli
+# general reasoning. Only when it isn't installed yet, like every other
+# installer: this used to update and reinstall on every run.
+if [ "$NEWLY_INSTALLED" = true ]; then
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install ohmydebn-opencode-cli
+fi
 
 # Freshly installed onto a system that may already have a default AI
 # assistant: ask before changing it (defaults to no, and says nothing when

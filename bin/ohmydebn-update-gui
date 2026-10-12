@@ -147,23 +147,32 @@ STALL_SECONDS = 90
 # the stall hint and the revealed terminal like any other.
 CONSENT_PROMPT_MARKER = "Ctrl-c to cancel"
 
-# How an abort proceeds. SIGINT goes to the child's whole process group
-# at once: it's the Ctrl-C the terminal flow would deliver, which apt
-# handles as gracefully as an interrupt can - it finishes the package
-# dpkg is on and stops there. SIGINT alone doesn't stop the update,
-# though: sudo catches it and exits normally, and bash's cooperative-SIGINT
-# rule lets the script march on to its next command (seen live:
-# cancelling the password dialog killed only the prompt and the update
-# carried on). So SIGTERM follows - but only once no apt or dpkg is left
-# running under the update. Sending it on a timer (2 seconds) used to
-# reach apt through sudo while dpkg was mid-unpack or mid-configure:
-# exactly the half-installed state the abort dialog warns about. Every
-# ABORT_POLL_MS the update's process tree is checked: apt/dpkg still
-# working means wait (and a newly started one gets its own SIGINT, so it
-# stops as early as it safely can); none left means SIGTERM, which stops
-# the script before its next command. Deliberately NO SIGKILL, ever. If
-# the child is still running after ABORT_PATIENCE_MS, apt is finishing a
-# package - the GUI says so and waits for it.
+# How an abort proceeds (AbortDriver below). The interrupt is a Ctrl-C
+# TYPED into the update's terminal, exactly as if pressed in the details
+# pane - not a SIGINT to the child's process group. The child is util-
+# linux `script` (ohmydebn-update re-execs itself under it to log the
+# run), and script answers SIGINT, SIGTERM, SIGHUP and SIGQUIT alike by
+# SIGTERMing the program it runs at once: a signalled abort killed the
+# update's shell instantly, the window said "Update aborted", and apt -
+# which never got any interrupt - carried on detached until it finished
+# (seen live on Ubuntu 24.04: a 46-second full-upgrade ran to completion
+# after the abort). Typed input goes through script to the update's
+# terminal like any keystroke, so the Ctrl-C reaches apt the way a real
+# one does: apt finishes the package dpkg is on and stops there, and the
+# script under it stops on apt's failure (set -e).
+#
+# SIGTERM still follows, as a backstop for a script that carries on -
+# but only once no apt or dpkg is left running under the update. Sending
+# it on a timer (2 seconds) used to reach apt through sudo while dpkg was
+# mid-unpack or mid-configure: exactly the half-installed state the abort
+# dialog warns about. Every ABORT_POLL_MS the update's process tree is
+# checked: apt/dpkg still working means wait (and a newly started one
+# gets its own Ctrl-C, so it stops as early as it safely can); none left
+# means SIGTERM, which stops the script before its next command.
+# Deliberately NO SIGKILL, ever. If the child is still running after
+# ABORT_PATIENCE_MS, apt is finishing a package - the GUI says so and
+# waits for it. The window reports the abort only when the child has
+# actually exited.
 ABORT_POLL_MS = 250
 ABORT_PATIENCE_MS = 8000
 # Process names (as /proc/<pid>/stat reports them) that mean "apt is
@@ -237,6 +246,68 @@ def abort_step(busy, interrupted, terminated):
         action = "interrupt" if busy - interrupted else "wait"
         return action, interrupted | busy
     return ("wait" if terminated else "terminate"), interrupted
+
+
+class AbortDriver:
+    """Drives an abort of the running update (see ABORT_POLL_MS's comment):
+    start() once, then poll() every ABORT_POLL_MS until it returns False
+    (the update has exited). No GTK in here, so the tests drive this exact
+    code against a real `script`."""
+
+    CTRL_C = b"\x03"
+
+    def __init__(self, proc, master, proc_dir="/proc"):
+        self.proc = proc
+        self.master = master
+        self.proc_dir = proc_dir
+        self.interrupted = set()
+        self.terminated = False
+
+    def _running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def _busy(self):
+        return busy_apt_pids(self.proc.pid, read_process_table(self.proc_dir))
+
+    def interrupt(self):
+        # Typed, not signalled - see ABORT_POLL_MS's comment for why a
+        # signal to `script` defeats the whole abort. Only if there's no
+        # terminal to type into does it fall back to SIGINT.
+        if self.master is not None:
+            try:
+                os.write(self.master, self.CTRL_C)
+                return
+            except OSError:
+                pass
+        self.signal(signal.SIGINT)
+
+    def signal(self, sig):
+        if not self._running():
+            return
+        try:
+            os.killpg(os.getpgid(self.proc.pid), sig)
+        except OSError:
+            try:
+                self.proc.send_signal(sig)
+            except OSError:
+                pass
+
+    def start(self):
+        if not self._running():
+            return
+        self.interrupted = self._busy()
+        self.interrupt()
+
+    def poll(self):
+        if not self._running():
+            return False
+        action, self.interrupted = abort_step(self._busy(), self.interrupted, self.terminated)
+        if action == "interrupt":
+            self.interrupt()
+        elif action == "terminate":
+            self.signal(signal.SIGTERM)
+            self.terminated = True
+        return True
 
 
 def is_fence(line):
@@ -724,8 +795,7 @@ class UpdateWindow(Gtk.Window):
         self.password_attempts = 0
         self.last_password_prompt = None
         self.aborting = False
-        self.abort_interrupted = set()
-        self.abort_terminated = False
+        self.abort_driver = None
         self.finished = False
 
         self._build_ui()
@@ -1248,7 +1318,7 @@ class UpdateWindow(Gtk.Window):
     @guarded()
     def _on_sudo_prompt(self):
         # An abort in progress can surface one more sudo prompt before
-        # its SIGTERM lands (see _abort; sudo catching the SIGINT is exactly
+        # its SIGTERM lands (see _abort; sudo catching the Ctrl-C is exactly
         # how the script survives long enough to reach its next sudo) -
         # don't stack a second password dialog on top of "Aborting...".
         if self.aborting:
@@ -1367,36 +1437,22 @@ class UpdateWindow(Gtk.Window):
         )
 
     def _abort(self):
-        # See ABORT_POLL_MS's comment for the plan: SIGINT now, SIGTERM
-        # only once no apt/dpkg is left running. _poll_child sees the exit
-        # and routes to _finish with aborting set.
+        # See ABORT_POLL_MS's comment for the plan: a typed Ctrl-C now,
+        # SIGTERM only once no apt/dpkg is left running. _poll_child sees
+        # the exit and routes to _finish with aborting set.
         if self.aborting:
             return
         self.aborting = True
         self.status_label.set_text("Aborting update...")
-        self.abort_interrupted = self._busy_apt()
-        self.abort_terminated = False
-        self._kill_child(signal.SIGINT)
+        self.abort_driver = AbortDriver(self.proc, self.master)
+        self.abort_driver.start()
         GLib.timeout_add(ABORT_POLL_MS, self._on_abort_poll)
         GLib.timeout_add(ABORT_PATIENCE_MS, self._on_abort_patience)
 
-    def _busy_apt(self):
-        if self.proc is None:
-            return set()
-        return busy_apt_pids(self.proc.pid, read_process_table())
-
     @guarded(default=GLib.SOURCE_REMOVE)
     def _on_abort_poll(self):
-        if self.proc is None or self.proc.poll() is not None:
+        if self.abort_driver is None or not self.abort_driver.poll():
             return GLib.SOURCE_REMOVE
-        action, self.abort_interrupted = abort_step(
-            self._busy_apt(), self.abort_interrupted, self.abort_terminated
-        )
-        if action == "interrupt":
-            self._kill_child(signal.SIGINT)
-        elif action == "terminate":
-            self._kill_child(signal.SIGTERM)
-            self.abort_terminated = True
         return GLib.SOURCE_CONTINUE
 
     @guarded(default=GLib.SOURCE_REMOVE)

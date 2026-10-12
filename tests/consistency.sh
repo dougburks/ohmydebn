@@ -27,6 +27,15 @@ BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
 source "$REPO_ROOT/tests/lib/extract-packages.sh"
 source "$REPO_ROOT/bin/ohmydebn-menu-tree"
 
+# The menu search index caches itself in ~/.local/state/ohmydebn-config,
+# keyed by the menu script's path, so the checks below used to leave a
+# cache for this checkout's bin/ohmydebn-menu in the real home directory.
+# A scratch HOME for the rest of the run (BUILD_SCRIPT above already has
+# the real one).
+SCRATCH_HOME=$(mktemp -d)
+export HOME="$SCRATCH_HOME"
+trap 'rm -rf "$SCRATCH_HOME"' EXIT
+
 FAIL=0
 
 echo "=== consistency ==="

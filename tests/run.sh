@@ -12,6 +12,10 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+# The Python tests import modules from bin/; without this each run left a
+# bin/__pycache__ behind in the checkout.
+export PYTHONDONTWRITEBYTECODE=1
+
 SKIP_APT_CHECKS=false
 [[ "${1:-}" == "--skip-apt-checks" ]] && SKIP_APT_CHECKS=true
 
@@ -26,7 +30,9 @@ run_suite() {
   echo "################################################################"
   echo "# $name"
   echo "################################################################"
-  if ! bash "$script"; then
+  # </dev/null: a test whose script reaches an unanswered question fails
+  # on end of input instead of waiting on the terminal for good.
+  if ! bash "$script" </dev/null; then
     SUITES_FAILED=$((SUITES_FAILED + 1))
     FAILED_NAMES+=("$name")
   fi

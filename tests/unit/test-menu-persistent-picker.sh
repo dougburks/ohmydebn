@@ -135,6 +135,7 @@ assert_contains "session end sends QUIT" "$CALLS" "serve-quit"
 # menu() maps its calling show_*_menu function to a breadcrumb via
 # menu_tree_paths - a bash+awk subprocess that used to run on every level.
 # It's now filled into MENU_BREADCRUMB_OF on the first call and reused.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -164,6 +165,7 @@ assert_eq "breadcrumb cache: later levels resolved from the cache (first match w
 assert_not_contains "breadcrumb cache: the duplicate's WRONG value never used" "$CALLS" "serve-request:WRONG"
 
 # --- Request line format: breadcrumb and options are tab-separated, in order ---
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -180,6 +182,7 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_contains "breadcrumb prefix is sent as given" "$CALLS" "serve-request:Install > AI"
 
 # --- Fallback: picker fails to start entirely -> one-shot mode still answers ---
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -204,6 +207,7 @@ assert_contains "fallback still returns the picked value" "$CALLS" "RESULT:Fallb
 # keep the signal-handling fix that made this safe to do a contained
 # change) - once it's gone, one-shot mode is used for the rest of the
 # session, not just once.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -241,6 +245,7 @@ assert_eq "both post-crash calls used one-shot mode" "2" "$(grep -c '^oneshot-ca
 # specifically so this script's real "wait for a pick" is the latter, not
 # the former - this test is what would catch a regression back to the
 # former.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"

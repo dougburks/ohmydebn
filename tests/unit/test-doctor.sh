@@ -309,6 +309,7 @@ build_machine yes
 rm "$H/.config/ohmydebn/current/default-ai"
 run_doctor
 assert_contains "no default AI: valid, with its fallback" "$OUTPUT" "ok - default AI is valid (unset - opencode)"
+mock_cleanup
 
 # --- a colors.toml with a repeated key (as ohmydebn-theme-set-colors wrote for
 # Aether themes before 4.9.0): not a failure - every reader of colors.toml

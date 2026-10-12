@@ -11,6 +11,7 @@
 # regardless - VTE_AVAILABLE just reads False there.
 
 import os
+import shutil
 import sys
 import tempfile
 from importlib.machinery import SourceFileLoader
@@ -256,6 +257,7 @@ proc_root = fake_proc({
     200: (1, "apt"), 300: (1, "odd) name (x"),
 })
 table = gui.read_process_table(proc_root)
+shutil.rmtree(proc_root)
 check_eq("process table: parent and name read from stat", table[104], (103, "apt"))
 check_eq("process table: a name containing ') (' is read whole", table[300], (1, "odd) name (x"))
 check_eq("busy apt: apt and dpkg under the update, through sudo's own session",
@@ -269,7 +271,6 @@ check_eq("process table: a missing /proc gives an empty table",
 
 # And against the real /proc: a process named "apt" under a shell under
 # this test is found; it's a copy of sleep, so nothing touches apt itself.
-import shutil  # noqa: E402
 import subprocess as _subprocess  # noqa: E402
 import time  # noqa: E402
 fake_bin = tempfile.mkdtemp()

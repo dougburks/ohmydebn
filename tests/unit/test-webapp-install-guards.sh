@@ -67,7 +67,29 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_contains "downloads the icon after --" "$CALLS" "-- https://example.com/icon.png"
 assert_eq "writes the desktop file" "1" "$(find "$SCRATCH_HOME/.local/share/applications" -name '*.desktop' | wc -l)"
 DESKTOP_CONTENT=$(cat "$SCRATCH_HOME/.local/share/applications/Good App.desktop")
-assert_contains "desktop file has the real Exec" "$DESKTOP_CONTENT" "Exec=ohmydebn-launch-webapp https://example.com"
+assert_contains "desktop file runs the launcher by its full path" "$DESKTOP_CONTENT" "Exec=/usr/share/ohmydebn/bin/ohmydebn-launch-webapp \"https://example.com\""
+
+# --- A URL with %, quotes or shell characters reaches the browser intact ---
+# It used to be written bare: %20 was read as a (bad) field code and the
+# launcher broke. Parsed here the way Cinnamon parses it.
+fresh_scratch_home
+URL='https://example.com/a%20b?q="x"&y=$HOME`id`\z'
+install_webapp "Odd" "$URL" "https://example.com/icon.png"
+ARGV=$(python3 "$REPO_ROOT/tests/lib/desktop-exec-argv.py" "$SCRATCH_HOME/.local/share/applications/Odd.desktop")
+assert_eq "the launcher gets exactly the URL" "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp
+$URL" "$ARGV"
+
+# --- A failed icon download (an error page) stops the install ---
+fresh_scratch_home
+mock_bin curl <<'STUB'
+#!/bin/bash
+echo "curl $*" >>"$MOCK_CALLS"
+[[ "$1" == *f* ]] && exit 22
+touch "$3"
+STUB
+install_webapp "Missing Icon" "https://example.com" "https://example.com/404.png"
+assert_contains "the icon is fetched with curl -f" "$(cat "$MOCK_CALLS")" "curl -fsSL"
+assert_eq "an icon that can't be downloaded writes no launcher" "" "$(find "$SCRATCH_HOME/.local/share/applications" -name '*.desktop')"
 
 rm -rf "$SCRATCH_HOME"
 mock_cleanup

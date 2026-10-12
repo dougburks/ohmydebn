@@ -54,7 +54,11 @@ for APP_NAME in "${APP_NAMES[@]}"; do
     echo "Skipping '$APP_NAME': app name must not contain '/'."
     continue
   fi
-  if [[ ! -f "$DESKTOP_DIR/$APP_NAME.desktop" ]]; then
+  # Only a launcher ohmydebn-webapp-install wrote: a name given on the
+  # command line used to delete any <name>.desktop, so
+  # `ohmydebn-webapp-remove firefox` removed a user's own firefox.desktop.
+  if [[ ! -f "$DESKTOP_DIR/$APP_NAME.desktop" ]] ||
+    ! grep -q '^Exec=.*ohmydebn-launch-webapp' "$DESKTOP_DIR/$APP_NAME.desktop"; then
     echo "No web app named '$APP_NAME'."
     continue
   fi

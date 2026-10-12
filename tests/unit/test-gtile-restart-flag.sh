@@ -103,7 +103,7 @@ SCRATCH_HOME=$(mktemp -d)
 DPKG_GTILE_VERSION="2.8.1-20260831" run_script
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "first run, version installed+enabled: restart flagged" "1" "$RESTART_FLAG"
-assert_contains "first run: restart headline shown" "$CALLS" "Cinnamon will restart at the end of this update for gtile"
+assert_contains "first run: restart headline shown" "$CALLS" "Cinnamon will restart at the end of this update for gTile"
 assert_eq "first run: restart-version state file written" "2.8.1-20260831" \
   "$(cat "$SCRATCH_HOME/.local/state/ohmydebn-config/gtile-cinnamon-restart-version" 2>/dev/null)"
 rm -rf "$SCRATCH_HOME"

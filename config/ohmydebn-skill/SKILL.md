@@ -420,7 +420,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 ## Example Requests
 
 - "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
-- "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "GMail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
+- "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "Gmail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets

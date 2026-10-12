@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Every webapp (Calendar, GMail, Google, Hotkeys, X, the OhMyDebn
+# Every webapp (Calendar, Gmail, Google, Hotkeys, X, the OhMyDebn
 # website, every user-installed webapp from ohmydebn-webapp-install, and
 # ohmydebn-menu's doc links) tiled to the right half with gaps
 # immediately after launch, via the shared ohmydebn-launch-tiled helper -

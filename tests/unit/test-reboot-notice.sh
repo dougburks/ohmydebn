@@ -56,6 +56,16 @@ assert_contains "newer kernel: says nothing is broken meanwhile, because of the 
 assert_contains "newer kernel: desktop notification sent under a display" "$(cat "$MOCK_CALLS")" "notify-send OhMyDebn Update A reboot is needed"
 mock_cleanup
 
+# --- the same newer kernel, but after ohmydebn-reset-config: silent (a
+# reset installs nothing, and "to finish this update" would be wrong) ---
+setup "6.12.105+deb13-amd64" "6.12.105+deb13-amd64" "6.12.107+deb13-amd64"
+OUTPUT=$(DISPLAY=:0 OHMYDEBN_RESET=1 PATH="$(mock_path)" bash -e "$MOCK_DIR/patched.sh" 2>&1)
+EXIT_CODE=$?
+assert_eq "reset: exits 0" "0" "$EXIT_CODE"
+assert_eq "reset: prints nothing" "" "$OUTPUT"
+assert_eq "reset: no headline, no notification" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
 # --- version sort, not string sort: 6.12.10 running beats an installed 6.12.9 ---
 setup "6.12.10-amd64" "6.12.9-amd64" "6.12.10-amd64"
 run_notice

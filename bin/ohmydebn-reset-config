@@ -57,7 +57,26 @@ done
 # upgrade at the end, which an update does every time: OHMYDEBN_SKIP_UPGRADE
 # leaves it out (install.sh --skip-upgrade's switch), since a reset of
 # config files must not also upgrade the system, or fail when offline.
-OHMYDEBN_SKIP_UPGRADE=1 PATH="/usr/share/ohmydebn/bin:$PATH" bash -e /usr/share/ohmydebn/ohmydebn.sh
+# OHMYDEBN_RESET makes the final steps say nothing about skipped upgrades,
+# an "update complete" or a reboot an earlier update needed.
+RESET_STATUS=0
+OHMYDEBN_RESET=1 OHMYDEBN_SKIP_UPGRADE=1 PATH="/usr/share/ohmydebn/bin:$PATH" \
+  bash -e /usr/share/ohmydebn/ohmydebn.sh || RESET_STATUS=$?
+
+# Oh My Zsh is downloaded, not shipped: offline, its step can't fetch a new
+# copy, and ~/.zshrc then failed to load it in every new terminal until an
+# update ran online. It's code rather than settings, so the previous copy
+# goes back - also when a later step failed.
+OHMYZSH_BACKUP=~/.oh-my-zsh-backup-$TIMESTAMP
+if [ ! -e ~/.oh-my-zsh ] && [ -d "$OHMYZSH_BACKUP" ]; then
+  mv "$OHMYZSH_BACKUP" ~/.oh-my-zsh
+  echo
+  echo "Couldn't download a new copy of Oh My Zsh, so your previous one was kept."
+fi
+
+if [ "$RESET_STATUS" -ne 0 ]; then
+  exit "$RESET_STATUS"
+fi
 
 # Reapply the current theme (keeping the background) so the files it
 # generates - the Starship config, and the theme pieces of the others -
@@ -66,3 +85,6 @@ THEME_NAME=$(cat ~/.config/ohmydebn/current/theme.name 2>/dev/null || true)
 if [ -n "$THEME_NAME" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-theme-set --keep-background "$THEME_NAME"
 fi
+
+echo
+/usr/share/ohmydebn/bin/ohmydebn-headline "OhMyDebn config reset complete"

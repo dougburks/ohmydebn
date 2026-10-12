@@ -89,6 +89,17 @@ assert_contains "updates.sh (skip): the rest of the stage still runs (opencode m
 assert_contains "updates.sh (skip): the rest of the stage still runs (update-check timer)" "$CALLS" "ohmydebn-update-check-install"
 mock_cleanup
 
+# ohmydebn-reset-config skips the upgrade too, but never asked for it:
+# saying "Skipping ... (--skip-upgrade)" named an option the user never typed.
+setup_updates
+OUTPUT=$(PATH="$(mock_path)" OHMYDEBN_SKIP_UPGRADE=1 OHMYDEBN_RESET=1 bash -e "$MOCK_DIR/updates-patched.sh" 2>&1)
+CALLS=$(cat "$MOCK_CALLS")
+assert_not_contains "updates.sh (reset): the full upgrade is NOT run" "$CALLS" "ohmydebn-update-system-pkgs"
+assert_not_contains "updates.sh (reset): no --skip-upgrade headline" "$CALLS" "Skipping the full system update"
+assert_not_contains "updates.sh (reset): no advice to update" "$OUTPUT" "Run ohmydebn-update when convenient"
+assert_contains "updates.sh (reset): the rest of the stage still runs" "$CALLS" "ohmydebn-update-check-install"
+mock_cleanup
+
 setup_updates
 PATH="$(mock_path)" bash -e "$MOCK_DIR/updates-patched.sh" >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")

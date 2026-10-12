@@ -16,7 +16,11 @@ if [ "${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}" = "1" ] && pgrep -x cinnamon >/dev/
   setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
 fi
 
-if [ -f ~/.local/state/ohmydebn ]; then
+# ohmydebn-reset-config (OHMYDEBN_RESET) prints its own "complete" once
+# it has reapplied the theme, after this run - not "update complete".
+if [ "${OHMYDEBN_RESET:-}" = "1" ]; then
+  :
+elif [ -f ~/.local/state/ohmydebn ]; then
   VERSION=$(/usr/share/ohmydebn/bin/ohmydebn-version)
   /usr/share/ohmydebn/bin/ohmydebn-headline "OhMyDebn update complete - version: $VERSION"
 else

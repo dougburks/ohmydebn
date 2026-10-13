@@ -27,6 +27,15 @@ BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
 source "$REPO_ROOT/tests/lib/extract-packages.sh"
 source "$REPO_ROOT/bin/ohmydebn-menu-tree"
 
+# The menu search index caches itself in ~/.local/state/ohmydebn-config,
+# keyed by the menu script's path, so the checks below used to leave a
+# cache for this checkout's bin/ohmydebn-menu in the real home directory.
+# A scratch HOME for the rest of the run (BUILD_SCRIPT above already has
+# the real one).
+SCRATCH_HOME=$(mktemp -d)
+export HOME="$SCRATCH_HOME"
+trap 'rm -rf "$SCRATCH_HOME"' EXIT
+
 FAIL=0
 
 echo "=== consistency ==="
@@ -1036,6 +1045,7 @@ PIN_FILE_OWNERS=(
   # Both Brave variants share one repository, set up and torn down by the
   # same helper - so writer and cleaner are the one script.
   "ohmydebn-brave-repo:ohmydebn-brave-repo:brave-browser-release.pref"
+  "ohmydebn-chatgpt-install:ohmydebn-chatgpt-remove:chatgpt.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
   "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
@@ -1066,11 +1076,10 @@ echo "-- *-install scripts run apt update before apt install (regression guard) 
 # power-user.sh, and every on-demand script that uses it) - adding its own
 # apt update would multiply redundant network calls per run instead of
 # running once, so it relies by design on the same early update
-# install.sh's own flow already guarantees. ohmydebn-code-install never
-# actually calls apt install at all (a raw dpkg -i on a downloaded .deb) -
-# a plain string match would otherwise be fooled by its own comment
-# mentioning "apt install" in prose.
-INSTALL_APT_UPDATE_EXEMPT=("ohmydebn-pkg-install-optional" "ohmydebn-code-install")
+# install.sh's own flow already guarantees. An installer that hands a
+# vendor .deb to ohmydebn-apt-install-deb is covered too: the helper runs
+# apt update itself before it installs.
+INSTALL_APT_UPDATE_EXEMPT=("ohmydebn-pkg-install-optional")
 CHECKED=0
 for f in "$REPO_ROOT"/bin/*-install; do
   name=$(basename "$f")
@@ -1086,7 +1095,7 @@ for f in "$REPO_ROOT"/bin/*-install; do
     # update"`) would otherwise satisfy a looser match without the script
     # actually calling it, exactly the false-negative this guard exists to
     # prevent.
-    if ! grep -q '/usr/bin/apt update' "$f"; then
+    if ! grep -q '/usr/bin/apt update' "$f" && ! grep -q '/usr/share/ohmydebn/bin/ohmydebn-apt-install-deb' "$f"; then
       echo "  FAIL - $name calls apt install without apt update first"
       FAIL=$((FAIL + 1))
     fi

@@ -1,16 +1,8 @@
 #!/bin/bash
 
-# Clear any pre-existing value before gtile-restart-flag.sh below gets a
-# chance to set it - under the normal ohmydebn-update
-# invocation (a fresh `bash install.sh` subprocess each run) this can
-# never actually be set yet at this point, so this is a no-op in
-# practice; it exists so that stays true even if something ever invokes
-# this flow differently (e.g. `source install.sh` directly instead of
-# running it as its own process, for faster local iteration) - without
-# this, a leftover exported "1" from an earlier run in the same shell
-# would trigger an unnecessary restart even when nothing this run
-# actually needs one.
-unset OHMYDEBN_CINNAMON_RESTART_NEEDED
+# OHMYDEBN_CINNAMON_RESTART_NEEDED is cleared once at the top of
+# ohmydebn.sh, not here: config steps set it too (gTile's checkbox fix,
+# the applet ID fix), and clearing it here threw their requests away.
 
 source $OHMYDEBN_INSTALL/finalization/updates.sh
 source $OHMYDEBN_INSTALL/finalization/theme-carousel-cache.sh

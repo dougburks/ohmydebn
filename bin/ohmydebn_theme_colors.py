@@ -5,12 +5,9 @@
 # key=value file ohmydebn-theme-set-picker rewrites on every theme
 # change). Four keys, in the roles ohmydebn-menu-picker established:
 # bg0 = window scrim, bg1 = solid surface, bg3 = accent, fg0 =
-# foreground. Grew out of ohmydebn-update-gui's own loader once
-# ohmydebn_speedtest_common.py became a second consumer of the same
-# parsing - ohmydebn-menu-picker predates all of this and keeps its own
-# reader (it wants CSS strings directly and carries extra picker-only
-# styling around them), so the palette *file* stays the single source of
-# truth even though that one reader isn't unified here.
+# foreground. Grew out of ohmydebn-update-gui's own loader; the speed
+# tests, the menu picker and the virt-manager passt window read the
+# palette through it too.
 #
 # Not a menu entry itself - imported only, the same role
 # ohmydebn_speedtest_common.py plays for the dial widget (and the same
@@ -19,8 +16,8 @@
 
 import os
 
-# Identical to ohmydebn-menu-picker's DEFAULT_COLORS, hex-encoded - the
-# shared "no theme applied yet" fallback look.
+# The shared "no theme applied yet" fallback look (the menu picker's
+# original defaults, hex-encoded).
 DEFAULT_THEME_COLORS = {
     "bg0": "#141418F2",
     "bg1": "#141418",

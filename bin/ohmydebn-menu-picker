@@ -4,7 +4,7 @@
 # and (via --apps) the application launcher formerly provided by rofi's
 # `-show drun` in ohmydebn-app-launcher.
 #
-# Menu mode shows the 12 real categories by default; once the user types,
+# Menu mode shows the 11 real categories by default; once the user types,
 # live-filters across every leaf action in the whole nested menu tree (rofi
 # can't do this itself - its dmenu/script modes only ever filter one static
 # list handed to them at launch, never re-query per keystroke). Prints the
@@ -58,7 +58,12 @@ import shlex
 import subprocess
 import sys
 import tempfile
-import time
+
+# The shared palette reader sits next to this script (as ohmydebn-update-gui
+# finds it), wherever this is run from.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_theme_colors as theme_colors  # noqa: E402
+from ohmydebn_theme_colors import css_rgba  # noqa: E402
 
 OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
 MENU_FILE = f"{OHMYDEBN_BIN}/ohmydebn-menu"
@@ -74,14 +79,6 @@ SHIPPED_FLATTEN_CACHE = "/usr/share/ohmydebn/cache/menu-tree-flatten.tsv"
 # these are for.
 ROW_HEIGHT_PX = 35
 MIN_SCROLLER_ROWS = 3  # cosmetic floor only - a 1-result search shouldn't shrink to a sliver
-
-DEFAULT_COLORS = {
-    "bg0": "rgba(20, 20, 24, 0.95)",
-    "bg1": "rgba(20, 20, 24, 1)",
-    "bg3": "rgba(90, 90, 220, 0.95)",
-    "fg0": "rgba(230, 230, 230, 1)",
-}
-
 
 def run_menu_tree(func_call):
     """Source ohmydebn-menu-tree and evaluate func_call, returning stdout lines.
@@ -172,8 +169,8 @@ def load_leaves(breadcrumb_prefix=""):
     for the top-level Go menu, meaning no filtering (today's behavior,
     unchanged). When set, only that submenu's own descendants are
     searchable, and the display label has the redundant prefix stripped
-    (e.g. "Media > GIMP image editor" instead of
-    "Install > Media > GIMP image editor" when already inside Install) -
+    (e.g. "Editors > GIMP" instead of "Apps > Editors > GIMP" when
+    already inside Apps) -
     but the returned *value* is always the full absolute breadcrumb, so
     menu()'s own prefix-stripping logic on the bash side always has a
     consistent absolute string to work with, no relative/absolute
@@ -369,9 +366,10 @@ def decode_icon_pixbuf(path, size=32):
     confirmed by direct benchmarking to cut a full ~300-icon resolution
     from ~0.2-0.3s down to ~0.05-0.1s once warm - loading a tiny pre-scaled
     PNG is cheap in a way rendering a vector icon at that size never is,
-    regardless of thread count. Same mktemp-then-replace pattern
-    record_app_usage() already uses elsewhere in this file, via
-    tempfile.mkstemp specifically (not a fixed name plus getpid()) because
+    regardless of thread count. Written to a temporary file and then
+    renamed into place, via tempfile.mkstemp specifically (unlike
+    record_app_usage()'s name plus getpid(), which one process at a time
+    can rely on) because
     several desktop entries can share the same underlying icon file - two
     threads racing to cache the identical target path need genuinely
     distinct temp files, not just distinct per-process ones."""
@@ -392,8 +390,14 @@ def decode_icon_pixbuf(path, size=32):
             os.makedirs(ICON_CACHE_DIR, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=ICON_CACHE_DIR, suffix=".png")
             os.close(fd)
-            pixbuf.savev(tmp, "png", [], [])
-            os.replace(tmp, cache_path)
+            try:
+                pixbuf.savev(tmp, "png", [], [])
+                os.replace(tmp, cache_path)
+            finally:
+                # Gone after a successful replace; otherwise (a full disk,
+                # say) every launcher open used to leave ~300 of these.
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
         except (GLib.Error, OSError):
             pass
     return pixbuf
@@ -420,16 +424,20 @@ def record_app_usage(desktop_id):
         return
     counts = load_app_usage()
     counts[desktop_id] = counts.get(desktop_id, 0) + 1
-    # Same mktemp-then-replace pattern ohmydebn-menu-tree's cache write
-    # uses, so a picker killed mid-write never leaves a half-written file
+    # Written to a pid-suffixed temporary file and renamed into place, so a
+    # picker killed mid-write never leaves a half-written file
     # behind for the next launch to trip over.
     try:
         os.makedirs(os.path.dirname(APP_USAGE_FILE), exist_ok=True)
         tmp = f"{APP_USAGE_FILE}.tmp{os.getpid()}"
-        with open(tmp, "w", encoding="utf-8") as f:
-            for did, count in counts.items():
-                f.write(f"{did}\t{count}\n")
-        os.replace(tmp, APP_USAGE_FILE)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                for did, count in counts.items():
+                    f.write(f"{did}\t{count}\n")
+            os.replace(tmp, APP_USAGE_FILE)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
     except OSError:
         pass
 
@@ -445,7 +453,7 @@ def load_apps_metadata():
     usage-based sorting - ties (including "never launched", the common
     case for most entries) fall back to alphabetical.
 
-    Deliberately stops short of resolving icons (see resolve_icon()) -
+    Deliberately stops short of resolving icons (see resolve_icon_path()) -
     confirmed by hand that on a system with a few hundred .desktop entries,
     the per-entry Gtk.IconTheme lookups there (not this parsing) are what
     stretched the launcher's time-to-first-frame to multiple seconds, since
@@ -558,30 +566,13 @@ def activate_window(win):
         pass
 
 
-def hex_to_rgba(hex_value):
-    hex_value = hex_value.lstrip("#")
-    r = int(hex_value[0:2], 16)
-    g = int(hex_value[2:4], 16)
-    b = int(hex_value[4:6], 16)
-    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
-    return f"rgba({r}, {g}, {b}, {a:.3f})"
-
-
 def load_theme_colors():
-    """Reads the small plain key=value file ohmydebn-theme-set-picker
-    writes fresh on every theme change, so this picker always matches
-    whatever theme is active - no separate palette to keep in sync."""
-    colors = dict(DEFAULT_COLORS)
-    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key and value:
-                    colors[key] = hex_to_rgba(value)
-    except OSError:
-        pass
-    return colors
+    """The current theme's palette (the small key=value file
+    ohmydebn-theme-set-picker writes on every theme change) as CSS rgba()
+    strings, so this picker always matches the active theme. Read through
+    the shared ohmydebn_theme_colors.py: this used to have its own parser,
+    which raised on a malformed value, so the menu wouldn't open."""
+    return {key: css_rgba(value) for key, value in theme_colors.load_theme_colors().items()}
 
 
 CSS_TEMPLATE = """
@@ -716,7 +707,7 @@ class Picker(Gtk.Window):
         # It stops being enough the moment content changes *after* that
         # first layout (every reload() to a new screen, every search
         # keystroke): plain resize() is silently ignored by Cinnamon/
-        # Muffin on this undecorated DIALOG-hint window once mapped
+        # Muffin on this undecorated window once mapped
         # (confirmed by hand - tried directly, and after clearing
         # set_size_request() first, neither budged it), and --serve mode's
         # window is *always* mapped with zero rows before reload() ever
@@ -768,7 +759,7 @@ class Picker(Gtk.Window):
         # opposite (focus on the ListBox, forwarding keystrokes into the
         # entry via GtkSearchEntry.handle_event()) and that dropped
         # characters under IBus in practice - confirmed by a real report of
-        # "cloud" not matching "Cloudflare Warp". Forwarded/synthetic events
+        # "cloud" not matching "Cloudflare WARP". Forwarded/synthetic events
         # bypassing the actually-focused widget is exactly what input
         # methods don't expect.
         self.entry.connect("key-press-event", self.on_entry_key)
@@ -1466,9 +1457,7 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
         breadcrumb_prefix, _, remainder = line.rstrip("\n").partition("\t")
         go_items, _, mode = remainder.partition("\t")
         mode = mode or "menu"
-        t0 = time.monotonic()
         win.reload(go_items, breadcrumb_prefix, mode)
-        print(f"[timing] reload({breadcrumb_prefix!r}) took {(time.monotonic() - t0) * 1000:.1f}ms", file=sys.stderr, flush=True)
         return GLib.SOURCE_CONTINUE
 
     request_fifo = open(request_fifo_path, "r")
@@ -1477,8 +1466,8 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
     win.show_all()
     Gtk.main()
     # Defensive, not load-bearing in the common case (every real pick/
-    # cancel already goes through _start_icon_loading()'s own shutdown or
-    # this batch's own once its queue drains): only actually matters if the
+    # cancel lets _resolve_app_icons_batch() shut the pool down itself once
+    # its queue drains): only actually matters if the
     # whole session ends (QUIT, or this process killed outright) while
     # "Other Apps" is still mid-icon-load, which would otherwise leave an
     # un-shut-down pool for the interpreter's own atexit handling to block

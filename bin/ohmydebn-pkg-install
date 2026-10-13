@@ -20,10 +20,18 @@ fzf_args=(
 # one to install.
 sudo /usr/bin/apt update
 
-pkg_names=$(apt list | awk -F/ '{print $1}' | sort -u | fzf "${fzf_args[@]}")
+# Only the "name/suite version arch" lines: apt list also prints a
+# "Listing..." header (and a warning about its CLI on stderr), and the
+# header used to show up in the picker as a package that couldn't install.
+pkg_names=$(apt list 2>/dev/null | awk -F/ 'NF > 1 {print $1}' | sort -u | fzf "${fzf_args[@]}")
 
 if [[ -n "$pkg_names" ]]; then
-  # Convert newline-separated selections to space-separated for apt
-  echo "$pkg_names" | tr '\n' ' ' | xargs sudo /usr/bin/apt -y install
+  mapfile -t pkgs <<<"$pkg_names"
+  # Say so when apt fails: the window used to end the same way either way,
+  # with apt's error easy to miss above it.
+  if ! sudo /usr/bin/apt -y install "${pkgs[@]}"; then
+    echo
+    echo "The install didn't finish - see the messages above."
+  fi
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi

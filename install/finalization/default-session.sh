@@ -10,8 +10,7 @@
 #    to this alternative. LightDM's "Default Xsession" entry runs the same
 #    thing. cinnamon-session and startxfce4 both register at priority 50,
 #    and on a tie update-alternatives keeps whichever was installed first,
-#    so on an XFCE base that stays XFCE. Pin cinnamon-session instead;
-#    `update-alternatives --auto x-session-manager` undoes this.
+#    so on an XFCE base that stays XFCE. Pin cinnamon-session instead.
 #
 # 2. LightDM's user-session. LightDM starts a user's remembered session
 #    (accountsservice / ~/.dmrc) when there is one, else user-session. A
@@ -23,6 +22,13 @@
 # Neither layer touches an existing user's remembered session: someone who
 # has already logged into XFCE under LightDM picks Cinnamon once from the
 # greeter's session menu, and LightDM remembers it from then on.
+#
+# This runs on every update and has no marker on purpose: OhMyDebn is a
+# Cinnamon desktop, so both defaults are put back to Cinnamon whenever
+# they've drifted (`update-alternatives --auto x-session-manager`, or an
+# edited lightdm.conf, lasts only until the next update). Choosing another
+# desktop in the greeter's session menu, which LightDM remembers per user,
+# is the way to keep one.
 DEFAULT_DM_FILE=/etc/X11/default-display-manager
 CINNAMON_SESSION=/usr/bin/cinnamon-session
 LIGHTDM_DIR=/etc/lightdm

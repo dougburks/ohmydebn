@@ -11,11 +11,12 @@ export OHMYDEBN_RUN_START="${OHMYDEBN_RUN_START:-$EPOCHSECONDS}"
 # Parse command line arguments
 POWER_USER=false
 ASSUME_YES=false
+# Each option is read where it sits; nothing shifts them off, since $@ is
+# passed on to ohmydebn.sh below as given (and ohmydebn.sh ignores it).
 for arg in "$@"; do
   case $arg in
   --power-user)
     POWER_USER=true
-    shift
     ;;
   --skip-upgrade)
     # Skips finalization's full system upgrade (apt full-upgrade of every
@@ -27,14 +28,12 @@ for arg in "$@"; do
     # stage that honors it (install/finalization/updates.sh) is sourced
     # from ohmydebn.sh further down.
     export OHMYDEBN_SKIP_UPGRADE=1
-    shift
     ;;
   --yes)
     # Skips every "Press Enter to continue" prompt below, for unattended runs
     # (CI smoke tests, scripted provisioning). Everything these prompts warn
     # about still happens - this only removes the pause to read it.
     ASSUME_YES=true
-    shift
     ;;
   *)
     # Unknown option
@@ -209,7 +208,11 @@ EOF
     fi
   fi
 
-  sudo /usr/bin/apt update && sudo /usr/bin/apt install -y curl gpg
+  # Two commands, not `apt update && apt install`: under set -e a failure
+  # on the left of && doesn't stop the script, which then failed later at
+  # curl with a less useful message.
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt install -y curl gpg
 
 fi
 

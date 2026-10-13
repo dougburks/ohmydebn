@@ -253,7 +253,17 @@ if [ -s "$TOUCHED_STATE" ]; then
   while read -r kind a b; do
     case "$kind" in
     custom) restore_stock_slot "$a" ;;
-    cinnamon) restore_cinnamon_key "$a" "$b" ;;
+    # A root-schema key (no subschema) is recorded as "cinnamon  <key>",
+    # and read's word splitting drops the empty field, so <key> arrives in
+    # $a. Read that way it used to be restored as a subschema with no key,
+    # which failed silently and left the user's binding in place.
+    cinnamon)
+      if [ -z "$b" ]; then
+        restore_cinnamon_key "" "$a"
+      else
+        restore_cinnamon_key "$a" "$b"
+      fi
+      ;;
     esac
   done <"$TOUCHED_STATE"
 fi

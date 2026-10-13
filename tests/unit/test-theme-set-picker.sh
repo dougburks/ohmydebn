@@ -61,4 +61,11 @@ HOME="$SCRATCH_HOME" "$SCRIPT" >/dev/null 2>&1
 EXIT_CODE=$?
 assert_eq "called with zero arguments: exits 0 rather than erroring" "0" "$EXIT_CODE"
 
+# Written to a temporary file and renamed into place (as every theme hook
+# writes its files), leaving nothing else behind and readable as before.
+HOME="$SCRATCH_HOME" "$SCRIPT" "$COLORS_FILE" >/dev/null 2>&1
+assert_eq "written whole: no temporary file left beside it" "picker-colors" \
+  "$(cd "$(dirname "$PICKER_COLORS_FILE")" && printf '%s ' picker-colors* | sed 's/ $//')"
+assert_eq "written whole: readable by everyone, like before" "644" "$(stat -c %a "$PICKER_COLORS_FILE")"
+
 test_summary

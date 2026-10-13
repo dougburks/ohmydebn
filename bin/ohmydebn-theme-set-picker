@@ -11,7 +11,7 @@
 # directly instead - the last real dependency on rofi's theming format.
 #
 # bg0/bg1/bg3/fg0 are the only keys the pickers actually read (see
-# DEFAULT_COLORS in ohmydebn-menu-picker) - the old rofi version also
+# DEFAULT_THEME_COLORS in ohmydebn_theme_colors.py) - the old rofi version also
 # computed bg2/fg1/fg2/fg3 with light/dark-mode-dependent formulas, but
 # none of those ever reached anything real, so this only computes what's
 # actually used, and drops the now-pointless <is-light-mode> argument
@@ -36,9 +36,14 @@ BG=$(grep -E "^\s*background\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"
 FG=$(grep -E "^\s*foreground\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
 ACCENT=$(grep -E "^\s*accent\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
 
-cat >"$PICKER_COLORS_FILE" <<EOF
+# Written to a temporary file and renamed into place, as every theme hook
+# writes its files, so a window opening mid-switch never reads half a file.
+TMP_COLORS=$(mktemp "$PICKER_COLORS_FILE.XXXXXX")
+cat >"$TMP_COLORS" <<EOF
 bg0=${BG}F2
 bg1=${BG}
 bg3=${ACCENT}F2
 fg0=${FG}
 EOF
+chmod 644 "$TMP_COLORS"
+mv "$TMP_COLORS" "$PICKER_COLORS_FILE"

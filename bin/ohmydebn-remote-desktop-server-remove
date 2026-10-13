@@ -9,6 +9,12 @@ XSESSION_D=/etc/X11/Xsession.d
 if ! dpkg -s "xrdp" >/dev/null 2>&1; then
   echo
   echo "Remote Desktop (XRDP) is not currently installed."
+  # XRDP removed some other way leaves OhMyDebn's session guard behind, and
+  # it would keep running at every X login with no RDP server to guard.
+  if [ -e "$XSESSION_D/45ohmydebn-xrdp-session-guard" ]; then
+    sudo rm -f "$XSESSION_D/45ohmydebn-xrdp-session-guard"
+    echo "Removed the session guard OhMyDebn installed for it."
+  fi
 else
   if [ "${1:-}" != "--skip-prompt" ]; then
     echo

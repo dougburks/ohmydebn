@@ -21,7 +21,7 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   sudo mkdir -p /usr/share/keyrings
   sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |
-    sudo tee /etc/apt/sources.list.d/claude-code.list
+    sudo tee /etc/apt/sources.list.d/claude-code.list >/dev/null
 
   # Restricts this repo to the one package it's actually needed for
   # (confirmed via `apt-cache depends claude-code` - no same-repo
@@ -35,6 +35,12 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
 
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install claude-code
+
+  # Theme it with the current OhMyDebn theme now: the theme hook skips
+  # Claude Code while it isn't installed, so otherwise its first start
+  # would wait for the next theme switch. A theme that can't be applied
+  # mustn't fail the install.
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-claude --current || true
 
   # Installed onto a system that may already have a default AI assistant:
   # ask before changing it (defaults to no, and says nothing when this is

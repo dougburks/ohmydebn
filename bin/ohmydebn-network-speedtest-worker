@@ -9,7 +9,7 @@
 # $1=up (uploads 64MB of zeroes per request). Runs until killed or a
 # request fails - the caller starts several of these in parallel and is
 # the one deciding when a measurement window is over, by killing this
-# process group.
+# process and its children (the curl or dd it's running).
 #
 # Pulled out into its own script so the terminal and GTK versions of the
 # speed test share this one implementation instead of the bash and Python

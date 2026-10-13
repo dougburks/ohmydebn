@@ -54,8 +54,12 @@ class FakeCompleted:
         self.returncode = returncode
 
 
+VIRSH_ENVS = []
+
+
 def fake_run_returning(stdout, returncode=0):
-    def _fake(argv, capture_output=True, text=True, check=False):
+    def _fake(argv, capture_output=True, text=True, check=False, env=None):
+        VIRSH_ENVS.append((env or {}).get("LC_ALL"))
         return FakeCompleted(stdout, returncode)
 
     return _fake
@@ -152,6 +156,9 @@ try:
     pu.subprocess.run = fake_run_returning("")
     check_eq("get_vm_state: empty output falls back to 'unknown' rather than ''", pu.get_vm_state("mystery-vm"), "unknown")
 
+    # virsh's output is compared ("shut off"), so it's always run untranslated.
+    check_eq("every virsh call runs with LC_ALL=C", set(VIRSH_ENVS), {"C"})
+
     upgrade_calls = []
 
     def fake_upgrade_run(argv, capture_output=True, text=True, check=False):
@@ -181,6 +188,33 @@ try:
         check("upgrade_to_passt: a virt-xml failure propagates rather than failing silently", True)
 finally:
     pu.subprocess.run = original_run
+
+# A malformed picker-colors value keeps the default for that key: this
+# window's own copy of the parser used to raise, so it never opened.
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+
+old_home = os.environ.get("HOME")
+fake_home = tempfile.mkdtemp(prefix="ohmydebn-test-home-")
+try:
+    os.environ["HOME"] = fake_home
+    colors_dir = os.path.join(fake_home, ".config", "ohmydebn", "current")
+    os.makedirs(colors_dir)
+    with open(os.path.join(colors_dir, "picker-colors"), "w", encoding="utf-8") as f:
+        f.write("bg0=#zzzzzz\nbg1=#2e3440\n")
+    colors = pu.load_theme_colors()
+    check_eq("load_theme_colors: a malformed value keeps the default", colors["bg0"], "rgba(20, 20, 24, 0.949)")
+    check_eq("load_theme_colors: a valid value applies", colors["bg1"], "rgba(46, 52, 64, 1.000)")
+finally:
+    os.environ["HOME"] = old_home if old_home is not None else ""
+    shutil.rmtree(fake_home)
+
+# The message rows aren't wrapped (a wrapped one was cut off at the
+# bottom), so each line has to fit the window's 560px default width on its
+# own: about 48 characters of the 11pt monospace font, after the padding.
+for name in ("NO_VIRSH_MESSAGE", "NO_VMS_MESSAGE"):
+    longest = max(len(line) for line in getattr(pu, name).split("\n"))
+    check(f"{name}: every line fits the window unwrapped ({longest} characters)", longest <= 48)
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

@@ -115,6 +115,21 @@ set_theme mine || true
   || assert_eq "a theme the user wrote keeps its own neovim.lua" "yes" "no"
 [[ -f $(staged vscode.json) ]] && assert_eq "a theme the user wrote keeps every file it ships" "yes" "yes" || assert_eq "a theme the user wrote keeps every file it ships" "yes" "no"
 
+# --- Symlinks in the themes dir: an old one to a shipped theme goes, the
+# user's own stay. theme-set used to remove every symlink there but aether's,
+# so a theme the user linked in themselves was deleted on the next switch.
+devtheme="$SCRATCH_HOME/src/devtheme"
+mkdir -p "$devtheme"
+cp "$hostile/colors.toml" "$devtheme/colors.toml"
+ln -s "$devtheme" "$THEMES/devtheme"
+ln -s /usr/share/ohmydebn-themes/nord "$THEMES/nord"
+set_theme mine || true
+assert_eq "a symlink to a shipped theme (pre-3.3.0 leftover) is removed" "no" \
+  "$([ -L "$THEMES/nord" ] && echo yes || echo no)"
+assert_eq "a theme the user linked in themselves is kept" "yes" "$([ -L "$THEMES/devtheme" ] && echo yes || echo no)"
+set_theme devtheme || true
+assert_eq "...and can be applied" "devtheme" "$(cat "$SCRATCH_HOME/.config/ohmydebn/current/theme.name" 2>/dev/null)"
+
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 test_summary

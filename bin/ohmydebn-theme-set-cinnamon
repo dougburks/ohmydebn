@@ -306,28 +306,6 @@ if [[ -f "$INDEX_THEME" ]]; then
   sed -i "s/MetacityTheme=$TEMPLATE_NAME/MetacityTheme=$GENERATED_THEME_NAME/g" "$INDEX_THEME"
 fi
 
-# Also generate hdpi and xhdpi variants if they exist
-for suffix in "-hdpi" "-xhdpi"; do
-  TEMPLATE_VARIANT="$HOME/.themes/${TEMPLATE_NAME}${suffix}"
-  OUTPUT_VARIANT="$HOME/.themes/${GENERATED_THEME_NAME}${suffix}"
-
-  if [[ -d "$TEMPLATE_VARIANT" ]]; then
-    rm -rf "$OUTPUT_VARIANT"
-    cp -r "$TEMPLATE_VARIANT" "$OUTPUT_VARIANT"
-
-    # Update index.theme in variant
-    VARIANT_INDEX="$OUTPUT_VARIANT/index.theme"
-    if [[ -f "$VARIANT_INDEX" ]]; then
-      sed -i "s/Name=${TEMPLATE_NAME}${suffix}/Name=${GENERATED_THEME_NAME}${suffix}/g" "$VARIANT_INDEX"
-    fi
-
-    # Set proper ownership for variant
-    if [[ -d "$OUTPUT_VARIANT" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
-      chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_VARIANT" 2>/dev/null || true
-    fi
-  fi
-done
-
 # Set proper ownership for the generated theme directory
 if [[ -d "$OUTPUT_DIR" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
   chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_DIR" 2>/dev/null || true
@@ -341,6 +319,19 @@ fi
 # Apply GTK and Cinnamon themes using gsettings
 gsettings set org.cinnamon.desktop.interface gtk-theme "$GENERATED_THEME_NAME"
 gsettings set org.cinnamon.theme name "$GENERATED_THEME_NAME"
+
+# Remove the themes generated for other OhMyDebn themes. Each one is a full
+# GTK/Cinnamon theme (about 2.6 MB) and nothing removed them, so every theme
+# ever applied - Aether's generated ones especially - stayed in ~/.themes
+# (46 of them, 122 MB, on one machine). Only now, after Cinnamon and GTK
+# have switched to the new one, so none of them is in use; reapplying a
+# theme regenerates its folder. A symlink is someone's own and is left
+# alone.
+for GENERATED in "$HOME"/.themes/ohmydebn-*; do
+  if [[ "$(basename "$GENERATED")" != "$GENERATED_THEME_NAME" && -d "$GENERATED" && ! -L "$GENERATED" ]]; then
+    rm -rf "$GENERATED"
+  fi
+done
 
 # If using aether to change theme then restart cinnamon to force window decoration update
 THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name")

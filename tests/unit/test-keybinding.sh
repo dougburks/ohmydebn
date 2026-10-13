@@ -46,6 +46,13 @@ mock_log "gsettings $*"
 if [[ "$1 $2 $3" == "get org.cinnamon.desktop.keybindings custom-list" ]]; then
   echo "${MOCK_CUSTOM_LIST:-}"
 fi
+# MOCK_SLOT4_NAME/COMMAND: what the Super + K slot (custom-4) holds now.
+if [[ "$1" == get && "$2" == *custom-keybindings/custom-4/ ]]; then
+  case "$3" in
+  name) echo "${MOCK_SLOT4_NAME:-}" ;;
+  command) echo "${MOCK_SLOT4_COMMAND:-}" ;;
+  esac
+fi
 exit 0
 EOF
   mock_bin pgrep <<'EOF'
@@ -91,7 +98,7 @@ assert_contains "first run: user keybindings applied afterwards, told the stock 
 # Order and shape of the custom-list writes: after every slot write, first
 # with __dummy__, then the final list.
 LIST_SETS=$(grep -n 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
-LAST_SLOT_SET=$(grep -n 'custom-keybindings/custom-' "$MOCK_CALLS" | tail -1 | cut -d: -f1)
+LAST_SLOT_SET=$(grep -n 'gsettings set .*custom-keybindings/custom-' "$MOCK_CALLS" | tail -1 | cut -d: -f1)
 FIRST_LIST_SET=$(echo "$LIST_SETS" | head -1 | cut -d: -f1)
 assert_eq "first run: custom-list written exactly twice" "2" "$(echo "$LIST_SETS" | wc -l)"
 assert_eq "first run: custom-list written after the last slot" "yes" "$([ "$FIRST_LIST_SET" -gt "$LAST_SLOT_SET" ] && echo yes || echo no)"
@@ -148,5 +155,30 @@ assert_eq "custom-list: stock slot listed once, not duplicated from the old list
 assert_eq "custom-list: closes the array" "]" "${FINAL_LIST: -1}"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
+
+# --- Super + K's old "Hotkeys" name, on an install from before 4.9.0 ---
+# The rename to "Keybindings" came without a new marker, so it never
+# reached existing installs. It's renamed in place on any run, marker or
+# not - but only while the slot still opens the hotkeys page.
+SLOT4="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-4/"
+HOTKEYS_CMD="'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/'"
+for case in "'Hotkeys'|$HOTKEYS_CMD|renamed" "'Keybindings'|$HOTKEYS_CMD|kept" "'Hotkeys'|'my-own-script'|kept"; do
+  IFS='|' read -r name cmd expect <<<"$case"
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  MOCK_SLOT4_NAME="$name" MOCK_SLOT4_COMMAND="$cmd" MOCK_CINNAMON_RUNNING=true run_script
+  CALLS=$(cat "$MOCK_CALLS")
+  if [[ "$expect" == renamed ]]; then
+    assert_contains "Super + K named $name, opening the hotkeys page: renamed to Keybindings" "$CALLS" "gsettings set $SLOT4 name Keybindings"
+    assert_eq "...and nothing else rewritten" "1" "$(grep -c 'gsettings set' "$MOCK_CALLS")"
+  else
+    assert_not_contains "Super + K named $name running $cmd: left as it is" "$CALLS" "gsettings set"
+  fi
+  rm -rf "$SCRATCH_HOME"
+  mock_cleanup
+done
 
 test_summary

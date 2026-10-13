@@ -121,10 +121,16 @@ if [[ "$KEEP_BACKGROUND" == true ]]; then
   KEPT_BACKGROUND=$(readlink -f -- "$HOME/.config/ohmydebn/current/background" 2>/dev/null) || true
 fi
 
-# Remove all old symlinks from themes dir except aether
+# Remove the symlinks to shipped themes that releases before 3.3.0 put in
+# the themes dir (they pointed into /usr/share/ohmydebn-themes). Only
+# those: this used to remove EVERY symlink there but aether's, so a theme a
+# user linked in themselves (one they develop elsewhere, say) was deleted
+# on the next switch and "does not exist" right after.
 THEMES_DIR="$HOME/.config/ohmydebn/themes"
-find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type l ! -name aether -print0 | while read -r -d '' LINK; do
-  rm -f "$LINK"
+find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type l -print0 | while read -r -d '' LINK; do
+  if [[ "$(readlink -- "$LINK")" == /usr/share/ohmydebn-themes/* ]]; then
+    rm -f "$LINK"
+  fi
 done
 
 # Now that the old theme config has been cleaned up, proceed with setting new theme

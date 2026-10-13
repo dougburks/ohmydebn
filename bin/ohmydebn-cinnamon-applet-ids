@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+#
+# ohmydebn-cinnamon-applet-ids: gives every panel applet a unique instance
+# ID. Each org.cinnamon enabled-applets entry is
+# panel:side:position:uuid:id, and Cinnamon tracks applets by that ID
+# alone. OhMyDebn's seeded panel used to give two pairs of applets the same
+# ID (network and the workspace switcher both 10, the window list and power
+# both 12), so removing one could leave it on the panel until Cinnamon
+# restarted. New installs got unique IDs in 4.10.0
+# (install/config/cinnamon.sh); this fixes the panels seeded before then.
+#
+# Of each set of applets sharing an ID, the first keeps it and the rest get
+# new IDs from Cinnamon's own next-applet-id counter. A single-instance
+# applet (no max-instances, or 1, in its metadata.json - Cinnamon's own
+# rule) keeps its settings in <uuid>.json, so renumbering it touches no
+# file; those are renumbered in preference. A multi-instance applet's
+# settings are <id>.json, so when one has to be renumbered its file moves
+# with it. Nothing changes when the IDs are already unique, so this runs on
+# every update without a marker.
+#
+# Usage: ohmydebn-cinnamon-applet-ids [--dry-run]
+
+import json
+import os
+import subprocess
+import sys
+
+APPLET_DIRS = (
+    os.path.expanduser("~/.local/share/cinnamon/applets"),
+    "/usr/share/cinnamon/applets",
+)
+SPICES_DIR = os.path.expanduser("~/.config/cinnamon/spices")
+
+
+def parse_strv(text):
+    """The list from `gsettings get` output: ['a', 'b'] or @as []."""
+    text = text.strip()
+    if text.startswith("@as "):
+        text = text[4:]
+    # GVariant string lists use single quotes and never contain them here
+    # (panel IDs, sides, uuids and numbers only).
+    items = text.strip("[]").split(",")
+    return [item.strip().strip("'") for item in items if item.strip()]
+
+
+def format_strv(items):
+    return "[" + ", ".join(f"'{item}'" for item in items) + "]"
+
+
+def is_multi_instance(uuid, applet_dirs=APPLET_DIRS):
+    """Cinnamon's rule (extension.js get_max_instances): max-instances
+    missing means 1. An applet whose metadata can't be read counts as
+    multi-instance, so its settings file (if any) moves with it."""
+    for base in applet_dirs:
+        try:
+            with open(os.path.join(base, uuid, "metadata.json")) as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            continue
+        try:
+            return int(meta.get("max-instances", 1)) != 1
+        except (TypeError, ValueError):
+            return True
+    return True
+
+
+def plan(entries, next_id, multi):
+    """(new_entries, moves, new_next_id). moves is [(uuid, old_id,
+    new_id)] for renumbered multi-instance applets, whose settings file
+    has to follow. multi(uuid) says whether an applet is multi-instance."""
+    parsed = []
+    for entry in entries:
+        parts = entry.split(":")
+        parsed.append(parts if len(parts) == 5 else None)
+    used = {p[4] for p in parsed if p}
+    numeric = [int(i) for i in used if i.isdigit()]
+    next_id = max([next_id] + [n + 1 for n in numeric])
+
+    by_id = {}
+    for index, parts in enumerate(parsed):
+        if parts:
+            by_id.setdefault(parts[4], []).append(index)
+
+    renumber = set()
+    for indexes in by_id.values():
+        if len(indexes) < 2:
+            continue
+        # Keep one: prefer a multi-instance applet (its <id>.json stays
+        # put), else the first. Single-instance ones renumber for free.
+        keep = next((i for i in indexes if multi(parsed[i][3])), indexes[0])
+        renumber.update(i for i in indexes if i != keep)
+
+    new_entries, moves = list(entries), []
+    for index in sorted(renumber):
+        parts = parsed[index]
+        new_id = str(next_id)
+        next_id += 1
+        if multi(parts[3]):
+            moves.append((parts[3], parts[4], new_id))
+        new_entries[index] = ":".join(parts[:4] + [new_id])
+    return new_entries, moves, next_id
+
+
+def gsettings(*args):
+    return subprocess.run(["gsettings", *args], check=True, capture_output=True, text=True).stdout
+
+
+def main():
+    dry_run = "--dry-run" in sys.argv[1:]
+    try:
+        entries = parse_strv(gsettings("get", "org.cinnamon", "enabled-applets"))
+        next_id = int(gsettings("get", "org.cinnamon", "next-applet-id").split()[-1])
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return 0  # no Cinnamon settings to read (no session bus): nothing to do
+    new_entries, moves, new_next_id = plan(entries, next_id, is_multi_instance)
+    if new_entries == entries:
+        return 0
+    for old, new in zip(entries, new_entries):
+        if old != new:
+            print(f"Panel applet {old.split(':')[3]}: ID {old.split(':')[4]} -> {new.split(':')[4]}")
+    if dry_run:
+        return 0
+    # Settings files first, so the applet finds its settings when Cinnamon
+    # reloads it under the new ID. Never over an existing file.
+    for uuid, old_id, new_id in moves:
+        old_file = os.path.join(SPICES_DIR, uuid, f"{old_id}.json")
+        new_file = os.path.join(SPICES_DIR, uuid, f"{new_id}.json")
+        if os.path.exists(old_file) and not os.path.exists(new_file):
+            os.replace(old_file, new_file)
+    if new_next_id > next_id:
+        gsettings("set", "org.cinnamon", "next-applet-id", str(new_next_id))
+    gsettings("set", "org.cinnamon", "enabled-applets", format_strv(new_entries))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

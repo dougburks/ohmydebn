@@ -13,16 +13,28 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   read -r
 
   ARCH=$(uname -m)
-  TEMP=$(mktemp)
-  echo "Downloading ChatGPT (this is a large download and may take a few minutes)..."
   if [ "$ARCH" == "x86_64" ]; then
-    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
+    DEB_ARCH=amd64
   elif [ "$ARCH" == "aarch64" ]; then
-    curl -fSL "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_arm64.deb" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
+    DEB_ARCH=arm64
   else
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1
   fi
+  echo "ChatGPT is a large download and may take a few minutes."
+  # Through apt, so its dependencies come too and a failed download stops
+  # here - see ohmydebn-apt-install-deb. OpenAI publishes no checksum.
+  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "ChatGPT" "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_$DEB_ARCH.deb"
+
+  # ChatGPT's own postinst registers OpenAI's repo as an apt source
+  # (/etc/apt/sources.list.d/chatgpt.sources, signed by
+  # /usr/share/keyrings/chatgpt-archive-keyring.gpg; its postrm removes
+  # both on purge) - same reasoning/pattern as ohmydebn-code-install's own
+  # pin: OhMyDebn never creates that source file itself, so restricting it
+  # has to happen here. A bare signed-by trusts OpenAI's key to sign any
+  # package name. Its dependencies are all ordinary distro libraries.
+  printf 'Package: *\nPin: origin "persistent.oaistatic.com"\nPin-Priority: -1\n\nPackage: chatgpt\nPin: origin "persistent.oaistatic.com"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/chatgpt.pref >/dev/null
 
   # Installed onto a system that may already have a default AI assistant:
   # ask before changing it (defaults to no, and says nothing when this is

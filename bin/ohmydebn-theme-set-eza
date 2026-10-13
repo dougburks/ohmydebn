@@ -1,10 +1,10 @@
 #!/bin/bash
 
 EZA_CONFIG=~/.config/eza
-mkdir -p $EZA_CONFIG
+mkdir -p "$EZA_CONFIG"
 
 if [ -f ~/.config/ohmydebn/current/theme/eza.yml ]; then
-  ln -snf ~/.config/ohmydebn/current/theme/eza.yml $EZA_CONFIG/theme.yml
+  ln -snf ~/.config/ohmydebn/current/theme/eza.yml "$EZA_CONFIG/theme.yml"
 else
-  rm -f $EZA_CONFIG/theme.yml
+  rm -f "$EZA_CONFIG/theme.yml"
 fi

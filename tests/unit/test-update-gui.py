@@ -11,6 +11,7 @@
 # regardless - VTE_AVAILABLE just reads False there.
 
 import os
+import shutil
 import sys
 import tempfile
 from importlib.machinery import SourceFileLoader
@@ -219,21 +220,186 @@ check_eq("guarded: wrapped function actually ran", len(calls), 1)
 
 print()
 
-# --- abort escalation plan (see ABORT_ESCALATION's comment) ---
-# The child's process group includes apt and dpkg. SIGINT (apt's graceful
-# interrupt) first, SIGTERM after a grace period, and NEVER SIGKILL - a
-# killed dpkg mid-configure is the inconsistent state the abort dialog
-# warns about. Pinned here so a future "make abort faster" change can't
-# quietly reintroduce it.
-import signal as _signal  # noqa: E402
+# --- abort: SIGTERM only once apt/dpkg are done (see ABORT_POLL_MS) ---
+# The abort used to send SIGTERM on a 2-second timer, which reached apt
+# through sudo while dpkg was mid-unpack or mid-configure - the half-
+# installed state the abort dialog warns about. Now each poll decides from
+# the processes actually running under the update.
+check_eq("abort step: apt/dpkg still running - wait, never terminate",
+         gui.abort_step({300, 301}, {300, 301}, False), ("wait", {300, 301}))
+check_eq("abort step: a newly started apt gets its own SIGINT",
+         gui.abort_step({300, 400}, {300}, False), ("interrupt", {300, 400}))
+check_eq("abort step: nothing apt-ish left - the one SIGTERM",
+         gui.abort_step(set(), {300}, False), ("terminate", {300}))
+check_eq("abort step: SIGTERM sent once, then just wait for the exit",
+         gui.abort_step(set(), {300}, True), ("wait", {300}))
+check("abort: no SIGKILL anywhere in the abort path",
+      "signal.SIGKILL" not in open(os.path.join(BIN, "ohmydebn-update-gui")).read())
+check("abort: patience message comes after several polls",
+      gui.ABORT_PATIENCE_MS > 4 * gui.ABORT_POLL_MS)
 
-plan = list(gui.ABORT_ESCALATION)
-check_eq("abort plan: opens with SIGINT immediately", plan[0], (0, _signal.SIGINT))
-check_eq("abort plan: escalates to SIGTERM after a grace period", plan[1][1], _signal.SIGTERM)
-check("abort plan: grace period is positive", plan[1][0] > 0)
-check("abort plan: never SIGKILLs apt/dpkg", all(sig != _signal.SIGKILL for _d, sig in plan))
-check("abort plan: delays are ascending", all(a[0] < b[0] for a, b in zip(plan, plan[1:])))
-check("abort plan: patience wait comes after the last signal", gui.ABORT_PATIENCE_MS > plan[-1][0])
+# A fake /proc: the update (100) runs bash (101), which runs sudo (102)
+# -> sudo's monitor (103, own session under use_pty) -> apt (104) ->
+# dpkg (105) -> a maintainer script (106). An unrelated apt (200, say
+# unattended-upgrades) must not count.
+def fake_proc(entries):
+    root = tempfile.mkdtemp()
+    for pid, (ppid, name) in entries.items():
+        os.makedirs(os.path.join(root, str(pid)))
+        with open(os.path.join(root, str(pid), "stat"), "w") as f:
+            f.write(f"{pid} ({name}) S {ppid} {pid} {pid} 0 -1 4194560 0 0\n")
+    os.makedirs(os.path.join(root, "self"))  # non-numeric entries are skipped
+    return root
+
+proc_root = fake_proc({
+    100: (1, "script"), 101: (100, "bash"), 102: (101, "sudo"), 103: (102, "sudo"),
+    104: (103, "apt"), 105: (104, "dpkg"), 106: (105, "postinst"),
+    200: (1, "apt"), 300: (1, "odd) name (x"),
+})
+table = gui.read_process_table(proc_root)
+shutil.rmtree(proc_root)
+check_eq("process table: parent and name read from stat", table[104], (103, "apt"))
+check_eq("process table: a name containing ') (' is read whole", table[300], (1, "odd) name (x"))
+check_eq("busy apt: apt and dpkg under the update, through sudo's own session",
+         gui.busy_apt_pids(100, table), {104, 105})
+check_eq("busy apt: an apt that isn't the update's own doesn't count",
+         200 in gui.busy_apt_pids(100, table), False)
+check_eq("busy apt: nothing running yet - empty",
+         gui.busy_apt_pids(101, {101: (100, "bash")}), set())
+check_eq("process table: a missing /proc gives an empty table",
+         gui.read_process_table("/nonexistent-proc-dir"), {})
+
+# And against the real /proc: a process named "apt" under a shell under
+# this test is found; it's a copy of sleep, so nothing touches apt itself.
+import subprocess as _subprocess  # noqa: E402
+import time  # noqa: E402
+fake_bin = tempfile.mkdtemp()
+shutil.copy("/bin/sleep", os.path.join(fake_bin, "apt"))
+holder = _subprocess.Popen(["bash", "-c", f"{fake_bin}/apt 30; true"], stdin=_subprocess.DEVNULL)
+for _ in range(50):
+    found = gui.busy_apt_pids(holder.pid, gui.read_process_table())
+    if found:
+        break
+    time.sleep(0.05)
+check_eq("real /proc: an apt under the update's shell is found", len(found), 1)
+holder.kill()
+for pid in found:
+    try:
+        os.kill(pid, 15)
+    except OSError:
+        pass
+holder.wait()
+shutil.rmtree(fake_bin)
+
+
+# --- abort against the real `script` (see ABORT_POLL_MS's comment) ---
+# The update runs under util-linux script, which answers SIGINT by
+# SIGTERMing the program it runs at once - so the abort used to kill the
+# update's shell instantly and report "Update aborted" while apt carried
+# on detached (seen live). AbortDriver types Ctrl-C instead. A fake "apt"
+# (a bash script named apt, so /proc names it apt) keeps working for a
+# while after an interrupt, like apt finishing the package dpkg is on.
+import fcntl as _fcntl  # noqa: E402
+import pty as _pty  # noqa: E402
+import termios as _termios  # noqa: E402
+
+
+def run_abort(inner_tail, apt_body):
+    work = tempfile.mkdtemp()
+    events = os.path.join(work, "events")
+    apt = os.path.join(work, "apt")
+    with open(apt, "w") as f:
+        f.write("#!/bin/bash\n" + apt_body.replace("EVENTS", events))
+    os.chmod(apt, 0o755)
+    # set -e, like the real update shell (install.sh and its steps).
+    inner = f"set -e; echo start >>{events}; {apt}{inner_tail.replace('EVENTS', events)}"
+    master, slave = _pty.openpty()
+
+    def setup():
+        os.setsid()
+        _fcntl.ioctl(slave, _termios.TIOCSCTTY, 0)
+
+    proc = _subprocess.Popen(["script", "-qefc", f"bash -c {inner!r}", os.path.join(work, "typescript")],
+                             stdin=slave, stdout=slave, stderr=slave, preexec_fn=setup, pass_fds=(slave,))
+    os.close(slave)
+    os.set_blocking(master, False)
+
+    def drain():
+        try:
+            while os.read(master, 65536):
+                pass
+        except OSError:
+            pass
+
+    for _ in range(40):  # wait for the fake apt to be running
+        time.sleep(0.05)
+        drain()
+        if os.path.exists(events) and "unpacking" in open(events).read():
+            break
+    driver = gui.AbortDriver(proc, master)
+    t0 = time.monotonic()
+    driver.start()
+    apt_gone_at = exited_at = None
+    while time.monotonic() - t0 < 15:
+        time.sleep(gui.ABORT_POLL_MS / 1000)
+        drain()
+        if apt_gone_at is None and not any(n == "apt" and p != os.getpid() and
+                                           apt in open(f"/proc/{p}/cmdline", "rb").read().decode(errors="replace")
+                                           for p, (_pp, n) in gui.read_process_table().items()
+                                           if os.path.exists(f"/proc/{p}/cmdline")):
+            apt_gone_at = time.monotonic() - t0
+        if not driver.poll():
+            exited_at = time.monotonic() - t0
+            break
+    drain()
+    os.close(master)
+    if proc.poll() is None:
+        proc.kill()
+    proc.wait()
+    log = open(events).read() if os.path.exists(events) else ""
+    shutil.rmtree(work, ignore_errors=True)
+    return log, apt_gone_at, exited_at
+
+
+FINISHES_AFTER_CTRL_C = """
+interrupted=0
+trap 'interrupted=1; echo "got SIGINT" >>EVENTS' INT
+echo unpacking >>EVENTS
+for i in $(seq 1 100); do
+  if [ $interrupted = 1 ]; then
+    for j in $(seq 1 15); do sleep 0.1 || true; done
+    echo "finished current package" >>EVENTS
+    exit 100
+  fi
+  sleep 0.1 || true
+done
+echo "ran to completion" >>EVENTS
+"""
+
+# The real update shell runs with set -e: apt failing after the Ctrl-C
+# stops it.
+log, apt_gone, exited = run_abort("; echo 'next step ran' >>EVENTS", FINISHES_AFTER_CTRL_C)
+check("abort: apt gets the interrupt (it never did through script)", "got SIGINT" in log)
+check("abort: apt finishes the package it was on", "finished current package" in log)
+check("abort: apt is never left running to completion", "ran to completion" not in log)
+check("abort: the update ends only after apt has gone (no 'aborted' while apt runs)",
+      exited is not None and apt_gone is not None and exited >= apt_gone)
+check("abort: the next step never runs", "next step ran" not in log)
+
+# A script that carries on past apt's failure: the SIGTERM backstop stops
+# it once apt has gone, before its later work.
+log, apt_gone, exited = run_abort(" || true; sleep 20; echo 'later step ran' >>EVENTS", FINISHES_AFTER_CTRL_C)
+check("abort backstop: apt still finishes its package first", "finished current package" in log)
+# (script itself takes about 2 s to exit after the shell it runs is gone,
+# while it reads the last of its output.)
+check("abort backstop: SIGTERM stops the script soon after apt has gone",
+      exited is not None and apt_gone is not None and exited - apt_gone < 5)
+check("abort backstop: the later step never runs", "later step ran" not in log)
+
+# Stop pressed while no apt is running at all (an OhMyDebn config step):
+# the update stops promptly.
+log, _apt_gone, exited = run_abort("", "echo unpacking >>EVENTS; exit 0\n")
+check("abort with no apt running: the update stops within a second", exited is not None and exited < 1.5)
 
 
 # --- single instance: the lock and the "present yourself" poke ---

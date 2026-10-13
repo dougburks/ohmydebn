@@ -39,6 +39,7 @@ keybinding-custom 3 "App Launcher" "/usr/share/ohmydebn/bin/ohmydebn-app-launche
 EOF
   cat >"$STOCK/keybinding-cinnamon.txt" <<'EOF'
 keybinding-cinnamon "wm" "close" "['<Alt>F4', '<Super>w']" "Press Super + W to close a window"
+keybinding-cinnamon "" "looking-glass-keybinding" "['<Super><Alt>l']" "Press Super + Alt + L for Looking Glass"
 EOF
 
   mock_bin ohmydebn-headline <<'EOF'
@@ -215,6 +216,18 @@ assert_contains "cinnamon: reported" "$OUTPUT" "Alt + F4: Cinnamon wm close"
 run_apply
 assert_eq "cinnamon undone: key in keybinding-cinnamon.txt restored from it" "['<Alt>F4', '<Super>w']" "$(gs get org.cinnamon.desktop.keybindings.wm close)"
 assert_contains "cinnamon undone: key not in the stock file reset to Cinnamon's default" "$(cat "$MOCK_CALLS")" "reset org.cinnamon.desktop.keybindings.wm minimize"
+teardown
+
+# --- a root-schema Cinnamon key (no subschema): restored too ---
+# Its record has an empty subschema field, which read's word splitting
+# dropped, so removing the line left the user's binding in place.
+setup
+printf 'keybinding-cinnamon "" "looking-glass-keybinding" "['"'"'<Super>g'"'"']"\n' >"$USER_FILE"
+run_apply
+assert_eq "root key: changed" "['<Super>g']" "$(gs get org.cinnamon.desktop.keybindings looking-glass-keybinding)"
+: >"$USER_FILE"
+run_apply
+assert_eq "root key undone: restored from keybinding-cinnamon.txt" "['<Super><Alt>l']" "$(gs get org.cinnamon.desktop.keybindings looking-glass-keybinding)"
 teardown
 
 # --- a line pasted from keybinding-custom.txt: number ignored, matched by name ---

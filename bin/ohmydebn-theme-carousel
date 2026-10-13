@@ -32,20 +32,20 @@
 # Aether, Remove theme), all three also clickable directly in the caption
 # panel. S floats a bare search box instead of a results list - each
 # keystroke jumps the carousel itself to the first matching theme, so the
-# normal full-size preview IS the search feedback (see open_search()). R only shows up (as a red chip, since it's destructive) when the
+# normal full-size preview IS the search feedback (see open_search()). R
+# only shows up (as a red chip, since it's destructive) when the
 # currently-displayed theme is removable (see is_theme_removable() -
 # ohmydebn-theme-remove itself is hardcoded to only ever touch
-# ~/.config/ohmydebn/themes/, never the ~20 bundled system ones, so this
+# ~/.config/ohmydebn/themes/, never the bundled system ones, so this
 # mirrors that same real scope), and is itself a two-step confirm (first
 # press/click arms it, second confirms - see _arm_remove()) rather than
 # removing on a single keypress.
 #
 # Browse opens bjarneo.github.io/omarchy-themes (a visual, searchable theme
 # gallery) and closes this carousel rather than leaving it open - picking a
-# theme there triggers a registered aether:// URI handler (confirmed real:
-# see /usr/share/applications/li.oever.aether.url-handler.desktop ->
-# `aether --handle-url %u`) that installs and applies it directly, no need
-# to come back here at all.
+# theme there opens an aether:// link, which OhMyDebn's link guard
+# (ohmydebn-aether-url-guard) shows for confirmation before Aether
+# installs and applies it, so there's no need to come back here at all.
 #
 # Each theme's preview.png (where present - about half the themes have one;
 # it's each theme's original upstream Omarchy/Hyprland promo mockup, not an
@@ -218,7 +218,7 @@ def build_shortcuts_markup():
     return "\n".join([
         f'<a href="{SEARCH_THEMES_ACTION}">Search Themes - S</a>',
         f'<a href="{BROWSE_THEMES_URL}">Browse More Themes - B</a>',
-        f'<a href="{CREATE_THEME_ACTION}">Create new Theme using Aether - C</a>',
+        f'<a href="{CREATE_THEME_ACTION}">Create New Theme with Aether - C</a>',
     ])
 
 
@@ -563,11 +563,8 @@ def _cache_path(path, target_w, target_h):
     future change to load_cover_pixbuf's own crop/scale math) naturally
     misses the cache and re-decodes, with no separate invalidation logic
     needed: the old entry is simply never looked up again, just an orphaned
-    file under CAROUSEL_CACHE_DIR from then on - same tradeoff
-    ohmydebn-menu-picker's own icon cache already makes (no eviction there
-    either), acceptable here too since even every theme/background/size
-    combination this repo ships ever getting cached at once tops out
-    around 40-90MB of JPEGs, measured by hand.  Returns None (skip caching
+    file under CAROUSEL_CACHE_DIR until _evict_cache() trims the folder
+    back to CAROUSEL_CACHE_MAX_BYTES (oldest first).  Returns None (skip caching
     entirely for this call) rather than raising when the source file
     vanishes out from under a caller mid-decode - orphaned symlinks in a
     user's backgrounds/ override dir aren't this function's problem to
@@ -851,7 +848,7 @@ def make_fixed_thumb_frame(w, h, css_name="carousel-side", opacity=SIDE_OPACITY)
     fix; this carousel doesn't letterbox anything any more, on the theory
     that the real desktop background gets cropped to fill the screen
     either way (Cinnamon's default "zoom" picture-options - confirmed via
-    ohmydebn-theme-bg-next's own gsettings call, no picture-options
+    ohmydebn-theme-bg-set's own gsettings call, no picture-options
     override anywhere in this repo), so a smaller preview that shows the
     full, uncropped frame was never actually representative of what
     Enter's about to do, on top of visibly changing size theme to theme
@@ -1302,8 +1299,8 @@ class Carousel(Gtk.Window):
         self.right_ring_btns = right_frames
 
         # The card itself plus its new above/below background-neighbor
-        # thumbnails, stacked vertically - same idea as left_image/
-        # right_image below, just rotated 90 degrees for the background
+        # thumbnails, stacked vertically - same idea as the left/right
+        # theme rings above, just rotated 90 degrees for the background
         # sub-carousel instead of the theme carousel.
         card_stack = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card_stack.set_halign(Gtk.Align.CENTER)
@@ -1846,8 +1843,11 @@ class Carousel(Gtk.Window):
         # fixing it. reset_widgets() is the one call that actually forces
         # every affected widget (#carousel-card plus every #carousel-side
         # thumbnail at once, unlike a per-widget invalidate()) to re-read
-        # this provider.
-        Gtk.StyleContext.reset_widgets(Gdk.Screen.get_default())
+        # this provider. With no screen at all (no display, as in the test
+        # suite run headless) there's nothing realized to restyle.
+        screen = Gdk.Screen.get_default()
+        if screen is not None:
+            Gtk.StyleContext.reset_widgets(screen)
 
     def _show_bg_neighbors(self, bg_n):
         """The above/below background thumbnails for a theme with bg_n
@@ -2091,8 +2091,6 @@ class Carousel(Gtk.Window):
             return None
 
         self._decoder.submit(1, lambda: generation == self._prefetch_gen, collect, enqueue)
-
-        threading.Thread(target=work, daemon=True).start()
 
     def on_key_press(self, widget, event):
         keyval = event.keyval

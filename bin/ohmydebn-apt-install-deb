@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# ohmydebn-apt-install-deb: installs a vendor's .deb from a URL through apt.
+# Usage: ohmydebn-apt-install-deb <name> <url> [sha256]
+#   <name>    what to call it in messages ("Visual Studio Code")
+#   <url>     the .deb to download
+#   [sha256]  its checksum, when the vendor publishes one - checked before
+#             anything is installed
+#
+# For the installers whose vendor ships a .deb rather than an apt repo
+# (ChatGPT, VS Code, Google Chrome, Microsoft's repo-setup package). They
+# used to run `curl ... && dpkg -i ... && rm`, which had three problems:
+# dpkg -i doesn't install a package's dependencies (a vendor adding a new
+# library left the package half-installed), a failed download inside the
+# && chain skipped the install but still let the installer exit 0 and
+# carry on (VS Code wrote its pin for a package that wasn't there), and
+# the temporary file stayed behind. apt installs the file and its
+# dependencies together, a failed download or checksum stops here with a
+# clear message, and the download is always removed.
+
+set -euo pipefail
+
+if [ $# -lt 2 ]; then
+  echo "Usage: ohmydebn-apt-install-deb <name> <url> [sha256]" >&2
+  exit 1
+fi
+NAME="$1"
+URL="$2"
+SHA256="${3:-}"
+
+# A private directory, but readable by apt's unprivileged _apt user:
+# apt opens a local .deb as _apt, and otherwise warns that it fell back
+# to reading it as root.
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+chmod 755 "$WORK"
+DEB="$WORK/package.deb"
+
+echo "Downloading $NAME..."
+if ! curl -fSL "$URL" -o "$DEB"; then
+  echo
+  echo "Couldn't download $NAME. Check your Internet connection and try again." >&2
+  exit 1
+fi
+chmod 644 "$DEB"
+
+if [ -n "$SHA256" ]; then
+  if ! echo "$SHA256  $DEB" | sha256sum --check --quiet - 2>/dev/null; then
+    echo
+    echo "The $NAME download doesn't match its published checksum, so it wasn't installed." >&2
+    exit 1
+  fi
+  echo "Checksum verified."
+fi
+
+sudo /usr/bin/apt update
+sudo /usr/bin/apt -y install "$DEB"

@@ -13,16 +13,25 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
   read -r
 
   ARCH=$(uname -m)
-  TEMP=$(mktemp)
-  echo "Downloading Visual Studio Code..."
   if [ "$ARCH" == "x86_64" ]; then
-    curl -fSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
+    PLATFORM=linux-deb-x64
   elif [ "$ARCH" == "aarch64" ]; then
-    curl -fSL "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64" -o "$TEMP" && sudo /usr/bin/dpkg -i "$TEMP" && rm -f "$TEMP"
+    PLATFORM=linux-deb-arm64
   else
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1
   fi
+  # VS Code's update API names the current .deb and its SHA-256, so the
+  # download is checked before it's installed. Through apt, so its
+  # dependencies come too and a failed download stops here - see
+  # ohmydebn-apt-install-deb.
+  if ! RELEASE=$(curl -fsSL "https://update.code.visualstudio.com/api/update/$PLATFORM/stable/latest") ||
+    ! DEB_URL=$(jq -er '.url' <<<"$RELEASE") || ! DEB_SHA256=$(jq -er '.sha256hash' <<<"$RELEASE"); then
+    echo
+    echo "Couldn't find the current Visual Studio Code download. Check your Internet connection and try again." >&2
+    exit 1
+  fi
+  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "Visual Studio Code" "$DEB_URL" "$DEB_SHA256"
 
   # VS Code's own postinst self-registers packages.microsoft.com/repos/code
   # as an apt source (see /etc/apt/sources.list.d/vscode.sources) - unlike

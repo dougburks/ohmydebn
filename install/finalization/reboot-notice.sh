@@ -46,7 +46,13 @@ reboot_reason() {
   fi
 }
 
-REBOOT_REASON=$(reboot_reason)
+# Not after ohmydebn-reset-config (OHMYDEBN_RESET): a reset installs
+# nothing, so any reboot owed is an earlier update's, which said so then -
+# and "to finish this update" would be wrong here.
+REBOOT_REASON=""
+if [ "${OHMYDEBN_RESET:-}" != "1" ]; then
+  REBOOT_REASON=$(reboot_reason)
+fi
 if [ -n "$REBOOT_REASON" ]; then
   echo
   /usr/share/ohmydebn/bin/ohmydebn-headline "$REBOOT_HEADLINE"

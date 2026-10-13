@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # Echoes gTile-OhMyDebn's live "tiling-mode" setting (System Settings >
-# Extensions > gTile > Configure): "off", "rules", "traditional", or
-# "traditional-full". Defaults to "off" when the settings file doesn't
+# Extensions > gTile > Configure): "off", "rules", "traditional",
+# "traditional-full" or "scrollable". Defaults to "off" when the settings file doesn't
 # exist yet - a very fresh install before the extension's own defaults
 # file is seeded, or ohmydebn-gtile not installed at all - matching the
 # schema's own documented default and gTile.js's own handling of an

@@ -77,8 +77,13 @@ EOF
 # way: it did, repeatedly, mid test-run). Patch the absolute path to the
 # mock dir first, same technique test-spice-vdagent.sh uses for this exact
 # class of problem.
+# /dev/kvm is pointed at a scratch file whose write permission says whether
+# this user can already use KVM (KVM_WRITABLE=no: they can't yet).
 patched_script() {
-  sed "s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g" "$SCRIPT" >"$MOCK_DIR/virtmanager-install-patched.sh"
+  : >"$MOCK_DIR/kvm"
+  [[ "${KVM_WRITABLE:-yes}" == no ]] && chmod a-w "$MOCK_DIR/kvm"
+  sed -e "s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g" -e "s#/dev/kvm#$MOCK_DIR/kvm#g" \
+    "$SCRIPT" >"$MOCK_DIR/virtmanager-install-patched.sh"
   echo "$MOCK_DIR/virtmanager-install-patched.sh"
 }
 
@@ -104,6 +109,26 @@ assert_contains "amd64: autostarts the session pool" "$CALLS" "pool-autostart de
 assert_contains "amd64: starts the session pool" "$CALLS" "pool-start default"
 assert_contains "amd64: points virt-manager at qemu:///session (uris)" "$CALLS" "uris ['qemu:///session']"
 assert_contains "amd64: points virt-manager at qemu:///session (autoconnect)" "$CALLS" "autoconnect ['qemu:///session']"
+mock_cleanup
+
+# Cinnamon isn't restarted: that used to happen "so the kvm group takes
+# effect", which it can't - groups change only at the next login.
+mock_init
+mock_dpkg_not_installed amd64
+setup_common_mocks
+mock_virsh 1
+OUTPUT=$(USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" 2>&1)
+assert_not_contains "no Cinnamon restart mid-install" "$(cat "$MOCK_CALLS")" "cinnamon"
+assert_not_contains "KVM already usable (logind ACL): no log-out advice" "$OUTPUT" "Log out and back in"
+mock_cleanup
+
+mock_init
+mock_dpkg_not_installed amd64
+setup_common_mocks
+mock_virsh 1
+SCRIPT_COPY=$(KVM_WRITABLE=no patched_script)
+OUTPUT=$(USER=testuser PATH="$(mock_path)" bash "$SCRIPT_COPY" <<<"" 2>&1)
+assert_contains "KVM not usable until the group applies: says to log out and back in" "$OUTPUT" "Log out and back in before starting a virtual machine"
 mock_cleanup
 
 # Scenario 2: arm64 host -> the architecture case statement picks

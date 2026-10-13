@@ -1,58 +1,77 @@
 #!/bin/bash
 #
-# Unit tests for bin/ohmydebn-power-user-install - the post-install,
-# user-facing wrapper around install/packaging/power-user.sh. Confirms it
-# prompts before doing anything (Ctrl-C/EOF at the prompt must never reach
-# power-user.sh), and that a confirmed run invokes power-user.sh with
-# POWER_USER=true exported (the only thing power-user.sh actually needs from
-# its caller - see the comment in that file).
+# Unit tests for bin/ohmydebn-power-user-install, which applies the
+# power-user profile to an existing install. It used to say it removes
+# "Firefox, LibreOffice, etc." and then also purge every AI tool, VPN and
+# browser installed from the OhMyDebn menu. Now it lists exactly what it
+# will remove (the distro's apps only), says menu apps are kept, and does
+# nothing unless the answer is yes. The removal helper and the profile
+# itself are mocked.
 
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPT="$REPO_ROOT/bin/ohmydebn-power-user-install"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-power-user-install ==="
 
-# The script invokes power-user.sh by its hardcoded /usr/share/ohmydebn
-# path, which skips PATH entirely - patch that path to a mock script, same
-# technique test-power-user-flow.sh and test-virtmanager-install.sh use for
-# this exact class of problem.
-patched_script() {
-  sed "s#/usr/share/ohmydebn/install/packaging/power-user.sh#$MOCK_DIR/power-user.sh#" \
-    "$SCRIPT" >"$MOCK_DIR/power-user-install-patched.sh"
-  echo "$MOCK_DIR/power-user-install-patched.sh"
+# setup <what --list prints>
+setup() {
+  mock_init
+  printf '%s' "$1" >"$MOCK_DIR/list"
+  mock_bin ohmydebn-pkg-remove-all-optional <<'STUB'
+#!/bin/bash
+mock_log "remove-all-optional $*"
+cat "$MOCK_DIR/list"
+STUB
+  mkdir -p "$MOCK_DIR/root/install/packaging"
+  printf '#!/bin/bash\nmock_log "power-user.sh POWER_USER=$POWER_USER DISTRO_APPS_ONLY=${POWER_USER_DISTRO_APPS_ONLY:-}"\n' >"$MOCK_DIR/root/install/packaging/power-user.sh"
+  sed -e "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" -e "s#/usr/share/ohmydebn/install#$MOCK_DIR/root/install#g" \
+    "$REPO_ROOT/bin/ohmydebn-power-user-install" >"$MOCK_DIR/install.sh"
 }
 
-# Scenario 1: confirmed at the prompt -> power-user.sh runs with
-# POWER_USER=true exported.
-mock_init
-cat >"$MOCK_DIR/power-user.sh" <<'EOF'
-#!/bin/bash
-echo "power-user.sh POWER_USER=$POWER_USER" >>"$MOCK_CALLS"
-EOF
-chmod +x "$MOCK_DIR/power-user.sh"
-bash "$(patched_script)" <<<"" >/dev/null 2>&1
-EXIT_CODE=$?
-CALLS=$(cat "$MOCK_CALLS")
-assert_eq "confirmed: exits cleanly" "0" "$EXIT_CODE"
-assert_contains "confirmed: power-user.sh runs with POWER_USER=true" "$CALLS" "power-user.sh POWER_USER=true"
+run() {
+  OUTPUT=$(PATH="$(mock_path)" bash "$MOCK_DIR/install.sh" <<<"$1" 2>&1)
+  STATUS=$?
+}
+
+setup "libreoffice
+thunderbird"
+run ""
+assert_contains "lists exactly what will be removed" "$OUTPUT" "These apps will be removed:
+  libreoffice
+  thunderbird"
+assert_contains "says which apps are kept" "$OUTPUT" "Apps that only come from the OhMyDebn menu"
+assert_contains "and that listed apps go even if installed from the menu" "$OUTPUT" "removed even if you"
+assert_contains "asks first, defaulting to no" "$OUTPUT" "Continue? [y/N]"
+assert_contains "the list is the distro's apps only, and changes nothing" "$(cat "$MOCK_CALLS")" "remove-all-optional --distro-apps-only --list"
+assert_not_contains "Enter alone: nothing is applied" "$(cat "$MOCK_CALLS")" "power-user.sh"
+assert_eq "Enter alone: exits cleanly" "0" "$STATUS"
 mock_cleanup
 
-# Scenario 2: EOF at the prompt (Ctrl-C/closed stdin) -> `read -r` fails,
-# `set -e` bails before power-user.sh is ever reached.
-mock_init
-cat >"$MOCK_DIR/power-user.sh" <<'EOF'
-#!/bin/bash
-echo "power-user.sh POWER_USER=$POWER_USER" >>"$MOCK_CALLS"
-EOF
-chmod +x "$MOCK_DIR/power-user.sh"
-bash "$(patched_script)" </dev/null >/dev/null 2>&1
-EXIT_CODE=$?
-CALLS=$(cat "$MOCK_CALLS")
-assert_eq "cancelled: exits non-zero" "1" "$EXIT_CODE"
-assert_eq "cancelled: power-user.sh never runs" "" "$CALLS"
+setup "libreoffice"
+run "n"
+assert_not_contains "'n': nothing is applied" "$(cat "$MOCK_CALLS")" "power-user.sh"
+mock_cleanup
+
+setup "libreoffice"
+run "y"
+assert_contains "'y': the profile is applied, removing only the listed apps" "$(cat "$MOCK_CALLS")" "power-user.sh POWER_USER=true DISTRO_APPS_ONLY=1"
+mock_cleanup
+
+# EOF at the prompt (Ctrl-C, or closed input): `read` fails and set -e
+# stops the script before the profile is ever applied.
+setup "libreoffice"
+OUTPUT=$(PATH="$(mock_path)" bash "$MOCK_DIR/install.sh" </dev/null 2>&1)
+STATUS=$?
+assert_eq "cancelled (EOF): exits non-zero" "1" "$STATUS"
+assert_not_contains "cancelled (EOF): the profile never runs" "$(cat "$MOCK_CALLS")" "power-user.sh"
+mock_cleanup
+
+setup ""
+run "y"
+assert_contains "nothing of the distro's installed: says so" "$OUTPUT" "nothing will be removed"
+assert_contains "nothing of the distro's installed: the extras are still applied on 'y'" "$(cat "$MOCK_CALLS")" "power-user.sh"
 mock_cleanup
 
 test_summary

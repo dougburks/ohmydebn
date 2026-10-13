@@ -24,11 +24,19 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-menu persistent picker ==="
 
-# Strips the trailing "if [[ -n \"\${1:-}\" ]]; then go_to_menu ...; else
-# show_main_menu; fi" dispatch block so sourcing this file only defines
-# functions - doesn't immediately try to show a real menu.
+# A scratch HOME for the whole file: the menu caches its search index in
+# ~/.local/state/ohmydebn-config, keyed by the menu script's path, and these
+# tests run patched copies from temporary paths - so every run used to leave
+# two more cache files in the real home directory.
+TEST_HOME=$(mktemp -d)
+export HOME="$TEST_HOME"
+trap 'rm -rf "$TEST_HOME"' EXIT
+
+# Strips the script's last line, its top-level `show_main_menu` call, so
+# sourcing this file only defines functions - doesn't immediately try to
+# show a real menu.
 strip_dispatch() {
-  sed '/^if \[\[ -n "\${1:-}"/,$d' "$1"
+  sed '/^show_main_menu$/d' "$1"
 }
 
 setup_mock_picker() {
@@ -127,6 +135,7 @@ assert_contains "session end sends QUIT" "$CALLS" "serve-quit"
 # menu() maps its calling show_*_menu function to a breadcrumb via
 # menu_tree_paths - a bash+awk subprocess that used to run on every level.
 # It's now filled into MENU_BREADCRUMB_OF on the first call and reused.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -156,6 +165,7 @@ assert_eq "breadcrumb cache: later levels resolved from the cache (first match w
 assert_not_contains "breadcrumb cache: the duplicate's WRONG value never used" "$CALLS" "serve-request:WRONG"
 
 # --- Request line format: breadcrumb and options are tab-separated, in order ---
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -172,6 +182,7 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_contains "breadcrumb prefix is sent as given" "$CALLS" "serve-request:Install > AI"
 
 # --- Fallback: picker fails to start entirely -> one-shot mode still answers ---
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -196,6 +207,7 @@ assert_contains "fallback still returns the picked value" "$CALLS" "RESULT:Fallb
 # keep the signal-handling fix that made this safe to do a contained
 # change) - once it's gone, one-shot mode is used for the rest of the
 # session, not just once.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"
@@ -233,6 +245,7 @@ assert_eq "both post-crash calls used one-shot mode" "2" "$(grep -c '^oneshot-ca
 # specifically so this script's real "wait for a pick" is the latter, not
 # the former - this test is what would catch a regression back to the
 # former.
+mock_cleanup
 mock_init
 setup_mock_picker
 RESPONSES_FILE="$MOCK_DIR/responses"

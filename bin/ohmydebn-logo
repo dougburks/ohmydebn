@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# The animated logo (Ctrl+Shift+... via ohmydebn-logo-gui, and the menu).
+# The animated logo (Ctrl+Shift+O via ohmydebn-logo-gui, and the menu).
 # Colored from the current theme: ohmydebn-theme-logo-colors shapes the
 # theme's colors.toml into ttfx's rain palette and final gradient, so the
 # logo settles into the theme's own hues instead of ttfx's stock blue -
@@ -17,7 +17,10 @@
 PID_FILE=~/.cache/ohmydebn/logo.pid
 mkdir -p "$(dirname "$PID_FILE")"
 echo $$ >"$PID_FILE"
-trap 'rm -f "$PID_FILE"' EXIT
+# Only while it's still ours: with two logo windows open the second writes
+# its own PID here, and the first closing used to delete it, so a theme
+# change no longer refreshed the one still open.
+trap '[ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$PID_FILE"' EXIT
 
 /usr/share/ohmydebn/bin/ohmydebn-logo-generate
 

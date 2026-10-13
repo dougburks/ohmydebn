@@ -2,22 +2,22 @@
 #
 # Launches an arbitrary command in the background, then tiles whatever
 # window ends up active/focused afterward via ohmydebn-gtile-apply.
-# Generalizes the approach ohmydebn-browser-tiled originally used
-# (necessary because a browser launch can't be tracked by a fresh PID:
+# Generalizes the approach ohmydebn-browser-tiled first used (necessary
+# because a browser launch can't be tracked by a fresh PID:
 # even now that ohmydebn-browser execs the browser binary directly
 # instead of going through gtk-launch, most browsers are single-instance -
 # "launching" one that's already running just hands off to the existing
 # process and raises its window rather than keeping a new process alive)
-# to any command with the same problem. Most of OhMyDebn's own app launchers go through at least one
-# extra layer of indirection (a dpkg-installed check, a floating-terminal
-# helper, an app's own single-instance re-activation) before the real
+# to any command with the same problem. Most of OhMyDebn's own app
+# launchers go through at least one extra layer of indirection (a
+# dpkg-installed check, a floating-terminal helper, an app's own
+# single-instance re-activation) before the real
 # window-owning process exists, so a PID
 # captured at the top level - the way ohmydebn-terminal-tiled tracks
 # alacritty directly, safe there because it execs alacritty itself with
 # no indirection - would rarely match the actual window here. Always
 # tiles whatever ends up focused, rather than trying to tell a fresh
-# window from a raised one - same tradeoff ohmydebn-browser-tiled's own
-# comment already covered.
+# window from a raised one.
 #
 # Usage: ohmydebn-launch-tiled <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]
 #
@@ -57,8 +57,8 @@ shift 7
 # (unlike tile-rules.json's own window-created handler, which already only
 # fires in "rules" mode). Reading the live value here restores that
 # promise for every caller of this script. Doesn't apply the same gate to
-# "traditional"/"traditional-full" either: those modes have gTile's own
-# separate binary-tree auto-placement running instead, which this
+# "traditional"/"traditional-full"/"scrollable" either: those modes have
+# gTile's own auto-placement running instead, which this
 # script's own forced grid would just fight with. Only in "rules" mode
 # does forcing this specific grid make sense - the whole reason this
 # script exists is for windows tile-rules.json's own title/wmClass

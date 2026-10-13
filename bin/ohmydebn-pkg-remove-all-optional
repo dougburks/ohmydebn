@@ -2,7 +2,30 @@
 
 set -euo pipefail
 
-if [ "${1:-}" != "--skip-prompt" ]; then
+# Usage: ohmydebn-pkg-remove-all-optional [--skip-prompt] [--distro-apps-only] [--list]
+#   --distro-apps-only  remove only apps a base distro ships (DISTRO_APPS
+#                       below), never ones installed from the OhMyDebn menu
+#   --list              print the installed apps it would remove, change nothing
+#
+# The power-user profile (install/packaging/power-user.sh) is the only
+# caller. On a fresh `install.sh --power-user` nothing has been installed
+# from the OhMyDebn menu yet, so the full removal only meets what the
+# distro shipped. Run later (ohmydebn-power-user-install, on an existing
+# install) the full removal also purged every AI tool, VPN, browser and
+# editor the user had chosen from the menu - so that path uses
+# --distro-apps-only, and lists what it will remove before asking.
+SKIP_PROMPT=false
+DISTRO_ONLY=false
+LIST_ONLY=false
+for ARG in "$@"; do
+  case "$ARG" in
+  --skip-prompt) SKIP_PROMPT=true ;;
+  --distro-apps-only) DISTRO_ONLY=true ;;
+  --list) LIST_ONLY=true ;;
+  esac
+done
+
+if [ "$SKIP_PROMPT" = false ] && [ "$LIST_ONLY" = false ]; then
   echo "Continuing will remove all optional packages."
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
@@ -41,11 +64,22 @@ fi
 # processing cost (mandb, icon caches, desktop/mime databases) on its own,
 # and with Firefox/LibreOffice/etc. from the base Debian 13 Cinnamon ISO
 # usually installed, that cost was being paid dozens of times over.
+#
+# DISTRO_APPS are apps a base distro ships (some of which the OhMyDebn menu
+# also offers, like Firefox and LibreOffice). OHMYDEBN_APPS only ever come
+# from the OhMyDebn menu, so they're skipped with --distro-apps-only.
+# Neither list has Podman, rclone or Virtual Machine Manager: the power-user
+# profile installs those right after this, and purging them first only
+# deleted their system config for nothing.
+DISTRO_APPS=(abiword brasero calligra deja-dup duplicity gnome-calculator gnome-chess gnome-games gnumeric
+  goldendict-ng hexchat hoichess "libreoffice*" pidgin remmina tcpdump thunderbird "transmission*" tshark
+  wireshark x11vnc)
+OHMYDEBN_APPS=(cliamp distrobox docker.io emacs gnome-boxes localsend ohmydebn-opencode-cli uxplay)
+CANDIDATES=("${DISTRO_APPS[@]}")
+[ "$DISTRO_ONLY" = false ] && CANDIDATES+=("${OHMYDEBN_APPS[@]}")
+
 TO_PURGE=()
-for PACKAGE in abiword brasero calligra cliamp deja-dup docker.io distrobox duplicity emacs gnome-boxes \
-  gnome-calculator gnome-chess gnome-games gnumeric goldendict-ng hexchat hoichess \
-  "libreoffice*" localsend ohmydebn-opencode-cli pidgin podman rclone remmina tcpdump thunderbird "transmission*" \
-  tshark uxplay virt-manager wireshark x11vnc; do
+for PACKAGE in "${CANDIDATES[@]}"; do
   if pkg_glob_installed "$PACKAGE"; then
     TO_PURGE+=("$PACKAGE")
   fi
@@ -53,6 +87,40 @@ done
 
 if [ "$KALI" = false ] && pkg_glob_installed "firefox*"; then
   TO_PURGE+=("firefox*")
+fi
+
+# Apps with their own dedicated ohmydebn-<name>-remove script for
+# repo/keyring/config cleanup beyond a plain apt purge, as "package
+# script-name" pairs. All of them only ever come from the OhMyDebn menu.
+# Not brave-origin: it's the default browser (install/packaging/browser.sh),
+# not an optional app, so it stays for the same reason Chromium never
+# appeared here when it was the default - and the power-user flow, which
+# runs this first, would otherwise purge it only for its own
+# ohmydebn-brave-origin-install to put it straight back a moment later.
+DEDICATED=("antigravity antigravity" "brave-browser brave-browser" "chatgpt chatgpt"
+  "claude-code claude-code" "cloudflare-warp cloudflare-warp" "code code"
+  "google-chrome-stable google-chrome-stable" "helium-bin helium-bin" "powershell powershell"
+  "simplescreenrecorder simplescreenrecorder" "tailscale tailscale"
+  "ohmydebn-pi-coding-agent pi" "ohmydebn-codex-cli codex" "ohmydebn-t3code t3code"
+  "ohmydebn-grok-build grok" "ohmydebn-oh-my-pi omp")
+TO_REMOVE=()
+if [ "$DISTRO_ONLY" = false ]; then
+  for PAIR in "${DEDICATED[@]}"; do
+    read -r PACKAGE NAME <<<"$PAIR"
+    if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
+      TO_REMOVE+=("$NAME")
+    fi
+  done
+fi
+
+if [ "$LIST_ONLY" = true ]; then
+  for PACKAGE in "${TO_PURGE[@]}"; do
+    echo "${PACKAGE%\*}"
+  done
+  for NAME in "${TO_REMOVE[@]}"; do
+    echo "$NAME"
+  done
+  exit 0
 fi
 
 if [[ ${#TO_PURGE[@]} -gt 0 ]] && ! sudo /usr/bin/apt -y purge "${TO_PURGE[@]}"; then
@@ -68,39 +136,6 @@ fi
 
 sudo /usr/bin/apt -y autoremove
 
-# Apps with their own dedicated ohmydebn-<package>-remove script for
-# repo/keyring/config cleanup beyond a plain apt purge. Not brave-origin:
-# it's the default browser (install/packaging/browser.sh), not an optional
-# app, so it stays for the same reason Chromium never appeared here when it
-# was the default - and the power-user flow, which runs this first, would
-# otherwise purge it only for its own ohmydebn-brave-origin-install to put
-# it straight back a moment later.
-for PACKAGE in antigravity brave-browser chatgpt claude-code cloudflare-warp code \
-  google-chrome-stable helium-bin powershell simplescreenrecorder tailscale; do
-  if dpkg -s "$PACKAGE" >/dev/null 2>&1; then
-    "/usr/share/ohmydebn/bin/ohmydebn-${PACKAGE}-remove" --skip-prompt
-  fi
+for NAME in "${TO_REMOVE[@]}"; do
+  "/usr/share/ohmydebn/bin/ohmydebn-${NAME}-remove" --skip-prompt
 done
-
-# Pi, Codex, T3 Code, Grok Build and Oh My Pi don't fit the loop above - their dpkg
-# package names (ohmydebn-pi-coding-agent, ohmydebn-codex-cli,
-# ohmydebn-t3code, ohmydebn-grok-build, ohmydebn-oh-my-pi) aren't the same string as their
-# remove scripts' ohmydebn-pi-remove/ohmydebn-codex-remove/
-# ohmydebn-t3code-remove/ohmydebn-grok-remove/ohmydebn-omp-remove (the loop assumes both are the
-# same $PACKAGE, true for every other entry there but not for these short
-# script names).
-if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-pi-remove --skip-prompt
-fi
-if dpkg -s "ohmydebn-codex-cli" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-codex-remove --skip-prompt
-fi
-if dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-t3code-remove --skip-prompt
-fi
-if dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-grok-remove --skip-prompt
-fi
-if dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-omp-remove --skip-prompt
-fi

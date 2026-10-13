@@ -102,8 +102,8 @@ NAME="$1"
 
 if [[ "$ASK" == true ]]; then
   [[ "$(current_default)" == "$NAME" ]] && exit 0
-  # Some installers carry on past a failed download (curl && dpkg -i), so
-  # only offer what actually got installed.
+  # Only offer what actually got installed: an installer that failed
+  # partway may still reach this question.
   dpkg -s "$(package_of "$NAME")" >/dev/null 2>&1 || exit 0
   echo
   # printf + read rather than read -p: bash shows a -p prompt only when

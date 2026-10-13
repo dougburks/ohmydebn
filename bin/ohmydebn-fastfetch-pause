@@ -19,7 +19,10 @@
 PID_FILE=~/.cache/ohmydebn/fastfetch-pause.pid
 mkdir -p "$(dirname "$PID_FILE")"
 echo $$ >"$PID_FILE"
-trap 'rm -f "$PID_FILE"' EXIT
+# Only while it's still ours: with two windows open the second writes its
+# own PID here, and the first closing used to delete it, so a theme change
+# no longer refreshed the window still open.
+trap '[ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$PID_FILE"' EXIT
 
 render() {
   clear
@@ -31,8 +34,12 @@ trap 'SIZE=$(stty size); render' USR2
 SIZE=$(stty size)
 render
 
+# A read that fails for any reason other than its timeout or a signal
+# (status > 128) is end-of-file - no terminal any more - and ends the loop
+# instead of spinning on it, as ohmydebn-logo's does.
 while :; do
   read -t 0.5 -n 1 -s && break
+  [ $? -gt 128 ] || break
   CURRENT_SIZE=$(stty size)
   if [[ "$CURRENT_SIZE" != "$SIZE" ]]; then
     SIZE="$CURRENT_SIZE"

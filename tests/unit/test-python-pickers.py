@@ -281,12 +281,6 @@ try:
 finally:
     shutil.rmtree(scratch)
 
-check_eq("hex_to_rgba: 6-digit hex has full opacity", mp.hex_to_rgba("#2e3440"), "rgba(46, 52, 64, 1.000)")
-check_eq(
-    "hex_to_rgba: 8-digit hex applies the trailing alpha byte",
-    mp.hex_to_rgba("2e3440F2"), "rgba(46, 52, 64, 0.949)",
-)
-
 # load_theme_colors() reads ~/.config/ohmydebn/current/picker-colors, a
 # hardcoded path built inline (not a module constant), so this redirects
 # HOME for the duration of the test rather than monkeypatching a constant
@@ -308,10 +302,25 @@ try:
     check_eq("load_theme_colors: bg3 (accent color)", colors["bg3"], "rgba(129, 161, 193, 0.949)")
     check_eq("load_theme_colors: fg0", colors["fg0"], "rgba(216, 222, 233, 1.000)")
 
+    # A malformed value keeps the default for that key: the picker's own
+    # parser used to raise here, so the menu didn't open at all.
+    with open(picker_colors_path, "w", encoding="utf-8") as f:
+        f.write("bg0=#zzzzzz\nbg1=#2e3440\nbg3=nope\nfg0=#d8dee9\n")
+    colors = mp.load_theme_colors()
+    check_eq("load_theme_colors: a malformed bg0 keeps the default", colors["bg0"], "rgba(20, 20, 24, 0.949)")
+    check_eq("load_theme_colors: a malformed bg3 keeps the default", colors["bg3"], "rgba(90, 90, 220, 0.949)")
+    check_eq("load_theme_colors: the valid keys still apply", colors["bg1"], "rgba(46, 52, 64, 1.000)")
+
     os.remove(picker_colors_path)
     check_eq(
-        "load_theme_colors: falls back to DEFAULT_COLORS untouched when the file doesn't exist",
-        mp.load_theme_colors(), mp.DEFAULT_COLORS,
+        "load_theme_colors: the default palette when the file doesn't exist",
+        mp.load_theme_colors(),
+        {
+            "bg0": "rgba(20, 20, 24, 0.949)",
+            "bg1": "rgba(20, 20, 24, 1.000)",
+            "bg3": "rgba(90, 90, 220, 0.949)",
+            "fg0": "rgba(230, 230, 230, 1.000)",
+        },
     )
 finally:
     if old_home is None:
@@ -821,7 +830,7 @@ check(
     "build_shortcuts_markup: name comes before the shortcut letter (matches Cancel/Apply/Remove's ordering)",
     "Search Themes - S" in shortcuts_markup
     and "Browse More Themes - B" in shortcuts_markup
-    and "Create new Theme using Aether - C" in shortcuts_markup,
+    and "Create New Theme with Aether - C" in shortcuts_markup,
 )
 check(
     "build_shortcuts_markup: links each action to the right href",
@@ -2023,6 +2032,30 @@ finally:
     # out later.
     if picker._icon_pool is not None:
         picker._icon_pool.shutdown(wait=False)
+
+print()
+print("=== ohmydebn-menu-picker icon cache: a failed write leaves no temp file ===")
+# When saving the cached icon fails (a full disk, say), its mkstemp file
+# used to be left behind - about 300 per launcher open.
+_icon_scratch = tempfile.mkdtemp(prefix="ohmydebn-test-icons-")
+_saved_cache_dir, _saved_replace = mp.ICON_CACHE_DIR, mp.os.replace
+try:
+    mp.ICON_CACHE_DIR = os.path.join(_icon_scratch, "cache")
+    _icon_src = os.path.join(_icon_scratch, "app.png")
+    mp.GdkPixbuf.Pixbuf.new(mp.GdkPixbuf.Colorspace.RGB, False, 8, 48, 48).savev(_icon_src, "png", [], [])
+
+    def _failing_replace(*_args, **_kwargs):
+        raise OSError(28, "No space left on device")
+
+    mp.os.replace = _failing_replace
+    check("decode_icon_pixbuf: still returns the icon when caching fails",
+          mp.decode_icon_pixbuf(_icon_src) is not None)
+    mp.os.replace = _saved_replace
+    _left = os.listdir(mp.ICON_CACHE_DIR) if os.path.isdir(mp.ICON_CACHE_DIR) else []
+    check_eq("decode_icon_pixbuf: no temp file left after a failed cache write", _left, [])
+finally:
+    mp.ICON_CACHE_DIR, mp.os.replace = _saved_cache_dir, _saved_replace
+    shutil.rmtree(_icon_scratch)
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

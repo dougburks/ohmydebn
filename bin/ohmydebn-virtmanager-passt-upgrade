@@ -43,11 +43,21 @@ from gi.repository import Gdk, GLib, Gtk
 
 import os
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
+
+# The shared palette reader sits next to this script (as ohmydebn-update-gui
+# finds it), wherever this is run from.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_theme_colors as theme_colors  # noqa: E402
+from ohmydebn_theme_colors import css_rgba  # noqa: E402
 
 VIRSH = "/usr/bin/virsh"
 VIRT_XML = "/usr/bin/virt-xml"
 CONNECT = "qemu:///session"
+# virsh's output is compared below ("shut off"), and it's translated in other
+# languages - where the Upgrade button would then never be enabled.
+VIRSH_ENV = dict(os.environ, LC_ALL="C")
 
 
 def list_vm_names():
@@ -56,7 +66,7 @@ def list_vm_names():
     parse out of column widths."""
     result = subprocess.run(
         [VIRSH, "--connect", CONNECT, "list", "--all", "--name"],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, env=VIRSH_ENV,
     )
     return [line for line in result.stdout.splitlines() if line.strip()]
 
@@ -64,7 +74,7 @@ def list_vm_names():
 def get_vm_state(name):
     result = subprocess.run(
         [VIRSH, "--connect", CONNECT, "domstate", name],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, env=VIRSH_ENV,
     )
     return result.stdout.strip() or "unknown"
 
@@ -82,7 +92,7 @@ def get_passt_status(name):
     for upgrade_to_passt() to target individually."""
     result = subprocess.run(
         [VIRSH, "--connect", CONNECT, "dumpxml", name],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, env=VIRSH_ENV,
     )
     if result.returncode != 0 or not result.stdout.strip():
         return "unknown", []
@@ -134,34 +144,12 @@ def upgrade_to_passt(name, macs):
         )
 
 
-def hex_to_rgba(hex_value):
-    """Same conversion ohmydebn-menu-picker uses for this same file -
-    picker-colors stores #RRGGBBAA (an 8-digit hex with alpha baked in),
-    which GTK's CSS parser rejects outright ("Junk at end of value",
-    confirmed live) since it only understands #RRGGBB or rgba(...)."""
-    hex_value = hex_value.lstrip("#")
-    r = int(hex_value[0:2], 16)
-    g = int(hex_value[2:4], 16)
-    b = int(hex_value[4:6], 16)
-    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
-    return f"rgba({r}, {g}, {b}, {a:.3f})"
-
-
 def load_theme_colors():
-    """Same small key=value file ohmydebn-theme-set-picker writes on every
-    theme change that ohmydebn-menu-picker reads - keeps this window's
-    look in sync with the active theme with no separate palette."""
-    colors = {"bg0": "#1e1e2e", "bg1": "#313244", "bg3": "#585b70", "fg0": "#cdd6f4"}
-    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key in colors and value:
-                    colors[key] = value
-    except OSError:
-        pass
-    return {key: hex_to_rgba(value) for key, value in colors.items()}
+    """The current theme's palette as CSS rgba() strings, from the shared
+    reader (ohmydebn_theme_colors.py). This window used to keep its own
+    copy of that parsing, which raised on a malformed value so the window
+    never opened; the shared one keeps the default for that key."""
+    return {key: css_rgba(value) for key, value in theme_colors.load_theme_colors().items()}
 
 
 CSS_TEMPLATE = """
@@ -197,6 +185,17 @@ window {{
 }}
 """
 
+# The rows shown instead of VMs, as short fixed lines rather than one
+# wrapped label: a wrapping label's height depends on the width GTK settles
+# on, and the window's height was worked out for one line, so the second
+# was cut off at the bottom (seen in a VM).
+NO_VIRSH_MESSAGE = (
+    "Virtual Machine Manager isn't installed.\n"
+    "Install it from Apps > Virtualization,\n"
+    "then create a virtual machine."
+)
+NO_VMS_MESSAGE = "There are no virtual machines yet."
+
 STATUS_LABELS = {
     "passt": ("Using passt", "status-ok"),
     "needs_upgrade": ("Not using passt", "status-needs-upgrade"),
@@ -226,12 +225,11 @@ class PasstUpgradeWindow(Gtk.Window):
         # the usable monitor height - past that it scrolls instead of
         # running off/behind the screen edge. propagate_natural_height
         # makes the ScrolledWindow ask for its content's real height (up
-        # to the max) instead of an arbitrary fixed one; the row count
-        # here is fixed for this window's whole lifetime (refresh() only
-        # ever updates existing rows' state/button text, never adds or
-        # removes a VM), so unlike ohmydebn-menu-picker this never needs
-        # to re-negotiate size after the window is already shown - it
-        # only has to get this right once, before the first show().
+        # to the max) instead of an arbitrary fixed one. The size is worked
+        # out once, before the first show(): refresh() rebuilds the rows
+        # from the current VM list, and when that changes while the window
+        # is open, the scroller takes up the difference rather than the
+        # window resizing.
         scroller.set_max_content_height(max(300, int(get_monitor_geometry().height * 0.7)))
         scroller.set_propagate_natural_height(True)
         outer.pack_start(scroller, True, True, 0)
@@ -257,9 +255,26 @@ class PasstUpgradeWindow(Gtk.Window):
     def refresh(self):
         for child in self.listbox.get_children():
             self.listbox.remove(child)
-        for name in list_vm_names():
-            self.listbox.add(self._build_row(name))
+        # Always in the menu, so it's often opened with nothing to show:
+        # without virsh (no Virtual Machine Manager or Boxes) this used to
+        # fail at startup with no window at all.
+        if not os.path.exists(VIRSH):
+            self.listbox.add(self._message_row(NO_VIRSH_MESSAGE))
+        else:
+            names = list_vm_names()
+            for name in names:
+                self.listbox.add(self._build_row(name))
+            if not names:
+                self.listbox.add(self._message_row(NO_VMS_MESSAGE))
         self.listbox.show_all()
+
+    def _message_row(self, text):
+        row = Gtk.ListBoxRow()
+        row.set_activatable(False)
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class("vm-state")
+        row.add(label)
+        return row
 
     def _build_row(self, name):
         state = get_vm_state(name)
@@ -310,7 +325,7 @@ class PasstUpgradeWindow(Gtk.Window):
             return
         try:
             upgrade_to_passt(name, macs)
-        except subprocess.CalledProcessError as exc:
+        except (subprocess.CalledProcessError, OSError) as exc:
             error = Gtk.MessageDialog(
                 transient_for=self,
                 modal=True,
@@ -318,7 +333,15 @@ class PasstUpgradeWindow(Gtk.Window):
                 buttons=Gtk.ButtonsType.OK,
                 text=f"Couldn't upgrade {name}",
             )
-            error.format_secondary_text((exc.stderr or exc.stdout or str(exc)).strip())
+            # virt-xml comes with Virtual Machine Manager (virt-install), not
+            # with Boxes, which has virsh but not virt-xml.
+            if isinstance(exc, FileNotFoundError):
+                detail = "virt-xml isn't installed. It comes with Virtual Machine Manager (Apps > Virtualization)."
+            elif isinstance(exc, subprocess.CalledProcessError):
+                detail = (exc.stderr or exc.stdout or str(exc)).strip()
+            else:
+                detail = str(exc)
+            error.format_secondary_text(detail)
             error.run()
             error.destroy()
         self.refresh()

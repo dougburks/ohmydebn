@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 #
 # Pure-logic regression tests for bin/ohmydebn_theme_colors.py, the
-# shared picker-colors palette reader used by ohmydebn-update-gui and
-# ohmydebn_speedtest_common.py (ohmydebn-menu-picker keeps its own older
-# reader - see the module's header). These tests started life inside
+# shared picker-colors palette reader used by ohmydebn-update-gui,
+# ohmydebn_speedtest_common.py, the menu picker, the Aether link guard and
+# the virt-manager passt window. These tests started life inside
 # test-update-gui.py when the loader lived in that script, and moved
 # here with the code. No display needed - the module is plain Python
 # with no gi imports at all.

@@ -8,7 +8,7 @@ This file is for developing OhMyDebn. The skill in `config/ohmydebn-skill/` is d
 
 - `bin/` - every command, named `ohmydebn-*`. Installed to `/usr/share/ohmydebn/bin`, and scripts call each other by that absolute path.
 - `install.sh` - the bootstrap: checks the distro, sets up apt sources and the OhMyDebn repo, installs the `ohmydebn` package, then runs `ohmydebn.sh`.
-- `ohmydebn.sh` - sources `install/{packaging,config,cleanup,finalization}/all.sh`. A new file under `install/` must be sourced from its directory's `all.sh`.
+- `ohmydebn.sh` - sources `install/{packaging,config,cleanup,finalization}/all.sh`. A new file under `install/` must be sourced from its directory's `all.sh` (`install/keybinding/` has none; it's sourced through `install/finalization/keybinding.sh`).
 - `config/` - default configs, `*.tpl` templates rendered per theme, `tile-rules.json`, and the user-facing agent skill.
 - `themes/` - the built-in OhMyDebn theme, shipped as the separate `ohmydebn-themes` package. The Omarchy themes are packaged from the omarchy repo by `build-package-ohmydebn-themes-omarchy.sh` in `ohmydebn-package-build`.
 - `tests/` - the test suite (see below).
@@ -21,7 +21,7 @@ Two sibling repositories go with this one:
 
 ## The install runs again on every update
 
-`ohmydebn-update` updates the `ohmydebn` package and reruns `install.sh`, so everything under `install/` runs on new installs and on every update of existing ones. Keep it idempotent. A change that must happen only once is guarded by a marker file in `~/.local/state/ohmydebn-config/<name>`. Marker names must be unique (the consistency tests check this). Never overwrite a file the user may have edited without such a guard and a reason.
+`ohmydebn-update` updates the `ohmydebn` package and reruns `install.sh`, so everything under `install/` runs on new installs and on every update of existing ones. Keep it idempotent. A change that must happen only once is guarded by a marker file in `~/.local/state/ohmydebn-config/<name>`, or in `/var/lib/ohmydebn/<name>` for a setting that belongs to the whole machine rather than one user (such as the firewall). Marker names must be unique (the consistency tests check this). Never overwrite a file the user may have edited without such a guard and a reason.
 
 ## Testing
 
@@ -50,6 +50,7 @@ Unit test rules:
   - ask "Press Enter to continue or Ctrl-C to cancel." before changing anything, unless called with `--skip-prompt`, which means "part of an install or automation: ask nothing"
   - run `sudo /usr/bin/apt update` before `apt install`
   - pin any third-party apt repo to its own packages in `/etc/apt/preferences.d/`, and have the `-remove` script delete the same pin file
+  - install a vendor's `.deb` download with `ohmydebn-apt-install-deb <name> <url> [sha256]` (never `dpkg -i`), which installs its dependencies too; pass the vendor's checksum when they publish one
 - Any yes/no question that follows "Press Enter" defaults to No (`[y/N]`), so a reflexive second Enter changes nothing.
 - A new package dependency goes in exactly one place: `install/packaging/dependencies.sh`, `install/packaging/power-user.sh`, or the `ohmydebn` package's `--depends` in `ohmydebn-package-build/build-package-ohmydebn.sh`.
 - Don't count on apt Recommends being installed: MX Linux disables them. Install anything you need explicitly.
@@ -93,7 +94,7 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 Neovim comes from `ohmydebn-neovim` (upstream's release build) and each user's LazyVim plugins, parsers and Mason tools from `ohmydebn-neovim-plugins`, both built in `ohmydebn-package-build`. The tested plugin versions are `config/nvim/lazy-lock.json` in this repo, and `install/config/nvim.sh` refreshes users' plugins whenever that lockfile changes.
 
 1. A Neovim bug-fix release: bump `VERSION` in `build-package-ohmydebn-neovim.sh` and rebuild it. The plugin package accepts any Neovim in the same minor series.
-2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. Test Neovim in a VM, then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
+2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. A plugin set that differs from the one published under the script's `VERSION` is built as a candidate in `ohmydebn-packages-candidates`, not published. Install it on a VM with `sudo apt install --reinstall --allow-downgrades ./<deb>`, run `ohmydebn-update` there (which puts the new plugins into the user's Neovim), and test Neovim; then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
 3. A new Neovim minor release (such as 0.13): do both, since the plugin package depends on the minor version it was built with.
 
 ### Theming another app

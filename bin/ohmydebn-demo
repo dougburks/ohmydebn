@@ -20,11 +20,14 @@ while true; do
     --frame-rate 240 --canvas-width 0 --canvas-height $(($(tput lines) - 2)) \
     --anchor-canvas c --anchor-text c \
     --random-effect &
+  TTFX_PID=$!
 
-  while pgrep -x ttfx >/dev/null; do
+  # Only this demo's own ttfx, by its PID: `pkill -x ttfx` also stopped the
+  # animation in an open logo window (and `pgrep -x ttfx` waited on it).
+  # A key ends the demo, and its terminal window closes with this script.
+  while kill -0 "$TTFX_PID" 2>/dev/null; do
     if read -r -n 1 -t 0.01; then
-      pkill -x ttfx 2>/dev/null
-      pkill -f "alacritty --title \"OhMyDebn Demo\"" 2>/dev/null
+      kill "$TTFX_PID" 2>/dev/null
       exit 0
     fi
   done

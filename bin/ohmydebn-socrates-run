@@ -30,6 +30,11 @@ OHMYDEBN_CURRENT_DIR="$HOME/.config/ohmydebn/current"
 
 PODMAN_ARGS=(
   run
+  # Remove the container when SO-CRATES stops: everything worth keeping is
+  # in ~/socrates-data, mounted below. Without it every launch left a
+  # stopped container behind, and ohmydebn-socrates-cleanup only removes
+  # those of older images.
+  --rm
   --userns=keep-id
   --user "$(id -u):$(id -g)"
   -v ~/socrates-data:/data

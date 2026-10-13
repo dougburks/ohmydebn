@@ -77,6 +77,33 @@ assert_contains "flag set, Cinnamon running: headline shown" "$CALLS" "Restartin
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
+# Scenario 1b: run by ohmydebn-reset-config (OHMYDEBN_RESET): a requested
+# restart still happens, but no "update complete" - the reset prints its own
+# once it has reapplied the theme.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" XDG_CURRENT_DESKTOP="X-Cinnamon" OHMYDEBN_RESET=1 \
+  OHMYDEBN_CINNAMON_RESTART_NEEDED=1 MOCK_CINNAMON_RUNNING=true bash -e "$MOCK_DIR/finale-patched.sh" >/dev/null 2>&1
+wait_for_cinnamon_call
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "reset: a requested restart still happens" "$CALLS" "cinnamon --replace"
+assert_not_contains "reset: no \"update complete\"" "$CALLS" "update complete"
+assert_not_contains "reset: no first-install welcome" "$CALLS" "Installation complete"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 1c: an ordinary update still says "update complete".
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+RESTART_NEEDED="" MOCK_CINNAMON_RUNNING=false run_script
+assert_contains "update: \"update complete\" shown" "$(cat "$MOCK_CALLS")" "OhMyDebn update complete - version: 9.9.9-99999999"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
 # Scenario 2: flag set, but no live Cinnamon session -> no restart
 # (nothing to restart, and don't accidentally launch a fresh one).
 mock_init

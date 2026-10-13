@@ -19,8 +19,12 @@ THEME_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/current/theme/backgrounds/"
 USER_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/backgrounds/$THEME_NAME/"
 CURRENT_BACKGROUND_LINK="$HOME/.config/ohmydebn/current/background"
 
+# LC_ALL=C: by byte (so by codepoint), the order the theme carousel sorts
+# in. The carousel applies its N-th background as `--background N`, and a
+# locale sort put "aurora.jpg" before "Beach.jpg" where the carousel puts
+# it after, so it could apply a different wallpaper than it showed.
 mapfile -d '' -t BACKGROUNDS < <(
-  find -L "$USER_BACKGROUNDS_PATH" "$THEME_BACKGROUNDS_PATH" -maxdepth 1 -type f -print0 2>/dev/null | sort -z
+  find -L "$USER_BACKGROUNDS_PATH" "$THEME_BACKGROUNDS_PATH" -maxdepth 1 -type f -print0 2>/dev/null | LC_ALL=C sort -z
 )
 TOTAL=${#BACKGROUNDS[@]}
 

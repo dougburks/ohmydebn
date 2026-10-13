@@ -54,6 +54,10 @@ EOF2
 }
 
 run() {
+  # Enter at any question, or NO_INPUT=1: end of input, as if cancelled.
+  local input="$MOCK_DIR/enter"
+  printf '\n' >"$input"
+  [[ "${NO_INPUT:-}" == 1 ]] && input=/dev/null
   # A PATH without the real /usr/bin/fwupdmgr, so "not installed" is real.
   OUT=$(PATH="$MOCK_BIN:/usr/bin:/bin" bash -c '
     hide=$(mktemp -d)
@@ -61,7 +65,7 @@ run() {
     PATH="$MOCK_BIN:$hide" bash "$MOCK_BIN/ohmydebn-update-firmware"
     status=$?
     rm -rf "$hide"
-    exit $status' </dev/null 2>&1)
+    exit $status' <"$input" 2>&1)
   STATUS=$?
   CALLS=$(cat "$MOCK_CALLS")
 }
@@ -111,6 +115,19 @@ mock_cleanup
 setup yes 0 2 no no
 run
 assert_not_contains "BIOS: no fwupd-signed" "$CALLS" "fwupd-signed"
+mock_cleanup
+
+# --- fwupd missing: says what it installs and asks first; no answer, nothing installed ---
+setup no 0 0
+run
+assert_contains "fwupd missing: says what it installs first" "$OUT" "Continuing will first install fwupd"
+assert_contains "fwupd missing: asks first" "$OUT" "Press Enter to continue or Ctrl-C to cancel."
+assert_contains "fwupd missing: installs it after Enter" "$CALLS" "apt -y install fwupd"
+mock_cleanup
+
+setup no 0 0
+NO_INPUT=1 run
+assert_not_contains "fwupd missing, no answer (end of input): nothing installed" "$CALLS" "apt -y install"
 mock_cleanup
 
 # --- UEFI, signed updater already there (Debian installs recommends) ---

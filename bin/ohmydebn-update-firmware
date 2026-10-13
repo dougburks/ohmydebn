@@ -35,6 +35,25 @@ echo "Keep your computer plugged in and don't turn it off while firmware is"
 echo "updating. Some updates are installed during the next restart."
 echo
 
+# What has to be installed first, said before anything is (the
+# "Press Enter" step every installer has): this used to install it
+# without asking.
+NEEDED=()
+if ! command -v fwupdmgr >/dev/null 2>&1; then
+  NEEDED+=(fwupd)
+fi
+if [[ -d "$EFI_SYSFS" ]] && ! compgen -G "$SIGNED_EFI_GLOB" >/dev/null; then
+  NEEDED+=(fwupd-signed)
+fi
+if [[ ${#NEEDED[@]} -gt 0 ]]; then
+  printf -v NEEDED_TEXT '%s and ' "${NEEDED[@]}"
+  echo "Continuing will first install ${NEEDED_TEXT% and } from your distro's repos."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+  echo
+fi
+
 APT_UPDATED=false
 if ! command -v fwupdmgr >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Installing fwupd"

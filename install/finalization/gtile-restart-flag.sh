@@ -25,8 +25,8 @@
 # (finalization/keybinding.sh used to schedule one too, before it learned
 # to make Cinnamon reload keybindings live). Instead this just sets
 # OHMYDEBN_CINNAMON_RESTART_NEEDED, a plain shell variable shared across
-# every finalization script sourced into this same process (see
-# ohmydebn.sh/all.sh) - finalization/finale.sh, the last step, does the
+# every step sourced into this same process (see ohmydebn.sh, which clears
+# it before the first one) - finalization/finale.sh, the last step, does the
 # one actual restart at the very end if anything asked for it.
 
 GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/null)
@@ -38,7 +38,7 @@ GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/nu
 GTILE_MIN_VERSION="2.3.1"
 if [ -z "$GTILE_INSTALLED_VERSION" ] || ! dpkg --compare-versions "$GTILE_INSTALLED_VERSION" ge "$GTILE_MIN_VERSION"; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "WARNING: ohmydebn-gtile is out of date"
-  echo "Installed: ${GTILE_INSTALLED_VERSION:-none}, need >= $GTILE_MIN_VERSION - apps launched via hotkeys/menu won't auto-tile until it's upgraded."
+  echo "Installed: ${GTILE_INSTALLED_VERSION:-none}, need >= $GTILE_MIN_VERSION - apps launched from keybindings or the menu won't auto-tile until it's upgraded."
   echo "Run: sudo apt install --only-upgrade ohmydebn-gtile"
 fi
 
@@ -57,7 +57,7 @@ if [ -n "$GTILE_INSTALLED_VERSION" ] && gsettings get org.cinnamon enabled-exten
     # announced: finale.sh checks the same thing and wouldn't restart, so
     # telling the user Cinnamon "will restart" would be wrong.
     if pgrep -x cinnamon >/dev/null; then
-      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update for gtile"
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update for gTile"
       export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
     fi
   fi

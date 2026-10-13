@@ -38,7 +38,7 @@ PACKAGES=(
   libnotify-bin
 
   # ohmydebn-menu's Setup > Bluetooth/Printers targets. Only Recommends
-  # of cinnamon-desktop-environment, and the batched install above runs
+  # of cinnamon-desktop-environment, and the batched install below runs
   # with --no-install-recommends (see ohmydebn-pkg-install-optional) - so
   # without naming them here, any install not seeded from the Debian
   # Cinnamon ISO never got them and both menu entries were silent

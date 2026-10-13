@@ -44,6 +44,12 @@ import subprocess
 import sys
 from urllib.parse import parse_qsl, urlsplit
 
+# The shared palette reader sits next to this script (as ohmydebn-update-gui
+# finds it), wherever this is run from.
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_theme_colors as theme_colors  # noqa: E402
+from ohmydebn_theme_colors import css_rgba  # noqa: E402
+
 AETHER_BIN = "/usr/share/aether/aether"
 
 # The one host every colors=/wallpaper= URL on bjarneo.github.io/omarchy-themes
@@ -54,13 +60,6 @@ KNOWN_PAYLOAD_HOST = "wallpapers.hel1.your-objectstorage.com"
 
 PAYLOAD_PARAMS = ("colors", "wallpaper", "external_theme")
 
-# Same fallback palette ohmydebn-menu-picker uses when no theme has run yet.
-DEFAULT_COLORS = {
-    "bg0": "rgba(20, 20, 24, 0.95)",
-    "bg1": "rgba(20, 20, 24, 1)",
-    "bg3": "rgba(90, 90, 220, 0.95)",
-    "fg0": "rgba(230, 230, 230, 1)",
-}
 
 CSS_TEMPLATE = """
 #guard-window {{
@@ -92,30 +91,13 @@ CSS_TEMPLATE = """
 """
 
 
-def hex_to_rgba(hex_value):
-    hex_value = hex_value.lstrip("#")
-    r = int(hex_value[0:2], 16)
-    g = int(hex_value[2:4], 16)
-    b = int(hex_value[4:6], 16)
-    a = int(hex_value[6:8], 16) / 255 if len(hex_value) >= 8 else 1.0
-    return f"rgba({r}, {g}, {b}, {a:.3f})"
-
-
 def load_theme_colors():
-    """Same file, same format, same fallback as ohmydebn-menu-picker's own
-    load_theme_colors() - ohmydebn-theme-set-picker writes it fresh on every
-    theme change, so this dialog always matches whatever theme is active."""
-    colors = dict(DEFAULT_COLORS)
-    config_path = os.path.expanduser("~/.config/ohmydebn/current/picker-colors")
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                if key and value:
-                    colors[key] = hex_to_rgba(value)
-    except OSError:
-        pass
-    return colors
+    """The current theme's palette as CSS rgba() strings, through the shared
+    reader (ohmydebn_theme_colors.py) the menu picker uses, so this dialog
+    matches the active theme. This used to have its own parser, which
+    raised on a malformed value, so the dialog never appeared and an Aether
+    link silently did nothing."""
+    return {key: css_rgba(value) for key, value in theme_colors.load_theme_colors().items()}
 
 
 def payload_host(raw_value):

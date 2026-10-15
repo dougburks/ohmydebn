@@ -23,6 +23,11 @@ echo $$ >"$PID_FILE"
 # own PID here, and the first closing used to delete it, so a theme change
 # no longer refreshed the window still open.
 trap '[ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$PID_FILE"' EXIT
+# Exit through a trap on the signals that close the window. Without one,
+# bash 5.2 sometimes drops a SIGTERM that lands during the timed read
+# below and keeps looping (seen as test-fastfetch-pause.sh hanging about
+# one run in five).
+trap 'exit 0' TERM HUP INT
 
 render() {
   clear

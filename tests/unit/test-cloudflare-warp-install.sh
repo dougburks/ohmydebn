@@ -8,8 +8,10 @@
 # stayed behind, failing every later apt update and ohmydebn-update. Each
 # supported distro's os-release (the same values the distro-detection tests
 # use) must get a codename Cloudflare serves, and a source apt can't
-# refresh must be removed again. sudo, apt, curl and gpg are mocked, and
-# the system paths point into a scratch directory.
+# refresh must be removed again. An Ubuntu release Cloudflare doesn't serve
+# yet (a 404 for its repo) falls back to the newest supported LTS. sudo,
+# apt, curl and gpg are mocked, and the system paths point into a scratch
+# directory.
 
 set -uo pipefail
 
@@ -30,8 +32,19 @@ EOF2
 #!/bin/bash
 exit 1
 EOF2
+  # The repo check asks for dists/<codename>/Release and reads the status
+  # code; MOCK_CURL_404 lists the codenames Cloudflare doesn't serve, and
+  # MOCK_CURL_DOWN stands for no network (curl prints 000 and fails).
   mock_bin curl <<'EOF2'
 #!/bin/bash
+url="${*: -1}"
+if [[ "$url" == */dists/*/Release ]]; then
+  mock_log "curl check $url"
+  [ -n "${MOCK_CURL_DOWN:-}" ] && { printf 000; exit 6; }
+  codename="${url%/Release}"; codename="${codename##*/}"
+  [[ " ${MOCK_CURL_404:-} " == *" $codename "* ]] && printf 404 || printf 200
+  exit 0
+fi
 echo "key"
 EOF2
   mock_bin gpg <<'EOF2'
@@ -86,6 +99,26 @@ expect "Mint 22.3" noble "ID=linuxmint" "VERSION_CODENAME=zena" "UBUNTU_CODENAME
 expect "Pop!_OS 24.04" noble "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
 expect "Ubuntu 24.04" noble "ID=ubuntu" "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
 expect "Ubuntu 26.04 (no UBUNTU_CODENAME)" resolute "ID=ubuntu" "VERSION_CODENAME=resolute"
+
+# --- an Ubuntu release Cloudflare doesn't serve yet ---
+UBUNTU_2610=("ID=ubuntu" "ID_LIKE=debian" "VERSION_CODENAME=stonking" "UBUNTU_CODENAME=stonking")
+setup
+MOCK_CURL_404="stonking" run_install "${UBUNTU_2610[@]}"
+assert_eq "Ubuntu 26.10, not served yet: falls back to resolute" "resolute" "$(codename_in_list)"
+assert_contains "Ubuntu 26.10, not served yet: installs" "$(cat "$MOCK_CALLS")" "apt -y install cloudflare-warp"
+mock_cleanup
+setup
+run_install "${UBUNTU_2610[@]}"
+assert_eq "Ubuntu 26.10, once served: uses stonking" "stonking" "$(codename_in_list)"
+mock_cleanup
+setup
+MOCK_CURL_DOWN=1 MOCK_CURL_404="stonking" run_install "${UBUNTU_2610[@]}"
+assert_eq "network error on the check: keeps its own codename" "stonking" "$(codename_in_list)"
+mock_cleanup
+setup
+run_install "ID=debian" "VERSION_CODENAME=trixie"
+assert_not_contains "Debian: no repo check needed" "$(cat "$MOCK_CALLS")" "curl check"
+mock_cleanup
 
 # --- apt update fails: the source, pin and key are taken back out ---
 setup

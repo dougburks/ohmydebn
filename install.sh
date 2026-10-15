@@ -88,7 +88,18 @@ if [ -f "$OS_RELEASE" ]; then
   esac
 fi
 
-if [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
+# The unsupported-distro warning asks once per release: the release the
+# user said yes to is recorded, and later runs (every ohmydebn-update) just
+# print a one-line note instead of stopping - in the update GUI, the
+# warning used to open the terminal and wait for Enter on every update.
+# Keyed to the release, so moving an install to a different unsupported
+# release (say, the next Ubuntu interim) asks again.
+UNSUPPORTED_OK_FILE=~/.local/state/ohmydebn-config/unsupported-distro-accepted
+UNSUPPORTED_RELEASE="${ID:-unknown} ${VERSION_ID:-${VERSION_CODENAME:-}}"
+if [ "$DISTRO_OK" = false ] && [ -f "$UNSUPPORTED_OK_FILE" ] &&
+  [ "$(cat "$UNSUPPORTED_OK_FILE")" = "$UNSUPPORTED_RELEASE" ]; then
+  echo "Note: ${PRETTY_NAME:-This distro} isn't one OhMyDebn supports, so this run is untested there."
+elif [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   clear
   cat <<EOF
 WARNING!
@@ -102,6 +113,8 @@ IF IT BREAKS YOUR SYSTEM, YOU GET TO KEEP BOTH PIECES!
 Press Enter if you are sure you want to continue or Ctrl-c to cancel.
 EOF
   read -r _
+  mkdir -p "$(dirname "$UNSUPPORTED_OK_FILE")"
+  echo "$UNSUPPORTED_RELEASE" >"$UNSUPPORTED_OK_FILE"
 fi
 
 # Check what user is running the script

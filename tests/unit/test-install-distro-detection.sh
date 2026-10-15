@@ -172,4 +172,47 @@ run_sources_scenario "Zorin OS 18 (ID=zorin, ID_LIKE=ubuntu)" "kept" \
 run_sources_scenario "Debian 13 with no Debian sources configured" "repaired" \
   "ID=debian" "VERSION_CODENAME=trixie"
 
+# --- The unsupported-distro warning asks once per release ---
+# Every ohmydebn-update reruns install.sh; on an unsupported release the
+# warning used to stop each one for Enter (and open the update GUI's
+# terminal for it). Once accepted, later runs on the same release only
+# print a note; a different unsupported release asks again.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+ACCEPTED="$SCRATCH_HOME/.local/state/ohmydebn-config/unsupported-distro-accepted"
+# run_install <stdin> <os-release lines...>
+run_install() {
+  local input="$1"
+  shift
+  printf '%s\n' "$@" >"$MOCK_DIR/os-release"
+  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+    OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" bash "$SCRIPT" < <(printf '%b' "$input") 2>&1)
+}
+UBUNTU_2610=('PRETTY_NAME="Ubuntu 26.10"' "ID=ubuntu" "ID_LIKE=debian" 'VERSION_ID="26.10"' "VERSION_CODENAME=stonking")
+
+run_install '\n\n' "${UBUNTU_2610[@]}"
+assert_contains "first run on 26.10: warning shown" "$OUTPUT" "$WARNING_TEXT"
+assert_eq "first run on 26.10: the accepted release is recorded" "ubuntu 26.10" "$(cat "$ACCEPTED" 2>/dev/null)"
+
+# An update: the install has finished (its marker exists), and there's no
+# input at all - a run that still stopped to ask would read end-of-file and
+# fail under set -e instead of finishing.
+mkdir -p "$SCRATCH_HOME/.local/state"
+touch "$SCRATCH_HOME/.local/state/ohmydebn"
+run_install '' "${UBUNTU_2610[@]}"
+assert_not_contains "next run on 26.10: no warning" "$OUTPUT" "$WARNING_TEXT"
+assert_not_contains "next run on 26.10: nothing for the update GUI to stop on" "$OUTPUT" "Ctrl-c to cancel"
+assert_contains "next run on 26.10: a one-line note instead" "$OUTPUT" "Note: Ubuntu 26.10 isn't one OhMyDebn supports"
+assert_contains "next run on 26.10: finishes" "$OUTPUT" "OHMYDEBN_TEST_SKIP_CONFIG set - skipping desktop-config layer"
+
+run_install '\n\n' 'PRETTY_NAME="Ubuntu 27.04"' "ID=ubuntu" "ID_LIKE=debian" 'VERSION_ID="27.04"' "VERSION_CODENAME=tbd"
+assert_contains "a different unsupported release: asks again" "$OUTPUT" "$WARNING_TEXT"
+assert_eq "a different unsupported release: recorded" "ubuntu 27.04" "$(cat "$ACCEPTED" 2>/dev/null)"
+
+run_install '' "ID=ubuntu" "VERSION_CODENAME=resolute" 'VERSION_ID="26.04"'
+assert_not_contains "supported release: no note" "$OUTPUT" "isn't one OhMyDebn supports"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
 test_summary

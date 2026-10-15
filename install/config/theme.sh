@@ -99,3 +99,24 @@ if [ ! -f $PICKER_COLORS_BACKFILL_STATE ]; then
   fi
   touch $PICKER_COLORS_BACKFILL_STATE
 fi
+
+# fastfetch shows OhMyDebn's grin instead of the distro logo (4.12.0), set
+# by a "logo" block in its config. The active theme's config.jsonc was
+# templated before that block existed and templates never overwrite, so
+# regenerate it, once, when it's one of ours (it has the OhMyDebn Website
+# line) and has no logo of its own. A config a theme ships itself is left
+# alone.
+FASTFETCH_LOGO_BACKFILL_STATE=~/.local/state/ohmydebn-config/fastfetch-logo-backfill-20261015
+if [ ! -f $FASTFETCH_LOGO_BACKFILL_STATE ]; then
+  FASTFETCH_THEME_CONFIG=~/.config/ohmydebn/current/theme/config.jsonc
+  if [ -f "$FASTFETCH_THEME_CONFIG" ] && grep -q '"OhMyDebn Website"' "$FASTFETCH_THEME_CONFIG" &&
+    ! grep -q '"logo"' "$FASTFETCH_THEME_CONFIG"; then
+    rm -f "$FASTFETCH_THEME_CONFIG"
+    /usr/share/ohmydebn/bin/ohmydebn-theme-set-templates ~/.config/ohmydebn/current/theme
+  fi
+  touch $FASTFETCH_LOGO_BACKFILL_STATE
+fi
+
+# The colored logo itself, on every run: it's only rewritten when it
+# changes, so this just keeps it matching the current logo and theme.
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch || true

@@ -14,6 +14,79 @@ else
   ln -snf /usr/share/ohmydebn/config/fastfetch/config-default.jsonc "$FASTFETCH_CONFIG/config.jsonc"
 fi
 
+# The logo: OhMyDebn's grin (config/fastfetch/logo.txt) in the theme's logo
+# gradient, running corner to corner like the full-color icon's. Both
+# configs point fastfetch at the colored copy written here, which it prints
+# as-is ("file-raw"); without it, fastfetch shows the distro's logo. The
+# gradient comes from ohmydebn-theme-logo-colors, so with no theme it's the
+# default palette. Blank cells stay uncolored, so the eyes and mouth show
+# the terminal's own background.
+LOGO_SOURCE=/usr/share/ohmydebn/config/fastfetch/logo.txt
+LOGO="$FASTFETCH_CONFIG/ohmydebn-logo.txt"
+if [ -f "$LOGO_SOURCE" ]; then
+  # Character, not byte, indexing for the block characters.
+  export LC_ALL=C.UTF-8
+
+  GRADIENT=""
+  while IFS='=' read -r key value; do
+    [ "$key" = gradient ] && GRADIENT="$value"
+  done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
+  STOPS=()
+  for hex in $GRADIENT; do
+    [[ "$hex" =~ ^[0-9A-Fa-f]{6}$ ]] && STOPS+=("$hex")
+  done
+  [ ${#STOPS[@]} -gt 0 ] || STOPS=(488bff b2e7de 57eaf7)
+  SEGMENTS=$((${#STOPS[@]} - 1))
+
+  mapfile -t LINES <"$LOGO_SOURCE"
+  ROWS=${#LINES[@]}
+  WIDTH=1
+  for line in "${LINES[@]}"; do
+    [ ${#line} -gt "$WIDTH" ] && WIDTH=${#line}
+  done
+
+  ART=""
+  for r in "${!LINES[@]}"; do
+    line=${LINES[$r]}
+    out="" last=""
+    for ((c = 0; c < ${#line}; c++)); do
+      ch=${line:c:1}
+      if [ "$ch" = " " ]; then
+        out+=" "
+        continue
+      fi
+      # Position along the diagonal, 0..1000.
+      t=$(((c * 1000 / (WIDTH > 1 ? WIDTH - 1 : 1) + r * 1000 / (ROWS > 1 ? ROWS - 1 : 1)) / 2))
+      if [ "$SEGMENTS" -eq 0 ]; then
+        a=${STOPS[0]} b=${STOPS[0]} f=0
+      else
+        pos=$((t * SEGMENTS))
+        i=$((pos / 1000))
+        [ "$i" -ge "$SEGMENTS" ] && i=$((SEGMENTS - 1))
+        f=$((pos - i * 1000))
+        a=${STOPS[$i]} b=${STOPS[$((i + 1))]}
+      fi
+      rgb=""
+      for k in 0 2 4; do
+        ca=$((16#${a:k:2})) cb=$((16#${b:k:2}))
+        rgb+="${rgb:+;}$(((ca * 1000 + (cb - ca) * f + 500) / 1000))"
+      done
+      [ "$rgb" != "$last" ] && out+=$'\e'"[38;2;${rgb}m" && last=$rgb
+      out+=$ch
+    done
+    ART+="$out"$'\e[0m\n'
+  done
+
+  # Rewritten only when it changes, atomically, so a fastfetch running at
+  # that moment never reads half a file.
+  if [ "$(cat "$LOGO" 2>/dev/null)" != "${ART%$'\n'}" ]; then
+    TMP=$(mktemp "$LOGO.XXXXXX")
+    printf '%s' "$ART" >"$TMP"
+    chmod 644 "$TMP"
+    mv "$TMP" "$LOGO"
+  fi
+fi
+
 # Refresh an already-open fastfetch window (ohmydebn-fastfetch-gui) in
 # place, rather than leaving it showing stale colors until closed and
 # reopened. Signal the PID directly instead of pkill - see

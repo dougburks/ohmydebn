@@ -172,7 +172,7 @@ gnome-terminal and mate-terminal keep their settings in dconf, not in files:
 | App | Location |
 |-----|----------|
 | btop | `~/.config/btop/btop.conf` |
-| fastfetch | `~/.config/fastfetch/config.jsonc` |
+| fastfetch | `~/.config/fastfetch/config.jsonc` (a link to the current theme's copy, remade on a theme change); the logo is `~/.config/fastfetch/ohmydebn-logo.txt`, recolored on a theme change |
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
 | git | `~/.gitconfig` (written by `git config --global`) |

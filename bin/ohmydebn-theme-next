@@ -36,5 +36,5 @@ NEW_THEME_NAME=${THEMES[$NEXT_INDEX]}
 
 /usr/share/ohmydebn/bin/ohmydebn-theme-set "$NEW_THEME_NAME"
 if command -v notify-send >/dev/null 2>&1; then
-  notify-send "Theme changed to $NEW_THEME_NAME" -t 2000
+  notify-send -i ohmydebn "Theme changed to $NEW_THEME_NAME" -t 2000
 fi

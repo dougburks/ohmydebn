@@ -271,5 +271,6 @@ fi
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-logo
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-menu-icon "$IS_LIGHT_MODE"
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-opencode
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-vscode

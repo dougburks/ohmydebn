@@ -1,0 +1,102 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-theme-set-menu-icon [true|false]: matches OhMyDebn's icons to the
+# current theme. The argument says whether the theme is light (as
+# ohmydebn-theme-set passes it); without one, it's read from the theme.
+#
+# The OhMyDebn Menu launcher (the Cinnamon menu and any panel launcher show
+# its icon) uses a one-color symbolic grin that the desktop tints with the
+# theme's text color: solid on dark themes, an outline on light ones, where
+# a solid dark disc looks heavy. Only our own two icon names are swapped,
+# so an icon the user chose for the launcher stays.
+#
+# The full-color icon (named ohmydebn: notifications and OhMyDebn's own
+# windows) is the same grin in the theme's logo gradient. The package
+# installs a default copy in /usr/share/icons/hicolor; the themed copy
+# written to ~/.local/share/icons/hicolor takes its place for this user.
+
+THEME_DIR="$HOME/.config/ohmydebn/current/theme"
+COLORS_TOML="$THEME_DIR/colors.toml"
+TEMPLATE=/usr/share/ohmydebn/config/icons/ohmydebn.svg.tpl
+LAUNCHER="$HOME/.local/share/applications/ohmydebn-menu.desktop"
+ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+SOLID=ohmydebn-menu-symbolic
+OUTLINE=ohmydebn-menu-outline-symbolic
+
+# Same detection as ohmydebn-theme-set: a `mode` key in colors.toml, or the
+# light.mode marker older themes use.
+IS_LIGHT_MODE="${1:-}"
+if [ -z "$IS_LIGHT_MODE" ]; then
+  IS_LIGHT_MODE=false
+  if { [ -f "$COLORS_TOML" ] && grep -qE '^\s*mode\s*=\s*"light"' "$COLORS_TOML"; } ||
+    [ -f "$THEME_DIR/light.mode" ]; then
+    IS_LIGHT_MODE=true
+  fi
+fi
+
+# --- The launcher's symbolic icon
+WANT=$SOLID
+[ "$IS_LIGHT_MODE" = true ] && WANT=$OUTLINE
+if [ -f "$LAUNCHER" ] && grep -qxE "Icon=($SOLID|$OUTLINE)" "$LAUNCHER" &&
+  ! grep -qx "Icon=$WANT" "$LAUNCHER"; then
+  TMP=$(mktemp "$LAUNCHER.XXXXXX")
+  sed -E "s/^Icon=($SOLID|$OUTLINE)$/Icon=$WANT/" "$LAUNCHER" >"$TMP"
+  mv "$TMP" "$LAUNCHER"
+fi
+
+# --- The full-color icon
+[ -f "$TEMPLATE" ] || exit 0
+
+# toml_color <key> -> "#rrggbb" or nothing. Only a plain hex color gets
+# through, so nothing a theme supplies can break out of the SVG.
+toml_color() {
+  local value
+  value=$(grep -E "^\s*$1\s*=" "$COLORS_TOML" 2>/dev/null | head -1 | sed -E 's/.*=\s*"#?([0-9A-Fa-f]{6})".*/\1/')
+  [[ "$value" =~ ^[0-9A-Fa-f]{6}$ ]] && printf '#%s' "${value,,}"
+  return 0
+}
+
+# The gradient is the logo's (accent -> blue -> cyan, or the default
+# palette with no theme), so the icon and the logo always agree.
+GRADIENT=""
+while IFS='=' read -r key value; do
+  [ "$key" = gradient ] && GRADIENT="$value"
+done < <(/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors)
+read -r -a COLORS <<<"$GRADIENT"
+[ ${#COLORS[@]} -gt 0 ] || COLORS=(488bff b2e7de 57eaf7)
+
+STOPS=""
+for i in "${!COLORS[@]}"; do
+  [[ "${COLORS[$i]}" =~ ^[0-9A-Fa-f]{6}$ ]] || continue
+  if [ ${#COLORS[@]} -eq 1 ]; then
+    OFFSET=0
+  else
+    OFFSET=$(awk -v i="$i" -v n="${#COLORS[@]}" 'BEGIN { printf "%g", i / (n - 1) }')
+  fi
+  STOPS+="${STOPS:+$'\n'}      <stop offset=\"$OFFSET\" stop-color=\"#${COLORS[$i],,}\"/>"
+done
+
+# The eyes and mouth: the theme background on a dark theme, its text color
+# on a light one, so they're always the dark part of the face.
+if [ "$IS_LIGHT_MODE" = true ]; then
+  INK=$(toml_color foreground)
+  INK=${INK:-#4c4f69}
+else
+  INK=$(toml_color background)
+  INK=${INK:-#1e1e2e}
+fi
+
+SVG=$(<"$TEMPLATE")
+SVG=${SVG//"{{ stops }}"/$STOPS}
+SVG=${SVG//"{{ ink }}"/$INK}
+
+# Rewritten only when it changes, atomically: the desktop rescans its icons
+# whenever the folder changes.
+mkdir -p "$ICON_DIR"
+if [ "$(cat "$ICON_DIR/ohmydebn.svg" 2>/dev/null)" != "$SVG" ]; then
+  TMP=$(mktemp "$ICON_DIR/.ohmydebn.svg.XXXXXX")
+  printf '%s\n' "$SVG" >"$TMP"
+  chmod 644 "$TMP"
+  mv "$TMP" "$ICON_DIR/ohmydebn.svg"
+fi

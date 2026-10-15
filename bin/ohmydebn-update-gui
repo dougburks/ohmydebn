@@ -66,6 +66,10 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango
 
+# OhMyDebn's full-color icon for this window in the window list and
+# switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
+Gtk.Window.set_default_icon_name("ohmydebn")
+
 # VTE may legitimately be missing on the first GUI-triggered update of an
 # older install (see header) - everything else must still import so main()
 # can choose the fallback, and so the unit tests can import this module's

@@ -163,6 +163,8 @@ EOF2
 EOF2
   mock_bin notify-send <<'EOF2'
 #!/bin/bash
+# Skip the icon option (-i ohmydebn) so $2 is still the message.
+[ "$1" = -i ] && shift 2
 mock_log "notify $2"
 EOF2
   sed -n '/^pick_ohmydebn_channel() {/,/^}/p;/^pick_claude_code_channel() {/,/^}/p' "$REPO_ROOT/bin/ohmydebn-menu" |

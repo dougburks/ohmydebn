@@ -49,6 +49,10 @@ gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Wnck", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango, Wnck
 
+# OhMyDebn's full-color icon for this window in the window list and
+# switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
+Gtk.Window.set_default_icon_name("ohmydebn")
+
 import configparser
 import os
 import re

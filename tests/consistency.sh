@@ -1288,5 +1288,31 @@ done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*
 echo "  checked every file under install/"
 
 echo
+echo "-- OhMyDebn's notifications and GTK windows carry its icon --"
+# Without -i, a notification from OhMyDebn shows no icon at all; a GTK
+# window without a default icon shows a generic one in the window list and
+# switcher. Both use the full-color "ohmydebn" icon that
+# ohmydebn-theme-set-menu-icon colors to the theme. Aether's own import
+# notice is Aether's, not ours.
+CHECKED=0
+while IFS= read -r HIT; do
+  CHECKED=$((CHECKED + 1))
+  if [[ "$HIT" != *"notify-send -i ohmydebn "* ]]; then
+    echo "  FAIL - notification without the OhMyDebn icon: $HIT"
+    FAIL=$((FAIL + 1))
+  fi
+done < <(grep -rnE '(^|[[:space:](])notify-send +[-"]' "$REPO_ROOT/bin" "$REPO_ROOT/install" |
+  grep -vE ':[0-9]+:[[:space:]]*#|command -v notify-send' | sed "s#^$REPO_ROOT/##")
+while IFS= read -r f; do
+  CHECKED=$((CHECKED + 1))
+  if ! grep -qF 'Gtk.Window.set_default_icon_name("ohmydebn")' "$f"; then
+    echo "  FAIL - GTK window without the OhMyDebn icon: ${f#"$REPO_ROOT"/}"
+    FAIL=$((FAIL + 1))
+  fi
+# The underscored .py files are modules the windows import, not windows.
+done < <(grep -lE '^from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+echo "  checked $CHECKED notifications and GTK scripts"
+
+echo
 echo "$FAIL failure(s)"
 [[ $FAIL -eq 0 ]]

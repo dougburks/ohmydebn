@@ -727,7 +727,7 @@ pick_claude_code_channel() {
   local current stable_item latest_item
   if ! dpkg -s claude-code >/dev/null 2>&1; then
     command -v notify-send >/dev/null 2>&1 &&
-      notify-send "OhMyDebn" "Claude Code isn't installed. Install it from Apps > AI." -t 3000
+      notify-send -i ohmydebn "OhMyDebn" "Claude Code isn't installed. Install it from Apps > AI." -t 3000
     return
   fi
   current=$(/usr/share/ohmydebn/bin/ohmydebn-claude-code-channel --current)
@@ -825,7 +825,7 @@ pick_default_agent() {
   done < <(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --list-installed)
   if [[ -z "$items" ]]; then
     command -v notify-send >/dev/null 2>&1 &&
-      notify-send "OhMyDebn" "No AI assistants are installed yet. Install one from Apps > AI." -t 3000
+      notify-send -i ohmydebn "OhMyDebn" "No AI assistants are installed yet. Install one from Apps > AI." -t 3000
     return
   fi
   menu "Default Agent" "$items"
@@ -839,7 +839,7 @@ pick_default_agent() {
   fi
   /usr/share/ohmydebn/bin/ohmydebn-ai-set-default "$name"
   command -v notify-send >/dev/null 2>&1 &&
-    notify-send "OhMyDebn" "$result is now your default AI assistant (Super + A)." -t 3000
+    notify-send -i ohmydebn "OhMyDebn" "$result is now your default AI assistant (Super + A)." -t 3000
   return 0
 }
 
@@ -854,7 +854,7 @@ pick_default_browser() {
   done < <(/usr/share/ohmydebn/bin/ohmydebn-browser-set-default --list-installed)
   if [[ -z "$items" ]]; then
     command -v notify-send >/dev/null 2>&1 &&
-      notify-send "OhMyDebn" "No web browsers are installed yet. Install one from Apps > Browsers." -t 3000
+      notify-send -i ohmydebn "OhMyDebn" "No web browsers are installed yet. Install one from Apps > Browsers." -t 3000
     return
   fi
   menu "Default Browser" "$items"

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="256" height="256">
+  <!-- OhMyDebn, full color: the menu icon's grin filled with the theme's
+       logo gradient. ohmydebn-theme-set-menu-icon fills in the gradient
+       stops and the color of the eyes and mouth. -->
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="15" y2="15">
+{{ stops }}
+    </linearGradient>
+  </defs>
+  <path fill="url(#g)" d="M1 8a7 7 0 1 0 14 0a7 7 0 1 0 -14 0Z"/>
+  <path fill="{{ ink }}" d="M4.4 5.7a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0ZM9.2 5.7a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0ZM4.2 8.4H11.8A3.8 3.8 0 0 1 4.2 8.4Z"/>
+</svg>

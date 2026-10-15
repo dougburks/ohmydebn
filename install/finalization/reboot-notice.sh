@@ -67,6 +67,6 @@ if [ -n "$REBOOT_REASON" ]; then
     echo "Reboot when it's convenient - nothing is broken until then, programs that are already running just keep using the old versions of those packages."
   fi
   if [ -n "${DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
-    notify-send "OhMyDebn Update" "$REBOOT_HEADLINE. $REBOOT_REASON" -t 0 2>/dev/null || true
+    notify-send -i ohmydebn "OhMyDebn Update" "$REBOOT_HEADLINE. $REBOOT_REASON" -t 0 2>/dev/null || true
   fi
 fi

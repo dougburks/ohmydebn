@@ -1,0 +1,129 @@
+#!/usr/bin/python3
+#
+# ohmydebn-panel-menu-launcher: puts the OhMyDebn Menu on the panel, as a
+# panel launcher (Cinnamon's own panel-launchers applet) right after the
+# Cinnamon menu. The corner stays the Cinnamon menu (Super); the grin next
+# to it is the OhMyDebn Menu (Super + Space).
+#
+# Changes nothing when:
+# - a panel launcher already has the OhMyDebn Menu (one the user added,
+#   or this script's from an earlier run)
+# - there's no Cinnamon menu on any panel: the panel has been rearranged,
+#   so there's no obvious place for it
+#
+# The launcher's settings file (spices/panel-launchers@cinnamon.org/
+# <id>.json, since the applet allows several instances) is written before
+# the applet is added, so it starts with just the OhMyDebn Menu rather
+# than the applet's default Firefox, Terminal and Files launchers. Cinnamon
+# fills in the rest of the file from the applet's schema and keeps the
+# value. The applet gets a new instance ID from Cinnamon's next-applet-id
+# counter, above every ID in use, and applets after the Cinnamon menu move
+# along one place if the next one is taken.
+#
+# Usage: ohmydebn-panel-menu-launcher [--dry-run]
+# Exits 0 when the launcher is there or deliberately not added, 1 when
+# Cinnamon's settings couldn't be read (no session bus), so the install
+# step can try again on the next run.
+
+import json
+import os
+import subprocess
+import sys
+
+MENU_DESKTOP = "ohmydebn-menu.desktop"
+LAUNCHERS = "panel-launchers@cinnamon.org"
+CINNAMON_MENU = "menu@cinnamon.org"
+SPICES_DIR = os.path.expanduser("~/.config/cinnamon/spices")
+
+
+def parse_strv(text):
+    """The list from `gsettings get` output: ['a', 'b'] or @as []."""
+    text = text.strip()
+    if text.startswith("@as "):
+        text = text[4:]
+    items = text.strip("[]").split(",")
+    return [item.strip().strip("'") for item in items if item.strip()]
+
+
+def format_strv(items):
+    return "[" + ", ".join(f"'{item}'" for item in items) + "]"
+
+
+def launcher_list(applet_id, spices_dir=None):
+    """The launchers a panel-launchers instance shows, from its settings
+    file, or [] if it has none yet."""
+    try:
+        with open(os.path.join(spices_dir or SPICES_DIR, LAUNCHERS, f"{applet_id}.json")) as f:
+            value = json.load(f).get("launcherList", {}).get("value", [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def plan(entries, next_id, launchers_of):
+    """(new_entries, new_id) to add the launcher, or (None, None) when
+    nothing should change. launchers_of(id) lists a panel-launchers
+    instance's launchers."""
+    parsed = [entry.split(":") for entry in entries]
+    parsed = [p if len(p) == 5 else None for p in parsed]
+
+    for p in parsed:
+        if p and p[3] == LAUNCHERS and MENU_DESKTOP in launchers_of(p[4]):
+            return None, None
+
+    menu = next((p for p in parsed if p and p[3] == CINNAMON_MENU and p[2].isdigit()), None)
+    if menu is None:
+        return None, None
+    panel, side, position = menu[0], menu[1], int(menu[2]) + 1
+
+    def same_side(p):
+        return p and p[0] == panel and p[1] == side and p[2].isdigit()
+
+    new_entries = list(entries)
+    if any(same_side(p) and int(p[2]) == position for p in parsed):
+        for index, p in enumerate(parsed):
+            if same_side(p) and int(p[2]) >= position:
+                new_entries[index] = ":".join([p[0], p[1], str(int(p[2]) + 1), p[3], p[4]])
+
+    used = [int(p[4]) for p in parsed if p and p[4].isdigit()]
+    new_id = max([next_id] + [n + 1 for n in used])
+    # Right after the Cinnamon menu in the list too, which is the order
+    # Cinnamon falls back on.
+    menu_index = next(i for i, p in enumerate(parsed) if p is menu)
+    new_entries.insert(menu_index + 1, f"{panel}:{side}:{position}:{LAUNCHERS}:{new_id}")
+    return new_entries, new_id
+
+
+def gsettings(*args):
+    return subprocess.run(["gsettings", *args], check=True, capture_output=True, text=True).stdout
+
+
+def main():
+    dry_run = "--dry-run" in sys.argv[1:]
+    try:
+        entries = parse_strv(gsettings("get", "org.cinnamon", "enabled-applets"))
+        next_id = int(gsettings("get", "org.cinnamon", "next-applet-id").split()[-1])
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return 1
+    new_entries, new_id = plan(entries, next_id, launcher_list)
+    if new_entries is None:
+        return 0
+    print(f"Adding the OhMyDebn Menu to the panel (panel launcher {new_id})")
+    if dry_run:
+        return 0
+    settings_dir = os.path.join(SPICES_DIR, LAUNCHERS)
+    settings_file = os.path.join(settings_dir, f"{new_id}.json")
+    os.makedirs(settings_dir, exist_ok=True)
+    # The ID is new, so no file should be there; never replace one that is.
+    if not os.path.exists(settings_file):
+        tmp = settings_file + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"launcherList": {"type": "generic", "default": [], "value": [MENU_DESKTOP]}}, f, indent=4)
+        os.replace(tmp, settings_file)
+    gsettings("set", "org.cinnamon", "next-applet-id", str(new_id + 1))
+    gsettings("set", "org.cinnamon", "enabled-applets", format_strv(new_entries))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

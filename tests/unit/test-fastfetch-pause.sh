@@ -172,6 +172,20 @@ EOF
 run_window 1 3
 assert_eq "missing frames: made, then played" "F0" "$(drawn | head -1)"
 rm -rf "$SCRATCH_HOME"
+
+# Scenario G: a theme change (SIGUSR2) while the window is open redraws
+# it and the animation starts over. It used to stop: the redraw ran
+# inside the signal handler, where asking the cursor position failed.
+anim_home
+PID_FILE="$SCRATCH_HOME/.cache/ohmydebn/fastfetch-pause.pid"
+{ sleep 0.4; printf '\e[3;1R'; sleep 1.4; kill -USR2 "$(cat "$PID_FILE")"; sleep 0.3; printf '\e[3;1R'; sleep 1.5; } |
+  HOME="$SCRATCH_HOME" PATH="$(mock_path)" timeout 10 \
+    script -qec "stty rows 40 cols 120; bash $MOCK_DIR/fastfetch-pause-patched.sh" /dev/null 2>&1 |
+  sed $'s/\e/ESC/g' >"$MOCK_DIR/screen"
+assert_eq "theme change: redrawn" "2" "$(grep -o 'fastfetch output' "$MOCK_DIR/screen" | wc -l)"
+assert_eq "theme change: the shimmer plays again after the redraw" \
+  "$(printf 'F%s\n' $(seq 0 21); echo STILL; printf 'F%s\n' $(seq 0 21); echo STILL)" "$(drawn | head -46)"
+rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
 test_summary

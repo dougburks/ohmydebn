@@ -99,7 +99,13 @@ animate() {
   TICK=$(((TICK + 1) % CYCLE))
 }
 
-trap 'SIZE=$(stty size); render' USR2
+# Like the closing signals, SIGUSR2 only sets a flag, and the loop below
+# redraws. Redrawing inside the trap itself left the window without its
+# animation after a theme change: the trap runs in the middle of the
+# loop's timed read, and the cursor-position read load_frames makes from
+# there failed.
+REDRAW=""
+trap 'REDRAW=1' USR2
 
 SIZE=$(stty size)
 render
@@ -113,6 +119,12 @@ while [ -z "$CLOSED" ]; do
   read -t 0.05 -n 1 -s && break
   [ $? -gt 128 ] || break
   [ -z "$CLOSED" ] || break
+  if [ -n "$REDRAW" ]; then
+    REDRAW=""
+    SIZE=$(stty size)
+    render
+    continue
+  fi
   animate
   CHECK=$(((CHECK + 1) % 10))
   [ "$CHECK" -eq 0 ] || continue

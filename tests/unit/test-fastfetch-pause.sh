@@ -72,4 +72,106 @@ exec 3<&-
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
+# --- The logo animation. It needs a real terminal, so these run the
+# script inside `script`'s pseudo-terminal, set to 40 rows. Nothing
+# answers the script's cursor-position question there, so the test types
+# the answer itself: "\e[<row>;1R" (row 3: fastfetch's output fit, so the
+# logo is still at the top). The frames are markers - F0..F21 for the
+# shimmer, STILL, WINK - so the output shows which were drawn, in order.
+mock_init
+mock_bin ohmydebn-fastfetch <<'EOF'
+#!/bin/bash
+echo "fastfetch output"
+EOF
+mock_bin ohmydebn-fastfetch-logo-generate <<'EOF'
+#!/bin/bash
+mock_log "generated"
+EOF
+mock_bin gsettings <<'EOF'
+#!/bin/bash
+case "$3" in
+desktop-effects-workspace) echo "${MOCK_EFFECTS:-true}" ;;
+enable-animations) echo "${MOCK_ANIMATIONS:-true}" ;;
+esac
+EOF
+sed -e "s#/usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate#$MOCK_BIN/ohmydebn-fastfetch-logo-generate#" \
+  -e "s#/usr/share/ohmydebn/bin/ohmydebn-fastfetch\$#$MOCK_BIN/ohmydebn-fastfetch#" \
+  "$SCRIPT" >"$MOCK_DIR/fastfetch-pause-patched.sh"
+
+anim_home() {
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.config/fastfetch" "$SCRATCH_HOME/.cache/ohmydebn"
+  echo '{ "logo": { "type": "file-raw", "source": "~/.config/fastfetch/ohmydebn-logo.txt" } }' \
+    >"$SCRATCH_HOME/.config/fastfetch/config.jsonc"
+  for i in $(seq 0 21); do printf 'F%s\0' "$i"; done >"$SCRATCH_HOME/.cache/ohmydebn/fastfetch-logo-frames"
+  printf 'STILL\0WINK' >>"$SCRATCH_HOME/.cache/ohmydebn/fastfetch-logo-frames"
+}
+
+# run_window <seconds> <cursor row answer>: the window for that long, in a
+# 40-row terminal; its output (escapes shown as ESC) lands in $MOCK_DIR/screen.
+run_window() {
+  { sleep 0.4; printf '\e[%s;1R' "$2"; sleep "$1"; } |
+    HOME="$SCRATCH_HOME" PATH="$(mock_path)" timeout 10 \
+      script -qec "stty rows 40 cols 120; bash $MOCK_DIR/fastfetch-pause-patched.sh" /dev/null 2>&1 |
+    sed $'s/\e/ESC/g' >"$MOCK_DIR/screen"
+}
+# The frames drawn, in order, one per line.
+drawn() {
+  sed -e 's/ESC7/\nESC7/g' -e 's/ESC8/\n/g' "$MOCK_DIR/screen" | sed -n 's/^ESC7//p'
+}
+
+# Scenario A: the shimmer plays straight away, frame by frame, then the
+# still logo goes back.
+anim_home
+run_window 1.6 3
+assert_eq "shimmer: all its frames, in order, then the still logo" \
+  "$(printf 'F%s\n' $(seq 0 21); echo STILL)" "$(drawn | head -23)"
+assert_contains "frames drawn with the cursor saved and put back" "$(cat "$MOCK_DIR/screen")" "ESC7F0ESC8"
+rm -rf "$SCRATCH_HOME"
+
+# Scenario B: a little over two seconds in, the wink, and then the still
+# logo again.
+anim_home
+run_window 3 3
+assert_eq "wink: after the shimmer, then the still logo again" "STILL
+WINK
+STILL" "$(drawn | sed -n '23,25p')"
+rm -rf "$SCRATCH_HOME"
+
+# Scenario C: animations turned off in Cinnamon - nothing is drawn.
+anim_home
+MOCK_EFFECTS=false run_window 1 3
+assert_eq "desktop effects off: no animation" "" "$(drawn)"
+MOCK_ANIMATIONS=false run_window 1 3
+assert_eq "animations off (accessibility): no animation" "" "$(drawn)"
+rm -rf "$SCRATCH_HOME"
+
+# Scenario D: fastfetch's output filled the screen (the cursor ended on
+# the last row), so it may have scrolled and the logo isn't at the top.
+anim_home
+run_window 1 40
+assert_eq "output reached the bottom: no animation" "" "$(drawn)"
+rm -rf "$SCRATCH_HOME"
+
+# Scenario E: fastfetch isn't showing OhMyDebn's logo (a theme's own
+# config chose another) - nothing is drawn over it.
+anim_home
+echo '{ "logo": { "source": "debian" } }' >"$SCRATCH_HOME/.config/fastfetch/config.jsonc"
+run_window 1 3
+assert_eq "another logo: no animation" "" "$(drawn)"
+rm -rf "$SCRATCH_HOME"
+
+# Scenario F: the frames are missing (a cleared cache) - the window makes
+# them, then plays them.
+anim_home
+mv "$SCRATCH_HOME/.cache/ohmydebn/fastfetch-logo-frames" "$MOCK_DIR/frames"
+cat >"$MOCK_BIN/ohmydebn-fastfetch-logo-generate" <<EOF
+#!/bin/bash
+cp "$MOCK_DIR/frames" "\$HOME/.cache/ohmydebn/fastfetch-logo-frames"
+EOF
+run_window 1 3
+assert_eq "missing frames: made, then played" "F0" "$(drawn | head -1)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
 test_summary

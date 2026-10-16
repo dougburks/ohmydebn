@@ -1,0 +1,188 @@
+#!/usr/bin/python3
+#
+# ohmydebn-fastfetch-logo-generate: colors OhMyDebn's fastfetch logo (the
+# grin in config/fastfetch/logo.txt) in the current theme's logo gradient,
+# and builds the frames ohmydebn-fastfetch-pause plays over it in the
+# system summary window. Run by ohmydebn-theme-set-fastfetch on every
+# theme change, and by the window itself if its frames are missing.
+#
+# Writes two files, each only when its content changes and atomically
+# (temporary file, then rename), so a fastfetch or a window reading one at
+# that moment never sees half of it:
+#
+#   ~/.config/fastfetch/ohmydebn-logo.txt     the still logo, which both
+#       fastfetch configs print as-is ("file-raw")
+#   ~/.cache/ohmydebn/fastfetch-logo-frames   the animation: frames
+#       separated by NUL bytes, each one the logo's rows with a cursor
+#       move before every row, so it redraws the logo in place
+#
+# The gradient runs corner to corner, like the full-color icon's, and
+# comes from ohmydebn-theme-logo-colors, so with no theme it's the default
+# palette. Blank cells stay uncolored, so the eyes and mouth show the
+# terminal's own background.
+#
+# Frames, at FPS per second: SHIMMER_FRAMES of a band of light crossing
+# the face, then the still logo, then the wink (logo-wink.txt, the right
+# eye closed). ohmydebn-fastfetch-pause decides when each one plays.
+
+import os
+import re
+import subprocess
+import tempfile
+
+LOGO_SOURCE = "/usr/share/ohmydebn/config/fastfetch/logo.txt"
+WINK_SOURCE = "/usr/share/ohmydebn/config/fastfetch/logo-wink.txt"
+LOGO_COLORS = "/usr/share/ohmydebn/bin/ohmydebn-theme-logo-colors"
+HOME = os.path.expanduser("~")
+THEME_DIR = os.path.join(HOME, ".config/ohmydebn/current/theme")
+LOGO = os.path.join(HOME, ".config/fastfetch/ohmydebn-logo.txt")
+FRAMES = os.path.join(HOME, ".cache/ohmydebn/fastfetch-logo-frames")
+
+DEFAULT_STOPS = ["488bff", "b2e7de", "57eaf7"]
+FPS = 20
+SWEEP = 1.1  # seconds the shimmer takes to cross the face
+SHIMMER_FRAMES = round(SWEEP * FPS)
+BAND = 0.09  # half-width of the band of light, along the diagonal
+ESC = "\x1b"
+
+
+def gradient_stops():
+    """The logo gradient as validated "rrggbb" strings."""
+    stops = []
+    try:
+        out = subprocess.run([LOGO_COLORS], capture_output=True, text=True, check=False).stdout
+    except OSError:
+        out = ""
+    for line in out.splitlines():
+        key, _, value = line.partition("=")
+        if key == "gradient":
+            stops = [h.lower() for h in value.split() if re.fullmatch(r"[0-9A-Fa-f]{6}", h)]
+    return stops or DEFAULT_STOPS
+
+
+def is_light():
+    """Same detection as ohmydebn-theme-set: a `mode` key in colors.toml,
+    or the light.mode marker older themes use."""
+    try:
+        with open(os.path.join(THEME_DIR, "colors.toml")) as f:
+            if re.search(r'^\s*mode\s*=\s*"light"', f.read(), re.M):
+                return True
+    except OSError:
+        pass
+    return os.path.exists(os.path.join(THEME_DIR, "light.mode"))
+
+
+def read_shape(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read().splitlines()
+
+
+class Colorer:
+    """Colors cells by their place on the diagonal, 0 at the top-left
+    corner and 1000 at the bottom-right. Integer math throughout, so the
+    still logo comes out the same on every run."""
+
+    def __init__(self, stops, width, rows):
+        self.stops = [tuple(int(h[i : i + 2], 16) for i in (0, 2, 4)) for h in stops]
+        self.width = width
+        self.rows = rows
+
+    def position(self, r, c):
+        return (c * 1000 // max(self.width - 1, 1) + r * 1000 // max(self.rows - 1, 1)) // 2
+
+    def base(self, r, c):
+        segments = len(self.stops) - 1
+        if segments == 0:
+            return self.stops[0]
+        pos = self.position(r, c) * segments
+        i = min(pos // 1000, segments - 1)
+        f = pos - i * 1000
+        a, b = self.stops[i], self.stops[i + 1]
+        return tuple((ca * 1000 + (cb - ca) * f + 500) // 1000 for ca, cb in zip(a, b))
+
+
+def render(lines, color, positioned=False):
+    """The lines with a truecolor escape wherever the color changes, a
+    reset at each line's end, and (for frames) a cursor move to the start
+    of each row. Frames also switch line wrap off while drawing, as
+    fastfetch does, so a narrow window clips the logo instead of
+    wrapping it."""
+    out = []
+    for r, line in enumerate(lines):
+        s = f"{ESC}[{r + 1};1H" if positioned else ""
+        last = None
+        for c, ch in enumerate(line):
+            if ch == " ":
+                s += ch
+                continue
+            rgb = ";".join(str(v) for v in color(r, c))
+            if rgb != last:
+                s += f"{ESC}[38;2;{rgb}m"
+                last = rgb
+            s += ch
+        out.append(s + f"{ESC}[0m")
+    if positioned:
+        return f"{ESC}[?7l" + "".join(out) + f"{ESC}[?7h"
+    return "".join(line + "\n" for line in out)
+
+
+def write_if_changed(path, content):
+    try:
+        with open(path, encoding="utf-8") as f:
+            if f.read() == content:
+                return
+    except OSError:
+        pass
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix="." + os.path.basename(path) + ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def main():
+    try:
+        logo = read_shape(LOGO_SOURCE)
+    except OSError:
+        return
+    try:
+        wink = read_shape(WINK_SOURCE)
+    except OSError:
+        wink = logo
+
+    width = max([len(line) for line in logo] + [1])
+    colorer = Colorer(gradient_stops(), width, len(logo))
+    # How far the band of light lifts a cell toward white: a little less
+    # on a light theme, where white is close to the background.
+    strength = 0.6 if is_light() else 0.75
+
+    write_if_changed(LOGO, render(logo, colorer.base))
+
+    def shimmer(p):
+        def color(r, c):
+            base = colorer.base(r, c)
+            x = abs(colorer.position(r, c) / 1000 - p) / BAND
+            k = (1 - x * x) ** 2 * strength if x < 1 else 0
+            return tuple(int(v + (255 - v) * k + 0.5) for v in base)
+
+        return color
+
+    frames = []
+    for i in range(SHIMMER_FRAMES):
+        # The band starts just off the top-left corner and ends just past
+        # the bottom-right one, so it slides in and out.
+        p = -0.15 + 1.3 * (i / FPS) / SWEEP
+        frames.append(render(logo, shimmer(p), positioned=True))
+    frames.append(render(logo, colorer.base, positioned=True))
+    frames.append(render(wink, colorer.base, positioned=True))
+    write_if_changed(FRAMES, "\0".join(frames))
+
+
+if __name__ == "__main__":
+    main()

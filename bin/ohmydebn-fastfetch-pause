@@ -15,23 +15,88 @@
 # (comm is truncated to 15 chars), and `pkill -f` cmdline matching would
 # also hit the parent alacritty process, since its own argv includes this
 # script's path as the -e target.
+#
+# Animates OhMyDebn's logo: every CYCLE ticks a band of light crosses the
+# grin, and a little later it winks. fastfetch prints once and exits, so
+# this script redraws just the logo's rows in place with the frames
+# ohmydebn-fastfetch-logo-generate builds (see there), leaving the info
+# beside it alone.
 
 PID_FILE=~/.cache/ohmydebn/fastfetch-pause.pid
+FRAMES_FILE=~/.cache/ohmydebn/fastfetch-logo-frames
 mkdir -p "$(dirname "$PID_FILE")"
 echo $$ >"$PID_FILE"
 # Only while it's still ours: with two windows open the second writes its
 # own PID here, and the first closing used to delete it, so a theme change
 # no longer refreshed the window still open.
 trap '[ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ] && rm -f "$PID_FILE"' EXIT
-# Exit through a trap on the signals that close the window. Without one,
-# bash 5.2 sometimes drops a SIGTERM that lands during the timed read
-# below and keeps looping (seen as test-fastfetch-pause.sh hanging about
-# one run in five).
-trap 'exit 0' TERM HUP INT
+# The signals that close the window only set a flag, and the loop below
+# ends on it. Without a trap, bash 5.2 sometimes drops a SIGTERM that
+# lands during the timed read and keeps looping (seen as
+# test-fastfetch-pause.sh hanging about one run in five). Calling `exit`
+# from the trap instead sometimes crashed bash (a segfault, about one
+# close in fifty with the animation's short reads), which skipped the
+# EXIT trap and left the pidfile behind.
+CLOSED=""
+trap 'CLOSED=1' TERM HUP INT
+
+# One tick is one animation frame (20 per second, the rate the frames are
+# built for). In each 4-second cycle the shimmer's frames play from tick 0,
+# then the still logo is put back, and the wink shows for WINK_TICKS ticks
+# from WINK_AT.
+CYCLE=80
+WINK_AT=44
+WINK_TICKS=5
+
+# Animate only when it will land on the logo and is wanted:
+# - the screen shows fastfetch's output in a real terminal
+# - fastfetch was showing OhMyDebn's logo, not one a theme's own config chose
+# - Cinnamon's animations are on (Effects > Desktop and window effects, and
+#   the accessibility setting that turns animations off)
+# - the output didn't scroll: the logo is drawn from the top row, so it
+#   must still be there. The cursor's row after fastfetch says so: below
+#   the last row means the screen scrolled.
+load_frames() {
+  FRAMES=()
+  TICK=0
+  [ -t 0 ] && [ -t 1 ] || return
+  grep -q 'ohmydebn-logo\.txt' ~/.config/fastfetch/config.jsonc 2>/dev/null || return
+  if command -v gsettings >/dev/null; then
+    [ "$(gsettings get org.cinnamon desktop-effects-workspace 2>/dev/null)" = false ] && return
+    [ "$(gsettings get org.cinnamon.desktop.interface enable-animations 2>/dev/null)" = false ] && return
+  fi
+  local row rows
+  IFS='[;' read -r -s -d R -t 0.5 -p $'\e[6n' _ row _ || return
+  rows=${SIZE%% *}
+  [[ "$row" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] && [ "$row" -lt "$rows" ] || return
+  [ -f "$FRAMES_FILE" ] || /usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate 2>/dev/null
+  [ -f "$FRAMES_FILE" ] || return
+  mapfile -d '' FRAMES <"$FRAMES_FILE"
+  # The shimmer's frames, then the still logo, then the wink.
+  SHIMMER_FRAMES=$((${#FRAMES[@]} - 2))
+  [ "$SHIMMER_FRAMES" -gt 0 ] || FRAMES=()
+}
 
 render() {
   clear
   /usr/share/ohmydebn/bin/ohmydebn-fastfetch
+  load_frames
+}
+
+# The frame for this tick, if one is due: drawn with the cursor saved and
+# put back, so the screen's cursor stays where fastfetch left it.
+animate() {
+  [ ${#FRAMES[@]} -gt 0 ] || return
+  local frame=""
+  if [ "$TICK" -lt "$SHIMMER_FRAMES" ]; then
+    frame=$TICK
+  elif [ "$TICK" -eq "$SHIMMER_FRAMES" ] || [ "$TICK" -eq $((WINK_AT + WINK_TICKS)) ]; then
+    frame=$SHIMMER_FRAMES
+  elif [ "$TICK" -eq "$WINK_AT" ]; then
+    frame=$((SHIMMER_FRAMES + 1))
+  fi
+  [ -n "$frame" ] && printf '\e7%s\e8' "${FRAMES[$frame]}"
+  TICK=$(((TICK + 1) % CYCLE))
 }
 
 trap 'SIZE=$(stty size); render' USR2
@@ -41,10 +106,16 @@ render
 
 # A read that fails for any reason other than its timeout or a signal
 # (status > 128) is end-of-file - no terminal any more - and ends the loop
-# instead of spinning on it, as ohmydebn-logo's does.
-while :; do
-  read -t 0.5 -n 1 -s && break
+# instead of spinning on it, as ohmydebn-logo's does. The size is checked
+# every 10 ticks (twice a second), as often as before the animation.
+CHECK=0
+while [ -z "$CLOSED" ]; do
+  read -t 0.05 -n 1 -s && break
   [ $? -gt 128 ] || break
+  [ -z "$CLOSED" ] || break
+  animate
+  CHECK=$(((CHECK + 1) % 10))
+  [ "$CHECK" -eq 0 ] || continue
   CURRENT_SIZE=$(stty size)
   if [[ "$CURRENT_SIZE" != "$SIZE" ]]; then
     SIZE="$CURRENT_SIZE"

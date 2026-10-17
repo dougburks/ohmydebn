@@ -129,7 +129,7 @@ EOF2
   mock_bin dpkg-query <<'EOF2'
 #!/bin/bash
 case "$*" in
-*ohmydebn-neovim) echo "0.12.5" ;;
+*ohmydebn-neovim) echo "0.12.5-1" ;;
 *) echo "4.8.0" ;;
 esac
 EOF2
@@ -419,7 +419,7 @@ printf 'return { { "bjarneo/hackerman.nvim", dependencies = { "bjarneo/aether.nv
 elf "$N/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so" '\267\000'         # arm64 build on amd64
 run_doctor MOCK_NVIM_VERSION=0.10.4                                                # the distro's nvim shadows it
 assert_eq "broken neovim: exits 1" "1" "$EXIT_CODE"
-assert_contains "broken neovim: shadowing nvim named" "$OUTPUT" "FAIL - nvim on PATH is ohmydebn-neovim's (nvim reports 0.10.4, package is 0.12.5"
+assert_contains "broken neovim: shadowing nvim named" "$OUTPUT" "FAIL - nvim on PATH is ohmydebn-neovim's (nvim reports 0.10.4, package is 0.12.5-1"
 assert_contains "broken neovim: unfinished refresh says how to fix" "$OUTPUT" "FAIL - the tested plugin set is installed for this user (run: ohmydebn-update)"
 assert_contains "broken neovim: missing plugin named" "$OUTPUT" "FAIL - every plugin in the tested set is present (missing: LazyVim)"
 assert_contains "broken neovim: missing parser named" "$OUTPUT" "FAIL - every treesitter parser in the set is present (missing: lua)"

@@ -389,7 +389,9 @@ if ! dpkg -s ohmydebn-neovim-plugins >/dev/null 2>&1; then
 else
   NVIM_PKG_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-neovim 2>/dev/null || echo "?")
   NVIM_VERSION=$(nvim --version 2>/dev/null | sed -n '1s/^NVIM v//p')
-  if [ "$NVIM_VERSION" = "$NVIM_PKG_VERSION" ]; then ok "nvim on PATH is ohmydebn-neovim's ($NVIM_VERSION)"; else fail "nvim on PATH is ohmydebn-neovim's" "nvim reports ${NVIM_VERSION:-nothing}, package is $NVIM_PKG_VERSION: $(command -v nvim || echo 'no nvim on PATH')"; fi
+  # nvim reports the upstream version; the package's may add a Debian
+  # revision (0.12.6-1) after a rebuild of the same release.
+  if [ "$NVIM_VERSION" = "${NVIM_PKG_VERSION%-*}" ]; then ok "nvim on PATH is ohmydebn-neovim's ($NVIM_VERSION)"; else fail "nvim on PATH is ohmydebn-neovim's" "nvim reports ${NVIM_VERSION:-nothing}, package is $NVIM_PKG_VERSION: $(command -v nvim || echo 'no nvim on PATH')"; fi
 
   NVIM_SEED_SUM=$(sha256sum "$NVIM_SEED/config/lazy-lock.json" 2>/dev/null | cut -d' ' -f1)
   if [ -n "$NVIM_SEED_SUM" ] && [ "$(cat "$STATE/ohmydebn-config/nvim-plugins-seeded" 2>/dev/null)" = "$NVIM_SEED_SUM" ]; then ok "the tested plugin set is installed for this user"; else fail "the tested plugin set is installed for this user" "run: ohmydebn-update"; fi

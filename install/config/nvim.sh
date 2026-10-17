@@ -44,6 +44,12 @@ if dpkg -s "ohmydebn-neovim-plugins" >/dev/null 2>&1; then
     cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-animated-scrolling-off.lua $SCROLLING
   fi
 
+  DASHBOARD_STATUSLINE=$NVIM_PLUGINS/snacks-dashboard-statusline.lua
+  if [ ! -f $DASHBOARD_STATUSLINE ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $DASHBOARD_STATUSLINE"
+    cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-dashboard-statusline.lua $DASHBOARD_STATUSLINE
+  fi
+
   TRANSPARENCY=$NVIM_CONFIG_DIR/plugin/after/transparency.lua
   TRANSPARENCY_STATE=$NVIM_STATE_DIR/nvim-transparency-20260308
   if [ ! -f $TRANSPARENCY_STATE ]; then

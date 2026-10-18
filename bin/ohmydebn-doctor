@@ -15,7 +15,7 @@ set -uo pipefail
 # the gTile extension and its settings, the theme and whether the terminal
 # and theme config files parse, dpkg state, disk space, the firewall, the
 # kernel-module blocks, the clock, the VM display agent, firmware-update
-# support and the Radeon 890M's TearFree setting on kernel 7, Neovim's
+# support and the Radeon 890M's TearFree and dcdebugmask settings, Neovim's
 # tested plugin set, the login session default, the systemd timer (or its
 # absence without systemd), the default browser and AI assistant, the AI
 # wrappers and skill links, the custom keybindings, the Aether/omarchy
@@ -375,26 +375,43 @@ fi
 if [ -d "$SYSROOT/sys/firmware/efi" ] && dpkg -s fwupd >/dev/null 2>&1; then
   if compgen -G "$SYSROOT/usr/lib*/fwupd/efi/fwupd*.efi.signed" >/dev/null; then ok "firmware updates: fwupd's signed EFI binary installed"; else fail "firmware updates: fwupd's signed EFI binary installed" "run: sudo apt install fwupd-signed"; fi
 fi
-# AMD's Radeon 890M (PCI 1002:150e, in the Framework Laptop 13 Pro AMD) on
-# kernel 7 briefly shows corrupted blocks of the screen - an amdgpu bug
-# upstream (drm/amd #5950, #5524). Turning on the amdgpu Xorg driver's
-# TearFree avoids it; the Hardware Notes page says how. xrandr shows the
-# setting the running X server actually uses, however it was turned on. The
-# affected kernels are this one pattern: bound it once a kernel fixes the
-# bug.
-TEARFREE_GPU="0x1002:0x150e"
+# AMD's Radeon 890M (PCI 1002:150e, in the Framework Laptop 13 Pro AMD)
+# needs two settings, both on the Hardware Notes page:
+# - TearFree in the amdgpu Xorg driver: on kernel 7, small parts of the
+#   screen briefly flash corrupted without it - an amdgpu bug upstream
+#   (drm/amd #5950, #5524). xrandr shows the setting the running X server
+#   actually uses, however it was turned on. The affected kernels are this
+#   one pattern: bound it once a kernel fixes the bug.
+# - amdgpu.dcdebugmask with Panel Self Refresh, Panel Replay and Idle Power
+#   States turned off (0x10, 0x400 and 0x800): the test laptop froze several
+#   times without it, needing the power button, and hasn't since. Checked on
+#   every kernel, as which ones froze isn't known. The driver's own copy of
+#   the value counts, however it was set (boot menu or modprobe.d); extra
+#   bits are fine.
+RADEON_890M="0x1002:0x150e"
 TEARFREE_KERNELS='^7\.'
-TEARFREE_DOCS="https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series"
+DCDEBUGMASK_BITS=$((0x10 | 0x400 | 0x800))
+RADEON_890M_DOCS="https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series"
 for pci in "$SYSROOT"/sys/bus/pci/devices/*; do
-  [ "$(cat "$pci/vendor" 2>/dev/null):$(cat "$pci/device" 2>/dev/null)" = "$TEARFREE_GPU" ] || continue
+  [ "$(cat "$pci/vendor" 2>/dev/null):$(cat "$pci/device" 2>/dev/null)" = "$RADEON_890M" ] || continue
   if [[ "$RUNNING_KERNEL" =~ $TEARFREE_KERNELS ]]; then
     if ! XRANDR=$(xrandr --prop 2>/dev/null); then
       skip "Radeon 890M on kernel 7: TearFree on" "xrandr couldn't read the display"
     elif grep -qE '^[[:space:]]*TearFree:[[:space:]]*on[[:space:]]*$' <<<"$XRANDR"; then
       ok "Radeon 890M on kernel 7: TearFree on"
     else
-      fail "Radeon 890M on kernel 7: TearFree on" "the screen may briefly flash corrupted blocks - see $TEARFREE_DOCS"
+      fail "Radeon 890M on kernel 7: TearFree on" "the screen may briefly flash corrupted blocks - see $RADEON_890M_DOCS"
     fi
+  fi
+  # Validated before the arithmetic, which would otherwise evaluate whatever
+  # the file holds. The driver prints it in decimal.
+  DCDEBUGMASK=$(cat "$SYSROOT/sys/module/amdgpu/parameters/dcdebugmask" 2>/dev/null)
+  if ! [[ "$DCDEBUGMASK" =~ ^(0[xX][0-9a-fA-F]+|[1-9][0-9]*|0)$ ]]; then
+    skip "Radeon 890M: display power saving off (amdgpu.dcdebugmask)" "the amdgpu driver didn't report it"
+  elif [ $((DCDEBUGMASK & DCDEBUGMASK_BITS)) -eq "$DCDEBUGMASK_BITS" ]; then
+    ok "Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+  else
+    fail "Radeon 890M: display power saving off (amdgpu.dcdebugmask)" "the laptop may freeze - see $RADEON_890M_DOCS"
   fi
   break
 done

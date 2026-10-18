@@ -313,7 +313,8 @@ run_doctor
 assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
 mock_cleanup
 
-# --- the Radeon 890M (Framework Laptop 13 Pro AMD) on kernel 7: TearFree checked ---
+# --- the Radeon 890M (Framework Laptop 13 Pro AMD): TearFree on kernel 7,
+# and dcdebugmask on every kernel ---
 # add_pci <vendor> <device>: a PCI device in the mocked sysfs.
 add_pci() {
   local dir="$ROOT/sys/bus/pci/devices/0000:c1:00.$((++PCI_COUNT))"
@@ -321,25 +322,49 @@ add_pci() {
   echo "$1" >"$dir/vendor"
   echo "$2" >"$dir/device"
 }
+# dcdebugmask <value>: the amdgpu driver loaded with that value.
+dcdebugmask() {
+  mkdir -p "$ROOT/sys/module/amdgpu/parameters"
+  echo "$1" >"$ROOT/sys/module/amdgpu/parameters/dcdebugmask"
+}
 PCI_COUNT=0
 build_machine yes
+dcdebugmask 0
 run_doctor MOCK_KERNEL=7.0.0-38-generic
-assert_not_contains "TearFree: no Radeon 890M, no check" "$OUTPUT" "TearFree"
+assert_not_contains "890M: no Radeon 890M, no TearFree check" "$OUTPUT" "TearFree"
+assert_not_contains "890M: no Radeon 890M, no dcdebugmask check" "$OUTPUT" "dcdebugmask"
 add_pci 0x1022 0x14e8
 add_pci 0x1002 0x150e
 run_doctor MOCK_KERNEL=7.0.0-38-generic
-assert_contains "TearFree: off on kernel 7 is caught, with the docs" "$OUTPUT" \
+assert_contains "890M: TearFree off on kernel 7 is caught, with the docs" "$OUTPUT" \
   "FAIL - Radeon 890M on kernel 7: TearFree on (the screen may briefly flash corrupted blocks - see https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series)"
-assert_eq "TearFree: off on kernel 7 fails the run" "1" "$EXIT_CODE"
+assert_contains "890M: the driver's default dcdebugmask (0) is caught, with the docs" "$OUTPUT" \
+  "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the laptop may freeze - see https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series)"
+assert_eq "890M: either one fails the run" "1" "$EXIT_CODE"
 run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_TEARFREE=auto
-assert_contains "TearFree: the driver's default (auto) isn't on" "$OUTPUT" "FAIL - Radeon 890M on kernel 7: TearFree on"
+assert_contains "890M: the driver's default TearFree (auto) isn't on" "$OUTPUT" "FAIL - Radeon 890M on kernel 7: TearFree on"
+dcdebugmask 3088
 run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
-assert_contains "TearFree: on is ok" "$OUTPUT" "ok - Radeon 890M on kernel 7: TearFree on"
-assert_eq "TearFree: on passes the run" "0" "$EXIT_CODE"
+assert_contains "890M: TearFree on is ok" "$OUTPUT" "ok - Radeon 890M on kernel 7: TearFree on"
+assert_contains "890M: dcdebugmask 0xC10 (as the driver prints it) is ok" "$OUTPUT" "ok - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+assert_eq "890M: both set passes the run" "0" "$EXIT_CODE"
+dcdebugmask 0xE10
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: dcdebugmask with extra bits is ok" "$OUTPUT" "ok - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+dcdebugmask 1040
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: dcdebugmask without Idle Power States (0x410) is caught" "$OUTPUT" "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+dcdebugmask '$(touch pwned)'
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: a dcdebugmask that isn't a number is a skip" "$OUTPUT" "skip - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the amdgpu driver didn't report it)"
+rm -r "$ROOT/sys/module/amdgpu"
 run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_XRANDR_FAIL=1
-assert_contains "TearFree: no display to ask is a skip" "$OUTPUT" "skip - Radeon 890M on kernel 7: TearFree on (xrandr couldn't read the display)"
+assert_contains "890M: no display to ask is a TearFree skip" "$OUTPUT" "skip - Radeon 890M on kernel 7: TearFree on (xrandr couldn't read the display)"
+assert_contains "890M: amdgpu not loaded is a dcdebugmask skip" "$OUTPUT" "skip - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the amdgpu driver didn't report it)"
+dcdebugmask 0
 run_doctor MOCK_KERNEL=6.17.0-20-generic
-assert_not_contains "TearFree: kernel 6.17 isn't affected" "$OUTPUT" "TearFree"
+assert_not_contains "890M: kernel 6.17 has no TearFree check" "$OUTPUT" "TearFree"
+assert_contains "890M: kernel 6.17 still has the dcdebugmask check" "$OUTPUT" "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
 mock_cleanup
 
 # --- no default AI chosen yet: valid, falling back to OpenCode ---

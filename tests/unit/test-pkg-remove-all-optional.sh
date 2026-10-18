@@ -123,7 +123,7 @@ mock_bin dpkg <<'EOF'
 [[ "$1" == "-l" ]] && exit 1
 if [[ "$1" == "-s" ]]; then
   case "$2" in
-  claude-code | brave-browser | brave-origin | ohmydebn-pi-coding-agent | ohmydebn-codex-cli | ohmydebn-t3code | ohmydebn-grok-build | ohmydebn-oh-my-pi) exit 0 ;;
+  claude-code | claude-desktop | brave-browser | brave-origin | ohmydebn-pi-coding-agent | ohmydebn-codex-cli | ohmydebn-t3code | ohmydebn-grok-build | ohmydebn-oh-my-pi) exit 0 ;;
   *) exit 1 ;;
   esac
 fi
@@ -141,6 +141,10 @@ EOF
 mock_bin ohmydebn-pi-remove <<'EOF'
 #!/bin/bash
 echo "ohmydebn-pi-remove $*" >>"$MOCK_CALLS"
+EOF
+mock_bin ohmydebn-claude-desktop-remove <<'EOF'
+#!/bin/bash
+echo "ohmydebn-claude-desktop-remove $*" >>"$MOCK_CALLS"
 EOF
 for name in ohmydebn-brave-browser-remove ohmydebn-brave-origin-remove; do
   mock_bin "$name" <<EOF
@@ -168,6 +172,7 @@ sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/pkg-remove-all
 PATH="$(mock_path)" bash "$MOCK_DIR/pkg-remove-all-optional-patched.sh" --skip-prompt </dev/null >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "dedicated-remove loop: installed claude-code gets removed" "$CALLS" "ohmydebn-claude-code-remove --skip-prompt"
+assert_contains "dedicated-remove loop: installed Claude Desktop gets removed" "$CALLS" "ohmydebn-claude-desktop-remove --skip-prompt"
 assert_contains "Pi special case: installed Pi gets removed" "$CALLS" "ohmydebn-pi-remove --skip-prompt"
 assert_contains "Codex special case: installed Codex gets removed" "$CALLS" "ohmydebn-codex-remove --skip-prompt"
 assert_contains "T3 Code special case: installed T3 Code gets removed" "$CALLS" "ohmydebn-t3code-remove --skip-prompt"

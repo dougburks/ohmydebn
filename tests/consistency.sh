@@ -677,6 +677,7 @@ fi
 declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-opencode-install]=opencode
   [ohmydebn-claude-code-install]=claude-code
+  [ohmydebn-claude-desktop-install]=claude-desktop
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
@@ -1038,6 +1039,7 @@ echo "-- apt pin filename agrees between each installer and its own remove scrip
 # repo), so both map to the same filename here.
 PIN_FILE_OWNERS=(
   "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
+  "ohmydebn-claude-desktop-install:ohmydebn-claude-desktop-remove:claude-desktop.pref"
   "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
   "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
@@ -1231,6 +1233,7 @@ fi
 # arg instead of a direct --title flag.
 PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-chatgpt:ChatGPT"
+  "ohmydebn-claude-desktop:Claude Desktop"
   "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
   "ohmydebn-antigravity:Antigravity"
@@ -1262,7 +1265,7 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt Brave-origin Brave-browser KeePassXC Gedit Aether)
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
   if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
     echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""

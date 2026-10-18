@@ -1,0 +1,93 @@
+#!/usr/bin/python3
+#
+# ohmydebn-pgp-fingerprint: prints the fingerprint of the primary key in an
+# OpenPGP public key file (ASCII-armored or binary), as 40 uppercase hex
+# digits - the form vendors publish. An installer compares it with the
+# vendor's published fingerprint before handing the key to apt, so a key
+# swapped in transit (or on the vendor's download server) is refused
+# rather than trusted. Without gpg: fresh Debian and Ubuntu installs don't
+# always have it, and this is only a hash of the key packet (RFC 4880
+# section 12.2 for v4 keys, RFC 9580 for v6).
+#
+# Usage: ohmydebn-pgp-fingerprint <key file>
+# Exits 1, printing nothing, when the file holds no public key it can read.
+
+import base64
+import hashlib
+import sys
+
+
+def dearmor(data):
+    """The binary packets of an ASCII-armored key, or the data unchanged
+    when it isn't armored."""
+    text = data.decode("ascii", "replace")
+    if "-----BEGIN PGP PUBLIC KEY BLOCK-----" not in text:
+        return data
+    body = text.split("-----BEGIN PGP PUBLIC KEY BLOCK-----", 1)[1]
+    body = body.split("-----END PGP PUBLIC KEY BLOCK-----", 1)[0]
+    lines = body.strip().splitlines()
+    # Armor headers ("Comment: ...") end at the first blank line.
+    if "" in [line.strip() for line in lines]:
+        lines = lines[[line.strip() for line in lines].index("") + 1:]
+    # The last line starting with "=" is the CRC24 checksum, not data.
+    lines = [line.strip() for line in lines if line.strip() and not line.startswith("=")]
+    return base64.b64decode("".join(lines))
+
+
+def first_public_key(packets):
+    """(version byte, body) of the first public-key packet (tag 6)."""
+    i = 0
+    while i < len(packets):
+        header = packets[i]
+        if not header & 0x80:
+            return None
+        if header & 0x40:  # new format
+            tag = header & 0x3F
+            first = packets[i + 1]
+            if first < 192:
+                length, i = first, i + 2
+            elif first < 224:
+                length, i = ((first - 192) << 8) + packets[i + 2] + 192, i + 3
+            elif first == 255:
+                length, i = int.from_bytes(packets[i + 2:i + 6], "big"), i + 6
+            else:
+                return None  # partial lengths never appear in key packets
+        else:  # old format
+            tag = (header >> 2) & 0x0F
+            size = (1, 2, 4)[header & 0x03] if header & 0x03 != 3 else None
+            if size is None:
+                return None
+            length = int.from_bytes(packets[i + 1:i + 1 + size], "big")
+            i += 1 + size
+        body = packets[i:i + length]
+        if len(body) != length:
+            return None
+        if tag == 6:
+            return body
+        i += length
+    return None
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: ohmydebn-pgp-fingerprint <key file>", file=sys.stderr)
+        return 1
+    try:
+        with open(sys.argv[1], "rb") as f:
+            body = first_public_key(dearmor(f.read()))
+    except (OSError, ValueError, IndexError):
+        return 1
+    if not body:
+        return 1
+    if body[0] == 4:
+        digest = hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest()
+    elif body[0] == 6:
+        digest = hashlib.sha256(b"\x9b" + len(body).to_bytes(4, "big") + body).hexdigest()
+    else:
+        return 1
+    print(digest.upper())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

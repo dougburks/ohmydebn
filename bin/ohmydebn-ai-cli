@@ -7,8 +7,9 @@
 # tool in the caller's existing terminal instead of opening a new window the
 # way ohmydebn-ai (Super+A) does. Three of the defaults (chatgpt/vscode/
 # antigravity) are GUI editors with no terminal-native form, so those are
-# opened on $PWD instead of run inside the terminal itself. T3 Code is a GUI
-# too, but it has no "open this directory" argument, so it just opens.
+# opened on $PWD instead of run inside the terminal itself. T3 Code and Claude
+# Desktop are GUIs too, but they have no "open this directory" argument, so
+# they just open.
 #
 # Same default-lookup/fallback logic as ohmydebn-ai - see that script's own
 # comment for why an unset or corrupted stored value falls back to opencode.
@@ -21,7 +22,7 @@ name="opencode"
 if [[ -f "$DEFAULT_AI_FILE" ]]; then
   stored=$(<"$DEFAULT_AI_FILE")
   case "$stored" in
-  opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) name="$stored" ;;
+  opencode | claude-code | claude-desktop | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) name="$stored" ;;
   esac
 fi
 
@@ -34,6 +35,7 @@ omp) exec /usr/share/ohmydebn/bin/ohmydebn-omp-cli ;;
 pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi-cli ;;
 chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt "$PWD" ;;
 t3code) exec /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
+claude-desktop) exec /usr/share/ohmydebn/bin/ohmydebn-claude-desktop ;;
 vscode) exec /usr/share/ohmydebn/bin/ohmydebn-code "$PWD" ;;
 antigravity) exec /usr/share/ohmydebn/bin/ohmydebn-antigravity "$PWD" ;;
 esac

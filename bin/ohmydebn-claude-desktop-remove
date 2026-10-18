@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "claude-desktop" >/dev/null 2>&1; then
+  echo
+  echo "Claude Desktop is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove Claude Desktop and its repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # The purge runs Claude Desktop's own postrm, which removes the repo
+  # entry and key (its marker is on the file ohmydebn-claude-desktop-install
+  # wrote); the rm -f lines catch them if the package never got that far.
+  # The pin is OhMyDebn's to remove.
+  sudo /usr/bin/apt -y purge claude-desktop
+  sudo /usr/bin/apt -y autoremove
+  sudo rm -f /etc/apt/sources.list.d/claude-desktop.list
+  sudo rm -f /usr/share/keyrings/claude-desktop-archive-keyring.asc
+  sudo rm -f /etc/apt/preferences.d/claude-desktop.pref
+  # After the repo is gone, so apt drops its package lists now rather than
+  # at the next update.
+  sudo /usr/bin/apt update
+fi

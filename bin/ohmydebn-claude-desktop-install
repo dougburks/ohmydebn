@@ -1,0 +1,81 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Anthropic's apt repository for Claude Desktop, and the fingerprint of the
+# key that signs it as published in https://code.claude.com/docs/en/desktop-linux
+# (the same key signs Claude Code's repository).
+REPO_URL=https://downloads.claude.ai/claude-desktop/apt/stable
+KEY_URL=https://downloads.claude.ai/claude-desktop/key.asc
+KEY_FINGERPRINT=31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
+KEYRING=/usr/share/keyrings/claude-desktop-archive-keyring.asc
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "claude-desktop" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Claude Desktop is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://downloads.claude.ai"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+
+  case "$(dpkg --print-architecture)" in
+  amd64 | arm64) ;;
+  *)
+    echo "Claude Desktop is only available for x86_64 and arm64."
+    exit 1
+    ;;
+  esac
+
+  # The key is checked against Anthropic's published fingerprint before apt
+  # trusts it, so a key swapped on the way (or on the download server) is
+  # refused instead of trusted for every update after.
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != "$KEY_FINGERPRINT" ]; then
+    echo "The Claude Desktop signing key from $KEY_URL isn't the one Anthropic publishes, so it wasn't installed."
+    exit 1
+  fi
+  sudo install -D -m 0644 "$KEY_FILE" "$KEYRING"
+
+  # Written exactly as the package's own postinst writes it, marker line
+  # first: the package then treats the file as its own, so it keeps it up
+  # to date and its postrm removes it (and the key) when Claude Desktop is
+  # removed. A file without the marker would be left alone as the admin's.
+  printf '%s\n' \
+    "### Managed by the claude-desktop package." \
+    "### Set CLAUDE_DESKTOP_ADD_REPO=\"true\"|\"false\" in /etc/default/claude-desktop" \
+    "### to force this entry on or off; remove this file too when opting out." \
+    "deb [arch=amd64,arm64 signed-by=$KEYRING] $REPO_URL stable main" |
+    sudo tee /etc/apt/sources.list.d/claude-desktop.list >/dev/null
+
+  # Restricts the repo to Claude Desktop (no same-repo dependencies), for
+  # the reason in ohmydebn-claude-code-install's pin. Claude Code's repo is
+  # on the same host, and its pin refuses everything from it but
+  # claude-code; each pin names its own package, which apt ranks above the
+  # other's catch-all, so the two coexist.
+  printf 'Package: *\nPin: origin "downloads.claude.ai"\nPin-Priority: -1\n\nPackage: claude-desktop\nPin: origin "downloads.claude.ai"\nPin-Priority: 500\n' |
+    sudo tee /etc/apt/preferences.d/claude-desktop.pref >/dev/null
+
+  sudo /usr/bin/apt update
+  # Its recommended packages bring QEMU for Cowork's virtual machine; where
+  # recommends are off (MX Linux), the Cowork tab names what to install.
+  sudo /usr/bin/apt -y install claude-desktop
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask claude-desktop || true
+  fi
+fi

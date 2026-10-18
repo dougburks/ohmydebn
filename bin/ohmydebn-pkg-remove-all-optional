@@ -98,7 +98,7 @@ fi
 # runs this first, would otherwise purge it only for its own
 # ohmydebn-brave-origin-install to put it straight back a moment later.
 DEDICATED=("antigravity antigravity" "brave-browser brave-browser" "chatgpt chatgpt"
-  "claude-code claude-code" "cloudflare-warp cloudflare-warp" "code code"
+  "claude-code claude-code" "claude-desktop claude-desktop" "cloudflare-warp cloudflare-warp" "code code"
   "google-chrome-stable google-chrome-stable" "helium-bin helium-bin" "powershell powershell"
   "simplescreenrecorder simplescreenrecorder" "tailscale tailscale"
   "ohmydebn-pi-coding-agent pi" "ohmydebn-codex-cli codex" "ohmydebn-t3code t3code"

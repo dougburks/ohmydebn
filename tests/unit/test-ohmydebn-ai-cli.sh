@@ -17,7 +17,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai-cli ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli ohmydebn-chatgpt ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli ohmydebn-chatgpt ohmydebn-t3code ohmydebn-claude-desktop ohmydebn-code ohmydebn-antigravity; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -53,8 +53,10 @@ declare -A CLI_EXPECTED=(
   [grok]="ohmydebn-grok-cli"
   [omp]="ohmydebn-omp-cli"
   [pi]="ohmydebn-pi-cli"
-  # T3 Code is a GUI, but it has no "open this directory" argument.
+  # T3 Code and Claude Desktop are GUIs, but they have no "open this
+  # directory" argument.
   [t3code]="ohmydebn-t3code"
+  [claude-desktop]="ohmydebn-claude-desktop"
 )
 for stored in "${!CLI_EXPECTED[@]}"; do
   fresh_scratch_home

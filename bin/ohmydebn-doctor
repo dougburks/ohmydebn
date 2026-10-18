@@ -14,12 +14,13 @@ set -uo pipefail
 # and third-party repo pins, state markers and the last update's result,
 # the gTile extension and its settings, the theme and whether the terminal
 # and theme config files parse, dpkg state, disk space, the firewall, the
-# kernel-module blocks, the clock, the VM display agent and firmware-update
-# support, Neovim's tested plugin set, the login session default, the
-# systemd timer (or its absence without systemd), the default browser and AI
-# assistant, the AI wrappers and skill links, the custom keybindings, the
-# Aether/omarchy compatibility layer, and the tools other scripts rely on
-# (Oh My Zsh and the menu launcher among them).
+# kernel-module blocks, the clock, the VM display agent, firmware-update
+# support and the Radeon 890M's TearFree setting on kernel 7, Neovim's
+# tested plugin set, the login session default, the systemd timer (or its
+# absence without systemd), the default browser and AI assistant, the AI
+# wrappers and skill links, the custom keybindings, the Aether/omarchy
+# compatibility layer, and the tools other scripts rely on (Oh My Zsh and
+# the menu launcher among them).
 #
 # For the unit test, OHMYDEBN_DOCTOR_SYSROOT prefixes every absolute
 # system path (/usr/share/ohmydebn, /etc, /run/systemd/system, ...) and
@@ -374,6 +375,29 @@ fi
 if [ -d "$SYSROOT/sys/firmware/efi" ] && dpkg -s fwupd >/dev/null 2>&1; then
   if compgen -G "$SYSROOT/usr/lib*/fwupd/efi/fwupd*.efi.signed" >/dev/null; then ok "firmware updates: fwupd's signed EFI binary installed"; else fail "firmware updates: fwupd's signed EFI binary installed" "run: sudo apt install fwupd-signed"; fi
 fi
+# AMD's Radeon 890M (PCI 1002:150e, in the Framework Laptop 13 Pro AMD) on
+# kernel 7 briefly shows corrupted blocks of the screen - an amdgpu bug
+# upstream (drm/amd #5950, #5524). Turning on the amdgpu Xorg driver's
+# TearFree avoids it; the Hardware Notes page says how. xrandr shows the
+# setting the running X server actually uses, however it was turned on. The
+# affected kernels are this one pattern: bound it once a kernel fixes the
+# bug.
+TEARFREE_GPU="0x1002:0x150e"
+TEARFREE_KERNELS='^7\.'
+TEARFREE_DOCS="https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series"
+for pci in "$SYSROOT"/sys/bus/pci/devices/*; do
+  [ "$(cat "$pci/vendor" 2>/dev/null):$(cat "$pci/device" 2>/dev/null)" = "$TEARFREE_GPU" ] || continue
+  if [[ "$RUNNING_KERNEL" =~ $TEARFREE_KERNELS ]]; then
+    if ! XRANDR=$(xrandr --prop 2>/dev/null); then
+      skip "Radeon 890M on kernel 7: TearFree on" "xrandr couldn't read the display"
+    elif grep -qE '^[[:space:]]*TearFree:[[:space:]]*on[[:space:]]*$' <<<"$XRANDR"; then
+      ok "Radeon 890M on kernel 7: TearFree on"
+    else
+      fail "Radeon 890M on kernel 7: TearFree on" "the screen may briefly flash corrupted blocks - see $TEARFREE_DOCS"
+    fi
+  fi
+  break
+done
 
 # ----------------------------------------------------------------- neovim
 section "Neovim"

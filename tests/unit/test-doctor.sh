@@ -144,7 +144,16 @@ printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 800
 EOF2
   mock_bin uname <<'EOF2'
 #!/bin/bash
-echo "6.12.1-amd64"
+echo "${MOCK_KERNEL:-6.12.1-amd64}"
+EOF2
+  # Only asked on a machine with the Radeon 890M (add_pci); the real one
+  # must never answer.
+  mock_bin xrandr <<'EOF2'
+#!/bin/bash
+[ -n "${MOCK_XRANDR_FAIL:-}" ] && exit 1
+printf 'Screen 0: minimum 320 x 200\neDP: connected primary 2880x1920+0+0\n'
+[ -n "${MOCK_TEARFREE:-}" ] && printf '\tTearFree: %s \n\t\tsupported: off, on, auto\n' "$MOCK_TEARFREE"
+exit 0
 EOF2
   mock_bin pgrep <<'EOF2'
 #!/bin/bash
@@ -302,6 +311,35 @@ rm "$ROOT"/boot/vmlinuz-*
 : >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-v8"; : >"$ROOT/boot/vmlinuz-6.18.50+rpt-rpi-2712"
 run_doctor
 assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
+mock_cleanup
+
+# --- the Radeon 890M (Framework Laptop 13 Pro AMD) on kernel 7: TearFree checked ---
+# add_pci <vendor> <device>: a PCI device in the mocked sysfs.
+add_pci() {
+  local dir="$ROOT/sys/bus/pci/devices/0000:c1:00.$((++PCI_COUNT))"
+  mkdir -p "$dir"
+  echo "$1" >"$dir/vendor"
+  echo "$2" >"$dir/device"
+}
+PCI_COUNT=0
+build_machine yes
+run_doctor MOCK_KERNEL=7.0.0-38-generic
+assert_not_contains "TearFree: no Radeon 890M, no check" "$OUTPUT" "TearFree"
+add_pci 0x1022 0x14e8
+add_pci 0x1002 0x150e
+run_doctor MOCK_KERNEL=7.0.0-38-generic
+assert_contains "TearFree: off on kernel 7 is caught, with the docs" "$OUTPUT" \
+  "FAIL - Radeon 890M on kernel 7: TearFree on (the screen may briefly flash corrupted blocks - see https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series)"
+assert_eq "TearFree: off on kernel 7 fails the run" "1" "$EXIT_CODE"
+run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_TEARFREE=auto
+assert_contains "TearFree: the driver's default (auto) isn't on" "$OUTPUT" "FAIL - Radeon 890M on kernel 7: TearFree on"
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "TearFree: on is ok" "$OUTPUT" "ok - Radeon 890M on kernel 7: TearFree on"
+assert_eq "TearFree: on passes the run" "0" "$EXIT_CODE"
+run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_XRANDR_FAIL=1
+assert_contains "TearFree: no display to ask is a skip" "$OUTPUT" "skip - Radeon 890M on kernel 7: TearFree on (xrandr couldn't read the display)"
+run_doctor MOCK_KERNEL=6.17.0-20-generic
+assert_not_contains "TearFree: kernel 6.17 isn't affected" "$OUTPUT" "TearFree"
 mock_cleanup
 
 # --- no default AI chosen yet: valid, falling back to OpenCode ---

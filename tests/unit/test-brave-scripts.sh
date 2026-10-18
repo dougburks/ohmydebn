@@ -52,6 +52,10 @@ EOF2
     mv "$ROOT/usr/share/ohmydebn/bin-$script" "$ROOT/usr/share/ohmydebn/bin/$script"; chmod +x "$ROOT/usr/share/ohmydebn/bin/$script"
   done
   BIN="$ROOT/usr/share/ohmydebn/bin"
+  # The remove hands the default browser on; only logged here (it's tested
+  # in test-default-browser.sh).
+  printf '#!/bin/bash\necho "ohmydebn-browser-set-default $*" >>"$MOCK_CALLS"\n' >"$BIN/ohmydebn-browser-set-default"
+  chmod +x "$BIN/ohmydebn-browser-set-default"
   OURS="$ROOT/etc/apt/sources.list.d/brave-browser-release.sources"
 }
 run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" bash "$@" </dev/null; }
@@ -108,6 +112,7 @@ OUT=$(MOCK_INSTALLED="brave-origin" run "$BIN/ohmydebn-brave-origin-remove" --sk
 assert_eq "remove (distro-owned): exits 0" "0" "$STATUS"
 assert_contains "remove (distro-owned): explains and refuses" "$OUT" "installed by your distribution, not by OhMyDebn"
 assert_not_contains "remove (distro-owned): no purge" "$(cat "$MOCK_CALLS")" "purge"
+assert_not_contains "remove (distro-owned): the default left alone" "$(cat "$MOCK_CALLS")" "ohmydebn-browser-set-default"
 assert_eq "remove (distro-owned): the distro's source is untouched" "yes" "$([ -f "$ROOT/etc/apt/sources.list.d/brave.list" ] && echo yes || echo no)"
 mock_cleanup
 
@@ -117,6 +122,7 @@ setup
 MOCK_INSTALLED="brave-origin" run "$BIN/ohmydebn-brave-origin-remove" --skip-prompt >/dev/null 2>&1
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "remove (ours): purges the package" "$CALLS" "sudo /usr/bin/apt -y purge brave-origin"
+assert_contains "remove (ours): the default browser is handed on" "$CALLS" "ohmydebn-browser-set-default --repair"
 assert_eq "remove (ours): our sources file removed" "no" "$([ -e "$OURS" ] && echo yes || echo no)"
 assert_eq "remove (ours): our pin removed" "no" "$([ -e "$ROOT/etc/apt/preferences.d/brave-browser-release.pref" ] && echo yes || echo no)"
 mock_cleanup

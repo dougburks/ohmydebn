@@ -71,7 +71,8 @@ EOF2
   chmod +x "$MOCK_BIN/ohmydebn-browser-set-default"
 }
 run() {
-  HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_SNAPS="${MOCK_SNAPS:-}" \
+  HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$MOCK_DIR/share" \
+    PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_SNAPS="${MOCK_SNAPS:-}" \
     MOCK_BRAVE_FAILS="${MOCK_BRAVE_FAILS:-}" bash "$@" </dev/null >/dev/null 2>&1
 }
 # Same, with the given text as stdin (an installer's "Press Enter" plus a
@@ -79,7 +80,8 @@ run() {
 run_input() {
   local input="$1"
   shift
-  OUT=$(HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_SNAPS="${MOCK_SNAPS:-}" \
+  OUT=$(HOME="$H" XDG_CONFIG_HOME="$H/.config" XDG_DATA_HOME="$H/.local/share" XDG_DATA_DIRS="$MOCK_DIR/share" \
+    PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_SNAPS="${MOCK_SNAPS:-}" \
     bash "$@" <<<"$input" 2>&1)
 }
 
@@ -479,6 +481,121 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_eq "sudo denied: exits non-zero" "1" "$EXIT_CODE"
 assert_contains "sudo denied: xdg half still applied" "$CALLS" "xdg-settings set default-web-browser firefox-esr.desktop"
 assert_contains "sudo denied: warns" "$OUT" "not every default-browser setting could be applied"
+mock_cleanup
+
+# --- ohmydebn-browser-set-default --repair: a default browser that's been uninstalled ---
+#
+# mimeapps <https default> [pdf default]: the user's mimeapps.list, as the
+# xdg tools write it.
+mimeapps() {
+  mkdir -p "$H/.config"
+  {
+    echo "[Default Applications]"
+    echo "x-scheme-handler/http=$1"
+    echo "x-scheme-handler/https=$1"
+    [ -n "${2:-}" ] && echo "application/pdf=$2"
+    echo
+    echo "[Added Associations]"
+    echo "x-scheme-handler/https=gone-elsewhere.desktop;"
+  } >"$H/.config/mimeapps.list"
+}
+
+# Chrome was the default and is gone; Brave Origin and Firefox are left ->
+# Brave Origin takes over everything, the PDF viewer too (it was Chrome's)
+setup
+set_default
+mimeapps google-chrome.desktop google-chrome.desktop
+MOCK_INSTALLED="firefox-esr brave-origin" run_input "" "$SET_DEFAULT" --repair
+EXIT_CODE=$?
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "repair: succeeds" "0" "$EXIT_CODE"
+assert_contains "repair: says what changed and where to change it" "$OUT" "Your default web browser is no longer installed, so Brave Origin is your default browser now. Change it any time: OhMyDebn Menu > Setup > Defaults > Browser."
+assert_contains "repair: Brave Origin first, not Firefox" "$CALLS" "xdg-settings set default-web-browser brave-origin.desktop"
+assert_contains "repair: alternatives too" "$CALLS" "sudo update-alternatives --set x-www-browser /usr/bin/brave-origin-stable"
+assert_contains "repair: https links" "$CALLS" "xdg-mime default brave-origin.desktop x-scheme-handler/https"
+assert_contains "repair: the removed browser's PDF viewing moves with it" "$CALLS" "xdg-mime default brave-origin.desktop application/pdf"
+mock_cleanup
+
+# The same, but the user picked another PDF viewer -> that stays
+setup
+set_default
+mimeapps google-chrome.desktop org.gnome.Evince.desktop
+MOCK_INSTALLED="brave-origin" run "$SET_DEFAULT" --repair
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "repair, own PDF viewer: browser repaired" "$CALLS" "xdg-settings set default-web-browser brave-origin.desktop"
+assert_not_contains "repair, own PDF viewer: left alone" "$CALLS" "application/pdf"
+mock_cleanup
+
+# No Brave Origin: Chromium before the others; then the table's order
+setup
+set_default
+mimeapps helium.desktop
+MOCK_INSTALLED="firefox-esr chromium" run "$SET_DEFAULT" --repair
+assert_contains "repair: Chromium next" "$(cat "$MOCK_CALLS")" "xdg-settings set default-web-browser chromium.desktop"
+mock_cleanup
+setup
+set_default
+mimeapps brave-origin.desktop
+MOCK_INSTALLED="firefox-esr" run "$SET_DEFAULT" --repair
+assert_contains "repair: Firefox when it's the only one left" "$(cat "$MOCK_CALLS")" "xdg-settings set default-web-browser firefox-esr.desktop"
+mock_cleanup
+
+# Nothing to fix: the default is installed, or there's no default at all,
+# or it's a browser OhMyDebn doesn't know whose .desktop file is there
+setup
+set_default
+mimeapps google-chrome.desktop
+MOCK_INSTALLED="google-chrome-stable brave-origin" run "$SET_DEFAULT" --repair
+assert_eq "repair: an installed default is left alone" "" "$(cat "$MOCK_CALLS")"
+rm "$H/.config/mimeapps.list"
+MOCK_INSTALLED="brave-origin" run "$SET_DEFAULT" --repair
+assert_eq "repair: no default set is left alone" "" "$(cat "$MOCK_CALLS")"
+mimeapps org.qutebrowser.qutebrowser.desktop
+mkdir -p "$MOCK_DIR/share/applications"
+: >"$MOCK_DIR/share/applications/org.qutebrowser.qutebrowser.desktop"
+MOCK_INSTALLED="brave-origin" run "$SET_DEFAULT" --repair
+assert_eq "repair: another browser that's still there is left alone" "" "$(cat "$MOCK_CALLS")"
+rm "$MOCK_DIR/share/applications/org.qutebrowser.qutebrowser.desktop"
+MOCK_INSTALLED="brave-origin" run "$SET_DEFAULT" --repair
+assert_contains "repair: another browser that's gone is replaced" "$(cat "$MOCK_CALLS")" "xdg-settings set default-web-browser brave-origin.desktop"
+mock_cleanup
+
+# Ubuntu's snap Chromium: installed as a snap, its desktop id counts
+setup
+set_default
+mimeapps chromium_chromium.desktop
+MOCK_INSTALLED="brave-origin" MOCK_SNAPS="chromium" run "$SET_DEFAULT" --repair
+assert_eq "repair: snap Chromium still installed is left alone" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
+# Only the first entry of a list is the default; CRLF line ends are fine
+setup
+set_default
+mkdir -p "$H/.config"
+printf '[Default Applications]\r\nx-scheme-handler/https=google-chrome.desktop;brave-origin.desktop;\r\n' >"$H/.config/mimeapps.list"
+MOCK_INSTALLED="brave-origin" run "$SET_DEFAULT" --repair
+assert_contains "repair: the first listed entry is the default" "$(cat "$MOCK_CALLS")" "xdg-settings set default-web-browser brave-origin.desktop"
+mock_cleanup
+
+# No browser left at all: says how to get one, changes nothing, still exit 0
+setup
+set_default
+mimeapps google-chrome.desktop
+run_input "" "$SET_DEFAULT" --repair
+EXIT_CODE=$?
+assert_eq "repair, no browser left: exits zero" "0" "$EXIT_CODE"
+assert_contains "repair, no browser left: says where to install one" "$OUT" "OhMyDebn Menu > Apps > Browsers"
+assert_eq "repair, no browser left: nothing configured" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
+# mimetypes.sh runs the repair on every update: a browser removed with apt
+# directly is replaced on an existing install
+setup
+mkdir -p "$H/.local/state/ohmydebn-config"
+touch "$H/.local/state/ohmydebn" "$H/.local/state/ohmydebn-config/pdf-20251107"
+mimeapps google-chrome.desktop
+MOCK_INSTALLED="brave-origin" run "$MOCK_DIR/mimetypes.sh"
+assert_contains "update: a removed default browser is replaced" "$(cat "$MOCK_CALLS")" "xdg-settings set default-web-browser brave-origin.desktop"
 mock_cleanup
 
 # --- ohmydebn-firefox-esr: the launcher behind the menu's Firefox entry ---

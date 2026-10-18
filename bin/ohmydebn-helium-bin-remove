@@ -19,4 +19,7 @@ else
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y purge helium-bin
   sudo /usr/bin/apt -y autoremove
+  # If it was the default browser, another installed one takes over, so
+  # links and Super+B don't land in whatever happens to handle them.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --repair || true
 fi

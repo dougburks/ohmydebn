@@ -18,7 +18,10 @@ fi
 # package either, but Mint (ID_LIKE=ubuntu) ships a real Chromium deb and
 # blocks snapd, and some derivatives package their own.
 CHROMIUM_PACKAGE=chromium
-if ! apt-cache policy chromium 2>/dev/null | grep -qE '^[[:space:]]*Candidate: [^(]'; then
+# A here-string, not a pipe: under pipefail, grep -q stopping at its match
+# can kill apt-cache with SIGPIPE, and the pipeline then reads as "no
+# candidate".
+if ! grep -qE '^[[:space:]]*Candidate: [^(]' <<<"$(apt-cache policy chromium 2>/dev/null)"; then
   CHROMIUM_PACKAGE=chromium-browser
 fi
 

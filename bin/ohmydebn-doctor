@@ -226,7 +226,7 @@ esac
 section "Cinnamon and gTile"
 check "gTile@OhMyDebn extension files installed" test -f "$SYSROOT/usr/share/cinnamon/extensions/gTile@OhMyDebn/metadata.json"
 if has_session_bus; then
-  if gs org.cinnamon enabled-extensions | grep -q "gTile@OhMyDebn"; then ok "gTile@OhMyDebn enabled in Cinnamon"; else fail "gTile@OhMyDebn enabled in Cinnamon"; fi
+  if grep -q "gTile@OhMyDebn" <<<"$(gs org.cinnamon enabled-extensions)"; then ok "gTile@OhMyDebn enabled in Cinnamon"; else fail "gTile@OhMyDebn enabled in Cinnamon"; fi
 else
   skip "gTile@OhMyDebn enabled in Cinnamon" "no session bus for gsettings"
 fi
@@ -536,7 +536,7 @@ fi
 # (each ohmydebn-<tool> does), so a missing one is a note, not a failure.
 if [ -x "$OHMYDEBN/bin/ohmydebn-ai-set-default" ]; then
   AI_DEFAULT=$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --current 2>/dev/null || echo opencode)
-  if "$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1 | grep -qx "$AI_DEFAULT"; then
+  if grep -qx "$AI_DEFAULT" <<<"$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1)"; then
     ok "default AI assistant installed ($AI_DEFAULT)"
   else
     echo "  default AI assistant ($AI_DEFAULT) isn't installed - Super+A offers to install it"

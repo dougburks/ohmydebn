@@ -248,7 +248,7 @@ setup_chromium debian
 run_input "" "$MOCK_DIR/chromium-install.sh"
 assert_contains "menu install: installs chromium" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y --no-install-recommends install chromium"
 assert_eq "menu install: asks about the default browser, after the install" "yes" \
-  "$(grep -A99 'apt -y --no-install-recommends install chromium' "$MOCK_CALLS" | grep -q 'ohmydebn-browser-set-default --ask chromium' && echo yes || echo no)"
+  "$(grep -q 'ohmydebn-browser-set-default --ask chromium' <<<"$(grep -A99 'apt -y --no-install-recommends install chromium' "$MOCK_CALLS")" && echo yes || echo no)"
 mock_cleanup
 
 # Ubuntu, not installed: the transitional chromium-browser package instead
@@ -345,7 +345,7 @@ for spec in "ohmydebn-brave-origin-install brave-origin skip" \
   # so it shows up as an apt install of the downloaded file.
   assert_eq "$installer: installs the package" "yes" "$(grep -qE "apt -y install ($pkg|.*\.deb)" "$MOCK_CALLS" && echo yes || echo no)"
   assert_eq "$installer: asks about the default browser, after the install" "yes" \
-    "$(grep -A99 -E "apt -y install" "$MOCK_CALLS" | grep -q "ohmydebn-browser-set-default --ask $pkg" && echo yes || echo no)"
+    "$(grep -q "ohmydebn-browser-set-default --ask $pkg" <<<"$(grep -A99 -E "apt -y install" "$MOCK_CALLS")" && echo yes || echo no)"
   mock_cleanup
 
   setup_installer "$installer"

@@ -79,7 +79,7 @@ HOME="$SCRATCH_HOME" OHMYDEBN_TEST_SPICE_CHANNEL="$MOCK_DIR/fake-spice-channel" 
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "channel present on systemd: starts the daemon's socket" "$CALLS" "sudo systemctl start spice-vdagentd.socket"
 assert_eq "channel present on systemd: socket started after the install" "yes" \
-  "$(grep -A99 'install spice-vdagent=' "$MOCK_CALLS" | grep -q 'systemctl start spice-vdagentd.socket' && echo yes || echo no)"
+  "$(grep -q 'systemctl start spice-vdagentd.socket' <<<"$(grep -A99 'install spice-vdagent=' "$MOCK_CALLS")" && echo yes || echo no)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

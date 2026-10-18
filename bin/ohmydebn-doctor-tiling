@@ -107,7 +107,7 @@ fi
 for t in xdotool xprop gdbus alacritty python3; do
   command -v "$t" >/dev/null 2>&1 || { skip "tiling exercise" "$t not found"; finish; exit $?; }
 done
-if ! gsettings get org.cinnamon enabled-extensions 2>/dev/null | grep -q gTile@OhMyDebn; then
+if ! grep -q gTile@OhMyDebn <<<"$(gsettings get org.cinnamon enabled-extensions 2>/dev/null)"; then
   skip "tiling exercise" "gTile@OhMyDebn is not enabled"; finish; exit $?
 fi
 [ -f "$SPICE" ] || { skip "tiling exercise" "no gTile settings file at $SPICE"; finish; exit $?; }
@@ -149,7 +149,7 @@ win_id() { xdotool search --name "^$TITLE_PREFIX-$1\$" 2>/dev/null | head -1; }
 win_visible() {
   local id
   id=$(win_id "$1"); [ -n "$id" ] || return 1
-  ! xprop -id "$id" _NET_WM_STATE 2>/dev/null | grep -q _NET_WM_STATE_HIDDEN
+  ! grep -q _NET_WM_STATE_HIDDEN <<<"$(xprop -id "$id" _NET_WM_STATE 2>/dev/null)"
 }
 
 open_window() {

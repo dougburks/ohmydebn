@@ -62,6 +62,6 @@ mock_cleanup
 FINAL_STEPS=$(grep -oE 'finalization/[A-Za-z0-9._-]+\.sh' "$REPO_ROOT/install/finalization/all.sh")
 assert_contains "finalization/all.sh runs finale.sh" "$FINAL_STEPS" "finalization/finale.sh"
 assert_eq "finale.sh runs after gtile-restart-flag.sh" "yes" \
-  "$(grep -A99 'gtile-restart-flag.sh' <<<"$FINAL_STEPS" | grep -q 'finale.sh' && echo yes || echo no)"
+  "$(grep -q 'finale.sh' <<<"$(grep -A99 'gtile-restart-flag.sh' <<<"$FINAL_STEPS")" && echo yes || echo no)"
 
 test_summary

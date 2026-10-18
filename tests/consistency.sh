@@ -202,7 +202,10 @@ for f in "$REPO_ROOT"/install/config/*.sh; do
   # Origin is the default browser) is guarded on a name no install list
   # carries; its dedicated bin/ohmydebn-<package>-install script vouches
   # for the name instead.
-  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name" &&
+  # A here-string, not a pipe: under pipefail, grep -q exiting at its
+  # first match can kill the writer with SIGPIPE and fail the pipeline,
+  # reporting a name that's there as missing.
+  if ! grep -qxF "$name" <<<"$(printf '%s\n' "${ALL_KNOWN_PKGS[@]}")" &&
     [[ ! -x "$REPO_ROOT/bin/ohmydebn-$name-install" ]]; then
     echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh, and has no bin/ohmydebn-$name-install"
     FAIL=$((FAIL + 1))
@@ -645,7 +648,7 @@ if [[ -z "$FINISH_START" ]]; then
 elif [[ "$(grep -c 'self\._schedule_close()' <<<"$FINISH_BLOCK")" -lt 2 ]]; then
   echo "  FAIL - finish() no longer schedules a close on both the real-value and cancelled paths back to on_result - a leaf pick (About, Demo, ...) will stay visible again until whatever it launches closes"
   FAIL=$((FAIL + 1))
-elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -A5 'def _deferred_close' "$PICKER_FILE" | grep -q 'Gtk\.main_quit()'; then
+elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -q 'Gtk\.main_quit()' <<<"$(grep -A5 'def _deferred_close' "$PICKER_FILE")"; then
   echo "  FAIL - _schedule_close()'s own timeout callback no longer actually quits the process - a leaf pick would leave it hidden but running forever now"
   FAIL=$((FAIL + 1))
 elif ! grep -q 'GLib\.source_remove' "$PICKER_FILE"; then
@@ -670,7 +673,7 @@ AI_MENU_START=$(grep -n '^show_ai_menu() {' "$MENU_FILE" | head -1 | cut -d: -f1
 AI_MENU_REL_END=$(tail -n "+$AI_MENU_START" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
 AI_MENU_END=$((AI_MENU_START + AI_MENU_REL_END - 1))
 AI_MENU_BLOCK=$(sed -n "${AI_MENU_START},${AI_MENU_END}p" "$MENU_FILE")
-if echo "$AI_MENU_BLOCK" | grep -q 'ohmydebn-ai-set-default'; then
+if grep -q 'ohmydebn-ai-set-default' <<<"$AI_MENU_BLOCK"; then
   echo "  FAIL - show_ai_menu calls ohmydebn-ai-set-default - picking a tool there must only open it"
   FAIL=$((FAIL + 1))
 fi

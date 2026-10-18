@@ -44,7 +44,7 @@ check_packages_exist() {
     if apt-cache show "$pkg" >/dev/null 2>&1; then
       continue
     fi
-    if printf '%s\n' "${OHMYDEBN_OWNED[@]}" | grep -qxF "$pkg"; then
+    if grep -qxF "$pkg" <<<"$(printf '%s\n' "${OHMYDEBN_OWNED[@]}")"; then
       echo "  info - $label: '$pkg' not found (comes from ohmydebn's own repo - only relevant if that repo isn't configured on this machine)"
     else
       echo "  FAIL - $label: '$pkg' not found in any configured apt source"
@@ -95,7 +95,7 @@ if apt-cache show cinnamon-desktop-environment >/dev/null 2>&1; then
 
     removed_alt=""
     for alt in "${ALTS[@]}"; do
-      if printf '%s\n' "${REMOVED[@]}" | grep -qxF "$alt"; then
+      if grep -qxF "$alt" <<<"$(printf '%s\n' "${REMOVED[@]}")"; then
         removed_alt="$alt"
         break
       fi
@@ -105,7 +105,7 @@ if apt-cache show cinnamon-desktop-environment >/dev/null 2>&1; then
     other_installed=false
     for alt in "${ALTS[@]}"; do
       [[ "$alt" == "$removed_alt" ]] && continue
-      if printf '%s\n' "${INSTALLED[@]}" | grep -qxF "$alt"; then
+      if grep -qxF "$alt" <<<"$(printf '%s\n' "${INSTALLED[@]}")"; then
         other_installed=true
         break
       fi

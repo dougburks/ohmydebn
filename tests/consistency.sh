@@ -1073,6 +1073,13 @@ for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
     echo "  FAIL - bin/ohmydebn-apt-pins doesn't list $PREF (written by $INSTALLER)"
     FAIL=$((FAIL + 1))
   fi
+  # For a repo the installer writes itself, --prune deletes the same key
+  # the remove script does - so the two agree on where it is.
+  KEY=$(grep -oP "^  \"[a-z0-9.-]+:$PREF:[^:]*:\K[^\"]+" "$REPO_ROOT/bin/ohmydebn-apt-pins" || true)
+  if [[ -n "$KEY" ]] && ! grep -qF "$KEY" "$REPO_ROOT/bin/$REMOVER"; then
+    echo "  FAIL - bin/ohmydebn-apt-pins removes $KEY with $PREF's repo, but $REMOVER doesn't"
+    FAIL=$((FAIL + 1))
+  fi
 done
 
 echo

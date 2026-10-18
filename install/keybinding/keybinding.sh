@@ -113,18 +113,24 @@ if [ ! -f $KEYBINDING_STATE ]; then
   touch $KEYBINDING_STATE
 fi
 
-# The Super + K keybinding was renamed from "Hotkeys" to "Keybindings" in
-# 4.9.0 without a new marker above, so installs from before still show the
-# old name in Cinnamon's keyboard settings. Rename just that, rather than
-# bumping the marker, which would rewrite every stock keybinding - and
-# only while the slot still opens OhMyDebn's hotkeys page, so a slot a
-# user gave another job keeps the name they gave it. Runs on every update
-# and changes nothing once renamed.
-HOTKEYS_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-4/"
-if [ "$(gsettings get "$HOTKEYS_SLOT" name 2>/dev/null)" = "'Hotkeys'" ] &&
-  [[ "$(gsettings get "$HOTKEYS_SLOT" command 2>/dev/null)" == *"ohmydebn.org/hotkeys"* ]]; then
-  gsettings set "$HOTKEYS_SLOT" name "Keybindings" || true
-fi
+# Stock keybindings renamed without a new marker above, so installs from
+# before still show the old name in Cinnamon's keyboard settings: Super + K
+# ("Hotkeys", renamed in 4.9.0), and Gmail and Cloudflare WARP (4.11.0).
+# Rename just those, rather than bumping the marker, which would rewrite
+# every stock keybinding - and only while the slot still runs what
+# OhMyDebn put there, so a slot a user gave another job keeps the name
+# they gave it. Runs on every update and changes nothing once renamed.
+# rename_stock_keybinding <slot> <old name> <new name> <part of its command>
+rename_stock_keybinding() {
+  local slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
+  if [ "$(gsettings get "$slot" name 2>/dev/null)" = "'$2'" ] &&
+    [[ "$(gsettings get "$slot" command 2>/dev/null)" == *"$4"* ]]; then
+    gsettings set "$slot" name "$3" || true
+  fi
+}
+rename_stock_keybinding 4 "Hotkeys" "Keybindings" "ohmydebn.org/hotkeys"
+rename_stock_keybinding 2 "GMail" "Gmail" "https://mail.google.com"
+rename_stock_keybinding 43 "Cloudflare Warp" "Cloudflare WARP" "ohmydebn-cloudflare-warp"
 
 # The user's own keybindings (~/.config/ohmydebn/keybindings.txt), layered on
 # top of the stock ones. Outside the state gate on purpose: it has to run when

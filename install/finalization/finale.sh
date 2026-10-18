@@ -4,11 +4,11 @@
 # (finalization/gtile-restart-flag.sh, and config/cinnamon.sh's gTile
 # checkbox fix and config/cinnamon-applet-ids.sh; the keybinding step used
 # to as well, until it learned to make Cinnamon reload live) - a step sets
-# OHMYDEBN_CINNAMON_RESTART_NEEDED (cleared at the top of ohmydebn.sh) rather than
-# restarting immediately, so two independent restarts in the same run
-# can't race each other. Done
-# here, before the "update complete"/"installation complete" messaging
-# below, so that's the last thing printed, not this.
+# OHMYDEBN_CINNAMON_RESTART_NEEDED (cleared at the top of ohmydebn.sh)
+# rather than restarting immediately, so two independent restarts in the
+# same run can't race each other. Done here, before the "update
+# complete"/"installation complete" message below, so that message is the
+# last thing printed.
 # pgrep -x cinnamon here (not at flag-set time) is the up-to-date check of
 # whether there's actually a live Cinnamon session to restart.
 if [ "${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}" = "1" ] && pgrep -x cinnamon >/dev/null; then
@@ -40,11 +40,11 @@ fi
 # switch sessions at the login screen. Run over ssh or from a TTY there's no
 # desktop to judge (XDG_CURRENT_DESKTOP is unset), so say nothing rather
 # than tell a Cinnamon user to switch to Cinnamon.
-# Two cases need a reboot instead, since LightDM only reads lightdm.conf when
-# it starts and there's no session to pick: Raspberry Pi OS (its pi-greeter,
-# whose lightdm.conf finalization/lightdm.sh has just pointed at Cinnamon -
-# seen on Raspberry Pi OS for x86 with autologin off), and LightDM logging
-# this user straight into Cinnamon.
+# Two cases need a reboot instead, since LightDM only reads lightdm.conf
+# when it starts and the login screen offers no session to pick: Raspberry
+# Pi OS's pi-greeter, whose lightdm.conf finalization/lightdm.sh has just
+# pointed at Cinnamon (seen on Raspberry Pi OS for x86 with autologin
+# off), and a LightDM set to log this user straight into Cinnamon.
 LIGHTDM_CONF=/etc/lightdm/lightdm.conf
 if [ -n "${XDG_CURRENT_DESKTOP:-}" ] && [ "$XDG_CURRENT_DESKTOP" != "X-Cinnamon" ]; then
   echo

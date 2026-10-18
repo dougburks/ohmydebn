@@ -15,9 +15,18 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== bin/ohmydebn-theme-set-fastfetch ==="
 
+# Runs the hook with a do-nothing stand-in for the logo generator, which it
+# calls by its installed path: the installed copy (or none at all, on a
+# machine without OhMyDebn) isn't what's under test. Call after mock_init.
 run_theme_set_fastfetch() {
   local scratch_home="$1"
-  HOME="$scratch_home" bash "$SCRIPT" >/dev/null 2>&1
+  mock_bin ohmydebn-fastfetch-logo-generate <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+  sed "s#/usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate#$MOCK_BIN/ohmydebn-fastfetch-logo-generate#" \
+    "$SCRIPT" >"$MOCK_DIR/hook-run.sh"
+  HOME="$scratch_home" bash "$MOCK_DIR/hook-run.sh" </dev/null >/dev/null 2>&1
 }
 
 # Scenario 1: a live process whose cmdline contains "ohmydebn-fastfetch-pause"
@@ -78,7 +87,7 @@ mock_cleanup
 mock_init
 SCRATCH_HOME=$(mktemp -d)
 mkdir -p "$SCRATCH_HOME/.cache/ohmydebn"
-HOME="$SCRATCH_HOME" bash "$SCRIPT" >/dev/null 2>&1
+run_theme_set_fastfetch "$SCRATCH_HOME"
 assert_eq "no pidfile: script exits cleanly" "0" "$?"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup

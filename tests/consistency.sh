@@ -22,7 +22,12 @@ POWER_USER_SH="$REPO_ROOT/install/packaging/power-user.sh"
 # shellcheck disable=SC2034
 REMOVE_ALL_SH="$REPO_ROOT/bin/ohmydebn-pkg-remove-all-optional"
 # shellcheck disable=SC2034
-BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
+# The sibling checkout AGENTS.md assumes. Without it, the checks that read
+# the ohmydebn package's --depends would find nothing and quietly pass.
+BUILD_SCRIPT="$(cd "$REPO_ROOT/.." && pwd)/ohmydebn-package-build/build-package-ohmydebn.sh"
+if [[ ! -f "$BUILD_SCRIPT" ]]; then
+  echo "note: $BUILD_SCRIPT not found, so the ohmydebn package's dependencies aren't checked" >&2
+fi
 
 source "$REPO_ROOT/tests/lib/extract-packages.sh"
 source "$REPO_ROOT/bin/ohmydebn-menu-tree"
@@ -30,8 +35,7 @@ source "$REPO_ROOT/bin/ohmydebn-menu-tree"
 # The menu search index caches itself in ~/.local/state/ohmydebn-config,
 # keyed by the menu script's path, so the checks below used to leave a
 # cache for this checkout's bin/ohmydebn-menu in the real home directory.
-# A scratch HOME for the rest of the run (BUILD_SCRIPT above already has
-# the real one).
+# A scratch HOME for the rest of the run.
 SCRATCH_HOME=$(mktemp -d)
 export HOME="$SCRATCH_HOME"
 trap 'rm -rf "$SCRATCH_HOME"' EXIT

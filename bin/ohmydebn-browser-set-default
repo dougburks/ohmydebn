@@ -22,7 +22,7 @@
 # in the table below.
 #
 # Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <package>
-#        ohmydebn-browser-set-default --current | --list-installed
+#        ohmydebn-browser-set-default --current | --list-installed | --repair
 #   <package>   the apt package name: brave-origin, brave-browser, chromium,
 #               google-chrome-stable, helium-bin or firefox-esr. "chromium"
 #               covers Ubuntu's snap too (see bin/ohmydebn-chromium-install).

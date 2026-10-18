@@ -457,6 +457,11 @@ sleep 60 &
 mkdir -p "$MOCK_DIR/run"; echo "$!" >"$MOCK_DIR/run/ohmydebn-update-$(id -u).lock"
 run_doctor XDG_RUNTIME_DIR="$MOCK_DIR/run"
 assert_contains "running update: skipped, not failed" "$OUTPUT" "skip - the latest update completed (an update is running now)"
+# Without a runtime dir, ohmydebn-update keeps its lock in ~/.cache.
+rm -f "$MOCK_DIR/run/ohmydebn-update-$(id -u).lock"
+mkdir -p "$H/.cache"; echo "$!" >"$H/.cache/ohmydebn-update-$(id -u).lock"
+run_doctor
+assert_contains "running update, no runtime dir: found in ~/.cache" "$OUTPUT" "skip - the latest update completed (an update is running now)"
 kill %1 2>/dev/null
 mock_cleanup
 

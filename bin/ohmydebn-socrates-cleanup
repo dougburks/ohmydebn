@@ -190,7 +190,7 @@ if [[ ${#REMOVE[@]} -gt 0 ]]; then
       if [[ "$output" == *"image not known"* ]] || [[ "$output" == *"no image"* ]]; then
         echo "  already removed $img_name ($img_id)"
       elif [[ "$output" == *"image is in use by a container"* ]]; then
-        dep_cid=$(grep -oP '[0-9a-f]{64}' <<< "$output" | head -1)
+        dep_cid=$(grep -oP '[0-9a-f]{64}' <<< "$output" | head -1 || true)
         if [[ -n "$dep_cid" ]]; then
           cname=$(podman container inspect --format '{{.Name}}' "$dep_cid" 2>/dev/null || echo "$dep_cid")
           echo "  removing dependent container $cname ($dep_cid)..."

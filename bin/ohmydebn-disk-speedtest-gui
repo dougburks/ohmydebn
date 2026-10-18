@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 #
 # Graphical disk speed test - a GTK/Cairo recreation of Omarchy's own
-# QML speed-test overlay (~/git/omarchy's shell/Ui/SpeedTestOverlay.qml,
-# the "Quattro" checkout - the same overlay Omarchy's own network speed
-# test uses, explicitly "shared by the network and disk speed tests" per
+# QML speed-test overlay (shell/Ui/SpeedTestOverlay.qml in
+# https://github.com/basecamp/omarchy - the same overlay Omarchy's own
+# network speed test uses, explicitly "shared by the network and disk speed tests" per
 # its own top comment). See ohmydebn_speedtest_common.py, shared with
 # ohmydebn-network-speedtest-gui, for the dial widget itself and the
 # theme-accent color it uses.

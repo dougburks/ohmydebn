@@ -46,11 +46,11 @@ mock_log "gsettings $*"
 if [[ "$1 $2 $3" == "get org.cinnamon.desktop.keybindings custom-list" ]]; then
   echo "${MOCK_CUSTOM_LIST:-}"
 fi
-# MOCK_SLOT4_NAME/COMMAND: what the Super + K slot (custom-4) holds now.
-if [[ "$1" == get && "$2" == *custom-keybindings/custom-4/ ]]; then
+# MOCK_SLOT_NAME/COMMAND: what stock slot custom-$MOCK_SLOT holds now.
+if [[ "$1" == get && -n "${MOCK_SLOT:-}" && "$2" == *custom-keybindings/custom-$MOCK_SLOT/ ]]; then
   case "$3" in
-  name) echo "${MOCK_SLOT4_NAME:-}" ;;
-  command) echo "${MOCK_SLOT4_COMMAND:-}" ;;
+  name) echo "${MOCK_SLOT_NAME:-}" ;;
+  command) echo "${MOCK_SLOT_COMMAND:-}" ;;
   esac
 fi
 exit 0
@@ -156,29 +156,36 @@ assert_eq "custom-list: closes the array" "]" "${FINAL_LIST: -1}"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# --- Super + K's old "Hotkeys" name, on an install from before 4.9.0 ---
-# The rename to "Keybindings" came without a new marker, so it never
-# reached existing installs. It's renamed in place on any run, marker or
-# not - but only while the slot still opens the hotkeys page.
-SLOT4="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-4/"
-HOTKEYS_CMD="'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/'"
-for case in "'Hotkeys'|$HOTKEYS_CMD|renamed" "'Keybindings'|$HOTKEYS_CMD|kept" "'Hotkeys'|'my-own-script'|kept"; do
-  IFS='|' read -r name cmd expect <<<"$case"
-  mock_init
-  setup_mocks
-  SCRATCH_HOME=$(mktemp -d)
-  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
-  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
-  MOCK_SLOT4_NAME="$name" MOCK_SLOT4_COMMAND="$cmd" MOCK_CINNAMON_RUNNING=true run_script
-  CALLS=$(cat "$MOCK_CALLS")
-  if [[ "$expect" == renamed ]]; then
-    assert_contains "Super + K named $name, opening the hotkeys page: renamed to Keybindings" "$CALLS" "gsettings set $SLOT4 name Keybindings"
-    assert_eq "...and nothing else rewritten" "1" "$(grep -c 'gsettings set' "$MOCK_CALLS")"
-  else
-    assert_not_contains "Super + K named $name running $cmd: left as it is" "$CALLS" "gsettings set"
-  fi
-  rm -rf "$SCRATCH_HOME"
-  mock_cleanup
-done
+# --- Stock keybindings renamed without a new marker (Super + K's
+# "Hotkeys" before 4.9.0, "GMail" and "Cloudflare Warp" before 4.11.0), so
+# the new names never reached existing installs. Each is renamed in place
+# on any run, marker or not - but only while the slot still runs what
+# OhMyDebn put there.
+# slot|old name|new name|the command OhMyDebn gave it
+while IFS='|' read -r slot old new cmd; do
+  slot_path="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$slot/"
+  for case in "'$old'|$cmd|renamed" "'$new'|$cmd|kept" "'$old'|'my-own-script'|kept"; do
+    IFS='|' read -r name command expect <<<"$case"
+    mock_init
+    setup_mocks
+    SCRATCH_HOME=$(mktemp -d)
+    mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+    touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+    MOCK_SLOT="$slot" MOCK_SLOT_NAME="$name" MOCK_SLOT_COMMAND="$command" MOCK_CINNAMON_RUNNING=true run_script
+    CALLS=$(cat "$MOCK_CALLS")
+    if [[ "$expect" == renamed ]]; then
+      assert_contains "custom-$slot named $name, as OhMyDebn set it: renamed to $new" "$CALLS" "gsettings set $slot_path name $new"
+      assert_eq "...and nothing else rewritten" "1" "$(grep -c 'gsettings set' "$MOCK_CALLS")"
+    else
+      assert_not_contains "custom-$slot named $name running $command: left as it is" "$CALLS" "gsettings set"
+    fi
+    rm -rf "$SCRATCH_HOME"
+    mock_cleanup
+  done
+done <<'LIST'
+4|Hotkeys|Keybindings|'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/'
+2|GMail|Gmail|'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com'
+43|Cloudflare Warp|Cloudflare WARP|'/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp'
+LIST
 
 test_summary

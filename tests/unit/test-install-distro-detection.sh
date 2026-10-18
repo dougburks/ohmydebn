@@ -49,6 +49,10 @@ EOF
 #!/bin/bash
 exit 0
 EOF
+  # The OhMyDebn repo key, as if already installed: otherwise install.sh
+  # downloads it and installs it into /usr/share/keyrings, and these tests
+  # pass only on a machine that already has it.
+  echo key >"$MOCK_DIR/keyring.gpg"
 }
 
 WARNING_TEXT="untested and unsupported"
@@ -64,7 +68,7 @@ run_scenario() {
   # Two blank lines cover the two `read -r _` prompts this path can reach
   # (distro warning, welcome message) - any prompts that don't fire just
   # leave stdin partially unread, which is harmless.
-  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
     OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
     bash "$SCRIPT" < <(printf '\n\n') 2>&1)
   EXIT_CODE=$?
@@ -149,7 +153,7 @@ run_sources_scenario() {
   mkdir -p "$MOCK_DIR/apt/sources.list.d"
   echo "# managed elsewhere" >"$MOCK_DIR/apt/sources.list"
   SCRATCH_HOME=$(mktemp -d)
-  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
     OHMYDEBN_TEST_APT_DIR="$MOCK_DIR/apt" OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
     bash "$SCRIPT" < <(printf '\n\n') 2>&1)
   if [[ "$expect" == "kept" ]]; then
@@ -186,7 +190,7 @@ run_install() {
   local input="$1"
   shift
   printf '%s\n' "$@" >"$MOCK_DIR/os-release"
-  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+  OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
     OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" bash "$SCRIPT" < <(printf '%b' "$input") 2>&1)
 }
 UBUNTU_2610=('PRETTY_NAME="Ubuntu 26.10"' "ID=ubuntu" "ID_LIKE=debian" 'VERSION_ID="26.10"' "VERSION_CODENAME=stonking")

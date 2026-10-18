@@ -51,6 +51,7 @@ skip_other_once_only_blocks() {
   touch "$home/.local/state/ohmydebn-config/omarchy-theme-symlink-20260325"
   touch "$home/.local/state/ohmydebn-config/omarchy-theme-url-handler-20260814"
   touch "$home/.local/state/ohmydebn-config/fastfetch-config-backfill-20260817"
+  touch "$home/.local/state/ohmydebn-config/nvim-theme-backfill-20260926"
   touch "$home/.local/state/ohmydebn-config/fastfetch-logo-backfill-20261015"
 }
 

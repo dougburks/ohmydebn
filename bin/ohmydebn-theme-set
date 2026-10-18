@@ -163,6 +163,14 @@ if [[ ! -f "$THEME_PATH/colors.toml" && ! -f "$THEME_PATH/alacritty.toml" ]]; th
   exit 1
 fi
 
+# The colors are read from the theme itself (below), not from the filtered
+# copy, so a theme from a git repo mustn't have them in a symlink: it could
+# point at any file the session can read and have it copied into the theme.
+if theme_came_from_a_repo "$THEME_PATH" && [[ -L "$THEME_PATH/colors.toml" || -L "$THEME_PATH/alacritty.toml" ]]; then
+  echo "Theme '$THEME_NAME' was installed from a git repo, and its colors.toml or alacritty.toml is a link to another file, so it can't be used."
+  exit 1
+fi
+
 # Setup clean next theme directory (for atomic theme config swapping)
 rm -rf "$NEXT_THEME_PATH"
 mkdir -p "$NEXT_THEME_PATH"

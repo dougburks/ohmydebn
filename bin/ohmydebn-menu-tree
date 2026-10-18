@@ -5,7 +5,7 @@
 # (menu_tree_categories) and, once the user starts typing, every leaf action
 # across all ~25 nested show_*_menu functions flattened into
 # "breadcrumb<TAB>target" rows (menu_tree_flatten). Sourced only (by
-# ohmydebn-menu-picker, by ohmydebn-menu itself for menu_tree_paths'
+# ohmydebn-menu-picker inside its `bash -c`, by ohmydebn-menu itself for menu_tree_paths'
 # breadcrumbs, and by tests/consistency.sh) - no set -e/-u/-o pipefail here, since those would
 # leak into whichever caller sources this with its own, different flag
 # settings.
@@ -60,9 +60,10 @@ _mt_menu_block_start() {
 }
 
 # Splits one "icon  Label" item into "icon<TAB>label" - the icon is
-# optional (`\S*`, not `\S+`): a few items (Cybersecurity, Editor,
-# Virtualization, ...) have never carried one, just the same leading
-# whitespace every icon-bearing item also has before its label. Single
+# optional (`\S*`, not `\S+`): every item has one now, but some
+# (Cybersecurity, Editor, Virtualization, ...) once had none, just the same
+# leading whitespace every icon-bearing item also has before its label,
+# and an item added without one must still work. Single
 # source of truth for this split: it used to be hand-duplicated three
 # times (here, inline in _mt_flatten_uncached, and in
 # menu_tree_categories), and with `\S+` instead of `\S*` that duplication

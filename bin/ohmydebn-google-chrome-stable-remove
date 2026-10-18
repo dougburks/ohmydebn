@@ -8,7 +8,7 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
 else
   if [ "${1:-}" != "--skip-prompt" ]; then
     echo
-    echo "Continuing will remove Google Chrome."
+    echo "Continuing will remove Google Chrome and its repo."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r

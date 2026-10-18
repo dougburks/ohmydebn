@@ -146,8 +146,8 @@ else
 fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
 # vendor's own packages, so it can't replace anyone else's. VS Code's,
-# Chrome's and ChatGPT's repos are added by the vendors' own packages
-# (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
+# Chrome's, ChatGPT's and Claude Desktop's repos are added or kept up to
+# date by the vendors' own packages (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
 mapfile -t PINS < <("$OHMYDEBN/bin/ohmydebn-apt-pins" --list 2>/dev/null)
 PINNED=0
 MISSING=()
@@ -167,8 +167,11 @@ if [ "$MARKERS" -gt 0 ]; then ok "config state markers present ($MARKERS)"; else
 LATEST_LOG="$STATE/ohmydebn-logs/update-latest.log"
 if [ -e "$LATEST_LOG" ]; then
   echo "  latest update log: $(readlink -f "$LATEST_LOG")"
-  # ohmydebn-update's lock file holds the pid of the update running now.
-  UPDATE_LOCK="${XDG_RUNTIME_DIR:-/tmp}/ohmydebn-update-$(id -u).lock"
+  # ohmydebn-update's lock file holds the pid of the update running now,
+  # in the same place it puts it.
+  UPDATE_LOCK_DIR="${XDG_RUNTIME_DIR:-}"
+  if [ -z "$UPDATE_LOCK_DIR" ] || [ ! -d "$UPDATE_LOCK_DIR" ]; then UPDATE_LOCK_DIR="$HOME/.cache"; fi
+  UPDATE_LOCK="$UPDATE_LOCK_DIR/ohmydebn-update-$(id -u).lock"
   UPDATE_PID=$(cat "$UPDATE_LOCK" 2>/dev/null || true)
   STOPPED=$(grep -a "update stopped" "$LATEST_LOG" 2>/dev/null | tail -1 | tr -d '\r')
   if grep -aq "OhMyDebn update complete" "$LATEST_LOG" 2>/dev/null; then

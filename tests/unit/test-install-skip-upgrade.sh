@@ -37,10 +37,14 @@ EOF2
   mkdir -p "$SCRATCH_HOME/.local/state"; : >"$SCRATCH_HOME/.local/state/ohmydebn"  # not a first install
   printf 'ID=debian\nVERSION_CODENAME=trixie\n' >"$MOCK_DIR/os-release"
   sed "s#^source /usr/share/ohmydebn/ohmydebn.sh.*#env >\"$MOCK_DIR/env-at-config-layer\"#" "$REPO_ROOT/install.sh" >"$MOCK_DIR/install-patched.sh"
+  # The OhMyDebn repo key, as if already installed: otherwise install.sh
+  # downloads it and installs it into /usr/share/keyrings, and these tests
+  # pass only on a machine that already has it.
+  echo key >"$MOCK_DIR/keyring.gpg"
 }
 
 run_install() {
-  HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" PATH="$(mock_path)" \
+  HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" PATH="$(mock_path)" \
     bash "$MOCK_DIR/install-patched.sh" "$@" </dev/null >/dev/null 2>&1
 }
 
@@ -61,7 +65,7 @@ rm -rf "$SCRATCH_HOME"; mock_cleanup
 
 setup_install
 START_BEFORE=$((EPOCHSECONDS - 500))
-HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" PATH="$(mock_path)" OHMYDEBN_RUN_START="$START_BEFORE" \
+HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" PATH="$(mock_path)" OHMYDEBN_RUN_START="$START_BEFORE" \
   bash "$MOCK_DIR/install-patched.sh" --yes </dev/null >/dev/null 2>&1
 assert_contains "run start: an inherited value (from ohmydebn-update) is kept, not overwritten" \
   "$(cat "$MOCK_DIR/env-at-config-layer")" "OHMYDEBN_RUN_START=$START_BEFORE"

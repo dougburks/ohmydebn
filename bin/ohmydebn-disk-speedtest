@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Disk speed test, adapted from Omarchy's own bin/omarchy-disk-speedtest
-# (~/git/omarchy, the "Quattro" checkout) - same measurement approach:
+# (https://github.com/basecamp/omarchy) - same measurement approach:
 # direct I/O (O_DIRECT, bypassing the page cache) against several
 # exclusive per-run scratch files in parallel, sampling the backing
 # block device's own kernel I/O counters once a second rather than

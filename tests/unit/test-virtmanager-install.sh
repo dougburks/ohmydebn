@@ -19,6 +19,9 @@
 # This only covers the fresh-install path; there is deliberately no
 # migration logic for existing qemu:///system installs (out of scope by
 # design - see the conversation this change came from).
+#
+# HOME is a scratch directory: the script creates the storage pool's
+# directory under it.
 
 set -uo pipefail
 
@@ -95,13 +98,15 @@ mock_init
 mock_dpkg_not_installed amd64
 setup_common_mocks
 mock_virsh 1
-USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
+HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
 EXIT_CODE=$?
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "amd64: exits cleanly" "0" "$EXIT_CODE"
 assert_contains "amd64: installs qemu-system-x86" "$CALLS" "install qemu-system-x86 virt-manager"
 assert_not_contains "amd64: never installs qemu-kvm" "$CALLS" "qemu-kvm"
 assert_contains "amd64: adds the kvm group" "$CALLS" "adduser testuser kvm"
+assert_eq "amd64: the pool directory is made under (scratch) HOME" "yes" \
+  "$([ -d "$MOCK_DIR/home/.local/share/libvirt/images" ] && echo yes || echo no)"
 assert_not_contains "amd64: never adds the libvirt group" "$CALLS" "adduser testuser libvirt"
 assert_not_contains "amd64: never enables/starts system libvirtd" "$CALLS" "libvirtd"
 assert_contains "amd64: defines the session pool (missing)" "$CALLS" "pool-define-as default dir --target"
@@ -117,7 +122,7 @@ mock_init
 mock_dpkg_not_installed amd64
 setup_common_mocks
 mock_virsh 1
-OUTPUT=$(USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" 2>&1)
+OUTPUT=$(HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" 2>&1)
 assert_not_contains "no Cinnamon restart mid-install" "$(cat "$MOCK_CALLS")" "cinnamon"
 assert_not_contains "KVM already usable (logind ACL): no log-out advice" "$OUTPUT" "Log out and back in"
 mock_cleanup
@@ -127,7 +132,7 @@ mock_dpkg_not_installed amd64
 setup_common_mocks
 mock_virsh 1
 SCRIPT_COPY=$(KVM_WRITABLE=no patched_script)
-OUTPUT=$(USER=testuser PATH="$(mock_path)" bash "$SCRIPT_COPY" <<<"" 2>&1)
+OUTPUT=$(HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$SCRIPT_COPY" <<<"" 2>&1)
 assert_contains "KVM not usable until the group applies: says to log out and back in" "$OUTPUT" "Log out and back in before starting a virtual machine"
 mock_cleanup
 
@@ -137,7 +142,7 @@ mock_init
 mock_dpkg_not_installed arm64
 setup_common_mocks
 mock_virsh 1
-USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
+HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
 EXIT_CODE=$?
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "arm64: exits cleanly" "0" "$EXIT_CODE"
@@ -150,7 +155,7 @@ mock_init
 mock_dpkg_not_installed sparc64
 setup_common_mocks
 mock_virsh 1
-USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
+HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
 EXIT_CODE=$?
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "unknown arch: exits cleanly" "0" "$EXIT_CODE"
@@ -164,7 +169,7 @@ mock_init
 mock_dpkg_not_installed amd64
 setup_common_mocks
 mock_virsh 0
-USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
+HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
 EXIT_CODE=$?
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "pool exists: exits cleanly" "0" "$EXIT_CODE"
@@ -185,7 +190,7 @@ exit 1
 EOF
 setup_common_mocks
 mock_virsh 0
-USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
+HOME="$MOCK_DIR/home" USER=testuser PATH="$(mock_path)" bash "$(patched_script)" <<<"" >/dev/null 2>&1
 EXIT_CODE=$?
 CALLS=$(cat "$MOCK_CALLS")
 assert_eq "already installed: exits cleanly" "0" "$EXIT_CODE"

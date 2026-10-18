@@ -12,7 +12,7 @@ description: >
 
 # OhMyDebn Skill
 
-Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stability of the Debian distro, the ease of use of the Cinnamon desktop, and the beauty of Omarchy.
+Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stability of a Debian-based distro (Debian, Ubuntu, Mint and others), the ease of use of the Cinnamon desktop, and the beauty of Omarchy.
 
 ## When This Skill MUST Be Used
 

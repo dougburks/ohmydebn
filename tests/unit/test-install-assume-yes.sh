@@ -54,6 +54,10 @@ EOF
 mock_log "clear"
 exit 0
 EOF
+  # The OhMyDebn repo key, as if already installed: otherwise install.sh
+  # downloads it and installs it into /usr/share/keyrings, and these tests
+  # pass only on a machine that already has it.
+  echo key >"$MOCK_DIR/keyring.gpg"
 }
 
 write_os_release() {
@@ -69,7 +73,7 @@ mock_init
 setup_mocks
 write_os_release arch ""
 SCRATCH_HOME=$(mktemp -d)
-OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
   OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
   bash "$SCRIPT" --yes </dev/null 2>&1)
 EXIT_CODE=$?
@@ -87,7 +91,7 @@ mock_init
 setup_mocks
 write_os_release debian trixie
 SCRATCH_HOME=$(mktemp -d)
-OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
   OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
   bash "$SCRIPT" --yes </dev/null 2>&1)
 EXIT_CODE=$?
@@ -107,7 +111,7 @@ mock_init
 setup_mocks
 write_os_release debian trixie
 SCRATCH_HOME=$(mktemp -d)
-OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" \
+OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
   OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
   bash "$SCRIPT" <<<"" 2>&1)
 EXIT_CODE=$?

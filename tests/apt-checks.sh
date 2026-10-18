@@ -15,7 +15,12 @@ POWER_USER_SH="$REPO_ROOT/install/packaging/power-user.sh"
 # shellcheck disable=SC2034
 REMOVE_ALL_SH="$REPO_ROOT/bin/ohmydebn-pkg-remove-all-optional"
 # shellcheck disable=SC2034
-BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
+# The sibling checkout AGENTS.md assumes. Without it, the checks that read
+# the ohmydebn package's --depends would find nothing and quietly pass.
+BUILD_SCRIPT="$(cd "$REPO_ROOT/.." && pwd)/ohmydebn-package-build/build-package-ohmydebn.sh"
+if [[ ! -f "$BUILD_SCRIPT" ]]; then
+  echo "note: $BUILD_SCRIPT not found, so the ohmydebn package's dependencies aren't checked" >&2
+fi
 
 FAIL=0
 

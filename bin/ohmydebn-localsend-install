@@ -7,7 +7,7 @@ if ! dpkg -s "localsend" >/dev/null 2>&1; then
   echo
   echo "LocalSend is not currently installed."
   echo
-  echo "Continuing will install LocalSend package from:"
+  echo "Continuing will install it, built from:"
   echo "https://github.com/localsend/localsend"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."

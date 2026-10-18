@@ -67,9 +67,11 @@ if ! dpkg -s "claude-desktop" >/dev/null 2>&1; then
     sudo tee /etc/apt/preferences.d/claude-desktop.pref >/dev/null
 
   sudo /usr/bin/apt update
-  # Its recommended packages bring QEMU for Cowork's virtual machine; where
-  # recommends are off (MX Linux), the Cowork tab names what to install.
-  sudo /usr/bin/apt -y install claude-desktop
+  # Its recommended packages (QEMU, its UEFI firmware, virtiofsd) are what
+  # the virtual machine Claude runs larger tasks in needs - once the
+  # Cowork tab, now part of every chat. Anthropic counts on apt installing
+  # them, but MX Linux turns recommends off, so ask for them.
+  sudo /usr/bin/apt -y --install-recommends install claude-desktop
 
   # Installed onto a system that may already have a default AI assistant:
   # ask before changing it (defaults to no, and says nothing when this is

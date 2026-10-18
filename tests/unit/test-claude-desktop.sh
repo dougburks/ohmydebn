@@ -135,7 +135,10 @@ assert_contains "install: pin refuses everything else from the host" "$PIN" $'Pa
 assert_contains "install: pin allows claude-desktop" "$PIN" $'Package: claude-desktop\nPin: origin "downloads.claude.ai"\nPin-Priority: 500'
 assert_eq "install: apt update after the repo and pin, before the install" "yes" \
   "$([ "$(line_of 'tee /etc/apt/preferences.d/claude-desktop.pref')" -lt "$(line_of 'sudo /usr/bin/apt update')" ] &&
-    [ "$(line_of 'sudo /usr/bin/apt update')" -lt "$(line_of 'sudo /usr/bin/apt -y install claude-desktop')" ] && echo yes || echo no)"
+    [ "$(line_of 'sudo /usr/bin/apt update')" -lt "$(line_of 'sudo /usr/bin/apt -y --install-recommends install claude-desktop')" ] && echo yes || echo no)"
+# The task VM's QEMU, firmware and virtiofsd are Recommends, which MX Linux
+# turns off.
+assert_contains "install: with its recommends, even where they're off (MX)" "$CALLS" "--install-recommends install claude-desktop"
 assert_contains "install: then asks about the default AI" "$CALLS" "ai-set-default --ask claude-desktop"
 mock_cleanup
 
@@ -160,14 +163,14 @@ mock_cleanup
 # arm64 is fine
 setup
 MOCK_ARCH=arm64 run "$MOCK_DIR/install.sh" <<<"" >/dev/null
-assert_contains "arm64: installs" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install claude-desktop"
+assert_contains "arm64: installs" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y --install-recommends install claude-desktop"
 mock_cleanup
 
 # --skip-prompt: no question, no default-AI question
 setup
 OUT=$(run "$MOCK_DIR/install.sh" --skip-prompt </dev/null)
 assert_not_contains "--skip-prompt: doesn't ask" "$OUT" "Press Enter"
-assert_contains "--skip-prompt: installs" "$(cat "$MOCK_CALLS")" "apt -y install claude-desktop"
+assert_contains "--skip-prompt: installs" "$(cat "$MOCK_CALLS")" "apt -y --install-recommends install claude-desktop"
 assert_not_contains "--skip-prompt: no default-AI question" "$(cat "$MOCK_CALLS")" "ai-set-default"
 mock_cleanup
 

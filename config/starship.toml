@@ -4,7 +4,7 @@ add_newline = false
 
 format = """
 [](blue)\
-$os\
+[󰱰](bg:blue fg:black)\
 $username\
 [](bg:cyan fg:blue)\
 $directory\
@@ -16,30 +16,9 @@ $line_break$character"""
 
 # The palette section has been removed to use your terminal's dynamic colors.
 
-[os]
-disabled = false
-style = "bg:blue fg:black"
-
-[os.symbols]
-Windows = "󰍲"
-Ubuntu = "󰕈"
-SUSE = ""
-Raspbian = "󰐿"
-Mint = "󰣭"
-Macos = ""
-Manjaro = ""
-Linux = "󰌽"
-Gentoo = "󰣨"
-Fedora = "󰣛"
-Alpine = ""
-Amazon = ""
-Android = ""
-Arch = "󰣇"
-Artix = "󰣇"
-CentOS = ""
-Debian = "󰣚"
-Redhat = "󱄛"
-RedHatEnterprise = "󱄛"
+# The OhMyDebn logo leads the prompt, the same on every distro. It replaced
+# Starship's os module, which ran lsb_release before every prompt to pick a
+# distro logo - about 30 ms of each prompt.
 
 [username]
 show_always = true

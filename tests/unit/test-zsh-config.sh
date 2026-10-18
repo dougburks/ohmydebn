@@ -6,7 +6,9 @@
 # deliberately NOT baked into config/.zshrc itself, so they don't double up
 # on a fresh install where ZSHRC_STATE also copies the template) and
 # OPENCODE_CLI_ALIAS_STATE (a one-time sed migration of the pre-existing
-# `c` alias on installs provisioned before ohmydebn-opencode-cli existed).
+# `c` alias on installs provisioned before ohmydebn-opencode-cli existed)
+# and PROMPT_SPEED_STATE (the faster-prompt settings, appended after
+# `starship init`).
 
 set -uo pipefail
 
@@ -62,6 +64,15 @@ AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zs
 assert_eq "fresh install: a alias appears exactly once" "1" "$AI_CLI_COUNT"
 assert_eq "fresh install: ai-cli-alias state marker written" "yes" \
   "$([ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias" ] && echo yes || echo no)"
+# The prompt-speed block comes after `starship init`, which sets the RPROMPT
+# it clears.
+assert_eq "fresh install: prompt-speed block appears exactly once" "1" \
+  "$(grep -c '^ZSH_AUTOSUGGEST_MANUAL_REBIND=1$' "$SCRATCH_HOME/.zshrc")"
+assert_eq "fresh install: prompt-speed block comes after starship init" "yes" \
+  "$([ "$(grep -n 'starship init zsh' "$SCRATCH_HOME/.zshrc" | cut -d: -f1)" -lt \
+    "$(grep -n '^ZSH_AUTOSUGGEST_MANUAL_REBIND=1$' "$SCRATCH_HOME/.zshrc" | cut -d: -f1)" ] && echo yes || echo no)"
+assert_eq "fresh install: prompt-speed block is valid zsh" "yes" \
+  "$(zsh -n "$SCRATCH_HOME/.zshrc" 2>/dev/null && echo yes || echo no)"
 # Regression: config/.zshrc's `c` alias already contains the literal string
 # "/usr/share/ohmydebn/bin" (via the ohmydebn-opencode-cli path), which used
 # to false-positive the PATH-update guard and skip appending the actual
@@ -107,6 +118,8 @@ OMP_COUNT=$(grep -Fc "alias omp='$MOCK_BIN/ohmydebn-omp-cli'" "$SCRATCH_HOME/.zs
 assert_eq "pre-existing install: omp alias appended exactly once" "1" "$OMP_COUNT"
 AI_CLI_COUNT=$(grep -Fc "alias a='$MOCK_BIN/ohmydebn-ai-cli'" "$SCRATCH_HOME/.zshrc")
 assert_eq "pre-existing install: a alias appended exactly once" "1" "$AI_CLI_COUNT"
+assert_eq "pre-existing install: prompt-speed block appended exactly once" "1" \
+  "$(grep -c '^ZSH_AUTOSUGGEST_MANUAL_REBIND=1$' "$SCRATCH_HOME/.zshrc")"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -157,6 +170,7 @@ touch "$SCRATCH_HOME/.local/state/ohmydebn-config/grok-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/omp-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/opencode-cli-alias"
 touch "$SCRATCH_HOME/.local/state/ohmydebn-config/ai-cli-alias"
+touch "$SCRATCH_HOME/.local/state/ohmydebn-config/prompt-speed-20261018"
 cat >"$SCRATCH_HOME/.zshrc" <<'EOF'
 # Aliases
 alias c='/usr/share/ohmydebn/bin/ohmydebn-opencode-cli'
@@ -179,6 +193,8 @@ OMP_COUNT=$(grep -c "^alias omp='/usr/share/ohmydebn/bin/ohmydebn-omp-cli'\$" "$
 assert_eq "already migrated: omp alias still appears exactly once" "1" "$OMP_COUNT"
 assert_eq "already migrated: c alias still appears exactly once" "1" "$C_COUNT"
 assert_eq "already migrated: a alias still appears exactly once" "1" "$AI_CLI_COUNT"
+assert_eq "already migrated: prompt-speed block not appended again" "0" \
+  "$(grep -c '^ZSH_AUTOSUGGEST_MANUAL_REBIND=1$' "$SCRATCH_HOME/.zshrc")"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

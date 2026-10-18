@@ -18,3 +18,20 @@ if [ ! -f "$STARSHIP_STATE" ]; then
   mkdir -p ~/.local/state/ohmydebn-config
   touch "$STARSHIP_STATE"
 fi
+
+# One-time migration for configs written before 4.12.0: the OhMyDebn logo
+# replaces Starship's os module, which ran lsb_release before every prompt
+# to pick a distro logo (about 30 ms of each one, enough to lag when Enter
+# is held down). Only a config that still has OhMyDebn's $os line in its
+# format is changed; its now unused [os] tables go with it.
+STARSHIP_LOGO_STATE=~/.local/state/ohmydebn-config/starship-logo-20261018
+if [ ! -f "$STARSHIP_LOGO_STATE" ]; then
+  STARSHIP_CONFIG=~/.config/starship.toml
+  if grep -qx '\$os\\' "$STARSHIP_CONFIG" 2>/dev/null; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Putting the OhMyDebn logo in the starship prompt"
+    sed -i -e 's/^\$os\\$/[󰱰](bg:blue fg:black)\\/' \
+      -e '/^\[os\]$/,/^$/d' -e '/^\[os\.symbols\]$/,/^$/d' "$STARSHIP_CONFIG"
+  fi
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch "$STARSHIP_LOGO_STATE"
+fi

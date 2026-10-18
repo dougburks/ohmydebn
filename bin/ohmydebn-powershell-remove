@@ -13,8 +13,14 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
-  sudo rm -f /etc/apt/preferences.d/powershell.pref
+  /usr/share/ohmydebn/bin/ohmydebn-powershell-repo remove
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y purge powershell packages-microsoft-prod
+  sudo /usr/bin/apt -y purge powershell
+  # Only on a machine whose repo is still Microsoft's setup package (the
+  # update replaces it - see ohmydebn-powershell-repo). Once it's gone,
+  # apt no longer knows the name and naming it would fail the purge.
+  if dpkg -s packages-microsoft-prod >/dev/null 2>&1; then
+    sudo /usr/bin/apt -y purge packages-microsoft-prod
+  fi
   sudo /usr/bin/apt -y autoremove
 fi

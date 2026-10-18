@@ -1,0 +1,80 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-powershell-repo: sets up and tears down Microsoft's apt
+# repository for PowerShell, for ohmydebn-powershell-install/-remove and
+# for the update's migration (install/packaging/powershell-repo.sh).
+#
+#   ensure   check Microsoft's signing key, then write it, the sources
+#            file and the pin. Replaces packages-microsoft-prod if it's
+#            installed.
+#   remove   delete the key, sources file and pin
+#
+# This used to be Microsoft's packages-microsoft-prod.deb, which nothing
+# could check: Microsoft publishes no checksum for it, and its maintainer
+# scripts run as root, so a tampered copy could keep the real key and
+# still run anything. Writing the files here means only a key whose
+# fingerprint matches Microsoft's published one is ever trusted, and no
+# vendor script runs.
+#
+# The file names are the ones packages-microsoft-prod uses for the sources
+# list, so a user who installs that package later (for .NET, say) gets its
+# list in place of ours rather than a second source for the same
+# repository, which apt refuses when the two name different keys
+# ("Conflicting values set for option Signed-By"). The key is armored, so
+# it's .asc rather than the package's .gpg.
+
+APT_ETC=/etc/apt
+KEYRING=/usr/share/keyrings/microsoft-prod.asc
+KEY_URL=https://packages.microsoft.com/keys/microsoft-2025.asc
+# microsoft-2025.asc as Microsoft lists it on
+# https://packages.microsoft.com/keys/README, checked 2026-10-18; it signs
+# the Debian 13 repository. If Microsoft moves the repository to a new key,
+# installs refuse until it's updated here.
+FINGERPRINT=AA86F75E427A19DD33346403EE4D7792F748182B
+SOURCES="$APT_ETC/sources.list.d/microsoft-prod.list"
+PREF="$APT_ETC/preferences.d/powershell.pref"
+
+case "${1:-}" in
+ensure)
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != "$FINGERPRINT" ]; then
+    echo "The Microsoft signing key from $KEY_URL isn't the one Microsoft publishes, so it wasn't installed."
+    exit 1
+  fi
+  # Its prerm deletes its sources list and key; purging takes the rest
+  # (its debsig policy and keyring).
+  if dpkg -s packages-microsoft-prod >/dev/null 2>&1; then
+    sudo /usr/bin/apt -y purge packages-microsoft-prod
+  fi
+  sudo mkdir -p "$(dirname "$KEYRING")" "$(dirname "$SOURCES")" "$(dirname "$PREF")"
+  sudo install -m 0644 "$KEY_FILE" "$KEYRING"
+  # Microsoft's Debian 13 repository on every supported distro, Ubuntu-based
+  # ones included, on purpose: it's the only one of its repos with
+  # PowerShell for both amd64 and arm64 (checked 2026-10-12 - the Ubuntu
+  # 26.04 repo has no PowerShell at all and the 24.04 one has no arm64
+  # build), and it carries the newer 7.6 line. Its package only depends on
+  # libraries Ubuntu provides under the same names (libgcc1, libssl3 via
+  # the t64 packages, and any libicu from 60 to 106). The line is the one
+  # packages-microsoft-prod writes, with our key.
+  echo "deb [arch=amd64,arm64,armhf signed-by=$KEYRING] https://packages.microsoft.com/debian/13/prod trixie main" |
+    sudo tee "$SOURCES" >/dev/null
+  # Restricts the repo to PowerShell - same reasoning as
+  # ohmydebn-code-install's own pin (VS Code's repo is under
+  # packages.microsoft.com too - see that file's comment on why a shared
+  # origin across separate pin files is still safe). Confirmed via
+  # `apt-cache depends powershell` - no same-repo dependency, just
+  # ordinary system libraries.
+  printf 'Package: *\nPin: origin "packages.microsoft.com"\nPin-Priority: -1\n\nPackage: powershell\nPin: origin "packages.microsoft.com"\nPin-Priority: 500\n' |
+    sudo tee "$PREF" >/dev/null
+  ;;
+remove)
+  sudo rm -f "$KEYRING" "$SOURCES" "$PREF"
+  ;;
+*)
+  echo "Usage: ohmydebn-powershell-repo ensure|remove" >&2
+  exit 1
+  ;;
+esac

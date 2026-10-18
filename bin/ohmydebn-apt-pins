@@ -15,8 +15,7 @@
 #              otherwise keeps fetching it on every update, for nothing.
 #            - a pin whose repo is gone goes too: a vendor's own package
 #              takes the repo it added with it (ChatGPT, Chrome, Claude
-#              Desktop, VS Code, PowerShell's packages-microsoft-prod), but
-#              leaves OhMyDebn's pin.
+#              Desktop, VS Code), but leaves OhMyDebn's pin.
 #            A repo with any of its packages installed is never touched, nor
 #            is anything not on the list below (a distro's own source for
 #            the same vendor has another file name: LCOS's brave.list).
@@ -33,6 +32,9 @@ APT_DIR="$ROOT/etc/apt"
 # repos OhMyDebn's installers write (the same files their
 # ohmydebn-<app>-remove deletes) and left empty for the ones a vendor's own
 # package adds and removes. Both Brave variants share one repo.
+# PowerShell's is kept while Microsoft's own setup package is installed:
+# then the sources file is that package's (on a machine the update hasn't
+# moved off it yet, or where the user installed it for something else).
 PINS=(
   "antigravity:antigravity.pref:antigravity:/etc/apt/keyrings/antigravity-repo-key.gpg"
   "brave-browser-release:brave-browser-release.pref:brave-browser brave-origin:/usr/share/keyrings/brave-browser-archive-keyring.gpg"
@@ -40,10 +42,10 @@ PINS=(
   "cloudflare-client:cloudflare-client.pref:cloudflare-warp:/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg"
   "helium:helium.pref:helium-bin:/usr/share/keyrings/helium.gpg"
   "tailscale:tailscale.pref:tailscale:/usr/share/keyrings/tailscale-archive-keyring.gpg"
+  "microsoft-prod:powershell.pref:powershell packages-microsoft-prod:/usr/share/keyrings/microsoft-prod.asc"
   "chatgpt:chatgpt.pref::"
   "claude-desktop:claude-desktop.pref::"
   "google-chrome:google-chrome.pref::"
-  "microsoft-prod:powershell.pref::"
   "vscode:code.pref::"
 )
 

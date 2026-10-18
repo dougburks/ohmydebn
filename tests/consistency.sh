@@ -1034,9 +1034,9 @@ echo "  checked $CHECKED third-party-repo installers"
 echo
 echo "-- apt pin filename agrees between each installer and its own remove script (regression guard) --"
 # The check above only catches installers that write sources.list.d
-# themselves - it can't see code/google-chrome-stable/powershell, whose
-# repos are self-registered by the vendor's own postinst after a raw
-# `dpkg -i`, not by ohmydebn's script. Those three (and every other
+# themselves - it can't see code/google-chrome-stable, whose repos are
+# self-registered by the vendor's own postinst, nor the helpers that
+# write a repo for an installer. Those (and every other
 # pinned installer) are curated here instead, checking both that the
 # installer actually writes the expected preferences.d filename and that
 # its own -remove script cleans up that exact same filename - a rename in
@@ -1057,7 +1057,9 @@ PIN_FILE_OWNERS=(
   "ohmydebn-chatgpt-install:ohmydebn-chatgpt-remove:chatgpt.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
-  "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
+  # PowerShell's repository is the same: one helper, for the installer,
+  # the remove script and the update's migration.
+  "ohmydebn-powershell-repo:ohmydebn-powershell-repo:powershell.pref"
 )
 APT_PINS_LIST=$("$REPO_ROOT/bin/ohmydebn-apt-pins" --list)
 for ENTRY in "${PIN_FILE_OWNERS[@]}"; do

@@ -104,11 +104,10 @@ mock_cleanup
 
 # --- vendor-owned repos: the vendor's package removes the repo; the pin follows ---
 setup
-for pin in claude-desktop.pref google-chrome.pref chatgpt.pref code.pref powershell.pref; do
+for pin in claude-desktop.pref google-chrome.pref chatgpt.pref code.pref; do
   : >"$APT/preferences.d/$pin"
 done
 : >"$APT/sources.list.d/chatgpt.sources"   # ChatGPT still installed: its repo is there
-: >"$APT/sources.list.d/microsoft-prod.list" # packages-microsoft-prod still installed
 : >"$APT/preferences.d/my-own.pref"         # not OhMyDebn's
 prune
 assert_eq "vendor repo gone: Claude Desktop's pin goes" "no" "$(there /etc/apt/preferences.d/claude-desktop.pref)"
@@ -117,8 +116,21 @@ assert_eq "vendor repo gone: VS Code's pin (repo vscode) goes" "no" "$(there /et
 assert_contains "vendor repo gone: says which pin and why" "$OUT" "claude-desktop.pref: its repository is gone."
 assert_eq "vendor repo there (.sources): its pin stays" "yes" "$(there /etc/apt/preferences.d/chatgpt.pref)"
 assert_eq "vendor repo there: never removed by us" "yes" "$(there /etc/apt/sources.list.d/chatgpt.sources)"
-assert_eq "PowerShell's repo there: its pin stays" "yes" "$(there /etc/apt/preferences.d/powershell.pref)"
 assert_eq "a pin that isn't OhMyDebn's is never touched" "yes" "$(there /etc/apt/preferences.d/my-own.pref)"
+mock_cleanup
+
+# --- PowerShell's repo stays while PowerShell or Microsoft's setup package is installed ---
+setup
+repo microsoft-prod powershell.pref /usr/share/keyrings/microsoft-prod.asc
+MOCK_INSTALLED="powershell" prune
+assert_eq "PowerShell installed: its repo stays" "yes" "$(there /etc/apt/sources.list.d/microsoft-prod.list)"
+MOCK_INSTALLED="packages-microsoft-prod" prune
+assert_eq "setup package installed (its own list): the repo stays" "yes" "$(there /etc/apt/sources.list.d/microsoft-prod.list)"
+assert_eq "setup package installed: the pin stays" "yes" "$(there /etc/apt/preferences.d/powershell.pref)"
+prune
+assert_eq "neither installed: PowerShell's repo goes" "no" "$(there /etc/apt/sources.list.d/microsoft-prod.list)"
+assert_eq "neither installed: its key goes" "no" "$(there /usr/share/keyrings/microsoft-prod.asc)"
+assert_eq "neither installed: its pin goes" "no" "$(there /etc/apt/preferences.d/powershell.pref)"
 mock_cleanup
 
 # --- no preferences.d at all: fine ---

@@ -63,7 +63,7 @@ build_machine() {
   ln -s "$H/.config/ohmydebn/current/theme/config.jsonc" "$H/.config/fastfetch/config.jsonc"
   # The real -installed helpers, so the doctor checks the same lists the
   # installers use (they ask the mocked dpkg).
-  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$OMD/bin/"
+  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$REPO_ROOT/bin/ohmydebn-apt-pins" "$OMD/bin/"
 
   # System: a finished update, a third-party repo with its pin, the
   # firewall on, a VM with SPICE, UEFI with fwupd's signed binary, and the

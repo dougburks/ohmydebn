@@ -1055,6 +1055,7 @@ PIN_FILE_OWNERS=(
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
   "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
 )
+APT_PINS_LIST=$("$REPO_ROOT/bin/ohmydebn-apt-pins" --list)
 for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
   IFS=':' read -r INSTALLER REMOVER PREF <<<"$ENTRY"
   if ! grep -qF "preferences.d/$PREF" "$REPO_ROOT/bin/$INSTALLER"; then
@@ -1065,6 +1066,12 @@ for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
     FAIL=$((FAIL + 1))
   else
     echo "  $INSTALLER/$REMOVER agree on preferences.d/$PREF"
+  fi
+  # ohmydebn-apt-pins knows every pin too: the doctor checks each repo
+  # against its list, and --prune cleans up only the pins on it.
+  if ! grep -qx "[a-z0-9.-]*:$PREF" <<<"$APT_PINS_LIST"; then
+    echo "  FAIL - bin/ohmydebn-apt-pins doesn't list $PREF (written by $INSTALLER)"
+    FAIL=$((FAIL + 1))
   fi
 done
 

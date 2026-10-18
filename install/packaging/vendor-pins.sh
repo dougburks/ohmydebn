@@ -16,3 +16,8 @@ if [ -e "$APT_DIR/sources.list.d/chatgpt.sources" ] && [ ! -f "$APT_DIR/preferen
   printf 'Package: *\nPin: origin "persistent.oaistatic.com"\nPin-Priority: -1\n\nPackage: chatgpt\nPin: origin "persistent.oaistatic.com"\nPin-Priority: 500\n' |
     sudo tee "$APT_DIR/preferences.d/chatgpt.pref" >/dev/null
 fi
+
+# The other way round: a pin left behind after its app (and with it the
+# repo) was removed with Remove > Package or apt directly - see
+# ohmydebn-apt-pins.
+/usr/share/ohmydebn/bin/ohmydebn-apt-pins --prune || true

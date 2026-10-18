@@ -4,8 +4,9 @@
 # got ChatGPT before 4.11.0 have OpenAI's repo (added by ChatGPT's own
 # package) with no pin, so the key was trusted for any package name. The
 # step adds the pin then, matching ohmydebn-chatgpt-install's exactly,
-# and does nothing otherwise. sudo really runs the command it's given
-# (mkdir/tee into a scratch apt dir), and ohmydebn-headline is a logger.
+# and does nothing otherwise. It also drops pins whose repo is gone
+# (ohmydebn-apt-pins --prune). sudo really runs the command it's given
+# (mkdir/tee/rm in a scratch apt dir), and ohmydebn-headline is a logger.
 
 set -uo pipefail
 
@@ -29,6 +30,8 @@ STUB
 mock_log "headline $*"
 STUB
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$STEP" >"$MOCK_DIR/step.sh"
+  # The real pin cleanup, on the scratch apt dir (OHMYDEBN_TEST_APT_DIR).
+  cp "$REPO_ROOT/bin/ohmydebn-apt-pins" "$MOCK_BIN/"
 }
 
 run_step() {
@@ -63,6 +66,17 @@ run_step
 assert_eq "no ChatGPT repo: exits 0" "0" "$STATUS"
 assert_eq "no ChatGPT repo: no pin, nothing run" "no" "$([ -e "$APT/preferences.d/chatgpt.pref" ] && echo yes || echo no)"
 assert_eq "no ChatGPT repo: nothing run" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
+# A pin left behind by an app removed with apt: cleaned up on update
+setup
+mkdir -p "$APT/preferences.d"
+: >"$APT/preferences.d/claude-desktop.pref"
+: >"$APT/preferences.d/claude-code.pref"
+: >"$APT/sources.list.d/claude-code.list"
+run_step
+assert_eq "update: a pin whose repo is gone is removed" "no" "$([ -e "$APT/preferences.d/claude-desktop.pref" ] && echo yes || echo no)"
+assert_eq "update: a pin whose repo is there stays" "yes" "$([ -e "$APT/preferences.d/claude-code.pref" ] && echo yes || echo no)"
 mock_cleanup
 
 test_summary

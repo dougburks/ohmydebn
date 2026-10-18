@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# ohmydebn-apt-pins: the apt pins OhMyDebn adds for third-party repositories,
+# each restricting a vendor's repo to the vendor's own packages, and the repo
+# (sources.list.d/<name>.list or .sources) each one belongs to.
+#
+# Usage: ohmydebn-apt-pins --list | --prune
+#   --list   print "<repo name>:<pin file>" for each one - the doctor checks
+#            that every repo present has its pin.
+#   --prune  delete each pin whose repo is gone. An app removed from the
+#            menu's Remove > Package or with apt directly takes its repo
+#            with it (a vendor's postrm, or the purge of the package that
+#            owns the file) but leaves OhMyDebn's pin, which then does
+#            nothing until it matches that vendor's packages again some
+#            day. A pin whose repo is still there is never touched. Run by
+#            Remove > Package and on every update.
+#
+# OHMYDEBN_TEST_APT_DIR stands in for /etc/apt in the unit tests.
+
+set -euo pipefail
+
+APT_DIR="${OHMYDEBN_TEST_APT_DIR:-/etc/apt}"
+
+# Both Brave variants share one repository and its pin.
+PINS=(
+  "antigravity:antigravity.pref"
+  "brave-browser-release:brave-browser-release.pref"
+  "chatgpt:chatgpt.pref"
+  "claude-code:claude-code.pref"
+  "claude-desktop:claude-desktop.pref"
+  "cloudflare-client:cloudflare-client.pref"
+  "google-chrome:google-chrome.pref"
+  "helium:helium.pref"
+  "microsoft-prod:powershell.pref"
+  "tailscale:tailscale.pref"
+  "vscode:code.pref"
+)
+
+case "${1:-}" in
+--list)
+  printf '%s\n' "${PINS[@]}"
+  ;;
+--prune)
+  for entry in "${PINS[@]}"; do
+    repo=${entry%%:*}
+    pin="$APT_DIR/preferences.d/${entry#*:}"
+    [ -f "$pin" ] || continue
+    if [ -e "$APT_DIR/sources.list.d/$repo.list" ] || [ -e "$APT_DIR/sources.list.d/$repo.sources" ]; then
+      continue
+    fi
+    sudo rm -f "$pin"
+    echo "Removed $pin: its repository is gone."
+  done
+  ;;
+*)
+  echo "Usage: ohmydebn-apt-pins --list | --prune" >&2
+  exit 1
+  ;;
+esac

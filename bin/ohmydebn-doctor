@@ -147,20 +147,8 @@ fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
 # vendor's own packages, so it can't replace anyone else's. VS Code's,
 # Chrome's and ChatGPT's repos are added by the vendors' own packages
-# (.list or .sources).
-PINS=(
-  "antigravity:antigravity.pref"
-  "brave-browser-release:brave-browser-release.pref"
-  "chatgpt:chatgpt.pref"
-  "claude-code:claude-code.pref"
-  "claude-desktop:claude-desktop.pref"
-  "cloudflare-client:cloudflare-client.pref"
-  "google-chrome:google-chrome.pref"
-  "helium:helium.pref"
-  "microsoft-prod:powershell.pref"
-  "tailscale:tailscale.pref"
-  "vscode:code.pref"
-)
+# (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
+mapfile -t PINS < <("$OHMYDEBN/bin/ohmydebn-apt-pins" --list 2>/dev/null)
 PINNED=0
 MISSING=()
 for entry in "${PINS[@]}"; do

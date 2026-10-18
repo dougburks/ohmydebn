@@ -15,8 +15,11 @@
 # would otherwise pass the check and be trusted too.
 #
 # Usage: ohmydebn-pgp-fingerprint <key file>
+#        ohmydebn-pgp-fingerprint --all <keyring file>
 # Exits 1, printing nothing, when the file holds no public key it can read,
-# or more than one.
+# or more than one. --all is for a vendor whose keyring holds several keys
+# (Brave's): it prints every primary key's fingerprint, one per line, for
+# the caller to compare with the whole published set.
 
 import base64
 import hashlib
@@ -49,9 +52,9 @@ def dearmor(data):
     return base64.b64decode("".join(lines), validate=True)
 
 
-def only_public_key(packets):
-    """The body of the one public-key packet (tag 6), or None when there
-    isn't exactly one or anything in the file isn't a whole packet."""
+def public_keys(packets):
+    """The bodies of every public-key packet (tag 6), or None when there
+    are none or anything in the file isn't a whole packet."""
     if not packets:
         return None
     keys = []
@@ -84,27 +87,36 @@ def only_public_key(packets):
         if tag == 6:
             keys.append(body)
         i += length
-    return keys[0] if len(keys) == 1 else None
+    return keys or None
+
+
+def fingerprint(body):
+    if body[0] == 4:
+        return hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest().upper()
+    if body[0] == 6:
+        return hashlib.sha256(b"\x9b" + len(body).to_bytes(4, "big") + body).hexdigest().upper()
+    return None
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: ohmydebn-pgp-fingerprint <key file>", file=sys.stderr)
+    args = sys.argv[1:]
+    want_all = args[:1] == ["--all"]
+    if want_all:
+        args = args[1:]
+    if len(args) != 1:
+        print("Usage: ohmydebn-pgp-fingerprint [--all] <key file>", file=sys.stderr)
         return 1
     try:
-        with open(sys.argv[1], "rb") as f:
-            body = only_public_key(dearmor(f.read()))
+        with open(args[0], "rb") as f:
+            keys = public_keys(dearmor(f.read()))
     except (OSError, ValueError, IndexError):
         return 1
-    if not body:
+    if not keys or (len(keys) != 1 and not want_all):
         return 1
-    if body[0] == 4:
-        digest = hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest()
-    elif body[0] == 6:
-        digest = hashlib.sha256(b"\x9b" + len(body).to_bytes(4, "big") + body).hexdigest()
-    else:
+    fingerprints = [fingerprint(body) for body in keys]
+    if None in fingerprints:
         return 1
-    print(digest.upper())
+    print("\n".join(fingerprints))
     return 0
 
 

@@ -9,8 +9,9 @@
 #
 # /etc/apt, /usr/share/keyrings, ~/.config and /usr/share/ohmydebn are all
 # sed-patched to a scratch root; sudo runs its command for real against
-# those paths except apt, which is only logged; curl writes a stub; dpkg
-# answers from MOCK_INSTALLED.
+# those paths except apt, which is only logged; curl writes a stub, or for
+# the keyring Brave's real one (MOCK_KEY=extra: with a key added); dpkg
+# answers from MOCK_INSTALLED. The keyring check is the real one.
 
 set -uo pipefail
 
@@ -39,15 +40,32 @@ exec "$@"
 EOF2
   mock_bin curl <<'EOF2'
 #!/bin/bash
-# curl -fsSLo <dest> <url>
+# curl -fsSLo <dest> <url>, or curl -fsSL <url> -o <dest>
 mock_log "curl $*"
-echo "stub from $3" >"$2"
+dest="" url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -o | -fsSLo) dest="$2"; shift ;;
+  -*) ;;
+  *) url="$1" ;;
+  esac
+  shift
+done
+case "$url" in
+*keyring.gpg) cp "$MOCK_DIR/${MOCK_KEY:-brave}.gpg" "$dest" ;;
+*) echo "stub from $url" >"$dest" ;;
+esac
 EOF2
+  cp "$REPO_ROOT/tests/lib/brave-signing-keys.gpg" "$MOCK_DIR/brave.gpg"
+  # Brave's keys with Anthropic's appended: one key too many.
+  sed -n '/^$/,/^=/p' "$REPO_ROOT/tests/lib/anthropic-signing-key.asc" | grep -v -e '^$' -e '^=' | base64 -d |
+    cat "$MOCK_DIR/brave.gpg" - >"$MOCK_DIR/extra.gpg"
   for script in ohmydebn-brave-repo ohmydebn-brave-origin-install ohmydebn-brave-origin-remove; do
     sed "s#/usr/share/ohmydebn#$ROOT/usr/share/ohmydebn#g; s#^APT_ETC=/etc/apt#APT_ETC=$ROOT/etc/apt#; s#^KEYRING=/usr/share/keyrings#KEYRING=$ROOT/usr/share/keyrings#" \
       "$REPO_ROOT/bin/$script" >"$ROOT/usr/share/ohmydebn/bin-$script"
   done
   mkdir -p "$ROOT/usr/share/ohmydebn/bin"
+  cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$ROOT/usr/share/ohmydebn/bin/"
   for script in ohmydebn-brave-repo ohmydebn-brave-origin-install ohmydebn-brave-origin-remove; do
     mv "$ROOT/usr/share/ohmydebn/bin-$script" "$ROOT/usr/share/ohmydebn/bin/$script"; chmod +x "$ROOT/usr/share/ohmydebn/bin/$script"
   done
@@ -65,9 +83,19 @@ setup
 OUT=$(MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt 2>&1)
 assert_eq "fresh: our sources file written" "yes" "$([ -f "$OURS" ] && echo yes || echo no)"
 assert_eq "fresh: pin written, restricting the repo to Brave's packages" "yes" "$(grep -q 'Package: brave-browser brave-origin brave-keyring' "$ROOT/etc/apt/preferences.d/brave-browser-release.pref" && echo yes || echo no)"
-assert_eq "fresh: keyring fetched" "yes" "$([ -f "$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg" ] && echo yes || echo no)"
+assert_eq "fresh: Brave's keyring installed, as published" "yes" "$(cmp -s "$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg" "$REPO_ROOT/tests/lib/brave-signing-keys.gpg" && echo yes || echo no)"
 assert_contains "fresh: package installed" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install brave-origin"
 # the package "arrives" during install: dpkg mock can't flip mid-run, so the seed is checked in the installed scenarios below
+mock_cleanup
+
+# --- a keyring holding a key Brave doesn't publish: refused, nothing set up ---
+setup
+OUT=$(MOCK_KEY=extra MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt 2>&1); STATUS=$?
+assert_eq "extra key: fails" "1" "$STATUS"
+assert_contains "extra key: says why" "$OUT" "aren't the ones Brave publishes, so they weren't installed"
+assert_eq "extra key: no keyring installed" "no" "$([ -e "$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg" ] && echo yes || echo no)"
+assert_eq "extra key: no sources file" "no" "$([ -e "$OURS" ] && echo yes || echo no)"
+assert_not_contains "extra key: nothing installed" "$(cat "$MOCK_CALLS")" "apt -y install"
 mock_cleanup
 
 # --- LCOS: package present from Brave's repo via the distro's own brave.list, user never ran it ---

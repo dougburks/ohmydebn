@@ -7,6 +7,7 @@
 # terminal's stdin (through xargs it got /dev/null). fzf, dpkg and sudo
 # are stand-ins; sudo logs its arguments and the answer it reads. Both
 # now say so when apt fails, instead of ending the same way either way.
+# Remove also hands the default browser on, in case it just went.
 
 set -uo pipefail
 
@@ -46,6 +47,10 @@ STUB
 #!/bin/bash
 mock_log "show-done"
 STUB
+  mock_bin ohmydebn-browser-set-default <<'STUB'
+#!/bin/bash
+mock_log "browser-set-default $*"
+STUB
   for script in pkg-remove pkg-install; do
     sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-$script" >"$MOCK_DIR/$script"
   done
@@ -57,6 +62,8 @@ CALLS=$(cat "$MOCK_CALLS")
 assert_contains "the picked packages are purged by apt" "$CALLS" "sudo /usr/bin/apt purge cowsay fortune-mod"
 assert_not_contains "without -y, so apt asks first" "$CALLS" " -y"
 assert_contains "apt can read the answer from the terminal" "$CALLS" "answered: n"
+assert_contains "a removed default browser is handed on" "$CALLS" "browser-set-default --repair"
+assert_eq "the hand-off comes after apt, before the window waits" "sudo browser-set-default show-done" "$(cut -d' ' -f1 "$MOCK_CALLS" | tr '\n' ' ' | sed 's/ $//')"
 mock_cleanup
 
 setup ""

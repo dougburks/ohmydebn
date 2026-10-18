@@ -120,3 +120,9 @@ fi
 # The colored logo itself, on every run: it's only rewritten when it
 # changes, so this just keeps it matching the current logo and theme.
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch || true
+
+# The Starship config's one-time changes, on every run: ohmydebn-theme-set
+# only runs on a new install or a theme change, so an update never reached
+# them (4.12.0's OhMyDebn logo, which replaced the slow os module, was
+# missed that way). Its own markers keep each change to once.
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-starship || true

@@ -34,7 +34,7 @@ MOCK
 #!/bin/bash
 mock_log "theme-set-fastfetch"
 MOCK
-  for stub in ohmydebn-theme-set-colors ohmydebn-theme-set-picker ohmydebn-theme-set-colors-delete ohmydebn-theme-set-neovim; do
+  for stub in ohmydebn-theme-set-colors ohmydebn-theme-set-picker ohmydebn-theme-set-colors-delete ohmydebn-theme-set-neovim ohmydebn-theme-set-starship; do
     printf '#!/bin/bash\n' | mock_bin "$stub"
   done
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SCRIPT" >"$MOCK_DIR/theme-patched.sh"

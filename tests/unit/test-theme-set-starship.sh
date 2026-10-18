@@ -3,8 +3,8 @@
 # Unit tests for bin/ohmydebn-theme-set-starship: the Starship config is
 # written once, and a config from before 4.12.0 gets the OhMyDebn logo in
 # place of Starship's os module (which ran lsb_release before every prompt).
-# Only a config that still has OhMyDebn's $os line is changed. Runs in a
-# scratch HOME.
+# Only a config that still has OhMyDebn's $os line is changed, and every
+# update runs it (install/config/theme.sh). Runs in a scratch HOME.
 
 set -uo pipefail
 
@@ -98,6 +98,25 @@ touch "$STATE/starship-20251109"
 run
 assert_eq "config deleted: succeeds" "0" "$STATUS"
 assert_eq "config deleted: not recreated" "no" "$([ -e "$CONFIG" ] && echo yes || echo no)"
+mock_cleanup
+
+# --- an update reaches the migration: install/config/theme.sh runs this on
+# every run (ohmydebn-theme-set, which runs it too, only runs on a new
+# install or a theme change - the logo was first missed that way) ---
+setup
+mkdir -p "$STATE"
+touch "$STATE/starship-20251109" "$H/.local/state/ohmydebn"
+for m in omarchy-theme-symlink-20260325 omarchy-theme-url-handler-20260814 fastfetch-config-backfill-20260817 \
+  nvim-theme-backfill-20260926 picker-colors-backfill-20260825 fastfetch-logo-backfill-20261015; do
+  touch "$STATE/$m"
+done
+old_config >"$CONFIG"
+cp "$MOCK_DIR/starship-patched.sh" "$MOCK_BIN/ohmydebn-theme-set-starship"
+chmod +x "$MOCK_BIN/ohmydebn-theme-set-starship"
+printf '#!/bin/bash\n' | mock_bin ohmydebn-theme-set-fastfetch
+sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/install/config/theme.sh" >"$MOCK_DIR/theme-patched.sh"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/theme-patched.sh" </dev/null >/dev/null 2>&1
+assert_eq "update (theme.sh): the logo replaces \$os" "1" "$(grep -cxF "$LOGO" "$CONFIG")"
 mock_cleanup
 
 test_summary

@@ -7,7 +7,10 @@ if ! dpkg -s "localsend" >/dev/null 2>&1; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "LocalSend" /usr/share/ohmydebn/bin/ohmydebn-localsend-install
 fi
 
-# If installed, run it
+# If installed, run it. The package puts the app in /opt/localsend_app and
+# links it as /usr/bin/localsend_app, which its own menu entry runs too.
+# This used to run /usr/share/localsend_app/localsend_app, which the
+# package no longer has, so the hotkey quietly did nothing.
 if dpkg -s "localsend" >/dev/null 2>&1; then
-  /usr/share/localsend_app/localsend_app
+  /usr/bin/localsend_app
 fi

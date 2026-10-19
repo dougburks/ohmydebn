@@ -285,13 +285,6 @@ echo "  checked ${#ALL_BINDINGS[@]} key-combo assignments"
 
 echo
 echo "-- flattened menu-picker search list stays in sync with the real menu tree --"
-# No explicit MT_SKIP_LABELS here on purpose - this exercises
-# ohmydebn-menu-tree's own MT_DEFAULT_SKIP_LABELS ("Other Apps") the same
-# way every real caller does (ohmydebn-menu-picker's load_leaves(), the
-# ohmydebn-package-build repo's shipped-cache pregeneration), rather than
-# hand-repeating the literal a fourth time - that repetition is exactly
-# what once let one copy silently drift to a stale "Apps" for a long time
-# without anything noticing.
 mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>/dev/null)
 if [[ ${#FLAT[@]} -eq 0 ]]; then
   echo "  FAIL - menu_tree_flatten produced zero leaves"
@@ -337,8 +330,7 @@ echo "  checked ${#PATHS[@]} func -> breadcrumb paths"
 # ohmydebn-menu) silently "borrowed" whatever function's menu() call
 # happened to follow it in the file - confirmed live: once Other Apps
 # became reachable through _mt_walk() (nested under Apps) rather than
-# skipped outright via MT_SKIP_LABELS (which only the top-level walk in
-# _mt_flatten_uncached ever checks), it inherited show_containers_menu's
+# being a top-level Go item, it inherited show_containers_menu's
 # own Docker/Podman/Distrobox items instead of correctly reporting nothing
 # to walk. A synthetic fixture, not the real menu file, so this keeps
 # catching a regression in the tool itself regardless of which real
@@ -392,31 +384,31 @@ else
 fi
 
 echo
-echo "-- ohmydebn-menu-picker's ALWAYS_SUBMENU_LABELS matches ohmydebn-menu-tree's MT_DEFAULT_SKIP_LABELS --"
-# Same set of names by construction: a label excluded from the static
-# menu-tree walk (MT_DEFAULT_SKIP_LABELS) has no leaves for
-# find_submenu_labels() to match against, so it needs the exact same
-# label hand-added back via ALWAYS_SUBMENU_LABELS to still earn its ">"
-# marker - see that constant's own comment in ohmydebn-menu-picker. Two
-# independent hand-copies of the same set is exactly the kind of
-# duplication that already let MT_SKIP_LABELS itself drift stale once;
-# this catches the two ever disagreeing instead of relying on nobody
-# forgetting to update both.
-TREE_DEFAULT_SKIP=$(printf '%s\n' "${MT_DEFAULT_SKIP_LABELS[@]}" | sort)
-PICKER_ALWAYS_SUBMENU=$(python3 -c "
+echo "-- ohmydebn-menu-picker's ALWAYS_SUBMENU_LABELS are real menu items --"
+# A label there earns a submenu ">" marker without any leaves of its own
+# (see that constant's comment in ohmydebn-menu-picker). Renaming the menu
+# item without it would silently drop the marker, so each one must still
+# be an item label in ohmydebn-menu.
+mapfile -t PICKER_ALWAYS_SUBMENU < <(python3 -c "
 import re
 with open('$REPO_ROOT/bin/ohmydebn-menu-picker', encoding='utf-8') as f:
     src = f.read()
 m = re.search(r'ALWAYS_SUBMENU_LABELS = \{([^}]*)\}', src)
-labels = re.findall(r'\"([^\"]*)\"', m.group(1)) if m else []
-print('\n'.join(sorted(labels)))
+print('\n'.join(re.findall(r'\"([^\"]*)\"', m.group(1)) if m else []))
 ")
-if [[ "$TREE_DEFAULT_SKIP" != "$PICKER_ALWAYS_SUBMENU" ]]; then
-  echo "  FAIL - MT_DEFAULT_SKIP_LABELS ($TREE_DEFAULT_SKIP) != ALWAYS_SUBMENU_LABELS ($PICKER_ALWAYS_SUBMENU)"
+if [[ ${#PICKER_ALWAYS_SUBMENU[@]} -eq 0 ]]; then
+  echo "  FAIL - couldn't read ALWAYS_SUBMENU_LABELS from ohmydebn-menu-picker"
   FAIL=$((FAIL + 1))
-else
-  echo "  both agree on: $(tr '\n' ' ' <<<"$TREE_DEFAULT_SKIP")"
 fi
+for LABEL in "${PICKER_ALWAYS_SUBMENU[@]}"; do
+  if grep -qP '\\n\S*\s+'"$LABEL"'(\\n|")' "$MENU_FILE"; then
+    echo "  $LABEL is a menu item"
+  else
+    echo "  FAIL - ALWAYS_SUBMENU_LABELS names '$LABEL', which isn't a menu item in ohmydebn-menu"
+    FAIL=$((FAIL + 1))
+  fi
+done
+
 
 # Regression guard for a real bug: go_to_menu()'s case arms are matched in
 # file order against a lowercased category label, and bash's `case` picks

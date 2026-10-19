@@ -9,6 +9,14 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
   echo "Continuing will install it from:"
   echo "https://antigravity.google"
   echo
+  # Google's apt repository only has the legacy 1.x releases and is no
+  # longer updated (its releases page, checked 2026-10-18: 1.23.2, from
+  # April 2026). The 2.x App and IDE ship only as tarballs. Say so rather
+  # than let it look current.
+  echo "This is Antigravity 1.x, the last version Google released for apt."
+  echo "Google no longer updates it, and it may stop working. The newer"
+  echo "Antigravity 2 is a separate download from antigravity.google."
+  echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
   sudo mkdir -p /etc/apt/keyrings

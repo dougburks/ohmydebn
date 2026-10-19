@@ -5,7 +5,7 @@
 # (menu_tree_categories) and, once the user starts typing, every leaf action
 # across all ~25 nested show_*_menu functions flattened into
 # "breadcrumb<TAB>target" rows (menu_tree_flatten). Sourced only (by
-# ohmydebn-menu-picker, by ohmydebn-menu itself for menu_tree_paths'
+# ohmydebn-menu-picker inside its `bash -c`, by ohmydebn-menu itself for menu_tree_paths'
 # breadcrumbs, and by tests/consistency.sh) - no set -e/-u/-o pipefail here, since those would
 # leak into whichever caller sources this with its own, different flag
 # settings.
@@ -60,9 +60,10 @@ _mt_menu_block_start() {
 }
 
 # Splits one "icon  Label" item into "icon<TAB>label" - the icon is
-# optional (`\S*`, not `\S+`): a few items (Cybersecurity, Editor,
-# Virtualization, ...) have never carried one, just the same leading
-# whitespace every icon-bearing item also has before its label. Single
+# optional (`\S*`, not `\S+`): every item has one now, but some
+# (Cybersecurity, Editor, Virtualization, ...) once had none, just the same
+# leading whitespace every icon-bearing item also has before its label,
+# and an item added without one must still work. Single
 # source of truth for this split: it used to be hand-duplicated three
 # times (here, inline in _mt_flatten_uncached, and in
 # menu_tree_categories), and with `\S+` instead of `\S*` that duplication
@@ -160,26 +161,10 @@ _mt_walk() {
 # starts from the real Go item labels rather than enumerating those arms,
 # so the Go line stays the one list of what the top level shows.
 #
-# Go-menu categories with runtime-discovered, not statically enumerable,
-# content - see show_other_apps_menu's own comment in ohmydebn-menu for
-# why "Other Apps" is the one entry here. Used by _mt_flatten_uncached
-# below whenever a caller hasn't set its own MT_SKIP_LABELS (see there) -
-# every real caller (ohmydebn-menu-picker's load_leaves(),
-# tests/consistency.sh, and the separate ohmydebn-package-build repo's
-# shipped-cache pregeneration) used to hand-set this same literal
-# instead, and one of those three copies silently drifted (a stale
-# "Apps" instead of "Other Apps") for a long time without anything
-# noticing, since it happened to still be an inert no-op right up until a
-# real top-level category was ever named exactly "Apps". One canonical
-# value here removes the copies that could each independently go stale.
-MT_DEFAULT_SKIP_LABELS=("Other Apps")
-
-# Honors a global MT_SKIP_LABELS array (exact-match against Go item
-# labels) for entries that shouldn't appear in the flattened list - falls
-# back to MT_DEFAULT_SKIP_LABELS above when the caller hasn't set one at
-# all (checked via `declare -p`, not `${MT_SKIP_LABELS[@]:-}`, so a
-# caller that deliberately sets MT_SKIP_LABELS=() to skip nothing is
-# still honored rather than silently falling back to the default too).
+# Other Apps (under Apps) has no menu() call to parse - its content is a
+# live .desktop scan, see show_other_apps_menu's own comment in
+# ohmydebn-menu - so _mt_walk warns "no block for show_other_apps_menu"
+# and leaves it out on its own. Nothing here needs to name it.
 _mt_flatten_uncached() {
   local file="$1" goline raw
   goline=$(grep -n '^\s*local go_items="' "$file" | head -1 | cut -d: -f1)
@@ -192,21 +177,8 @@ _mt_flatten_uncached() {
   gend=$(_mt_block_end "$file" "$gstart")
   mapfile -t arms < <(_mt_arms "$file" "$gstart" "$gend")
 
-  local -a skip_labels
-  if declare -p MT_SKIP_LABELS &>/dev/null; then
-    skip_labels=("${MT_SKIP_LABELS[@]}")
-  else
-    skip_labels=("${MT_DEFAULT_SKIP_LABELS[@]}")
-  fi
-
   local label
   for label in "${labels[@]}"; do
-    local skip=0 s
-    for s in "${skip_labels[@]:-}"; do
-      [[ "$label" == "$s" ]] && { skip=1; break; }
-    done
-    [[ $skip -eq 1 ]] && continue
-
     local lower matched="" a kw target
     lower=$(tr '[:upper:]' '[:lower:]' <<<"$label")
     for a in "${arms[@]}"; do

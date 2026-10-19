@@ -4,11 +4,11 @@ set -euo pipefail
 
 if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
   echo
-  echo "simplescreenrecorder is not currently installed."
+  echo "SimpleScreenRecorder is not currently installed."
 else
   if [ "${1:-}" != "--skip-prompt" ]; then
     echo
-    echo "Continuing will remove simplescreenrecorder."
+    echo "Continuing will remove SimpleScreenRecorder."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r

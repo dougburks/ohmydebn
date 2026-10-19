@@ -1,0 +1,124 @@
+#!/usr/bin/python3
+#
+# ohmydebn-pgp-fingerprint: prints the fingerprint of the primary key in an
+# OpenPGP public key file (ASCII-armored or binary), as 40 uppercase hex
+# digits - the form vendors publish. An installer compares it with the
+# vendor's published fingerprint before handing the key to apt, so a key
+# swapped in transit (or on the vendor's download server) is refused
+# rather than trusted. Without gpg: fresh Debian and Ubuntu installs don't
+# always have it, and this is only a hash of the key packet (RFC 4880
+# section 12.2 for v4 keys, RFC 9580 for v6).
+#
+# apt trusts every key in the file, not just the one fingerprinted, so a
+# file holding anything besides exactly one key is refused: a second key
+# appended to the vendor's (as a second packet or a second armored block)
+# would otherwise pass the check and be trusted too.
+#
+# Usage: ohmydebn-pgp-fingerprint <key file>
+#        ohmydebn-pgp-fingerprint --all <keyring file>
+# Exits 1, printing nothing, when the file holds no public key it can read,
+# or more than one. --all is for a vendor whose keyring holds several keys
+# (Brave's): it prints every primary key's fingerprint, one per line, for
+# the caller to compare with the whole published set.
+
+import base64
+import hashlib
+import sys
+
+
+BEGIN = "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+END = "-----END PGP PUBLIC KEY BLOCK-----"
+
+
+def dearmor(data):
+    """The binary packets of an ASCII-armored key, or the data unchanged
+    when it isn't armored. None when the file holds more than the one
+    armored block."""
+    text = data.decode("ascii", "replace")
+    if BEGIN not in text:
+        return data
+    before, body = text.split(BEGIN, 1)
+    if END not in body:
+        return None
+    body, after = body.split(END, 1)
+    if before.strip() or after.strip() or BEGIN in body:
+        return None
+    lines = body.strip().splitlines()
+    # Armor headers ("Comment: ...") end at the first blank line.
+    if "" in [line.strip() for line in lines]:
+        lines = lines[[line.strip() for line in lines].index("") + 1:]
+    # The last line starting with "=" is the CRC24 checksum, not data.
+    lines = [line.strip() for line in lines if line.strip() and not line.startswith("=")]
+    return base64.b64decode("".join(lines), validate=True)
+
+
+def public_keys(packets):
+    """The bodies of every public-key packet (tag 6), or None when there
+    are none or anything in the file isn't a whole packet."""
+    if not packets:
+        return None
+    keys = []
+    i = 0
+    while i < len(packets):
+        header = packets[i]
+        if not header & 0x80:
+            return None
+        if header & 0x40:  # new format
+            tag = header & 0x3F
+            first = packets[i + 1]
+            if first < 192:
+                length, i = first, i + 2
+            elif first < 224:
+                length, i = ((first - 192) << 8) + packets[i + 2] + 192, i + 3
+            elif first == 255:
+                length, i = int.from_bytes(packets[i + 2:i + 6], "big"), i + 6
+            else:
+                return None  # partial lengths never appear in key packets
+        else:  # old format
+            tag = (header >> 2) & 0x0F
+            size = (1, 2, 4)[header & 0x03] if header & 0x03 != 3 else None
+            if size is None:
+                return None
+            length = int.from_bytes(packets[i + 1:i + 1 + size], "big")
+            i += 1 + size
+        body = packets[i:i + length]
+        if len(body) != length:
+            return None
+        if tag == 6:
+            keys.append(body)
+        i += length
+    return keys or None
+
+
+def fingerprint(body):
+    if body[0] == 4:
+        return hashlib.sha1(b"\x99" + len(body).to_bytes(2, "big") + body).hexdigest().upper()
+    if body[0] == 6:
+        return hashlib.sha256(b"\x9b" + len(body).to_bytes(4, "big") + body).hexdigest().upper()
+    return None
+
+
+def main():
+    args = sys.argv[1:]
+    want_all = args[:1] == ["--all"]
+    if want_all:
+        args = args[1:]
+    if len(args) != 1:
+        print("Usage: ohmydebn-pgp-fingerprint [--all] <key file>", file=sys.stderr)
+        return 1
+    try:
+        with open(args[0], "rb") as f:
+            keys = public_keys(dearmor(f.read()))
+    except (OSError, ValueError, IndexError):
+        return 1
+    if not keys or (len(keys) != 1 and not want_all):
+        return 1
+    fingerprints = [fingerprint(body) for body in keys]
+    if None in fingerprints:
+        return 1
+    print("\n".join(fingerprints))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,89 @@
+#!/bin/bash
+#
+# ohmydebn-apt-pins: the third-party apt repositories OhMyDebn's installers
+# set up, each with its pin restricting the repo to the vendor's own
+# packages, and what's left of them once their app is gone.
+#
+# Usage: ohmydebn-apt-pins --list | --prune
+#   --list   print "<repo name>:<pin file>" for each one - the doctor checks
+#            that every repo present has its pin.
+#   --prune  clean up after apps removed with the menu's Remove > Package or
+#            with apt directly, rather than with their own
+#            ohmydebn-<app>-remove:
+#            - a repo OhMyDebn's installer wrote (its sources file, key and
+#              pin) goes once none of its packages is installed. apt
+#              otherwise keeps fetching it on every update, for nothing.
+#            - a pin whose repo is gone goes too: a vendor's own package
+#              takes the repo it added with it (ChatGPT, Chrome, Claude
+#              Desktop, VS Code), but leaves OhMyDebn's pin.
+#            A repo with any of its packages installed is never touched, nor
+#            is anything not on the list below (a distro's own source for
+#            the same vendor has another file name: LCOS's brave.list).
+#            Run by Remove > Package and on every update.
+#
+# OHMYDEBN_TEST_ROOT prefixes every path in the unit tests.
+
+set -euo pipefail
+
+ROOT="${OHMYDEBN_TEST_ROOT:-}"
+APT_DIR="$ROOT/etc/apt"
+
+# <repo>:<pin file>:<packages>:<key>. Packages and key are given for the
+# repos OhMyDebn's installers write (the same files their
+# ohmydebn-<app>-remove deletes) and left empty for the ones a vendor's own
+# package adds and removes. Both Brave variants share one repo.
+# PowerShell's is kept while Microsoft's own setup package is installed:
+# then the sources file is that package's (on a machine the update hasn't
+# moved off it yet, or where the user installed it for something else).
+PINS=(
+  "antigravity:antigravity.pref:antigravity:/etc/apt/keyrings/antigravity-repo-key.gpg"
+  "brave-browser-release:brave-browser-release.pref:brave-browser brave-origin:/usr/share/keyrings/brave-browser-archive-keyring.gpg"
+  "claude-code:claude-code.pref:claude-code:/usr/share/keyrings/claude-code.asc"
+  "cloudflare-client:cloudflare-client.pref:cloudflare-warp:/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg"
+  "helium:helium.pref:helium-bin:/usr/share/keyrings/helium.gpg"
+  "tailscale:tailscale.pref:tailscale:/usr/share/keyrings/tailscale-archive-keyring.gpg"
+  "microsoft-prod:powershell.pref:powershell packages-microsoft-prod:/usr/share/keyrings/microsoft-prod.asc"
+  "chatgpt:chatgpt.pref::"
+  "claude-desktop:claude-desktop.pref::"
+  "google-chrome:google-chrome.pref::"
+  "vscode:code.pref::"
+)
+
+# Installed, not just known to dpkg: a package removed without purging
+# still answers dpkg -s.
+installed() {
+  [ "$(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null)" = installed ]
+}
+
+case "${1:-}" in
+--list)
+  for entry in "${PINS[@]}"; do
+    IFS=: read -r repo pin _ <<<"$entry"
+    echo "$repo:$pin"
+  done
+  ;;
+--prune)
+  for entry in "${PINS[@]}"; do
+    IFS=: read -r repo pin packages key <<<"$entry"
+    sources=("$APT_DIR/sources.list.d/$repo.list" "$APT_DIR/sources.list.d/$repo.sources")
+    pin="$APT_DIR/preferences.d/$pin"
+    if [ -e "${sources[0]}" ] || [ -e "${sources[1]}" ]; then
+      [ -n "$packages" ] || continue
+      in_use=false
+      for package in $packages; do
+        installed "$package" && in_use=true
+      done
+      [ "$in_use" = false ] || continue
+      sudo rm -f "${sources[@]}" "$ROOT$key" "$pin"
+      echo "Removed the $repo apt repository: nothing from it is installed any more."
+    elif [ -f "$pin" ]; then
+      sudo rm -f "$pin"
+      echo "Removed $pin: its repository is gone."
+    fi
+  done
+  ;;
+*)
+  echo "Usage: ohmydebn-apt-pins --list | --prune" >&2
+  exit 1
+  ;;
+esac

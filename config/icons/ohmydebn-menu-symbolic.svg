@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- OhMyDebn Menu, for dark themes: a solid grinning face with the eyes
+       and mouth cut out. Symbolic, so the desktop recolors it with the
+       theme's text color. Cut-outs use evenodd in one path: GTK recolors
+       by forcing every shape's fill, so masks wouldn't work. -->
+  <path fill="#bebebe" fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0a7 7 0 1 0 -14 0ZM4.4 5.7a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0ZM9.2 5.7a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0 -2.4 0ZM4.2 8.4H11.8A3.8 3.8 0 0 1 4.2 8.4Z"/>
+</svg>

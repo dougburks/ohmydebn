@@ -22,6 +22,14 @@ set -euo pipefail
 BRAVE_REPO_HOST="brave-browser-apt-release.s3.brave.com"
 APT_ETC=/etc/apt
 KEYRING=/usr/share/keyrings/brave-browser-archive-keyring.gpg
+# The release channel's signing keys as Brave publishes them on
+# https://brave.com/signing-keys/ (brave-core.asc), checked 2026-10-18. The
+# keyring holds all of them, and apt trusts every key in it, so it must
+# hold exactly these. When Brave adds a key, installs refuse the keyring
+# until it's added here.
+BRAVE_FINGERPRINTS="47D32A74E9A9E013A4B4926C68D513D36A73CD96
+B2A3DCA350E67256740DF904DE4EC67BE4B0DCA0
+DBF1A116C220B8C7164F98230686B78420038257"
 SOURCES="$APT_ETC/sources.list.d/brave-browser-release.sources"
 PREF="$APT_ETC/preferences.d/brave-browser-release.pref"
 
@@ -46,8 +54,15 @@ ensure)
     echo "Brave's package repository is already configured on this system - leaving it as it is."
     exit 0
   fi
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "https://$BRAVE_REPO_HOST/brave-browser-archive-keyring.gpg" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint --all "$KEY_FILE" | sort || true)" != "$BRAVE_FINGERPRINTS" ]; then
+    echo "The Brave signing keys from $BRAVE_REPO_HOST aren't the ones Brave publishes, so they weren't installed."
+    exit 1
+  fi
   sudo mkdir -p "$(dirname "$KEYRING")" "$(dirname "$SOURCES")" "$(dirname "$PREF")"
-  sudo curl -fsSLo "$KEYRING" "https://$BRAVE_REPO_HOST/brave-browser-archive-keyring.gpg"
+  sudo install -m 0644 "$KEY_FILE" "$KEYRING"
   sudo curl -fsSLo "$SOURCES" "https://$BRAVE_REPO_HOST/brave-browser.sources"
   printf 'Package: *\nPin: origin "%s"\nPin-Priority: -1\n\nPackage: brave-browser brave-origin brave-keyring\nPin: origin "%s"\nPin-Priority: 500\n' "$BRAVE_REPO_HOST" "$BRAVE_REPO_HOST" |
     sudo tee "$PREF" >/dev/null

@@ -32,6 +32,11 @@ if [ "$NEW_INSTALL" = true ]; then
   xdg-mime default org.xfce.ristretto.desktop image/bmp image/gif image/jpeg image/png image/tiff image/webp
 fi
 
+# A default browser removed with apt directly, rather than from the menu
+# (whose remove scripts do this themselves): another installed one takes
+# over. Changes nothing while the default is still installed.
+/usr/share/ohmydebn/bin/ohmydebn-browser-set-default --repair || true
+
 # Existing installs already carry this marker, so their PDF handler stays
 # whatever it is (chromium) - only a new install gets Brave Origin here. A
 # new install just got its PDF viewer along with the browser above; an

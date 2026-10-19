@@ -199,11 +199,12 @@ assert_contains "logged run: install.sh runs" "$(cat "$MOCK_CALLS")" "install.sh
 assert_contains "logged run: was actually logged" "$OUTPUT" "Logging this update to"
 mock_cleanup
 
-# --- lock dir fallback: an unusable XDG_RUNTIME_DIR falls back to /tmp without failing ---
+# --- lock dir fallback: an unusable XDG_RUNTIME_DIR falls back to
+# ~/.cache without failing (not /tmp, where another user could take the name) ---
 setup
 run_update XDG_RUNTIME_DIR=/definitely/not/a/dir
 assert_eq "runtime dir fallback: still runs" "0" "$STATUS"
-assert_eq "runtime dir fallback: lock landed in /tmp" "yes" "$([ -e "/tmp/ohmydebn-update-$(id -u).lock" ] && echo yes || echo no)"
+assert_eq "runtime dir fallback: lock landed in ~/.cache" "yes" "$([ -e "$FAKE_HOME/.cache/ohmydebn-update-$(id -u).lock" ] && echo yes || echo no)"
 mock_cleanup
 
 test_summary

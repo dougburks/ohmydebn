@@ -4,7 +4,9 @@ set -euo pipefail
 
 if ! dpkg -s "simplescreenrecorder" >/dev/null 2>&1; then
   echo
-  echo "simplescreenrecorder is not currently installed."
+  echo "SimpleScreenRecorder is not currently installed."
+  echo
+  echo "Continuing will install it from your existing distro repo."
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r

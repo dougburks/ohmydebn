@@ -66,6 +66,10 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango
 
+# OhMyDebn's full-color icon for this window in the window list and
+# switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
+Gtk.Window.set_default_icon_name("ohmydebn")
+
 # VTE may legitimately be missing on the first GUI-triggered update of an
 # older install (see header) - everything else must still import so main()
 # can choose the fallback, and so the unit tests can import this module's
@@ -539,9 +543,12 @@ def fetch_latest_release(url=RELEASES_API_URL, timeout=PREFLIGHT_TIMEOUT_S):
 
 
 def instance_lock_path():
+    # Without a runtime dir, ~/.cache rather than /tmp, where another user
+    # could create this predictable name first (as in ohmydebn-update).
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
     if not runtime_dir or not os.path.isdir(runtime_dir):
-        runtime_dir = "/tmp"
+        runtime_dir = os.path.join(os.path.expanduser("~"), ".cache")
+        os.makedirs(runtime_dir, exist_ok=True)
     return os.path.join(runtime_dir, f"ohmydebn-update-gui-{os.getuid()}.lock")
 
 
@@ -550,9 +557,9 @@ def acquire_instance_lock(path):
     fd open for as long as the instance lives, closing it releases the
     lock - or (None, holder_pid) when another live process holds it
     (holder_pid may be None if its pid couldn't be read)."""
-    # O_NOFOLLOW: in the /tmp fallback (no XDG_RUNTIME_DIR) another user
-    # could plant this name as a link to a file of ours, which the
-    # truncate below would then empty.
+    # O_NOFOLLOW: a link planted at this name (in a shared directory, as
+    # the old /tmp fallback was) mustn't lead the truncate below to empty
+    # a file it points to.
     fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

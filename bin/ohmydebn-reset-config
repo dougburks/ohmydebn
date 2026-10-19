@@ -24,8 +24,8 @@ CONFIGS=(~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.conf
 # Neovim's base config are recreated whenever they're missing.
 # tests/unit/test-reset-config.sh checks that every marker those steps and
 # the theme hooks use is listed here.
-CONFIG_MARKERS=(bat-20251110 btop-config-20250916 starship-20251109
-  zshrc-20260116 grc color-man pi-alias codex-alias grok-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias
+CONFIG_MARKERS=(bat-20251110 btop-config-20250916 starship-20251109 starship-logo-20261018
+  zshrc-20260116 grc color-man pi-alias codex-alias grok-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias prompt-speed-20261018
   nvim-transparency-20260308 nvim-relativenumber-20260929 nvim-plugins-20260926)
 
 echo "WARNING!"

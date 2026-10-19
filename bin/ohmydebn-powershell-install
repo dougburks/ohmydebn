@@ -11,26 +11,9 @@ if ! dpkg -s "powershell" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
-  sudo mkdir -p /usr/share/keyrings
-  # Microsoft's Debian 13 repo on every supported distro, Ubuntu-based ones
-  # included, on purpose: it's the only one of its repos with PowerShell
-  # for both amd64 and arm64 (checked 2026-10-12 - the Ubuntu 26.04 repo
-  # has no PowerShell at all and the 24.04 one has no arm64 build), and it
-  # carries the newer 7.6 line. Its package only depends on libraries
-  # Ubuntu provides under the same names (libgcc1, libssl3 via the t64
-  # packages, and any libicu from 60 to 106).
-  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "Microsoft's package repository setup" https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
-
-  # packages-microsoft-prod.deb self-registers packages.microsoft.com as
-  # an apt source (see /etc/apt/sources.list.d/microsoft-prod.list) - same
-  # reasoning/pattern as ohmydebn-code-install's own pin (that script
-  # shares this exact origin, since VS Code's repo also lives under
-  # packages.microsoft.com - see that file's own comment on why a shared
-  # origin across separate pin files is still safe). Confirmed via
-  # `apt-cache depends powershell` - no same-repo dependency, just
-  # ordinary system libraries.
-  printf 'Package: *\nPin: origin "packages.microsoft.com"\nPin-Priority: -1\n\nPackage: powershell\nPin: origin "packages.microsoft.com"\nPin-Priority: 500\n' |
-    sudo tee /etc/apt/preferences.d/powershell.pref >/dev/null
+  # Microsoft's key is checked before apt trusts it - see
+  # ohmydebn-powershell-repo.
+  /usr/share/ohmydebn/bin/ohmydebn-powershell-repo ensure
 
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install powershell

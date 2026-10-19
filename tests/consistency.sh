@@ -22,7 +22,12 @@ POWER_USER_SH="$REPO_ROOT/install/packaging/power-user.sh"
 # shellcheck disable=SC2034
 REMOVE_ALL_SH="$REPO_ROOT/bin/ohmydebn-pkg-remove-all-optional"
 # shellcheck disable=SC2034
-BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
+# The sibling checkout AGENTS.md assumes. Without it, the checks that read
+# the ohmydebn package's --depends would find nothing and quietly pass.
+BUILD_SCRIPT="$(cd "$REPO_ROOT/.." && pwd)/ohmydebn-package-build/build-package-ohmydebn.sh"
+if [[ ! -f "$BUILD_SCRIPT" ]]; then
+  echo "note: $BUILD_SCRIPT not found, so the ohmydebn package's dependencies aren't checked" >&2
+fi
 
 source "$REPO_ROOT/tests/lib/extract-packages.sh"
 source "$REPO_ROOT/bin/ohmydebn-menu-tree"
@@ -30,8 +35,7 @@ source "$REPO_ROOT/bin/ohmydebn-menu-tree"
 # The menu search index caches itself in ~/.local/state/ohmydebn-config,
 # keyed by the menu script's path, so the checks below used to leave a
 # cache for this checkout's bin/ohmydebn-menu in the real home directory.
-# A scratch HOME for the rest of the run (BUILD_SCRIPT above already has
-# the real one).
+# A scratch HOME for the rest of the run.
 SCRATCH_HOME=$(mktemp -d)
 export HOME="$SCRATCH_HOME"
 trap 'rm -rf "$SCRATCH_HOME"' EXIT
@@ -202,7 +206,10 @@ for f in "$REPO_ROOT"/install/config/*.sh; do
   # Origin is the default browser) is guarded on a name no install list
   # carries; its dedicated bin/ohmydebn-<package>-install script vouches
   # for the name instead.
-  if ! printf '%s\n' "${ALL_KNOWN_PKGS[@]}" | grep -qxF "$name" &&
+  # A here-string, not a pipe: under pipefail, grep -q exiting at its
+  # first match can kill the writer with SIGPIPE and fail the pipeline,
+  # reporting a name that's there as missing.
+  if ! grep -qxF "$name" <<<"$(printf '%s\n' "${ALL_KNOWN_PKGS[@]}")" &&
     [[ ! -x "$REPO_ROOT/bin/ohmydebn-$name-install" ]]; then
     echo "  FAIL - $(basename "$f") guards on \`dpkg -s \"$name\"\`, but '$name' isn't in dependencies.sh, power-user.sh, or build-package-ohmydebn.sh, and has no bin/ohmydebn-$name-install"
     FAIL=$((FAIL + 1))
@@ -278,13 +285,6 @@ echo "  checked ${#ALL_BINDINGS[@]} key-combo assignments"
 
 echo
 echo "-- flattened menu-picker search list stays in sync with the real menu tree --"
-# No explicit MT_SKIP_LABELS here on purpose - this exercises
-# ohmydebn-menu-tree's own MT_DEFAULT_SKIP_LABELS ("Other Apps") the same
-# way every real caller does (ohmydebn-menu-picker's load_leaves(), the
-# ohmydebn-package-build repo's shipped-cache pregeneration), rather than
-# hand-repeating the literal a fourth time - that repetition is exactly
-# what once let one copy silently drift to a stale "Apps" for a long time
-# without anything noticing.
 mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>/dev/null)
 if [[ ${#FLAT[@]} -eq 0 ]]; then
   echo "  FAIL - menu_tree_flatten produced zero leaves"
@@ -330,8 +330,7 @@ echo "  checked ${#PATHS[@]} func -> breadcrumb paths"
 # ohmydebn-menu) silently "borrowed" whatever function's menu() call
 # happened to follow it in the file - confirmed live: once Other Apps
 # became reachable through _mt_walk() (nested under Apps) rather than
-# skipped outright via MT_SKIP_LABELS (which only the top-level walk in
-# _mt_flatten_uncached ever checks), it inherited show_containers_menu's
+# being a top-level Go item, it inherited show_containers_menu's
 # own Docker/Podman/Distrobox items instead of correctly reporting nothing
 # to walk. A synthetic fixture, not the real menu file, so this keeps
 # catching a regression in the tool itself regardless of which real
@@ -385,31 +384,31 @@ else
 fi
 
 echo
-echo "-- ohmydebn-menu-picker's ALWAYS_SUBMENU_LABELS matches ohmydebn-menu-tree's MT_DEFAULT_SKIP_LABELS --"
-# Same set of names by construction: a label excluded from the static
-# menu-tree walk (MT_DEFAULT_SKIP_LABELS) has no leaves for
-# find_submenu_labels() to match against, so it needs the exact same
-# label hand-added back via ALWAYS_SUBMENU_LABELS to still earn its ">"
-# marker - see that constant's own comment in ohmydebn-menu-picker. Two
-# independent hand-copies of the same set is exactly the kind of
-# duplication that already let MT_SKIP_LABELS itself drift stale once;
-# this catches the two ever disagreeing instead of relying on nobody
-# forgetting to update both.
-TREE_DEFAULT_SKIP=$(printf '%s\n' "${MT_DEFAULT_SKIP_LABELS[@]}" | sort)
-PICKER_ALWAYS_SUBMENU=$(python3 -c "
+echo "-- ohmydebn-menu-picker's ALWAYS_SUBMENU_LABELS are real menu items --"
+# A label there earns a submenu ">" marker without any leaves of its own
+# (see that constant's comment in ohmydebn-menu-picker). Renaming the menu
+# item without it would silently drop the marker, so each one must still
+# be an item label in ohmydebn-menu.
+mapfile -t PICKER_ALWAYS_SUBMENU < <(python3 -c "
 import re
 with open('$REPO_ROOT/bin/ohmydebn-menu-picker', encoding='utf-8') as f:
     src = f.read()
 m = re.search(r'ALWAYS_SUBMENU_LABELS = \{([^}]*)\}', src)
-labels = re.findall(r'\"([^\"]*)\"', m.group(1)) if m else []
-print('\n'.join(sorted(labels)))
+print('\n'.join(re.findall(r'\"([^\"]*)\"', m.group(1)) if m else []))
 ")
-if [[ "$TREE_DEFAULT_SKIP" != "$PICKER_ALWAYS_SUBMENU" ]]; then
-  echo "  FAIL - MT_DEFAULT_SKIP_LABELS ($TREE_DEFAULT_SKIP) != ALWAYS_SUBMENU_LABELS ($PICKER_ALWAYS_SUBMENU)"
+if [[ ${#PICKER_ALWAYS_SUBMENU[@]} -eq 0 ]]; then
+  echo "  FAIL - couldn't read ALWAYS_SUBMENU_LABELS from ohmydebn-menu-picker"
   FAIL=$((FAIL + 1))
-else
-  echo "  both agree on: $(tr '\n' ' ' <<<"$TREE_DEFAULT_SKIP")"
 fi
+for LABEL in "${PICKER_ALWAYS_SUBMENU[@]}"; do
+  if grep -qP '\\n\S*\s+'"$LABEL"'(\\n|")' "$MENU_FILE"; then
+    echo "  $LABEL is a menu item"
+  else
+    echo "  FAIL - ALWAYS_SUBMENU_LABELS names '$LABEL', which isn't a menu item in ohmydebn-menu"
+    FAIL=$((FAIL + 1))
+  fi
+done
+
 
 # Regression guard for a real bug: go_to_menu()'s case arms are matched in
 # file order against a lowercased category label, and bash's `case` picks
@@ -645,7 +644,7 @@ if [[ -z "$FINISH_START" ]]; then
 elif [[ "$(grep -c 'self\._schedule_close()' <<<"$FINISH_BLOCK")" -lt 2 ]]; then
   echo "  FAIL - finish() no longer schedules a close on both the real-value and cancelled paths back to on_result - a leaf pick (About, Demo, ...) will stay visible again until whatever it launches closes"
   FAIL=$((FAIL + 1))
-elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -A5 'def _deferred_close' "$PICKER_FILE" | grep -q 'Gtk\.main_quit()'; then
+elif ! grep -q 'def _deferred_close' "$PICKER_FILE" || ! grep -q 'Gtk\.main_quit()' <<<"$(grep -A5 'def _deferred_close' "$PICKER_FILE")"; then
   echo "  FAIL - _schedule_close()'s own timeout callback no longer actually quits the process - a leaf pick would leave it hidden but running forever now"
   FAIL=$((FAIL + 1))
 elif ! grep -q 'GLib\.source_remove' "$PICKER_FILE"; then
@@ -670,13 +669,14 @@ AI_MENU_START=$(grep -n '^show_ai_menu() {' "$MENU_FILE" | head -1 | cut -d: -f1
 AI_MENU_REL_END=$(tail -n "+$AI_MENU_START" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
 AI_MENU_END=$((AI_MENU_START + AI_MENU_REL_END - 1))
 AI_MENU_BLOCK=$(sed -n "${AI_MENU_START},${AI_MENU_END}p" "$MENU_FILE")
-if echo "$AI_MENU_BLOCK" | grep -q 'ohmydebn-ai-set-default'; then
+if grep -q 'ohmydebn-ai-set-default' <<<"$AI_MENU_BLOCK"; then
   echo "  FAIL - show_ai_menu calls ohmydebn-ai-set-default - picking a tool there must only open it"
   FAIL=$((FAIL + 1))
 fi
 declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-opencode-install]=opencode
   [ohmydebn-claude-code-install]=claude-code
+  [ohmydebn-claude-desktop-install]=claude-desktop
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
@@ -1026,9 +1026,9 @@ echo "  checked $CHECKED third-party-repo installers"
 echo
 echo "-- apt pin filename agrees between each installer and its own remove script (regression guard) --"
 # The check above only catches installers that write sources.list.d
-# themselves - it can't see code/google-chrome-stable/powershell, whose
-# repos are self-registered by the vendor's own postinst after a raw
-# `dpkg -i`, not by ohmydebn's script. Those three (and every other
+# themselves - it can't see code/google-chrome-stable, whose repos are
+# self-registered by the vendor's own postinst, nor the helpers that
+# write a repo for an installer. Those (and every other
 # pinned installer) are curated here instead, checking both that the
 # installer actually writes the expected preferences.d filename and that
 # its own -remove script cleans up that exact same filename - a rename in
@@ -1038,6 +1038,7 @@ echo "-- apt pin filename agrees between each installer and its own remove scrip
 # repo), so both map to the same filename here.
 PIN_FILE_OWNERS=(
   "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
+  "ohmydebn-claude-desktop-install:ohmydebn-claude-desktop-remove:claude-desktop.pref"
   "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
   "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
@@ -1048,8 +1049,11 @@ PIN_FILE_OWNERS=(
   "ohmydebn-chatgpt-install:ohmydebn-chatgpt-remove:chatgpt.pref"
   "ohmydebn-code-install:ohmydebn-code-remove:code.pref"
   "ohmydebn-google-chrome-stable-install:ohmydebn-google-chrome-stable-remove:google-chrome.pref"
-  "ohmydebn-powershell-install:ohmydebn-powershell-remove:powershell.pref"
+  # PowerShell's repository is the same: one helper, for the installer,
+  # the remove script and the update's migration.
+  "ohmydebn-powershell-repo:ohmydebn-powershell-repo:powershell.pref"
 )
+APT_PINS_LIST=$("$REPO_ROOT/bin/ohmydebn-apt-pins" --list)
 for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
   IFS=':' read -r INSTALLER REMOVER PREF <<<"$ENTRY"
   if ! grep -qF "preferences.d/$PREF" "$REPO_ROOT/bin/$INSTALLER"; then
@@ -1060,6 +1064,19 @@ for ENTRY in "${PIN_FILE_OWNERS[@]}"; do
     FAIL=$((FAIL + 1))
   else
     echo "  $INSTALLER/$REMOVER agree on preferences.d/$PREF"
+  fi
+  # ohmydebn-apt-pins knows every pin too: the doctor checks each repo
+  # against its list, and --prune cleans up only the pins on it.
+  if ! grep -qx "[a-z0-9.-]*:$PREF" <<<"$APT_PINS_LIST"; then
+    echo "  FAIL - bin/ohmydebn-apt-pins doesn't list $PREF (written by $INSTALLER)"
+    FAIL=$((FAIL + 1))
+  fi
+  # For a repo the installer writes itself, --prune deletes the same key
+  # the remove script does - so the two agree on where it is.
+  KEY=$(grep -oP "^  \"[a-z0-9.-]+:$PREF:[^:]*:\K[^\"]+" "$REPO_ROOT/bin/ohmydebn-apt-pins" || true)
+  if [[ -n "$KEY" ]] && ! grep -qF "$KEY" "$REPO_ROOT/bin/$REMOVER"; then
+    echo "  FAIL - bin/ohmydebn-apt-pins removes $KEY with $PREF's repo, but $REMOVER doesn't"
+    FAIL=$((FAIL + 1))
   fi
 done
 
@@ -1231,6 +1248,7 @@ fi
 # arg instead of a direct --title flag.
 PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-chatgpt:ChatGPT"
+  "ohmydebn-claude-desktop:Claude Desktop"
   "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
   "ohmydebn-antigravity:Antigravity"
@@ -1262,7 +1280,7 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt Brave-origin Brave-browser KeePassXC Gedit Aether)
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
   if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
     echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""
@@ -1286,6 +1304,32 @@ while IFS= read -r HIT; do
   FAIL=$((FAIL + 1))
 done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##")
 echo "  checked every file under install/"
+
+echo
+echo "-- OhMyDebn's notifications and GTK windows carry its icon --"
+# Without -i, a notification from OhMyDebn shows no icon at all; a GTK
+# window without a default icon shows a generic one in the window list and
+# switcher. Both use the full-color "ohmydebn" icon that
+# ohmydebn-theme-set-menu-icon colors to the theme. Aether's own import
+# notice is Aether's, not ours.
+CHECKED=0
+while IFS= read -r HIT; do
+  CHECKED=$((CHECKED + 1))
+  if [[ "$HIT" != *"notify-send -i ohmydebn "* ]]; then
+    echo "  FAIL - notification without the OhMyDebn icon: $HIT"
+    FAIL=$((FAIL + 1))
+  fi
+done < <(grep -rnE '(^|[[:space:](])notify-send +[-"]' "$REPO_ROOT/bin" "$REPO_ROOT/install" |
+  grep -vE ':[0-9]+:[[:space:]]*#|command -v notify-send' | sed "s#^$REPO_ROOT/##")
+while IFS= read -r f; do
+  CHECKED=$((CHECKED + 1))
+  if ! grep -qF 'Gtk.Window.set_default_icon_name("ohmydebn")' "$f"; then
+    echo "  FAIL - GTK window without the OhMyDebn icon: ${f#"$REPO_ROOT"/}"
+    FAIL=$((FAIL + 1))
+  fi
+# The underscored .py files are modules the windows import, not windows.
+done < <(grep -lE '^from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+echo "  checked $CHECKED notifications and GTK scripts"
 
 echo
 echo "$FAIL failure(s)"

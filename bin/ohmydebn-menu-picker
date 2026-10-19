@@ -49,6 +49,10 @@ gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Wnck", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango, Wnck
 
+# OhMyDebn's full-color icon for this window in the window list and
+# switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
+Gtk.Window.set_default_icon_name("ohmydebn")
+
 import configparser
 import os
 import re
@@ -179,14 +183,8 @@ def load_leaves(breadcrumb_prefix=""):
     Other Apps' descendants are runtime-discovered .desktop entries, not
     static bash-literal items like every other branch of this tree - there's
     nothing for this bash-source-parsing walk to statically enumerate, so
-    it's excluded here the same way "Apps" or "Office" or any other real
-    submenu would be if it could somehow have live-scanned children -
-    ohmydebn-menu-tree's own MT_DEFAULT_SKIP_LABELS already does this by
-    default, so this call doesn't need to (and deliberately no longer
-    does) set MT_SKIP_LABELS itself; see that default's own comment for
-    why hand-repeating the literal here independently was the actual bug
-    that let this exclusion silently stop working for a while. It's still
-    searchable from wherever it's in scope (the root, or from within
+    it never has any leaves here (show_other_apps_menu has no menu() call
+    for ohmydebn-menu-tree to parse). It's still searchable from wherever it's in scope (the root, or from within
     "Apps" - see Picker.on_search_changed()'s own comment), just via a
     different path: on_search_changed() merges in a live match against
     load_apps_metadata() directly (see _matching_app_rows()) rather than
@@ -206,20 +204,13 @@ def load_leaves(breadcrumb_prefix=""):
     return rows
 
 
-# Labels excluded from the static menu-tree walk (see
-# MT_DEFAULT_SKIP_LABELS in ohmydebn-menu-tree) because their own content
-# is runtime-discovered rather than a static bash-literal item list -
-# "Other Apps" is the only one today. Excluded from menu_tree_flatten()
-# means excluded from find_submenu_labels()'s own leaf-prefix check too
-# (there's no "Other Apps > ..." leaf for it to ever match against), so
-# without this override it never earned the right-edge ">" marker a real
-# submenu gets - even though picking it leads to a further screen exactly
-# like any other submenu (see show_other_apps_menu's own comment in
-# ohmydebn-menu). Mirrors the bash-side constant by value rather than a
-# live round trip on every reload() - tests/consistency.sh guards the two
-# staying in sync, the same drift that let MT_SKIP_LABELS itself go stale
-# for a long time being exactly the risk a second hand-copied literal
-# reintroduces here.
+# Labels with no leaves in the static menu-tree walk because their own
+# content is runtime-discovered rather than a static bash-literal item
+# list - "Other Apps" is the only one today. With no "Other Apps > ..."
+# leaf for find_submenu_labels()'s leaf-prefix check to match, it would
+# never earn the right-edge ">" marker a real submenu gets - even though
+# picking it leads to a further screen exactly like any other submenu
+# (see show_other_apps_menu's own comment in ohmydebn-menu).
 ALWAYS_SUBMENU_LABELS = {"Other Apps"}
 
 

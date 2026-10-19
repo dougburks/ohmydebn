@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Unit tests for bin/ohmydebn-theme-set-fastfetch's SIGUSR2 refresh of an
-# already-open ohmydebn-fastfetch-gui window (bin/ohmydebn-fastfetch-pause).
+# already-open ohmydebn-fastfetch-gui window (bin/ohmydebn-fastfetch-pause),
+# and its order: the logo is made before the window is signaled.
 # `kill` is a bash builtin, so it can't be mocked via PATH like pkill is for
 # btop/cava - these spawn a real short-lived background process and check
 # whether it actually received SIGUSR2, rather than mocking the signal send.
@@ -12,11 +13,20 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO_ROOT/bin/ohmydebn-theme-set-fastfetch"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== bin/ohmydebn-theme-set-fastfetch (SIGUSR2 refresh) ==="
+echo "=== bin/ohmydebn-theme-set-fastfetch ==="
 
+# Runs the hook with a do-nothing stand-in for the logo generator, which it
+# calls by its installed path: the installed copy (or none at all, on a
+# machine without OhMyDebn) isn't what's under test. Call after mock_init.
 run_theme_set_fastfetch() {
   local scratch_home="$1"
-  HOME="$scratch_home" bash "$SCRIPT" >/dev/null 2>&1
+  mock_bin ohmydebn-fastfetch-logo-generate <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+  sed "s#/usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate#$MOCK_BIN/ohmydebn-fastfetch-logo-generate#" \
+    "$SCRIPT" >"$MOCK_DIR/hook-run.sh"
+  HOME="$scratch_home" bash "$MOCK_DIR/hook-run.sh" </dev/null >/dev/null 2>&1
 }
 
 # Scenario 1: a live process whose cmdline contains "ohmydebn-fastfetch-pause"
@@ -77,8 +87,41 @@ mock_cleanup
 mock_init
 SCRATCH_HOME=$(mktemp -d)
 mkdir -p "$SCRATCH_HOME/.cache/ohmydebn"
-HOME="$SCRATCH_HOME" bash "$SCRIPT" >/dev/null 2>&1
+run_theme_set_fastfetch "$SCRATCH_HOME"
 assert_eq "no pidfile: script exits cleanly" "0" "$?"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 4: the logo is made (ohmydebn-fastfetch-logo-generate, tested
+# in test-fastfetch-logo-generate.sh) before an open window is signaled,
+# so the window redraws with the new one.
+mock_init
+SCRATCH_HOME=$(mktemp -d)
+mock_bin ohmydebn-fastfetch-logo-generate <<'EOF'
+#!/bin/bash
+mock_log "logo generated"
+EOF
+FAKE_SCRIPT="$MOCK_BIN/ohmydebn-fastfetch-pause"
+cat >"$FAKE_SCRIPT" <<EOF
+#!/bin/bash
+trap 'echo "window signaled" >>"$MOCK_CALLS"' USR2
+sleep 5 &
+wait \$!
+EOF
+chmod +x "$FAKE_SCRIPT"
+sed "s#/usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate#$MOCK_BIN/ohmydebn-fastfetch-logo-generate#" \
+  "$SCRIPT" >"$MOCK_DIR/hook.sh"
+"$FAKE_SCRIPT" &
+FAKE_PID=$!
+mkdir -p "$SCRATCH_HOME/.cache/ohmydebn"
+echo "$FAKE_PID" >"$SCRATCH_HOME/.cache/ohmydebn/fastfetch-pause.pid"
+sleep 0.3
+HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/hook.sh" </dev/null >/dev/null 2>&1
+sleep 0.3
+assert_eq "logo made, then the window signaled" "logo generated
+window signaled" "$(cat "$MOCK_CALLS")"
+kill "$FAKE_PID" 2>/dev/null
+wait "$FAKE_PID" 2>/dev/null
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

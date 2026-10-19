@@ -135,3 +135,23 @@ alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
 EOF
   touch $AI_CLI_ALIAS_STATE
 fi
+
+# Faster prompts, enough that holding Enter no longer lags: zsh-autosuggestions
+# binds its widgets once rather than before every prompt, and Starship's right
+# prompt is switched off - empty in OhMyDebn's config, it still ran Starship a
+# second time for every prompt. A config that sets right_format keeps it.
+# Appended, so it comes after `starship init`, which sets RPROMPT.
+PROMPT_SPEED_STATE=~/.local/state/ohmydebn-config/prompt-speed-20261018
+if [ ! -f $PROMPT_SPEED_STATE ]; then
+  cat <<'EOF' >>~/.zshrc
+
+# Faster prompts: autosuggestions binds its widgets once, and Starship's right
+# prompt (empty unless starship.toml sets right_format) isn't drawn
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1
+() {
+  local config=${STARSHIP_CONFIG:-$HOME/.config/starship.toml}
+  [[ -r $config && "$(<$config)" == *right_format* ]] || RPROMPT=''
+}
+EOF
+  touch $PROMPT_SPEED_STATE
+fi

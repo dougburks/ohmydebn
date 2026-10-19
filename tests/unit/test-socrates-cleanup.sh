@@ -39,7 +39,13 @@ case "$1 $2" in
   ;;
 "inspect "*) echo "$4" ;;
 "container ls") ;;
-"rmi "*) mock_log "rmi $2" ;;
+"rmi "*)
+  if [[ -f "$MOCK_DIR/in-use-$2" ]]; then
+    echo "Error: image is in use by a container"
+    exit 2
+  fi
+  mock_log "rmi $2"
+  ;;
 esac
 STUB
 }
@@ -57,6 +63,18 @@ mock_cleanup
 setup ""
 run --force
 assert_contains "default image not downloaded: older images go as before" "$CALLS" "rmi bbbbbbbbbbbb"
+mock_cleanup
+
+# podman says an image is in use but names no container: that image is
+# reported, and the rest are still removed (a grep finding no container ID
+# used to end the script there).
+setup ""
+touch "$MOCK_DIR/in-use-bbbbbbbbbbbb"
+run --force
+assert_eq "in use, no container named: exits 0" "0" "$STATUS"
+assert_contains "in use, no container named: says it failed" "$OUTPUT" "failed to remove ghcr.io/dougburks/so-crates:<none> (bbbbbbbbbbbb)"
+assert_contains "in use, no container named: the other old image still goes" "$CALLS" "rmi cccccccccccc"
+assert_contains "in use, no container named: and it finishes" "$OUTPUT" "Done. Kept:"
 mock_cleanup
 
 setup ""

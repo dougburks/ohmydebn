@@ -23,19 +23,27 @@ DEFAULT_BROWSER=$(xdg-settings get default-web-browser)
 # (brave-browser, brave-origin) are separate binaries too - both need
 # checking before their broader substring cousins ("chrome" / "brave") to
 # avoid matching the wrong one.
+browser=""
 if [[ $DEFAULT_BROWSER == *"firefox"* ]]; then
-    firefox --kiosk "$1"
+    browser=firefox; args=(--kiosk "$1")
 elif [[ $DEFAULT_BROWSER == *"chromium"* ]]; then
-    chromium --app="$1"
+    browser=chromium; args=(--app="$1")
 elif [[ $DEFAULT_BROWSER == *"chrome"* ]]; then
-    google-chrome-stable --app="$1"
+    browser=google-chrome-stable; args=(--app="$1")
 elif [[ $DEFAULT_BROWSER == *"brave-origin"* ]]; then
-    brave-origin --app="$1"
+    browser=brave-origin; args=(--app="$1")
 elif [[ $DEFAULT_BROWSER == *"brave"* ]]; then
-    brave-browser --app="$1"
+    browser=brave-browser; args=(--app="$1")
 elif [[ $DEFAULT_BROWSER == *"helium"* ]]; then
-    helium --app="$1"
+    browser=helium; args=(--app="$1")
+fi
+
+# xdg-open for an unsupported browser, and for a default that still names
+# one that's since been removed, which would otherwise run a missing
+# command and open nothing: xdg-open opens the URL in whatever handles it
+# now.
+if [[ -n $browser ]] && command -v "$browser" >/dev/null 2>&1; then
+    "$browser" "${args[@]}"
 else
-    # Fallback to xdg-open if browser is unsupported
     xdg-open "$1"
 fi

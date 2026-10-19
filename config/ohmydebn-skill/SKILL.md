@@ -12,7 +12,7 @@ description: >
 
 # OhMyDebn Skill
 
-Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stability of the Debian distro, the ease of use of the Cinnamon desktop, and the beauty of Omarchy.
+Manage OhMyDebn Linux systems - a debonair Linux platform that combines the stability of a Debian-based distro (Debian, Ubuntu, Mint and others), the ease of use of the Cinnamon desktop, and the beauty of Omarchy.
 
 ## When This Skill MUST Be Used
 
@@ -172,7 +172,7 @@ gnome-terminal and mate-terminal keep their settings in dconf, not in files:
 | App | Location |
 |-----|----------|
 | btop | `~/.config/btop/btop.conf` |
-| fastfetch | `~/.config/fastfetch/config.jsonc` |
+| fastfetch | `~/.config/fastfetch/config.jsonc` (a link to the current theme's copy, remade on a theme change); the logo is `~/.config/fastfetch/ohmydebn-logo.txt`, recolored on a theme change |
 | lazygit | `~/.config/lazygit/config.yml` |
 | starship | `~/.config/starship.toml` |
 | git | `~/.gitconfig` (written by `git config --global`) |
@@ -428,7 +428,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Reset my terminal/shell/editor configs to defaults" -> `ohmydebn-reset-config`
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
-- "Open OhMyDebn menu" -> `Super + Space`
+- "Open OhMyDebn menu" -> `Super + Space`, or the grin icon on the panel next to the Cinnamon menu
 - "Launch AI assistant" -> `Super + A` (the default assistant, set in Setup > Defaults > Agent) or from Apps > AI
 - "Update OpenCode to latest version" -> `ohmydebn-update` (updates OpenCode if it's installed)
 - "Open apps menu" -> `Super + R` (GTK app launcher)

@@ -18,8 +18,18 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
-  sudo mkdir -p /usr/share/keyrings
-  sudo curl -fsSL https://downloads.claude.ai/keys/claude-code.asc -o /usr/share/keyrings/claude-code.asc
+  # The key is checked against the fingerprint Anthropic publishes before
+  # apt trusts it, as in ohmydebn-claude-desktop-install (the same key
+  # signs both repositories).
+  KEY_URL=https://downloads.claude.ai/keys/claude-code.asc
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE ]; then
+    echo "The Claude Code signing key from $KEY_URL isn't the one Anthropic publishes, so it wasn't installed."
+    exit 1
+  fi
+  sudo install -D -m 0644 "$KEY_FILE" /usr/share/keyrings/claude-code.asc
   echo "deb [signed-by=/usr/share/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" |
     sudo tee /etc/apt/sources.list.d/claude-code.list >/dev/null
 

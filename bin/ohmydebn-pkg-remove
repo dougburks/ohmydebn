@@ -25,5 +25,11 @@ if [[ -n "$pkg_names" ]]; then
     echo
     echo "The removal didn't finish - see the messages above."
   fi
+  # If that was the default browser, another installed one takes over now
+  # rather than at the next update. Changes nothing otherwise.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --repair || true
+  # An app whose vendor repository went with it leaves OhMyDebn's pin for
+  # that repository behind; it goes too.
+  /usr/share/ohmydebn/bin/ohmydebn-apt-pins --prune || true
   /usr/share/ohmydebn/bin/ohmydebn-show-done
 fi

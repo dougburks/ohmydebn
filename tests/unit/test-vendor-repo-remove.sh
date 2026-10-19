@@ -52,7 +52,15 @@ EOF
 mock_log "$*"
 exit 0
 EOF
-  PATH="$(mock_path)" bash "$script" --skip-prompt </dev/null >/dev/null 2>&1
+  # OhMyDebn's own helpers (Chrome's remove hands the default browser on)
+  # come from the mock dir, never the installed system.
+  mock_bin ohmydebn-browser-set-default <<'EOF'
+#!/bin/bash
+mock_log "ohmydebn-browser-set-default $*"
+exit 0
+EOF
+  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$script" >"$MOCK_DIR/remove-patched.sh"
+  PATH="$(mock_path)" bash "$MOCK_DIR/remove-patched.sh" --skip-prompt </dev/null >/dev/null 2>&1
 }
 
 for entry in \
@@ -75,12 +83,15 @@ for entry in \
   assert_contains "deb822 .sources leftover removed" "$CALLS" "/etc/apt/sources.list.d/$srcbase.sources"
   assert_order "keyring removed before apt update" "/usr/share/keyrings/" "/usr/bin/apt update"
   assert_order "apt update after purge" "purge $pkg" "/usr/bin/apt update"
+  if [[ "$pkg" == google-chrome-stable ]]; then
+    assert_order "the default browser is handed on after the purge" "purge $pkg" "ohmydebn-browser-set-default --repair"
+  fi
   mock_cleanup
 
   # Scenario 2: not installed -> no sudo activity at all
   mock_init
   run_remove "$SCRIPT" "some-other-package"
-  assert_eq "not installed: nothing invoked via sudo" "" "$(cat "$MOCK_CALLS")"
+  assert_eq "not installed: nothing invoked via sudo, the default left alone" "" "$(cat "$MOCK_CALLS")"
   mock_cleanup
 done
 

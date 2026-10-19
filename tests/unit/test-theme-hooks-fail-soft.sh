@@ -7,12 +7,14 @@
 #
 # - bin/ohmydebn-theme-set-claude: a ~/.claude/settings.json that isn't
 #   valid JSON is left alone; a valid one gets the theme, written next to
-#   the real file so a dotfiles symlink stays a symlink.
+#   the real file so a dotfiles symlink stays a symlink. A color that isn't
+#   #rrggbb (which its arithmetic can't read) skips the theme.
 # - bin/ohmydebn-theme-set-cava: a missing cava config, or one without a
 #   [color] section (someone who had their own ~/.config/cava), is skipped.
 #
 # HOME is a scratch directory, so nothing here touches the real ~/.claude
-# or ~/.config/cava.
+# or ~/.config/cava, and pkill is a stand-in, so a running cava isn't
+# signalled.
 
 set -uo pipefail
 
@@ -118,15 +120,32 @@ assert_eq "claude --current: and selected" '"custom:ohmydebn-osaka-jade"' \
   "$(jq '.theme' "$MOCK_DIR/home/.claude/settings.json" 2>/dev/null)"
 mock_cleanup
 
+# --- claude: a color that isn't #rrggbb (a hand-made theme) skips the
+# theme instead of failing the whole switch ---
+for bad in '#fff' 'red'; do
+  mock_init
+  mkdir -p "$MOCK_DIR/home/.claude"
+  echo '{}' >"$MOCK_DIR/home/.claude/settings.json"
+  sed -E "s/^(accent\s*=\s*)\"[^\"]*\"/\1\"$bad\"/" "$COLORS" >"$MOCK_DIR/colors.toml"
+  run_claude_hook ohmydebn "$MOCK_DIR/colors.toml" false
+  assert_eq "claude, accent = \"$bad\": exits 0" "0" "$?"
+  assert_eq "claude, accent = \"$bad\": Claude Code's theme left as it was" "{}" "$(cat "$MOCK_DIR/home/.claude/settings.json")"
+  mock_cleanup
+done
+
 # --- cava: no config / no [color] section, hook succeeds ---
 mock_init
+mock_bin pkill <<'STUB'
+#!/bin/bash
+exit 0
+STUB
 mkdir -p "$MOCK_DIR/home/.config/ohmydebn/current/theme"
 cp "$COLORS" "$MOCK_DIR/home/.config/ohmydebn/current/theme/colors.toml"
-HOME="$MOCK_DIR/home" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
+HOME="$MOCK_DIR/home" PATH="$(mock_path)" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
 assert_eq "cava, no config: exits 0" "0" "$?"
 mkdir -p "$MOCK_DIR/home/.config/cava"
 printf '[general]\nframerate = 60\n' >"$MOCK_DIR/home/.config/cava/config"
-HOME="$MOCK_DIR/home" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
+HOME="$MOCK_DIR/home" PATH="$(mock_path)" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
 assert_eq "cava, no [color] section: exits 0" "0" "$?"
 assert_eq "cava, no [color] section: config untouched" "$(printf '[general]\nframerate = 60')" \
   "$(cat "$MOCK_DIR/home/.config/cava/config")"

@@ -111,6 +111,7 @@ run
 assert_eq "new user: config comes from the package" "$(jq -S . "$SEED/config/lazy-lock.json")" "$(jq -S . "$CFG/lazy-lock.json" 2>/dev/null)"
 assert_eq "new user: theme is linked" "yes" "$([[ -L "$CFG/lua/plugins/theme.lua" ]] && echo yes || echo no)"
 assert_eq "new user: offline settings in place" "yes" "$(exists "$CFG/lua/plugins/ohmydebn-offline.lua")"
+assert_eq "new user: no status line bar on the dashboard" "$(cat "$REPO_ROOT/config/nvim/lua/plugins/snacks-dashboard-statusline.lua")" "$(cat "$CFG/lua/plugins/snacks-dashboard-statusline.lua" 2>/dev/null)"
 assert_eq "new user: alpha installed at the tested commit" "$(head_of "$SEED/data/lazy/alpha")" "$(head_of "$DATA/lazy/alpha")"
 assert_eq "new user: beta installed at the tested commit" "$(head_of "$SEED/data/lazy/beta")" "$(head_of "$DATA/lazy/beta")"
 assert_eq "new user: parser installed" "lua parser 1" "$(cat "$DATA/site/parser/lua.so" 2>/dev/null)"
@@ -120,9 +121,11 @@ assert_eq "new user: Mason registry snapshot installed" "registry 1" "$(cat "$DA
 assert_eq "new user: nothing to back up" "0" "$(backups)"
 # --- and the next run (the next OhMyDebn update) changes nothing ---
 echo "user edit" >>"$DATA/lazy/alpha/plugin.lua"
+echo "-- user edit" >>"$CFG/lua/plugins/snacks-dashboard-statusline.lua"
 : >"$MOCK_CALLS"
 run
 assert_contains "same package: an unchanged set isn't reinstalled" "$(cat "$DATA/lazy/alpha/plugin.lua")" "user edit"
+assert_contains "same package: the user's dashboard status line edit stays" "$(cat "$CFG/lua/plugins/snacks-dashboard-statusline.lua")" "-- user edit"
 assert_not_contains "same package: nothing announced" "$(cat "$MOCK_CALLS")" "tested neovim plugins"
 teardown
 
@@ -176,6 +179,7 @@ assert_eq "migration: the user's own plugin spec stays" "yes" "$(exists "$CFG/lu
 assert_contains "migration: lazy.nvim's update checker turned off" "$(cat "$CFG/lua/config/lazy.lua")" "enabled = false, -- OhMyDebn ships tested plugin versions"
 assert_not_contains "migration: no update checker left on" "$(cat "$CFG/lua/config/lazy.lua")" "enabled = true"
 assert_eq "migration: offline settings in place" "yes" "$(exists "$CFG/lua/plugins/ohmydebn-offline.lua")"
+assert_eq "existing user: no status line bar on the dashboard" "yes" "$(exists "$CFG/lua/plugins/snacks-dashboard-statusline.lua")"
 assert_eq "refresh: outdated alpha replaced by the tested one" "$(head_of "$SEED/data/lazy/alpha")" "$(head_of "$DATA/lazy/alpha")"
 assert_eq "refresh: the old alpha is in the backup" "$OLD_ALPHA" "$(head_of "$DATA"/ohmydebn-backup-*/lazy/alpha)"
 assert_eq "refresh: the user's own plugin untouched" "$MINE" "$(head_of "$DATA/lazy/my-plugin")"

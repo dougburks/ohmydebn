@@ -13,9 +13,17 @@ WARP_PREF=/etc/apt/preferences.d/cloudflare-client.pref
 # the Ubuntu base where there is one (Ubuntu, Mint, Pop - UBUNTU_CODENAME,
 # or VERSION_CODENAME on Ubuntu itself), and otherwise trixie, the one
 # Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Devuan, LCOS).
+#
+# Cloudflare also publishes a new Ubuntu release's repo some time after the
+# release itself (26.10 "stonking" had none on release day), so an Ubuntu
+# codename it answers 404 for falls back to the newest Ubuntu LTS OhMyDebn
+# supports. Only a 404 does: on a network error the user's own codename is
+# kept, and the apt update below fails and cleans up as it would anyway.
+WARP_UBUNTU_FALLBACK=resolute
+
 warp_codename() {
-  local os_release="${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}"
-  (
+  local os_release="${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}" codename status
+  codename=$(
     ID="" ID_LIKE="" VERSION_CODENAME="" UBUNTU_CODENAME=""
     # shellcheck disable=SC1090
     . "$os_release"
@@ -27,6 +35,12 @@ warp_codename() {
       echo trixie
     fi
   )
+  if [ "$codename" != trixie ] && [ "$codename" != "$WARP_UBUNTU_FALLBACK" ]; then
+    status=$(curl -sIL --max-time 15 -o /dev/null -w '%{http_code}' \
+      "https://pkg.cloudflareclient.com/dists/$codename/Release" 2>/dev/null || true)
+    [ "$status" = 404 ] && codename=$WARP_UBUNTU_FALLBACK
+  fi
+  echo "$codename"
 }
 
 if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then

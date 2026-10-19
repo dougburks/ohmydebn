@@ -63,7 +63,7 @@ build_machine() {
   ln -s "$H/.config/ohmydebn/current/theme/config.jsonc" "$H/.config/fastfetch/config.jsonc"
   # The real -installed helpers, so the doctor checks the same lists the
   # installers use (they ask the mocked dpkg).
-  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$OMD/bin/"
+  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$REPO_ROOT/bin/ohmydebn-apt-pins" "$OMD/bin/"
 
   # System: a finished update, a third-party repo with its pin, the
   # firewall on, a VM with SPICE, UEFI with fwupd's signed binary, and the
@@ -129,7 +129,7 @@ EOF2
   mock_bin dpkg-query <<'EOF2'
 #!/bin/bash
 case "$*" in
-*ohmydebn-neovim) echo "0.12.5" ;;
+*ohmydebn-neovim) echo "0.12.5-1" ;;
 *) echo "4.8.0" ;;
 esac
 EOF2
@@ -144,7 +144,16 @@ printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 800
 EOF2
   mock_bin uname <<'EOF2'
 #!/bin/bash
-echo "6.12.1-amd64"
+echo "${MOCK_KERNEL:-6.12.1-amd64}"
+EOF2
+  # Only asked on a machine with the Radeon 890M (add_pci); the real one
+  # must never answer.
+  mock_bin xrandr <<'EOF2'
+#!/bin/bash
+[ -n "${MOCK_XRANDR_FAIL:-}" ] && exit 1
+printf 'Screen 0: minimum 320 x 200\neDP: connected primary 2880x1920+0+0\n'
+[ -n "${MOCK_TEARFREE:-}" ] && printf '\tTearFree: %s \n\t\tsupported: off, on, auto\n' "$MOCK_TEARFREE"
+exit 0
 EOF2
   mock_bin pgrep <<'EOF2'
 #!/bin/bash
@@ -304,6 +313,60 @@ run_doctor
 assert_not_contains "Pi: other board families' kernels don't ask for a reboot" "$OUTPUT" "reboot needed"
 mock_cleanup
 
+# --- the Radeon 890M (Framework Laptop 13 Pro AMD): TearFree on kernel 7,
+# and dcdebugmask on every kernel ---
+# add_pci <vendor> <device>: a PCI device in the mocked sysfs.
+add_pci() {
+  local dir="$ROOT/sys/bus/pci/devices/0000:c1:00.$((++PCI_COUNT))"
+  mkdir -p "$dir"
+  echo "$1" >"$dir/vendor"
+  echo "$2" >"$dir/device"
+}
+# dcdebugmask <value>: the amdgpu driver loaded with that value.
+dcdebugmask() {
+  mkdir -p "$ROOT/sys/module/amdgpu/parameters"
+  echo "$1" >"$ROOT/sys/module/amdgpu/parameters/dcdebugmask"
+}
+PCI_COUNT=0
+build_machine yes
+dcdebugmask 0
+run_doctor MOCK_KERNEL=7.0.0-38-generic
+assert_not_contains "890M: no Radeon 890M, no TearFree check" "$OUTPUT" "TearFree"
+assert_not_contains "890M: no Radeon 890M, no dcdebugmask check" "$OUTPUT" "dcdebugmask"
+add_pci 0x1022 0x14e8
+add_pci 0x1002 0x150e
+run_doctor MOCK_KERNEL=7.0.0-38-generic
+assert_contains "890M: TearFree off on kernel 7 is caught, with the docs" "$OUTPUT" \
+  "FAIL - Radeon 890M on kernel 7: TearFree on (the screen may briefly flash corrupted blocks - see https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series)"
+assert_contains "890M: the driver's default dcdebugmask (0) is caught, with the docs" "$OUTPUT" \
+  "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the laptop may freeze - see https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series)"
+assert_eq "890M: either one fails the run" "1" "$EXIT_CODE"
+run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_TEARFREE=auto
+assert_contains "890M: the driver's default TearFree (auto) isn't on" "$OUTPUT" "FAIL - Radeon 890M on kernel 7: TearFree on"
+dcdebugmask 3088
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: TearFree on is ok" "$OUTPUT" "ok - Radeon 890M on kernel 7: TearFree on"
+assert_contains "890M: dcdebugmask 0xC10 (as the driver prints it) is ok" "$OUTPUT" "ok - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+assert_eq "890M: both set passes the run" "0" "$EXIT_CODE"
+dcdebugmask 0xE10
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: dcdebugmask with extra bits is ok" "$OUTPUT" "ok - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+dcdebugmask 1040
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: dcdebugmask without Idle Power States (0x410) is caught" "$OUTPUT" "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+dcdebugmask '$(touch pwned)'
+run_doctor MOCK_KERNEL=7.2.1-generic MOCK_TEARFREE=on
+assert_contains "890M: a dcdebugmask that isn't a number is a skip" "$OUTPUT" "skip - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the amdgpu driver didn't report it)"
+rm -r "$ROOT/sys/module/amdgpu"
+run_doctor MOCK_KERNEL=7.0.0-38-generic MOCK_XRANDR_FAIL=1
+assert_contains "890M: no display to ask is a TearFree skip" "$OUTPUT" "skip - Radeon 890M on kernel 7: TearFree on (xrandr couldn't read the display)"
+assert_contains "890M: amdgpu not loaded is a dcdebugmask skip" "$OUTPUT" "skip - Radeon 890M: display power saving off (amdgpu.dcdebugmask) (the amdgpu driver didn't report it)"
+dcdebugmask 0
+run_doctor MOCK_KERNEL=6.17.0-20-generic
+assert_not_contains "890M: kernel 6.17 has no TearFree check" "$OUTPUT" "TearFree"
+assert_contains "890M: kernel 6.17 still has the dcdebugmask check" "$OUTPUT" "FAIL - Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+mock_cleanup
+
 # --- no default AI chosen yet: valid, falling back to OpenCode ---
 build_machine yes
 rm "$H/.config/ohmydebn/current/default-ai"
@@ -394,6 +457,11 @@ sleep 60 &
 mkdir -p "$MOCK_DIR/run"; echo "$!" >"$MOCK_DIR/run/ohmydebn-update-$(id -u).lock"
 run_doctor XDG_RUNTIME_DIR="$MOCK_DIR/run"
 assert_contains "running update: skipped, not failed" "$OUTPUT" "skip - the latest update completed (an update is running now)"
+# Without a runtime dir, ohmydebn-update keeps its lock in ~/.cache.
+rm -f "$MOCK_DIR/run/ohmydebn-update-$(id -u).lock"
+mkdir -p "$H/.cache"; echo "$!" >"$H/.cache/ohmydebn-update-$(id -u).lock"
+run_doctor
+assert_contains "running update, no runtime dir: found in ~/.cache" "$OUTPUT" "skip - the latest update completed (an update is running now)"
 kill %1 2>/dev/null
 mock_cleanup
 
@@ -419,7 +487,7 @@ printf 'return { { "bjarneo/hackerman.nvim", dependencies = { "bjarneo/aether.nv
 elf "$N/lazy/blink.cmp/target/release/libblink_cmp_fuzzy.so" '\267\000'         # arm64 build on amd64
 run_doctor MOCK_NVIM_VERSION=0.10.4                                                # the distro's nvim shadows it
 assert_eq "broken neovim: exits 1" "1" "$EXIT_CODE"
-assert_contains "broken neovim: shadowing nvim named" "$OUTPUT" "FAIL - nvim on PATH is ohmydebn-neovim's (nvim reports 0.10.4, package is 0.12.5"
+assert_contains "broken neovim: shadowing nvim named" "$OUTPUT" "FAIL - nvim on PATH is ohmydebn-neovim's (nvim reports 0.10.4, package is 0.12.5-1"
 assert_contains "broken neovim: unfinished refresh says how to fix" "$OUTPUT" "FAIL - the tested plugin set is installed for this user (run: ohmydebn-update)"
 assert_contains "broken neovim: missing plugin named" "$OUTPUT" "FAIL - every plugin in the tested set is present (missing: LazyVim)"
 assert_contains "broken neovim: missing parser named" "$OUTPUT" "FAIL - every treesitter parser in the set is present (missing: lua)"

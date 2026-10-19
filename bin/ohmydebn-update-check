@@ -76,7 +76,7 @@ main() {
     # Send desktop notification if notify-send is available (ignore errors)
     if command -v notify-send >/dev/null 2>&1; then
       local action
-      action=$(notify-send "OhMyDebn Update" "$msg" -u normal -t 0 -h int:transient:0 -h string:resident:true -h string:desktop-entry:ohmydebn-update-check -h string:appname:OhMyDebn --action="update=Click here to update" 2>/dev/null || true)
+      action=$(notify-send -i ohmydebn "OhMyDebn Update" "$msg" -u normal -t 0 -h int:transient:0 -h string:resident:true -h string:desktop-entry:ohmydebn-update-check -h string:appname:OhMyDebn --action="update=Click here to update" 2>/dev/null || true)
       # If user clicked the notification, execute the update command
       if [[ "$action" == "update" ]]; then
         /usr/share/ohmydebn/bin/ohmydebn-update-gui

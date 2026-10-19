@@ -8,7 +8,7 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
 else
   if [ "${1:-}" != "--skip-prompt" ]; then
     echo
-    echo "Continuing will remove Google Chrome."
+    echo "Continuing will remove Google Chrome and its repo."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
@@ -18,6 +18,9 @@ else
   # this stays correct even if Google renames the file again.
   sudo /usr/bin/apt -y purge google-chrome-stable
   sudo /usr/bin/apt -y autoremove
+  # If it was the default browser, another installed one takes over, so
+  # links and Super+B don't land in whatever happens to handle them.
+  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --repair || true
   sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
   sudo rm -f /usr/share/keyrings/google-chrome.gpg
   sudo rm -f /etc/apt/preferences.d/google-chrome.pref

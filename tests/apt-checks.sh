@@ -15,7 +15,12 @@ POWER_USER_SH="$REPO_ROOT/install/packaging/power-user.sh"
 # shellcheck disable=SC2034
 REMOVE_ALL_SH="$REPO_ROOT/bin/ohmydebn-pkg-remove-all-optional"
 # shellcheck disable=SC2034
-BUILD_SCRIPT="$HOME/git/ohmydebn-package-build/build-package-ohmydebn.sh"
+# The sibling checkout AGENTS.md assumes. Without it, the checks that read
+# the ohmydebn package's --depends would find nothing and quietly pass.
+BUILD_SCRIPT="$(cd "$REPO_ROOT/.." && pwd)/ohmydebn-package-build/build-package-ohmydebn.sh"
+if [[ ! -f "$BUILD_SCRIPT" ]]; then
+  echo "note: $BUILD_SCRIPT not found, so the ohmydebn package's dependencies aren't checked" >&2
+fi
 
 FAIL=0
 
@@ -44,7 +49,7 @@ check_packages_exist() {
     if apt-cache show "$pkg" >/dev/null 2>&1; then
       continue
     fi
-    if printf '%s\n' "${OHMYDEBN_OWNED[@]}" | grep -qxF "$pkg"; then
+    if grep -qxF "$pkg" <<<"$(printf '%s\n' "${OHMYDEBN_OWNED[@]}")"; then
       echo "  info - $label: '$pkg' not found (comes from ohmydebn's own repo - only relevant if that repo isn't configured on this machine)"
     else
       echo "  FAIL - $label: '$pkg' not found in any configured apt source"
@@ -95,7 +100,7 @@ if apt-cache show cinnamon-desktop-environment >/dev/null 2>&1; then
 
     removed_alt=""
     for alt in "${ALTS[@]}"; do
-      if printf '%s\n' "${REMOVED[@]}" | grep -qxF "$alt"; then
+      if grep -qxF "$alt" <<<"$(printf '%s\n' "${REMOVED[@]}")"; then
         removed_alt="$alt"
         break
       fi
@@ -105,7 +110,7 @@ if apt-cache show cinnamon-desktop-environment >/dev/null 2>&1; then
     other_installed=false
     for alt in "${ALTS[@]}"; do
       [[ "$alt" == "$removed_alt" ]] && continue
-      if printf '%s\n' "${INSTALLED[@]}" | grep -qxF "$alt"; then
+      if grep -qxF "$alt" <<<"$(printf '%s\n' "${INSTALLED[@]}")"; then
         other_installed=true
         break
       fi

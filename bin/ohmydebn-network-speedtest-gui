@@ -30,6 +30,10 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
+# OhMyDebn's full-color icon for this window in the window list and
+# switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
+Gtk.Window.set_default_icon_name("ohmydebn")
+
 import json
 import os
 import signal

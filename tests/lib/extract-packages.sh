@@ -32,7 +32,9 @@ extract_removal_packages() {
 }
 
 # Category A hard --depends packages from the sibling fpm build repo, if present.
+# Just the package name: a versioned one is quoted ("name (>= 1.0)"), and
+# its quote and version used to come through as the name.
 extract_fpm_hard_depends() {
   [[ -f "$BUILD_SCRIPT" ]] || return 0
-  grep -oP '(?<=--depends )\S+' "$BUILD_SCRIPT"
+  grep -oP '(?<=--depends )"?\K[a-z0-9][a-z0-9.+-]*' "$BUILD_SCRIPT"
 }

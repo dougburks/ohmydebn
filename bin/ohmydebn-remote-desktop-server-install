@@ -39,7 +39,7 @@ fi
 # user in that group - xrdp.ini itself documents this step. Without it the
 # daemon can't offer TLS and modern clients won't connect.
 if getent group ssl-cert >/dev/null && id xrdp >/dev/null 2>&1 &&
-  ! id -nG xrdp | tr ' ' '\n' | grep -qx ssl-cert; then
+  ! grep -qx ssl-cert <<<"$(id -nG xrdp | tr ' ' '\n')"; then
   sudo adduser xrdp ssl-cert
 fi
 

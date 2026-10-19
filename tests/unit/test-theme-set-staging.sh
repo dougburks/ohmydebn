@@ -25,7 +25,7 @@ setup_mocks() {
     ohmydebn-theme-set-colors-delete ohmydebn-theme-set-icon ohmydebn-theme-set-terminal \
     ohmydebn-theme-set-btop ohmydebn-theme-set-gedit ohmydebn-theme-set-starship \
     ohmydebn-theme-set-antigravity ohmydebn-theme-set-cava ohmydebn-theme-set-eza \
-    ohmydebn-theme-set-fastfetch ohmydebn-theme-set-logo ohmydebn-theme-set-opencode ohmydebn-theme-set-vscode; do
+    ohmydebn-theme-set-fastfetch ohmydebn-theme-set-logo ohmydebn-theme-set-menu-icon ohmydebn-theme-set-opencode ohmydebn-theme-set-vscode; do
     mock_bin "$cmd" <<'EOF'
 #!/bin/bash
 exit 0
@@ -101,6 +101,20 @@ fi
 
 assert_contains "ohmydebn-theme-set names the files it ignored" "$(cat "$MOCK_DIR/out")" "neovim.lua"
 assert_not_contains "ohmydebn-theme-set does not report a theme's documentation" "$(cat "$MOCK_DIR/out")" "README.md"
+
+# --- A theme from a git repo whose colors are a link elsewhere is refused:
+# the colors are read from the theme itself, so the link would be followed ---
+for file in colors.toml alacritty.toml; do
+  linked="$THEMES/linked-$file"
+  mkdir -p "$linked/.git"
+  printf 'secret = "#000000"\n' >"$SCRATCH_HOME/secret"
+  ln -s "$SCRATCH_HOME/secret" "$linked/$file"
+  rm -rf "$SCRATCH_HOME/.config/ohmydebn/current"
+  set_theme "linked-$file"
+  assert_eq "$file a symlink in a repo theme: refused" "1" "$?"
+  assert_contains "$file a symlink in a repo theme: says why" "$(cat "$MOCK_DIR/out")" "is a link to another file"
+  assert_eq "$file a symlink in a repo theme: nothing staged" "no" "$([ -e "$(staged colors.toml)" ] && echo yes || echo no)"
+done
 
 # --- A theme the user wrote themselves (no .git) is not filtered ---
 mine="$THEMES/mine"

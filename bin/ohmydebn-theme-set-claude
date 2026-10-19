@@ -84,6 +84,19 @@ for i in $(seq 0 15); do
   declare "COLOR$i=${val:-$FOREGROUND}"
 done
 
+# mix_hex does arithmetic on these, and ohmydebn-theme-set runs this hook
+# under set -e, so a color written any other way (#fff, a name) in a theme
+# someone made by hand would stop the whole theme switch here. Leave Claude
+# Code's theme as it is instead.
+for color in "$BACKGROUND" "$FOREGROUND" "$ACCENT" "$SELECTION_BACKGROUND" \
+  "$COLOR0" "$COLOR1" "$COLOR2" "$COLOR3" "$COLOR4" "$COLOR5" "$COLOR6" "$COLOR7" \
+  "$COLOR8" "$COLOR9" "$COLOR10" "$COLOR11" "$COLOR12" "$COLOR13" "$COLOR14" "$COLOR15"; do
+  if [[ ! "$color" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+    echo "ohmydebn-theme-set-claude: '$color' in $COLORS_SOURCE isn't a #rrggbb color, skipping" >&2
+    exit 0
+  fi
+done
+
 # Mix two hex colors: pct is the weight (0-100) given to color A, remainder to color B
 mix_hex() {
   local a="${1#\#}" b="${2#\#}" pct="$3"

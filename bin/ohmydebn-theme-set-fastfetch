@@ -14,6 +14,12 @@ else
   ln -snf /usr/share/ohmydebn/config/fastfetch/config-default.jsonc "$FASTFETCH_CONFIG/config.jsonc"
 fi
 
+# The logo: OhMyDebn's grin in the theme's colors, which both configs
+# point fastfetch at, and the frames the system summary window animates it
+# with. Written before the refresh signal below, so an open window redraws
+# with the new ones.
+/usr/share/ohmydebn/bin/ohmydebn-fastfetch-logo-generate || true
+
 # Refresh an already-open fastfetch window (ohmydebn-fastfetch-gui) in
 # place, rather than leaving it showing stale colors until closed and
 # reopened. Signal the PID directly instead of pkill - see

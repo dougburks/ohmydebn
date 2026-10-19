@@ -16,6 +16,9 @@ source $OHMYDEBN_INSTALL/packaging/spice-vdagent.sh
 # Pins for vendor-added repos an older OhMyDebn left unpinned.
 source $OHMYDEBN_INSTALL/packaging/vendor-pins.sh
 
+# PowerShell's repository, moved off Microsoft's unchecked setup package.
+source $OHMYDEBN_INSTALL/packaging/powershell-repo.sh
+
 source $OHMYDEBN_INSTALL/packaging/dependencies.sh
 
 # power-user.sh must run after dependencies.sh above (see the comment in

@@ -88,8 +88,14 @@ fi
 # the logging wrapper above, so a refusal lands in the log too and the
 # wrapper's own re-exec never contends with itself. -E 213 tells a refusal
 # apart from any exit status of the run itself.
-LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}"
-[ -d "$LOCK_DIR" ] || LOCK_DIR=/tmp
+# Without a runtime dir (some su and SSH sessions), ~/.cache rather than
+# /tmp: in /tmp another local user could create this predictable name
+# first and leave it unopenable, which would block every update.
+LOCK_DIR="${XDG_RUNTIME_DIR:-}"
+if [ -z "$LOCK_DIR" ] || [ ! -d "$LOCK_DIR" ]; then
+  LOCK_DIR="$HOME/.cache"
+  mkdir -p "$LOCK_DIR"
+fi
 LOCK_FILE="$LOCK_DIR/ohmydebn-update-$(id -u).lock"
 if [ -z "${OHMYDEBN_UPDATE_LOCKED:-}" ]; then
   if OHMYDEBN_UPDATE_LOCKED=1 flock -n -o -E 213 "$LOCK_FILE" bash "$0" "$@"; then

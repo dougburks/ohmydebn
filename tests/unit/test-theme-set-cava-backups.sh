@@ -6,7 +6,8 @@
 # keeps one backup, config.backup-before-ohmydebn: the config as it was
 # before OhMyDebn first changed it. The per-switch backups already there
 # are folded in: the oldest becomes that backup, the rest are removed.
-# HOME is a scratch directory.
+# HOME is a scratch directory, and pkill a stand-in, so a cava running on
+# this machine isn't signalled.
 
 set -uo pipefail
 
@@ -24,10 +25,14 @@ setup() {
   mkdir -p "$CAVA" "$H/.config/ohmydebn/current/theme"
   cp "$COLORS" "$H/.config/ohmydebn/current/theme/colors.toml"
   printf '[general]\nframerate = 60\n\n[color]\ngradient = 0\n' >"$CAVA/config"
+  mock_bin pkill <<'STUB'
+#!/bin/bash
+mock_log "pkill $*"
+STUB
 }
 
 run() {
-  HOME="$H" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
+  HOME="$H" PATH="$(mock_path)" bash "$REPO_ROOT/bin/ohmydebn-theme-set-cava" </dev/null >/dev/null 2>&1
   STATUS=$?
 }
 

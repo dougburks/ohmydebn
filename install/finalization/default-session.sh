@@ -17,7 +17,8 @@
 #    drop-in in lightdm.conf.d sets that default for anyone with nothing
 #    remembered yet. lightdm.conf itself loads after the drop-ins and would
 #    win, so an explicit non-cinnamon user-session there is switched too,
-#    with a .BEFORE.OHMYDEBN backup like finalization/lightdm.sh's RPi edit.
+#    with a .BEFORE.OHMYDEBN backup of the original, shared with
+#    finalization/lightdm.sh's RPi edit.
 #
 # Neither layer touches an existing user's remembered session: someone who
 # has already logged into XFCE under LightDM picks Cinnamon once from the
@@ -59,7 +60,13 @@ user-session=cinnamon"
     if grep -qE '^[[:space:]]*user-session[[:space:]]*=' $LIGHTDM_CONF 2>/dev/null &&
       ! grep -qE '^[[:space:]]*user-session[[:space:]]*=[[:space:]]*cinnamon[[:space:]]*$' $LIGHTDM_CONF; then
       echo "Updating user-session in $LIGHTDM_CONF, which would otherwise override the LightDM drop-in."
-      sudo sed -i.BEFORE.OHMYDEBN -E 's/^([[:space:]]*user-session[[:space:]]*=).*/\1cinnamon/' $LIGHTDM_CONF
+      # The original is backed up once (as in finalization/lightdm.sh): this
+      # runs again whenever user-session has drifted, and must not replace
+      # the original with an already-edited copy.
+      if [ ! -e "$LIGHTDM_CONF.BEFORE.OHMYDEBN" ]; then
+        sudo cp -p "$LIGHTDM_CONF" "$LIGHTDM_CONF.BEFORE.OHMYDEBN"
+      fi
+      sudo sed -i -E 's/^([[:space:]]*user-session[[:space:]]*=).*/\1cinnamon/' $LIGHTDM_CONF
     fi
   fi
 fi

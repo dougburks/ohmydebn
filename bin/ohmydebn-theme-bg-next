@@ -30,7 +30,7 @@ TOTAL=${#BACKGROUNDS[@]}
 
 if [[ $TOTAL -eq 0 ]]; then
   if command -v notify-send >/dev/null 2>&1; then
-    notify-send "No background was found for theme" -t 2000
+    notify-send -i ohmydebn "No background was found for theme" -t 2000
   fi
 else
   # Get current background from symlink

@@ -22,7 +22,7 @@
 # in the table below.
 #
 # Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <package>
-#        ohmydebn-browser-set-default --current | --list-installed
+#        ohmydebn-browser-set-default --current | --list-installed | --repair
 #   <package>   the apt package name: brave-origin, brave-browser, chromium,
 #               google-chrome-stable, helium-bin or firefox-esr. "chromium"
 #               covers Ubuntu's snap too (see bin/ohmydebn-chromium-install).
@@ -37,6 +37,14 @@
 #               xdg-settings one), or nothing if it isn't one of these.
 #   --list-installed
 #               print "package<TAB>name" for each installed browser.
+#   --repair    if the default browser has been uninstalled, make another
+#               installed one the default: Brave Origin first, then
+#               Chromium (the same order a new install picks in), then the
+#               rest. Changes nothing otherwise. No question: the browser
+#               it replaces is gone, so there's no choice to keep. Run by
+#               every ohmydebn-<browser>-remove after its purge, and by
+#               install/config/mimetypes.sh on every update, for a browser
+#               removed with apt directly.
 
 set -uo pipefail
 
@@ -48,6 +56,7 @@ case "${1:-}" in
 --pdf-only) MODE=pdf; shift ;;
 --current) MODE=current ;;
 --list-installed) MODE=list ;;
+--repair) MODE=repair ;;
 esac
 PACKAGE="${1:-}"
 
@@ -110,8 +119,79 @@ if [ "$MODE" = current ]; then
   exit 0
 fi
 
+# The first desktop id ~/.config/mimeapps.list names as the default for a
+# MIME type, or nothing. Read directly rather than asked of xdg-settings or
+# xdg-mime: when the default's .desktop file is gone, they quietly answer
+# with some other browser that handles the type instead (Firefox, in a VM
+# where Chrome was the default and was removed).
+mimeapps_default() {
+  local line in_defaults=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    case "$line" in
+    "[Default Applications]") in_defaults=1 ;;
+    "["*) in_defaults=0 ;;
+    "$1="*)
+      if [ $in_defaults -eq 1 ]; then
+        line=${line#*=}
+        echo "${line%%;*}"
+        return
+      fi
+      ;;
+    esac
+  done <"${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" 2>/dev/null
+}
+
+# Whether the app behind a desktop id is still there: for the browsers in
+# the table, whether their package is installed (Chromium's two ids both
+# count, deb or snap), and for anything else, whether its .desktop file is
+# in an applications dir - the XDG data dirs, plus snap's and flatpak's
+# export dirs in case this runs outside a session that lists them.
+app_present() {
+  local id=$1 pkg dir
+  if [ "$id" = chromium.desktop ] || [ "$id" = chromium_chromium.desktop ]; then
+    installed chromium
+    return
+  fi
+  for pkg in "${ALL_PACKAGES[@]}"; do
+    if lookup "$pkg" && [ "$DESKTOP" = "$id" ]; then
+      installed "$pkg"
+      return
+    fi
+  done
+  local -a dirs
+  IFS=: read -r -a dirs <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}:/var/lib/snapd/desktop:/var/lib/flatpak/exports/share:$HOME/.local/share/flatpak/exports/share"
+  for dir in "${dirs[@]}"; do
+    [ -n "$dir" ] && [ -f "$dir/applications/$id" ] && return 0
+  done
+  return 1
+}
+
+if [ "$MODE" = repair ]; then
+  removed=$(mimeapps_default x-scheme-handler/https)
+  if [ -z "$removed" ] || app_present "$removed"; then
+    exit 0
+  fi
+  PACKAGE=""
+  for pkg in brave-origin chromium "${ALL_PACKAGES[@]}"; do
+    if installed "$pkg"; then
+      PACKAGE=$pkg
+      break
+    fi
+  done
+  if [ -z "$PACKAGE" ]; then
+    echo "Your default web browser is no longer installed, and there's no other browser to switch to. Install one: OhMyDebn Menu > Apps > Browsers."
+    exit 0
+  fi
+  lookup "$PACKAGE"
+  echo "Your default web browser is no longer installed, so $NAME is your default browser now. Change it any time: OhMyDebn Menu > Setup > Defaults > Browser."
+  # The PDF viewer moves too only if it was the same removed app: one the
+  # user picked separately stays.
+  [ "$(mimeapps_default application/pdf)" = "$removed" ] && REPAIR_PDF=true || REPAIR_PDF=false
+fi
+
 if ! lookup "$PACKAGE"; then
-  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr> | --current | --list-installed" >&2
+  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr> | --current | --list-installed | --repair" >&2
   exit 1
 fi
 
@@ -149,8 +229,10 @@ if [ "$MODE" != pdf ]; then
   step xdg-mime default "$DESKTOP" x-scheme-handler/https
 fi
 
-/usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $NAME as default pdf viewer"
-step xdg-mime default "$DESKTOP" application/pdf
+if [ "$MODE" != repair ] || [ "$REPAIR_PDF" = true ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring $NAME as default pdf viewer"
+  step xdg-mime default "$DESKTOP" application/pdf
+fi
 
 if [ "$FAILED" = true ]; then
   echo "Warning: not every default-browser setting could be applied - see the errors above." >&2

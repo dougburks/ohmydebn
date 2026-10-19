@@ -14,12 +14,13 @@ set -uo pipefail
 # and third-party repo pins, state markers and the last update's result,
 # the gTile extension and its settings, the theme and whether the terminal
 # and theme config files parse, dpkg state, disk space, the firewall, the
-# kernel-module blocks, the clock, the VM display agent and firmware-update
-# support, Neovim's tested plugin set, the login session default, the
-# systemd timer (or its absence without systemd), the default browser and AI
-# assistant, the AI wrappers and skill links, the custom keybindings, the
-# Aether/omarchy compatibility layer, and the tools other scripts rely on
-# (Oh My Zsh and the menu launcher among them).
+# kernel-module blocks, the clock, the VM display agent, firmware-update
+# support and the Radeon 890M's TearFree and dcdebugmask settings, Neovim's
+# tested plugin set, the login session default, the systemd timer (or its
+# absence without systemd), the default browser and AI assistant, the AI
+# wrappers and skill links, the custom keybindings, the Aether/omarchy
+# compatibility layer, and the tools other scripts rely on (Oh My Zsh and
+# the menu launcher among them).
 #
 # For the unit test, OHMYDEBN_DOCTOR_SYSROOT prefixes every absolute
 # system path (/usr/share/ohmydebn, /etc, /run/systemd/system, ...) and
@@ -145,20 +146,9 @@ else
 fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
 # vendor's own packages, so it can't replace anyone else's. VS Code's,
-# Chrome's and ChatGPT's repos are added by the vendors' own packages
-# (.list or .sources).
-PINS=(
-  "antigravity:antigravity.pref"
-  "brave-browser-release:brave-browser-release.pref"
-  "chatgpt:chatgpt.pref"
-  "claude-code:claude-code.pref"
-  "cloudflare-client:cloudflare-client.pref"
-  "google-chrome:google-chrome.pref"
-  "helium:helium.pref"
-  "microsoft-prod:powershell.pref"
-  "tailscale:tailscale.pref"
-  "vscode:code.pref"
-)
+# Chrome's, ChatGPT's and Claude Desktop's repos are added or kept up to
+# date by the vendors' own packages (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
+mapfile -t PINS < <("$OHMYDEBN/bin/ohmydebn-apt-pins" --list 2>/dev/null)
 PINNED=0
 MISSING=()
 for entry in "${PINS[@]}"; do
@@ -177,8 +167,11 @@ if [ "$MARKERS" -gt 0 ]; then ok "config state markers present ($MARKERS)"; else
 LATEST_LOG="$STATE/ohmydebn-logs/update-latest.log"
 if [ -e "$LATEST_LOG" ]; then
   echo "  latest update log: $(readlink -f "$LATEST_LOG")"
-  # ohmydebn-update's lock file holds the pid of the update running now.
-  UPDATE_LOCK="${XDG_RUNTIME_DIR:-/tmp}/ohmydebn-update-$(id -u).lock"
+  # ohmydebn-update's lock file holds the pid of the update running now,
+  # in the same place it puts it.
+  UPDATE_LOCK_DIR="${XDG_RUNTIME_DIR:-}"
+  if [ -z "$UPDATE_LOCK_DIR" ] || [ ! -d "$UPDATE_LOCK_DIR" ]; then UPDATE_LOCK_DIR="$HOME/.cache"; fi
+  UPDATE_LOCK="$UPDATE_LOCK_DIR/ohmydebn-update-$(id -u).lock"
   UPDATE_PID=$(cat "$UPDATE_LOCK" 2>/dev/null || true)
   STOPPED=$(grep -a "update stopped" "$LATEST_LOG" 2>/dev/null | tail -1 | tr -d '\r')
   if grep -aq "OhMyDebn update complete" "$LATEST_LOG" 2>/dev/null; then
@@ -224,7 +217,7 @@ esac
 section "Cinnamon and gTile"
 check "gTile@OhMyDebn extension files installed" test -f "$SYSROOT/usr/share/cinnamon/extensions/gTile@OhMyDebn/metadata.json"
 if has_session_bus; then
-  if gs org.cinnamon enabled-extensions | grep -q "gTile@OhMyDebn"; then ok "gTile@OhMyDebn enabled in Cinnamon"; else fail "gTile@OhMyDebn enabled in Cinnamon"; fi
+  if grep -q "gTile@OhMyDebn" <<<"$(gs org.cinnamon enabled-extensions)"; then ok "gTile@OhMyDebn enabled in Cinnamon"; else fail "gTile@OhMyDebn enabled in Cinnamon"; fi
 else
   skip "gTile@OhMyDebn enabled in Cinnamon" "no session bus for gsettings"
 fi
@@ -374,6 +367,46 @@ fi
 if [ -d "$SYSROOT/sys/firmware/efi" ] && dpkg -s fwupd >/dev/null 2>&1; then
   if compgen -G "$SYSROOT/usr/lib*/fwupd/efi/fwupd*.efi.signed" >/dev/null; then ok "firmware updates: fwupd's signed EFI binary installed"; else fail "firmware updates: fwupd's signed EFI binary installed" "run: sudo apt install fwupd-signed"; fi
 fi
+# AMD's Radeon 890M (PCI 1002:150e, in the Framework Laptop 13 Pro AMD)
+# needs two settings, both on the Hardware Notes page:
+# - TearFree in the amdgpu Xorg driver: on kernel 7, small parts of the
+#   screen briefly flash corrupted without it - an amdgpu bug upstream
+#   (drm/amd #5950, #5524). xrandr shows the setting the running X server
+#   actually uses, however it was turned on. The affected kernels are this
+#   one pattern: bound it once a kernel fixes the bug.
+# - amdgpu.dcdebugmask with Panel Self Refresh, Panel Replay and Idle Power
+#   States turned off (0x10, 0x400 and 0x800): the test laptop froze several
+#   times without it, needing the power button, and hasn't since. Checked on
+#   every kernel, as which ones froze isn't known. The driver's own copy of
+#   the value counts, however it was set (boot menu or modprobe.d); extra
+#   bits are fine.
+RADEON_890M="0x1002:0x150e"
+TEARFREE_KERNELS='^7\.'
+DCDEBUGMASK_BITS=$((0x10 | 0x400 | 0x800))
+RADEON_890M_DOCS="https://ohmydebn.org/hardware-notes/#framework-laptop-13-pro-amd-ryzen-ai-300-series"
+for pci in "$SYSROOT"/sys/bus/pci/devices/*; do
+  [ "$(cat "$pci/vendor" 2>/dev/null):$(cat "$pci/device" 2>/dev/null)" = "$RADEON_890M" ] || continue
+  if [[ "$RUNNING_KERNEL" =~ $TEARFREE_KERNELS ]]; then
+    if ! XRANDR=$(xrandr --prop 2>/dev/null); then
+      skip "Radeon 890M on kernel 7: TearFree on" "xrandr couldn't read the display"
+    elif grep -qE '^[[:space:]]*TearFree:[[:space:]]*on[[:space:]]*$' <<<"$XRANDR"; then
+      ok "Radeon 890M on kernel 7: TearFree on"
+    else
+      fail "Radeon 890M on kernel 7: TearFree on" "the screen may briefly flash corrupted blocks - see $RADEON_890M_DOCS"
+    fi
+  fi
+  # Validated before the arithmetic, which would otherwise evaluate whatever
+  # the file holds. The driver prints it in decimal.
+  DCDEBUGMASK=$(cat "$SYSROOT/sys/module/amdgpu/parameters/dcdebugmask" 2>/dev/null)
+  if ! [[ "$DCDEBUGMASK" =~ ^(0[xX][0-9a-fA-F]+|[1-9][0-9]*|0)$ ]]; then
+    skip "Radeon 890M: display power saving off (amdgpu.dcdebugmask)" "the amdgpu driver didn't report it"
+  elif [ $((DCDEBUGMASK & DCDEBUGMASK_BITS)) -eq "$DCDEBUGMASK_BITS" ]; then
+    ok "Radeon 890M: display power saving off (amdgpu.dcdebugmask)"
+  else
+    fail "Radeon 890M: display power saving off (amdgpu.dcdebugmask)" "the laptop may freeze - see $RADEON_890M_DOCS"
+  fi
+  break
+done
 
 # ----------------------------------------------------------------- neovim
 section "Neovim"
@@ -389,7 +422,9 @@ if ! dpkg -s ohmydebn-neovim-plugins >/dev/null 2>&1; then
 else
   NVIM_PKG_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-neovim 2>/dev/null || echo "?")
   NVIM_VERSION=$(nvim --version 2>/dev/null | sed -n '1s/^NVIM v//p')
-  if [ "$NVIM_VERSION" = "$NVIM_PKG_VERSION" ]; then ok "nvim on PATH is ohmydebn-neovim's ($NVIM_VERSION)"; else fail "nvim on PATH is ohmydebn-neovim's" "nvim reports ${NVIM_VERSION:-nothing}, package is $NVIM_PKG_VERSION: $(command -v nvim || echo 'no nvim on PATH')"; fi
+  # nvim reports the upstream version; the package's may add a Debian
+  # revision (0.12.6-1) after a rebuild of the same release.
+  if [ "$NVIM_VERSION" = "${NVIM_PKG_VERSION%-*}" ]; then ok "nvim on PATH is ohmydebn-neovim's ($NVIM_VERSION)"; else fail "nvim on PATH is ohmydebn-neovim's" "nvim reports ${NVIM_VERSION:-nothing}, package is $NVIM_PKG_VERSION: $(command -v nvim || echo 'no nvim on PATH')"; fi
 
   NVIM_SEED_SUM=$(sha256sum "$NVIM_SEED/config/lazy-lock.json" 2>/dev/null | cut -d' ' -f1)
   if [ -n "$NVIM_SEED_SUM" ] && [ "$(cat "$STATE/ohmydebn-config/nvim-plugins-seeded" 2>/dev/null)" = "$NVIM_SEED_SUM" ]; then ok "the tested plugin set is installed for this user"; else fail "the tested plugin set is installed for this user" "run: ohmydebn-update"; fi
@@ -492,7 +527,7 @@ fi
 # (each ohmydebn-<tool> does), so a missing one is a note, not a failure.
 if [ -x "$OHMYDEBN/bin/ohmydebn-ai-set-default" ]; then
   AI_DEFAULT=$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --current 2>/dev/null || echo opencode)
-  if "$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1 | grep -qx "$AI_DEFAULT"; then
+  if grep -qx "$AI_DEFAULT" <<<"$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1)"; then
     ok "default AI assistant installed ($AI_DEFAULT)"
   else
     echo "  default AI assistant ($AI_DEFAULT) isn't installed - Super+A offers to install it"
@@ -507,7 +542,7 @@ for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
 done
 DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "unset - opencode")
 case "$DEFAULT_AI" in
-opencode | claude-code | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | claude-code | claude-desktop | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
 for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli; do

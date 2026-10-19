@@ -462,21 +462,26 @@ with tempfile.TemporaryDirectory() as tmp:
     check("present: no pid means nothing to poke", not gui.present_existing_instance(None))
     check("present: a dead pid is reported as not delivered", not gui.present_existing_instance(999999999))
 
-# instance_lock_path honors XDG_RUNTIME_DIR and falls back to /tmp.
-saved = os.environ.get("XDG_RUNTIME_DIR")
+# instance_lock_path honors XDG_RUNTIME_DIR and falls back to ~/.cache
+# (not /tmp, where another user could take the name). HOME is scratch.
+saved = {name: os.environ.get(name) for name in ("XDG_RUNTIME_DIR", "HOME")}
 try:
     with tempfile.TemporaryDirectory() as tmp:
         os.environ["XDG_RUNTIME_DIR"] = tmp
         check_eq("lock path: under XDG_RUNTIME_DIR, per uid",
                  gui.instance_lock_path(), os.path.join(tmp, f"ohmydebn-update-gui-{os.getuid()}.lock"))
-    os.environ["XDG_RUNTIME_DIR"] = "/definitely/not/a/dir"
-    check_eq("lock path: falls back to /tmp when the runtime dir is unusable",
-             gui.instance_lock_path(), f"/tmp/ohmydebn-update-gui-{os.getuid()}.lock")
+    with tempfile.TemporaryDirectory() as home:
+        os.environ["HOME"] = home
+        os.environ["XDG_RUNTIME_DIR"] = "/definitely/not/a/dir"
+        check_eq("lock path: falls back to ~/.cache when the runtime dir is unusable",
+                 gui.instance_lock_path(), os.path.join(home, ".cache", f"ohmydebn-update-gui-{os.getuid()}.lock"))
+        check("lock path: ~/.cache is created for it", os.path.isdir(os.path.join(home, ".cache")))
 finally:
-    if saved is None:
-        os.environ.pop("XDG_RUNTIME_DIR", None)
-    else:
-        os.environ["XDG_RUNTIME_DIR"] = saved
+    for name, value in saved.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
 
 
 # --- pre-flight release check: parsing, ordering, wording, and the fetch ---

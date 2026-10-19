@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "claude-desktop" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Claude Desktop" /usr/share/ohmydebn/bin/ohmydebn-claude-desktop-install
+fi
+
+if dpkg -s "claude-desktop" >/dev/null 2>&1; then
+  exec /usr/bin/claude-desktop "$@"
+fi

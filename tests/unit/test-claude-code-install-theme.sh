@@ -1,22 +1,36 @@
 #!/bin/bash
 #
-# Unit tests for bin/ohmydebn-claude-code-install's theming. The Claude Code
+# Unit tests for bin/ohmydebn-claude-code-install: its signing-key check,
+# and its theming. The Claude Code
 # theme hook does nothing while Claude Code isn't installed, so the
 # installer themes it with the current OhMyDebn theme right after
 # installing it - otherwise its first start would wait for the next theme
 # switch. A theme that can't be applied mustn't fail the install. sudo,
-# dpkg and the OhMyDebn commands it calls are stand-ins.
+# dpkg, curl and the OhMyDebn commands it calls are stand-ins; the
+# fingerprint check is the real one.
 
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== bin/ohmydebn-claude-code-install: theme ==="
+echo "=== bin/ohmydebn-claude-code-install: key check and theme ==="
 
-# setup <exit status of the theme hook>
+# setup <exit status of the theme hook>. MOCK_KEY is the key curl
+# "downloads": Anthropic's, or one with a changed byte.
 setup() {
   mock_init
+  cp "$REPO_ROOT/tests/lib/anthropic-signing-key.asc" "$MOCK_DIR/good.asc"
+  sed '3s/^mQINBGnK73AB/mQINBGnK73AC/' "$MOCK_DIR/good.asc" >"$MOCK_DIR/bad.asc"
+  mock_bin curl <<'STUB'
+#!/bin/bash
+mock_log "curl $*"
+while [ $# -gt 0 ]; do
+  [ "$1" = -o ] && cp "$MOCK_DIR/${MOCK_KEY:-good}.asc" "$2"
+  shift
+done
+STUB
+  cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$MOCK_BIN/ohmydebn-pgp-fingerprint"
   mock_bin dpkg <<'STUB'
 #!/bin/bash
 exit 1
@@ -39,7 +53,7 @@ STUB
 }
 
 run() {
-  PATH="$(mock_path)" bash "$MOCK_DIR/install" --skip-prompt </dev/null >/dev/null 2>&1
+  OUT=$(PATH="$(mock_path)" bash "$MOCK_DIR/install" --skip-prompt </dev/null 2>&1)
   STATUS=$?
   CALLS=$(cat "$MOCK_CALLS")
 }
@@ -47,6 +61,8 @@ run() {
 setup 0
 run
 assert_eq "installs: exits 0" "0" "$STATUS"
+assert_contains "the key comes from Anthropic" "$CALLS" "curl -fsSL https://downloads.claude.ai/keys/claude-code.asc"
+assert_contains "the checked key is installed for apt" "$CALLS" "sudo install -D -m 0644"
 assert_contains "installs Claude Code" "$CALLS" "sudo /usr/bin/apt -y install claude-code"
 assert_contains "then themes it with the current theme" "$CALLS" "theme-set-claude --current"
 assert_eq "themed after it's installed" "theme-set-claude --current" \
@@ -56,6 +72,14 @@ mock_cleanup
 setup 1
 run
 assert_eq "a theme that can't be applied doesn't fail the install" "0" "$STATUS"
+mock_cleanup
+
+# A key that isn't Anthropic's: refused before anything is changed
+setup 0
+MOCK_KEY=bad run
+assert_eq "wrong key: fails" "1" "$STATUS"
+assert_contains "wrong key: says why" "$OUT" "isn't the one Anthropic publishes, so it wasn't installed"
+assert_not_contains "wrong key: nothing privileged runs" "$CALLS" "sudo"
 mock_cleanup
 
 test_summary

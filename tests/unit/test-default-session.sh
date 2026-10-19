@@ -110,6 +110,19 @@ assert_eq "LightDM+explicit xfce: backup of original kept" "user-session=xfce" \
   "$(grep '^user-session=' "$MOCK_DIR/lightdm/lightdm.conf.BEFORE.OHMYDEBN" 2>/dev/null)"
 mock_cleanup
 
+# Scenario 3b: user-session drifted again after an earlier edit -> the
+# original backup is kept, not replaced by the already-edited file
+setup "/usr/sbin/lightdm" CINNAMON yes yes "[Seat:*]
+user-session=xfce"
+printf '[Seat:*]\nuser-session=original\n' >"$MOCK_DIR/lightdm/lightdm.conf.BEFORE.OHMYDEBN"
+EXIT_CODE=$(run_script)
+assert_eq "drifted again: exits 0" "0" "$EXIT_CODE"
+assert_eq "drifted again: user-session switched back to cinnamon" "user-session=cinnamon" \
+  "$(grep '^user-session=' "$MOCK_DIR/lightdm/lightdm.conf")"
+assert_eq "drifted again: the original backup is kept" "user-session=original" \
+  "$(grep '^user-session=' "$MOCK_DIR/lightdm/lightdm.conf.BEFORE.OHMYDEBN")"
+mock_cleanup
+
 # Scenario 4: re-run with everything already in place (update path) -> no sudo at all
 setup "/usr/sbin/lightdm" CINNAMON yes yes "[Seat:*]
 user-session=cinnamon"

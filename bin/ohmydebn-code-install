@@ -45,7 +45,7 @@ if ! dpkg -s "code" >/dev/null 2>&1; then
   # libraries.
   #
   # packages.microsoft.com is also PowerShell's own repo origin (see
-  # ohmydebn-powershell-install) - a separate Package: powershell stanza
+  # ohmydebn-powershell-repo) - a separate Package: powershell stanza
   # there restricts it the same way, and apt resolves pins per-package (a
   # specific Package: match always outranks a wildcard Package: * one,
   # regardless of which .pref file either came from), so the two coexist

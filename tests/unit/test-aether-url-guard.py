@@ -58,6 +58,14 @@ check_eq("wrong action is refused", outcome[0], "refuse")
 outcome = guard.build_confirmation("aether://apply?mode=dark")
 check_eq("no payload param is refused", outcome[0], "refuse")
 
+# urlsplit raises on this (an unclosed "[" reads as a broken IPv6 host):
+# refused with the dialog, not a traceback.
+try:
+    outcome = guard.build_confirmation("aether://[x")
+except ValueError:
+    outcome = ("raised",)
+check_eq("a malformed link is refused, not raised", outcome[0], "refuse")
+
 # --- A repeated parameter is refused: the dialog and Aether could each read
 # a different one (dict() keeps the last, Aether may take the first) ---
 outcome = guard.build_confirmation(

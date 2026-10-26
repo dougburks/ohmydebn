@@ -3,7 +3,7 @@
 # Shared GTK/Cairo dial widget and support code for
 # ohmydebn-network-speedtest-gui and ohmydebn-disk-speedtest-gui - a
 # recreation of Omarchy's own QML speed-test overlay
-# (~/git/omarchy's shell/Ui/SpeedTestOverlay.qml, the "Quattro" checkout),
+# (shell/Ui/SpeedTestOverlay.qml in https://github.com/basecamp/omarchy),
 # which is itself explicitly "shared by the network and disk speed tests"
 # per its own top comment; this file is that same sharing, just via a
 # plain importable Python module instead of one shared QML component,
@@ -12,7 +12,7 @@
 # .py-suffixed name here instead of that convention - it needs to be a
 # valid `import` target, which a name containing hyphens can never be).
 #
-# Not a menu entry itself - sourced only, the Python equivalent of
+# Not a menu entry itself - imported only, the Python equivalent of
 # bin/ohmydebn-menu-tree's own "Sourced only" role for bash.
 
 import gi

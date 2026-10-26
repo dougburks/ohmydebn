@@ -66,8 +66,12 @@ else
     RANDOM_INDEX=$(( RANDOM % TOTAL ))
     NEW_BACKGROUND="${BACKGROUNDS[$RANDOM_INDEX]}"
   elif [[ "$BG_ARG" =~ ^[0-9]+$ ]]; then
-    # 1-based index, clamp to valid range
-    SPECIFIC_INDEX=$(( (BG_ARG - 1) % TOTAL ))
+    # 1-based index, wrapping past the last one. 10#: a leading zero ("08")
+    # would otherwise be read as octal and abort the switch half done; 0
+    # means the first, not (wrapping backwards) the last.
+    SPECIFIC_INDEX=$((10#$BG_ARG))
+    ((SPECIFIC_INDEX >= 1)) || SPECIFIC_INDEX=1
+    SPECIFIC_INDEX=$(((SPECIFIC_INDEX - 1) % TOTAL))
     NEW_BACKGROUND="${BACKGROUNDS[$SPECIFIC_INDEX]}"
   elif [[ $INDEX -eq -1 ]]; then
     # Use the first background when no match was found

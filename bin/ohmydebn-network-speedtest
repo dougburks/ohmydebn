@@ -1,16 +1,17 @@
 #!/bin/bash
 #
 # Network speed test, adapted from Omarchy's own
-# bin/omarchy-network-speedtest (~/git/omarchy, the "Quattro" checkout) -
+# bin/omarchy-network-speedtest (https://github.com/basecamp/omarchy) -
 # same measurement approach: hammer several of Netflix's fast.com CDN
 # endpoints in parallel and sample the network interface's own byte
 # counters once a second, rather than trusting any single HTTP transfer's
 # self-reported rate. Reworked into one self-contained, fixed-duration run
 # (download then upload, each timed, with a final avg/peak summary)
 # instead of Omarchy's own toggleable live overlay (a Hyprland/quickshell
-# panel querying this same measurement indefinitely) - this launches into
-# an ordinary floating terminal instead, so a bounded run with a real end
-# makes more sense than an overlay meant to be switched on and off.
+# panel querying this same measurement indefinitely) - this runs in the
+# user's own terminal (the menu opens ohmydebn-network-speedtest-gui), so a
+# bounded run with a real end makes more sense than an overlay meant to be
+# switched on and off.
 #
 # curl and jq are both guaranteed ohmydebn dependencies (see
 # install/packaging/dependencies.sh) - no install-check wrapper needed,

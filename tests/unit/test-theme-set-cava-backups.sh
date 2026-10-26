@@ -46,6 +46,8 @@ assert_eq "first switch: exits 0" "0" "$STATUS"
 assert_eq "first switch: one backup, of the config before OhMyDebn changed it" "config.backup-before-ohmydebn " "$(backups)"
 assert_eq "first switch: the backup is the untouched original" "$ORIGINAL" "$(cat "$CAVA/config.backup-before-ohmydebn")"
 assert_contains "first switch: the theme's colors went in" "$(cat "$CAVA/config")" "gradient_color_1"
+# -x: without it, any process whose name contains "cava" got USR2.
+assert_contains "first switch: only a process named exactly cava is told to reload" "$(cat "$MOCK_CALLS")" "pkill -x -USR2 cava"
 run
 run
 assert_eq "more switches: still that one backup, nothing new" "config.backup-before-ohmydebn " "$(backups)"

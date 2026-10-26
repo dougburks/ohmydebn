@@ -790,7 +790,7 @@ show_setup_menu() {
   *Bluetooth*) blueman-manager ;;
   *Defaults*) show_defaults_menu ;;
   *Display*) cinnamon-settings display ;;
-  *Gestures*) cinnamon-settings gestures ;;
+  *Gestures*) /usr/share/ohmydebn/bin/ohmydebn-gestures ;;
   *Keybindings*) present_terminal "Keybindings" "/usr/share/ohmydebn/bin/ohmydebn-keybindings-edit" ;;
   *Keyboard*) cinnamon-settings keyboard ;;
   *Mouse*) cinnamon-settings mouse ;;

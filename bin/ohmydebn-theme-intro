@@ -15,7 +15,10 @@ set -euo pipefail
 # plays backgrounds/intros/1-in-the-groove.webm (or .mp4). Every other
 # background gets the light intro, drawn live from the image itself
 # (ohmydebn-theme-intro-play --light): twilight, the light arriving from
-# the top down, and the grin's shimmer crossing the scene.
+# the top down, and the grin's shimmer crossing the scene. So does a
+# background whose clip can't play - GStreamer's pieces for clips come with
+# the Omarchy intros package, which can be removed, and no H.264 decoder is
+# installed for an .mp4 - rather than no intro at all.
 #
 # Clips are looked for in two places only:
 # - a stock theme in /usr/share/ohmydebn-themes, when the user has no theme
@@ -89,25 +92,39 @@ find_intro() {
   done
 }
 
+# start_player <player arguments...>: starts the intro and returns once it
+# covers the screen (the player says "ready") or WAIT_SECONDS have passed.
+# Fails only when the player ended without ever showing anything (a clip it
+# couldn't play); one that's just slow is left to it, so two intros never
+# run at once. setsid: the intro outlives this script and whatever started
+# it (the theme carousel quits as soon as the switch is done), and its
+# stdout is only ever the one "ready" line read here.
+start_player() {
+  local status=0
+  exec 3< <(setsid "$PLAYER" "$@" </dev/null 2>/dev/null)
+  read -r -t "$WAIT_SECONDS" -u 3 _ || status=$?
+  exec 3<&-
+  # 0: ready. Over 128: timed out, still starting. Anything else: the
+  # player's stdout closed with nothing said, so it's gone.
+  ((status == 0 || status > 128))
+}
+
+play_intro() {
+  if [[ -n "$CLIP" ]] && start_player "$CLIP"; then
+    return 0
+  fi
+  start_player --light "$IMAGE" || true
+}
+
 intros_wanted || exit 0
 [[ -x "$PLAYER" ]] || exit 0
+IMAGE=$(readlink -f -- "$BACKGROUND" 2>/dev/null) || exit 0
+[[ -f "$IMAGE" ]] || exit 0
 CLIP=$(find_intro "$BACKGROUND")
-if [[ -n "$CLIP" ]]; then
-  PLAY=("$CLIP")
-else
-  IMAGE=$(readlink -f -- "$BACKGROUND" 2>/dev/null) || exit 0
-  [[ -f "$IMAGE" ]] || exit 0
-  PLAY=(--light "$IMAGE")
-fi
 
-# setsid: the intro outlives this script and whatever started it (the
-# theme carousel quits as soon as the switch is done), and its stdout is
-# only ever the one "ready" line read below.
 if [[ "$WAIT" == true ]]; then
-  exec 3< <(setsid "$PLAYER" "${PLAY[@]}" </dev/null 2>/dev/null)
-  read -r -t "$WAIT_SECONDS" -u 3 _ || true
-  exec 3<&-
+  play_intro
 else
-  setsid "$PLAYER" "${PLAY[@]}" </dev/null >/dev/null 2>&1 &
+  play_intro </dev/null >/dev/null 2>&1 &
 fi
 exit 0

@@ -120,7 +120,12 @@ def build_confirmation(raw_url):
       ("refuse", message)
       ("confirm", title, body, forward_url)
     """
-    parts = urlsplit(raw_url)
+    # A malformed link (an unclosed "[" reads as a broken IPv6 host) raises
+    # rather than parsing: refuse it with the dialog, not a traceback.
+    try:
+        parts = urlsplit(raw_url)
+    except ValueError:
+        return ("refuse", "That Aether link is malformed.")
 
     if parts.scheme != "aether":
         return ("refuse", f"Expected an aether:// link, got scheme {parts.scheme!r}.")

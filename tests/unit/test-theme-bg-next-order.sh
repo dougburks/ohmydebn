@@ -56,6 +56,15 @@ done
 assert_eq "the carousel's list was read" "5" "$(wc -w <<<"$CAROUSEL")"
 assert_eq "background N is the carousel's N-th, whatever the locale" "$CAROUSEL" "${BG_NEXT% }"
 
+# A leading zero isn't octal ("08" aborted the run), and 0 is the first
+# background, not the last.
+: >"$MOCK_CALLS"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --background 09 </dev/null >/dev/null 2>&1
+assert_eq "--background 09: read as decimal 9, wrapping to the fourth of five" "$(cut -d' ' -f4 <<<"$CAROUSEL")" "$(cat "$MOCK_CALLS")"
+: >"$MOCK_CALLS"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --background 0 </dev/null >/dev/null 2>&1
+assert_eq "--background 0: the first" "$(cut -d' ' -f1 <<<"$CAROUSEL")" "$(cat "$MOCK_CALLS")"
+
 # --print (what ohmydebn-theme-set uses, to start the background's intro
 # before setting it): the same choice, printed rather than set.
 : >"$MOCK_CALLS"

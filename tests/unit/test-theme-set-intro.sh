@@ -104,6 +104,14 @@ assert_contains "--background N: the N-th is chosen" "$(calls)" "bg-next --print
 assert_contains "--background N: ...and set" "$(calls)" "bg-set $(BG 2-dusk-guardian.jpg)"
 mock_cleanup
 
+# --- a first install: no theme before, so no intro over the installer ---
+setup
+rm "$H/.config/ohmydebn/current/theme.name"
+set_theme retro-82
+assert_not_contains "first theme ever (install): no intro" "$(calls)" "intro"
+assert_contains "first theme ever: the background is still set" "$(calls)" "bg-set $(BG 1-in-the-groove.jpg)"
+mock_cleanup
+
 # --- the same theme applied again: no intro ---
 setup
 echo retro-82 >"$H/.config/ohmydebn/current/theme.name"

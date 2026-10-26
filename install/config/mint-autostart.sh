@@ -15,7 +15,10 @@
 # Only ever runs once: if the user later re-enables one of these
 # themselves, a subsequent ohmydebn-update must not silently turn it back
 # off underneath them.
-if [ "$ID" = "linuxmint" ]; then
+# The ID is read here, not taken from install.sh's own read of os-release:
+# ohmydebn-reset-config runs ohmydebn.sh directly, where $ID was empty.
+# shellcheck disable=SC1090 # os-release, or the test's stand-in for it
+if [ "$(. "${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}" && echo "${ID:-}")" = "linuxmint" ]; then
   MINT_AUTOSTART_STATE=~/.local/state/ohmydebn-config/mint-autostart-20260902
   if [ ! -f "$MINT_AUTOSTART_STATE" ]; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Disabling unneeded Mint autostart apps"

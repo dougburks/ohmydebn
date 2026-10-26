@@ -41,6 +41,9 @@ setup() {
 #!/bin/bash
 mock_log "play $*"
 [[ -n "${MOCK_PLAYER_SILENT:-}" ]] && { sleep 2; exit 1; }
+# A clip it can't play (GStreamer or a decoder missing): it ends at once,
+# having shown nothing and said nothing.
+[[ -n "${MOCK_CLIP_FAILS:-}" && "$1" != --light ]] && exit 1
 echo ready
 EOF
   mock_bin gsettings <<'EOF'
@@ -179,6 +182,29 @@ setup
 intro
 for _ in $(seq 20); do [[ -s "$MOCK_CALLS" ]] && break; sleep 0.1; done
 assert_eq "without --wait: the intro still plays, on its own" "$(STOCK_CLIP)" "$(played)"
+mock_cleanup
+
+# --- a clip that can't play: the light intro instead, not nothing ---
+setup
+MOCK_CLIP_FAILS=1 intro --wait "$CURRENT/theme/backgrounds/1-in-the-groove.jpg"
+assert_eq "clip can't play: the light intro plays instead" \
+  "$(STOCK_CLIP)
+$(LIGHT "$CURRENT/theme/backgrounds/1-in-the-groove.jpg")" "$(played)"
+mock_cleanup
+
+setup
+MOCK_CLIP_FAILS=1 intro
+for _ in $(seq 30); do [[ $(wc -l <"$MOCK_CALLS") -ge 2 ]] && break; sleep 0.1; done
+assert_eq "clip can't play, without --wait (at login): the light intro too" \
+  "$(STOCK_CLIP)
+$(LIGHT "$CURRENT/theme/backgrounds/1-in-the-groove.jpg")" "$(played)"
+mock_cleanup
+
+# A player that's only slow to cover the screen is left to it: a second
+# intro would play over the first.
+setup
+MOCK_PLAYER_SILENT=1 intro --wait "$CURRENT/theme/backgrounds/1-in-the-groove.jpg"
+assert_eq "slow player: no light intro on top of it" "$(STOCK_CLIP)" "$(played)"
 mock_cleanup
 
 # --- the toggle ---

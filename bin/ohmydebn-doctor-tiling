@@ -83,6 +83,17 @@ overlaps() {
   (($1 < $5 + $7 && $5 < $1 + $3 && $2 < $6 + $8 && $6 < $2 + $4))
 }
 
+# geometry <title-suffix or full title> -> "x y w h" or nothing. Only on
+# EMPTY_DESKTOP, the workspace the test windows open on: searching every
+# workspace found the user's own window of the same title first (a real
+# cliamp window, for the rules check) and reported a false FAIL.
+geometry() {
+  local id
+  id=$(xdotool search --desktop "$EMPTY_DESKTOP" --name "^$1\$" 2>/dev/null | head -1)
+  [ -n "$id" ] || return 1
+  xdotool getwindowgeometry --shell "$id" 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} /^WIDTH=/{w=$2} /^HEIGHT=/{h=$2} END{print x, y, w, h}'
+}
+
 # Sourced for its functions only (the unit test).
 [ "${OHMYDEBN_DOCTOR_TILING_LIB:-}" = "1" ] && return 0 2>/dev/null
 
@@ -170,13 +181,6 @@ close_window() {
 
 close_all() { local n; for n in "${!PIDS[@]}"; do close_window "$n"; done; }
 
-# geometry <title-suffix or full title> -> "x y w h" or nothing
-geometry() {
-  local id
-  id=$(xdotool search --name "^$1\$" 2>/dev/null | head -1)
-  [ -n "$id" ] || return 1
-  xdotool getwindowgeometry --shell "$id" 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} /^WIDTH=/{w=$2} /^HEIGHT=/{h=$2} END{print x, y, w, h}'
-}
 
 # expect <label> <window n> <region>
 expect() {

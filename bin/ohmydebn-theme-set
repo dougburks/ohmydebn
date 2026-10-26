@@ -126,7 +126,9 @@ fi
 
 # The theme being switched away from: an intro plays only on an actual
 # change, not when the same theme is applied again (by ohmydebn-update,
-# ohmydebn-reset-config or Aether).
+# ohmydebn-reset-config or Aether), and not when there was none before: a
+# first install's theme step would otherwise cover the installer's own
+# terminal with a full-screen intro, which a keypress there also skipped.
 OLD_THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
 
 # Remove the symlinks to shipped themes that releases before 3.3.0 put in
@@ -189,8 +191,11 @@ if theme_came_from_a_repo "$THEME_PATH"; then
   stage_installed_theme "$THEME_PATH" "$NEXT_THEME_PATH"
   report_ignored_theme_files
 else
-  # Everything but backgrounds/intros: intro clips run to megabytes each,
-  # and ohmydebn-theme-intro plays them from where they are.
+  # Everything but backgrounds/intros: intro clips run to megabytes each.
+  # ohmydebn-theme-intro plays a stock theme's from where the package put
+  # them; a theme of the user's own in ~/.config/ohmydebn/themes doesn't
+  # have its clips played (its backgrounds get the light intro), only those
+  # in the user's backgrounds folder for the theme.
   find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 ! -name backgrounds -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
   if [[ -d "$THEME_PATH/backgrounds" ]]; then
     mkdir -p "$NEXT_THEME_PATH/backgrounds"
@@ -230,7 +235,7 @@ elif [[ -n "$BG_ARG" ]]; then
 else
   NEW_BACKGROUND=$(/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --print)
 fi
-if [[ -n "$NEW_BACKGROUND" && "$THEME_NAME" != "$OLD_THEME_NAME" ]]; then
+if [[ -n "$NEW_BACKGROUND" && -n "$OLD_THEME_NAME" && "$THEME_NAME" != "$OLD_THEME_NAME" ]]; then
   /usr/share/ohmydebn/bin/ohmydebn-theme-intro --wait "$NEW_BACKGROUND" || true
 fi
 

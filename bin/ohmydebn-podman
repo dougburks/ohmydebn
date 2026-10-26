@@ -9,14 +9,16 @@ if ! /usr/share/ohmydebn/bin/ohmydebn-podman-installed; then
 fi
 
 if dpkg -s "podman" >/dev/null 2>&1; then
-  # Podman installed before this check existed may still lack the
-  # subordinate ID ranges rootless mode needs; no-op when it has them.
-  /usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure
-
   # Podman has no GUI, so "launching" it means opening a terminal already
   # running --help - a starting point for whatever subcommand the user
   # actually needs - then dropping into an interactive shell in that same
   # window so they can act on it immediately instead of the terminal just
   # closing again.
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Podman" "podman --help; exec bash"
+  #
+  # First, in that terminal: Podman installed before the check existed may
+  # still lack the subordinate ID ranges rootless mode needs (a no-op when
+  # it has them). Adding them takes sudo, which needs the terminal to ask
+  # for a password - run from the menu or hotkey directly, with no
+  # terminal, it failed and nothing opened at all.
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Podman" "/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure; podman --help; exec bash"
 fi

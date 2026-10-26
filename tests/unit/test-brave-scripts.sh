@@ -82,6 +82,11 @@ run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" bash 
 setup
 OUT=$(MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt 2>&1)
 assert_eq "fresh: our sources file written" "yes" "$([ -f "$OURS" ] && echo yes || echo no)"
+# Written locally, never downloaded: a fetched one went in as root unchecked.
+assert_eq "fresh: sources file is Brave's stanza, signed by the checked keyring" \
+  "$(printf 'Types: deb\nURIs: https://brave-browser-apt-release.s3.brave.com\nSuites: stable\nComponents: main\nArchitectures: amd64 arm64\nSigned-By: %s' "$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg")" \
+  "$(cat "$OURS")"
+assert_not_contains "fresh: sources file not downloaded" "$(cat "$MOCK_CALLS")" "brave-browser.sources"
 assert_eq "fresh: pin written, restricting the repo to Brave's packages" "yes" "$(grep -q 'Package: brave-browser brave-origin brave-keyring' "$ROOT/etc/apt/preferences.d/brave-browser-release.pref" && echo yes || echo no)"
 assert_eq "fresh: Brave's keyring installed, as published" "yes" "$(cmp -s "$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg" "$REPO_ROOT/tests/lib/brave-signing-keys.gpg" && echo yes || echo no)"
 assert_contains "fresh: package installed" "$(cat "$MOCK_CALLS")" "sudo /usr/bin/apt -y install brave-origin"

@@ -87,7 +87,7 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 2. The distro check in `install.sh`, the supported list in its warning text, and the same check in `bin/ohmydebn-doctor`.
 3. The apt-sources step in `install.sh` must leave the distro's own sources alone.
 4. A case in `tests/unit/test-install-distro-detection.sh` using the distro's real `os-release`.
-5. `installation.md` and `requirements.md` in `ohmydebn-docs`, the home page's two distro lists and Base Distro card (`overrides/home.html` there), and a line under Supported distros in the release notes, then test the whole install in a VM.
+5. `installation.md`, `requirements.md`, `faq.md` and `introduction.md` in `ohmydebn-docs`, the home page's two distro lists and Base Distro card (`overrides/home.html` there), and a line under Supported distros in the release notes, then test the whole install in a VM.
 
 ### Updating Neovim or its plugins
 

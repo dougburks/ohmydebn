@@ -943,6 +943,9 @@ MENU_HOTKEY_PAIRS=(
   "Visual Studio Code:show_ai_menu:VSCode"
   "Visual Studio Code:show_editor_menu:VSCode"
   "Cava:show_media_menu:Cava"
+  # Cinnamon's gestures page does nothing without touchegg, which only
+  # ohmydebn-gestures offers to install; the menu went straight to it.
+  "Gestures:show_setup_menu:Gestures"
 )
 for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
   IFS=':' read -r KB_LABEL MENU_FUNC MENU_KEYWORD <<<"$ENTRY"

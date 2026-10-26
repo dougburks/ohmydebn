@@ -151,9 +151,9 @@ def load_categories(go_items):
         # Keep the original separator (1 or 2 spaces) for display instead of
         # hardcoding two - forcing two after a wide glyph like the
         # magnifying glass left a visibly oversized gap before "Cybersecurity".
-        # The icon itself is optional (\S*, not \S+) - a few items
-        # (Cybersecurity, Editor, Virtualization, ...) have never carried
-        # one, just the same leading separator every icon-bearing item
+        # The icon itself is optional (\S*, not \S+) - every item has one
+        # now, but a few (Cybersecurity, Editor, Virtualization, ...) once
+        # had none, just the same leading separator every icon-bearing item
         # also has before its label. \S+ required at least one non-
         # whitespace character before that separator, so it flatly failed
         # to match any icon-less item at all (the string starts with

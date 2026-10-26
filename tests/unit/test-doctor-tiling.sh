@@ -38,6 +38,19 @@ assert_eq "classify: the bug's stuck window reads as top-right, not right-half" 
 # Boundary tolerance: 45% wide still counts as a half.
 assert_eq "classify: 45%-wide tall window still reads as a half" "left-half" "$(classify_region 0 0 1143 1314 $SW $SH)"
 
+# --- geometry looks only on the test's own workspace: the user's real
+# cliamp window on another one was found first, a false FAIL ---
+xdotool() {
+  case "$1" in
+  search) [[ " $* " == *" --desktop 3 "* ]] && echo 222 || echo 111 ;;
+  getwindowgeometry) [ "$3" = 222 ] && printf 'X=1285\nY=739\nWIDTH=1245\nHEIGHT=599\n' || printf 'X=0\nY=0\nWIDTH=500\nHEIGHT=300\n' ;;
+  esac
+}
+# shellcheck disable=SC2034 # read by geometry()
+EMPTY_DESKTOP=3
+assert_eq "geometry: the test workspace's window, not another of the same title" "1285 739 1245 599" "$(geometry cliamp)"
+unset -f xdotool
+
 # --- mode_cycle_steps follows the extension's cycle order and wraps ---
 assert_eq "cycle: off -> rules is 1 step" "1" "$(mode_cycle_steps off rules)"
 assert_eq "cycle: off -> scrollable is 4 steps" "4" "$(mode_cycle_steps off scrollable)"

@@ -1558,6 +1558,13 @@ def main():
             ],
         )
 
+    # A second launch pokes the lock holder with SIGUSR1 to bring its
+    # window forward, but the handler for that is only installed once the
+    # window exists (UpdateWindow.__init__); until then SIGUSR1's default
+    # action killed this process, so two quick launches opened no window
+    # at all. Ignored until the handler replaces this.
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
+
     # One window per user - see acquire_instance_lock. The fd is held in
     # a name that lives as long as main() does; the lock dies with it.
     lock_fd, holder = acquire_instance_lock(instance_lock_path())

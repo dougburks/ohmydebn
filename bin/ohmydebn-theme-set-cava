@@ -210,8 +210,10 @@ update_cava_theme() {
 
 # Function to reload cava config
 reload_cava_colors() {
-    # Send USR2 signal to cava to reload config
-    pkill -USR2 cava 2>/dev/null || true
+    # Send USR2 signal to cava to reload config. -x: the name exactly, or
+    # pkill signals any process whose name merely contains "cava" (see the
+    # same fix in ohmydebn-theme-set-btop).
+    pkill -x -USR2 cava 2>/dev/null || true
 }
 
 # Run the update

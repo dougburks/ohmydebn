@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # dependencies.sh: Install packages that aren't guaranteed to exist on every
-# Debian 13 flavor / Kali / Debian testing target, so ohmydebn's own .deb
+# supported distro (see install.sh's distro check), so ohmydebn's own .deb
 # only hard-depends on packages it can guarantee (its own repo packages,
 # plus a handful of universal framework plumbing - see
 # build-package-ohmydebn.sh in the ohmydebn-package-build repo). Everything

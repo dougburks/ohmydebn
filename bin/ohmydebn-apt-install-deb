@@ -8,7 +8,7 @@
 #             anything is installed
 #
 # For the installers whose vendor ships a .deb rather than an apt repo
-# (ChatGPT, VS Code, Google Chrome, Microsoft's repo-setup package). They
+# (ChatGPT, VS Code, Google Chrome). They
 # used to run `curl ... && dpkg -i ... && rm`, which had three problems:
 # dpkg -i doesn't install a package's dependencies (a vendor adding a new
 # library left the package half-installed), a failed download inside the

@@ -6,6 +6,7 @@ source $OHMYDEBN_INSTALL/config/bat.sh
 source $OHMYDEBN_INSTALL/config/btop.sh
 source $OHMYDEBN_INSTALL/config/cava.sh
 source $OHMYDEBN_INSTALL/config/chromium.sh
+source $OHMYDEBN_INSTALL/config/chrony.sh
 source $OHMYDEBN_INSTALL/config/cinnamon.sh
 source $OHMYDEBN_INSTALL/config/cinnamon-applet-ids.sh
 source $OHMYDEBN_INSTALL/config/cursor.sh

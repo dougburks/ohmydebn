@@ -28,3 +28,7 @@ source $OHMYDEBN_INSTALL/packaging/power-user.sh
 # browser.sh runs after power-user.sh (see the comment in that file for
 # why).
 source $OHMYDEBN_INSTALL/packaging/browser.sh
+
+# Theme intros, installed once (not on a Raspberry Pi). After
+# dependencies.sh, like the other optional packages.
+source $OHMYDEBN_INSTALL/packaging/theme-intros.sh

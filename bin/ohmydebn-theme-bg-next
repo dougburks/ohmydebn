@@ -2,9 +2,17 @@
 set -euo pipefail
 
 # Cycles through the background images available
-# Usage: ohmydebn-theme-bg-next [--background <arg>]
+# Usage: ohmydebn-theme-bg-next [--print] [--background <arg>]
 #   <arg> can be "random" or a number (1-based index)
+#   --print prints the background that would be chosen instead of setting
+#   it: ohmydebn-theme-set starts the background's intro first, so the
+#   switch happens underneath it.
 
+PRINT_ONLY=false
+if [[ "${1:-}" == "--print" ]]; then
+  PRINT_ONLY=true
+  shift
+fi
 BG_ARG=""
 if [[ "${1:-}" == "--background" ]]; then
   BG_ARG="${2:-}"
@@ -69,5 +77,9 @@ else
     NEW_BACKGROUND="${BACKGROUNDS[$NEXT_INDEX]}"
   fi
 
-  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
+  if [[ "$PRINT_ONLY" == true ]]; then
+    echo "$NEW_BACKGROUND"
+  else
+    /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
+  fi
 fi

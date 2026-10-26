@@ -52,6 +52,9 @@ stage_installed_theme_dir() {
   for entry in "$source"/*; do
     [[ -e "$entry" ]] || continue
     name=$(basename "$entry")
+    # Intros aren't played from a theme installed from a git repo (see
+    # ohmydebn-theme-intro), so there's no point copying them.
+    [[ "$name" == intros && "$source" == "$THEME_PATH/backgrounds" ]] && continue
     if [[ -L "$entry" ]]; then
       case "${name,,}" in
       readme* | license* | changelog* | *.md | *.txt) ;;
@@ -121,6 +124,11 @@ if [[ "$KEEP_BACKGROUND" == true ]]; then
   KEPT_BACKGROUND=$(readlink -f -- "$HOME/.config/ohmydebn/current/background" 2>/dev/null) || true
 fi
 
+# The theme being switched away from: an intro plays only on an actual
+# change, not when the same theme is applied again (by ohmydebn-update,
+# ohmydebn-reset-config or Aether).
+OLD_THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
+
 # Remove the symlinks to shipped themes that releases before 3.3.0 put in
 # the themes dir (they pointed into /usr/share/ohmydebn-themes). Only
 # those: this used to remove EVERY symlink there but aether's, so a theme a
@@ -181,7 +189,13 @@ if theme_came_from_a_repo "$THEME_PATH"; then
   stage_installed_theme "$THEME_PATH" "$NEXT_THEME_PATH"
   report_ignored_theme_files
 else
-  find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
+  # Everything but backgrounds/intros: intro clips run to megabytes each,
+  # and ohmydebn-theme-intro plays them from where they are.
+  find -L "$THEME_PATH" -mindepth 1 -maxdepth 1 ! -name backgrounds -exec cp -r {} "$NEXT_THEME_PATH/" \; 2>/dev/null || true
+  if [[ -d "$THEME_PATH/backgrounds" ]]; then
+    mkdir -p "$NEXT_THEME_PATH/backgrounds"
+    find -L "$THEME_PATH/backgrounds" -mindepth 1 -maxdepth 1 ! -name intros -exec cp -r {} "$NEXT_THEME_PATH/backgrounds/" \; 2>/dev/null || true
+  fi
 fi
 
 # Resolve theme colors now (handles legacy colors.toml, Omarchy 4+ semantic
@@ -201,6 +215,24 @@ mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
 
 # Store theme name for reference
 echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
+
+# Choose the new background now, before anything on screen changes, and
+# start its intro if it has one: the intro covers the screen within about a
+# third of a second, and the rest of the switch (colors, panel, background)
+# then happens underneath it, the clip ending on the same picture the
+# desktop now shows. ohmydebn-theme-bg-next reads the theme.name and theme
+# copy just written.
+NEW_BACKGROUND=""
+if [[ "$KEEP_BACKGROUND" == true && -n "$KEPT_BACKGROUND" && -f "$KEPT_BACKGROUND" ]]; then
+  NEW_BACKGROUND="$KEPT_BACKGROUND"
+elif [[ -n "$BG_ARG" ]]; then
+  NEW_BACKGROUND=$(/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --print --background "$BG_ARG")
+else
+  NEW_BACKGROUND=$(/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --print)
+fi
+if [[ -n "$NEW_BACKGROUND" && "$THEME_NAME" != "$OLD_THEME_NAME" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-intro --wait "$NEW_BACKGROUND" || true
+fi
 
 # Determine light or dark mode. Omarchy 4+ themes signal this with a `mode`
 # key in colors.toml; older themes use a light.mode marker file instead.
@@ -241,13 +273,9 @@ else
   gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" || true
 fi
 
-# Set new background
-if [[ "$KEEP_BACKGROUND" == true && -n "$KEPT_BACKGROUND" && -f "$KEPT_BACKGROUND" ]]; then
-  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$KEPT_BACKGROUND"
-elif [[ -n "$BG_ARG" ]]; then
-  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --background "$BG_ARG"
-else
-  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-next
+# Set the new background chosen above
+if [[ -n "$NEW_BACKGROUND" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
 fi
 
 # Use COLORS_SOURCE to update cinnamon and gtk themes

@@ -251,6 +251,7 @@ ohmydebn-theme-install <url>     # Install from git repo
 - Background switching: `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`
 - Build custom themes: `Ctrl + Shift + A` (Aether theme builder)
 - Browse more themes: press B in the theme carousel (`Ctrl + Super + T`)
+- Theme intros: switching themes and logging in play a short intro that fades into the background: the background itself at twilight with the light arriving and a shimmer, drawn live, or for some Omarchy backgrounds Omarchy's own clip. Turn them off or on with `ohmydebn-theme-intro-toggle` (Style > Theme Intros). A user's own background in `~/.config/ohmydebn/backgrounds/<theme>/` can have its own clip at `intros/<same name>.mp4` or `.webm` beside it
 
 ### Keybindings
 

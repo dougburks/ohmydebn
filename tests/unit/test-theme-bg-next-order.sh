@@ -56,5 +56,12 @@ done
 assert_eq "the carousel's list was read" "5" "$(wc -w <<<"$CAROUSEL")"
 assert_eq "background N is the carousel's N-th, whatever the locale" "$CAROUSEL" "${BG_NEXT% }"
 
+# --print (what ohmydebn-theme-set uses, to start the background's intro
+# before setting it): the same choice, printed rather than set.
+: >"$MOCK_CALLS"
+PRINTED=$(HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --print --background 2 </dev/null 2>/dev/null)
+assert_eq "--print: prints the background --background N would set" "$(cut -d' ' -f2 <<<"$CAROUSEL")" "$(basename "$PRINTED")"
+assert_eq "--print: sets nothing" "" "$(cat "$MOCK_CALLS")"
+
 mock_cleanup
 test_summary

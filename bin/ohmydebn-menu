@@ -757,11 +757,13 @@ show_update_password_menu() {
 }
 
 show_style_menu() {
-  menu "Style" "  Effects\n  Notifications\n󰷛  Screensaver\n  Theme\n  Tiling\n  Windows\n󰕰  Workspaces"
+  menu "Style" "  Effects\n  Notifications\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
   case "$MENU_RESULT" in
   *Effects*) cinnamon-settings effects ;;
   *Notifications*) cinnamon-settings notifications ;;
   *Screensaver*) cinnamon-settings screensaver ;;
+  # Before *Theme*, which would match it too.
+  *Intros*) /usr/share/ohmydebn/bin/ohmydebn-theme-intro-toggle ;;
   *Theme*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *Tiling*) xlet-settings extension gTile@OhMyDebn ;;
   *Windows*) cinnamon-settings windows ;;

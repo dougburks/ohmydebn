@@ -1,0 +1,530 @@
+#!/usr/bin/python3
+#
+# ohmydebn-theme-intro-play: play a theme intro full screen on every
+# monitor, ending on the theme's still background, then fade out to reveal
+# that still underneath. Only ohmydebn-theme-intro runs this, after
+# deciding an intro should play at all (effects on, not a Raspberry Pi,
+# intros not turned off).
+# Usage: ohmydebn-theme-intro-play <clip>
+#        ohmydebn-theme-intro-play --light <image>
+#
+# A clip is a short silent video that ends on its background (the ones
+# Omarchy made for its themes, or a user's own). --light is for every
+# other background: the image itself starts in cool, dim twilight, the
+# light arrives from the top down like a sunrise, and the band of light
+# that crosses the OhMyDebn grin in the system summary crosses the scene.
+# It's drawn live from the image, so any background has one without
+# anything rendered ahead of time.
+#
+# Prints "ready" on stdout once the first frame is on screen, so
+# ohmydebn-theme-set can switch the theme underneath the intro instead of
+# the intro following the switch. Exits 1 on any failure (no display, a
+# missing GStreamer plugin, a file it can't decode) without having covered
+# anything for longer than it took to find out.
+#
+# Both fill each monitor the way Cinnamon's "zoom" background option fills
+# it with the still (scaled to cover, centered), so the last frame lines
+# up with the background it fades into.
+
+import os
+import signal
+import sys
+
+import cairo
+import gi
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
+
+# GStreamer is imported only for a clip (ClipIntro): the light intro needs
+# nothing beyond GTK and cairo, which Cinnamon itself depends on.
+Gst = None
+
+# A full-screen window that stays above everything must never outlive its
+# clip: the longest intro is about 8 seconds, so anything past this is a
+# stuck pipeline, and the window goes regardless.
+MAX_SECONDS = 20
+FADE_MS = 500
+SKIP_FADE_MS = 150
+# One intro at a time: switching themes again mid-intro replaces the
+# running one rather than stacking a second set of windows on top.
+PID_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "ohmydebn-theme-intro.pid")
+
+
+def replace_running_intro():
+    try:
+        with open(PID_FILE, encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmdline = f.read()
+    except (OSError, ValueError):
+        return
+    # Only one of ours: a stale pid file's number may belong to anything now.
+    if pid != os.getpid() and b"ohmydebn-theme-intro-play" in cmdline:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+
+def write_pid_file():
+    try:
+        tmp = f"{PID_FILE}.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(f"{os.getpid()}\n")
+        os.replace(tmp, PID_FILE)
+    except OSError:
+        pass
+
+
+def remove_pid_file():
+    try:
+        with open(PID_FILE, encoding="utf-8") as f:
+            if f.read().strip() == str(os.getpid()):
+                os.unlink(PID_FILE)
+    except OSError:
+        pass
+
+
+class Intro:
+    """What both kinds share: a window per monitor, kept invisible until its
+    first frame is drawn, the "ready" line, skipping, fading out, and the
+    time limit."""
+
+    def __init__(self):
+        self.status = 1
+        self.fading = False
+        self.done = False
+        self.shown = False
+        self.ready_sent = False
+        self.windows = []
+        self.widgets = []
+        self.drawn = set()
+
+    def monitors(self):
+        display = Gdk.Display.get_default()
+        return [display.get_monitor(i) for i in range(display.get_n_monitors())]
+
+    def wait_for_first_draw(self):
+        """Show the windows once every widget has drawn its first frame
+        (otherwise one black frame shows first), or after a moment
+        regardless."""
+        for widget in self.widgets:
+            widget.connect_after("draw", self.on_first_draw)
+            widget.queue_draw()
+        GLib.timeout_add(300, self.show)
+
+    def on_first_draw(self, widget, _cr):
+        self.drawn.add(widget)
+        if len(self.drawn) == len(self.widgets):
+            GLib.idle_add(self.show)
+        return False
+
+    def show(self):
+        if self.shown:
+            return False
+        self.shown = True
+        for win in self.windows:
+            Gtk.Widget.set_opacity(win, 1)
+        # A moment for the compositor to put them on screen before
+        # ohmydebn-theme-set starts changing what's underneath.
+        GLib.timeout_add(50, self.begin)
+        return False
+
+    def begin(self):
+        self.send_ready()
+        self.play()
+        return False
+
+    def play(self):
+        raise NotImplementedError
+
+    def stop(self):
+        pass
+
+    def make_window(self, monitor_num, widget):
+        win = Gtk.Window()
+        win.set_title("OhMyDebn theme intro")
+        win.set_decorated(False)
+        win.set_keep_above(True)
+        win.set_skip_taskbar_hint(True)
+        win.set_skip_pager_hint(True)
+        win.get_style_context().add_class("ohmydebn-theme-intro")
+        win.add(widget)
+        win.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.BUTTON_PRESS_MASK)
+        win.connect("key-press-event", lambda *_: self.fade_out(SKIP_FADE_MS))
+        win.connect("button-press-event", lambda *_: self.fade_out(SKIP_FADE_MS))
+        win.connect("realize", self.hide_cursor)
+        win.connect("delete-event", lambda *_: self.quit(0) or True)
+        win.fullscreen_on_monitor(win.get_screen(), monitor_num)
+        return win
+
+    @staticmethod
+    def hide_cursor(win):
+        cursor = Gdk.Cursor.new_for_display(win.get_display(), Gdk.CursorType.BLANK_CURSOR)
+        win.get_window().set_cursor(cursor)
+
+    def start(self):
+        # Black behind the video, around a clip that doesn't fill its
+        # monitor.
+        css = Gtk.CssProvider()
+        css.load_from_data(b".ohmydebn-theme-intro { background-color: #000000; }")
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+        # Invisible until the first frame is in place: an intro picks up
+        # where the theme carousel left off (the OhMyDebn theme's start on
+        # the very picture just chosen), and a black window in between, for
+        # the third of a second the first frame takes, read as a cut away.
+        # (The opacity is set as each window is realized: set before that,
+        # it doesn't reach the X window, which then shows black.)
+        for win in self.windows:
+            win.connect("realize", lambda w: Gtk.Widget.set_opacity(w, 0))
+            win.show_all()
+        self.prepare()
+        GLib.timeout_add_seconds(MAX_SECONDS, lambda: self.quit(1) or False)
+
+    def prepare(self):
+        """Get the first frame drawn; wait_for_first_draw() then shows it."""
+        raise NotImplementedError
+
+    def send_ready(self):
+        if self.ready_sent:
+            return
+        self.ready_sent = True
+        try:
+            print("ready", flush=True)
+            # Nothing else is ever written, and the reader goes away as soon
+            # as it has this line.
+            sys.stdout.close()
+        except OSError:
+            pass
+
+    def fade_out(self, duration_ms):
+        if self.fading:
+            return True
+        self.fading = True
+        self.status = 0
+        start = GLib.get_monotonic_time()
+
+        def step():
+            elapsed_ms = (GLib.get_monotonic_time() - start) / 1000
+            opacity = max(0.0, 1.0 - elapsed_ms / duration_ms)
+            for win in self.windows:
+                # Gtk.Widget's, not Gtk.Window's deprecated one of the
+                # same name.
+                Gtk.Widget.set_opacity(win, opacity)
+            if opacity <= 0:
+                self.quit(0)
+                return False
+            return True
+
+        GLib.timeout_add(16, step)
+        return True
+
+    def quit(self, status):
+        # Reached from several places (the fade's end, the time limit, an
+        # error, a signal); only the first one counts.
+        if self.done:
+            return
+        self.done = True
+        self.status = status if not self.fading else self.status
+        self.stop()
+        for win in self.windows:
+            win.destroy()
+        Gtk.main_quit()
+
+
+class ClipIntro(Intro):
+    """A video clip. One decode feeds every monitor: playbin's video goes
+    into a tee with one branch per monitor, and each branch crops the
+    picture to its monitor's shape (aspectratiocrop, centered)."""
+
+    def __init__(self, clip):
+        global Gst
+        super().__init__()
+        try:
+            gi.require_version("Gst", "1.0")
+            from gi.repository import Gst as _Gst
+        except (ImportError, ValueError) as err:
+            raise RuntimeError(f"GStreamer isn't available: {err}") from err
+        Gst = _Gst
+        Gst.init(None)
+        self.prerolled = False
+
+        self.playbin = Gst.ElementFactory.make("playbin", None)
+        sink_bin = Gst.Bin.new("intro-sinks")
+        convert = Gst.ElementFactory.make("videoconvert", None)
+        tee = Gst.ElementFactory.make("tee", None)
+        if not (self.playbin and convert and tee):
+            raise RuntimeError("GStreamer's playbin, videoconvert or tee is missing")
+        sink_bin.add(convert)
+        sink_bin.add(tee)
+        convert.link(tee)
+        sink_bin.add_pad(Gst.GhostPad.new("sink", convert.get_static_pad("sink")))
+
+        for i, monitor in enumerate(self.monitors()):
+            geo = monitor.get_geometry()
+            queue = Gst.ElementFactory.make("queue", None)
+            crop = Gst.ElementFactory.make("aspectratiocrop", None)
+            branch_convert = Gst.ElementFactory.make("videoconvert", None)
+            sink = Gst.ElementFactory.make("gtksink", None)
+            if not (queue and crop and branch_convert and sink):
+                raise RuntimeError("GStreamer's aspectratiocrop or gtksink is missing")
+            # Set from a string: Gst.Fraction needs gst-python's overrides
+            # (python3-gst-1.0), which aren't otherwise needed or installed.
+            Gst.util_set_object_arg(crop, "aspect-ratio", f"{geo.width}/{geo.height}")
+            for element in (queue, crop, branch_convert, sink):
+                sink_bin.add(element)
+            tee.link(queue)
+            queue.link(crop)
+            crop.link(branch_convert)
+            branch_convert.link(sink)
+            widget = sink.get_property("widget")
+            self.widgets.append(widget)
+            self.windows.append(self.make_window(i, widget))
+
+        self.playbin.set_property("video-sink", sink_bin)
+        # Video only: an intro is silent, and a user's own clip with a sound
+        # track shouldn't suddenly play it over the desktop.
+        self.playbin.set_property("audio-sink", Gst.ElementFactory.make("fakesink", None))
+        self.playbin.set_property("mute", True)
+        self.playbin.set_property("uri", Gst.filename_to_uri(os.path.abspath(clip)))
+
+        bus = self.playbin.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message)
+
+    def prepare(self):
+        # Paused first: the first frame is decoded and handed to the
+        # widgets (ASYNC_DONE) before anything is shown.
+        self.playbin.set_state(Gst.State.PAUSED)
+
+    def play(self):
+        self.playbin.set_state(Gst.State.PLAYING)
+
+    def stop(self):
+        self.playbin.set_state(Gst.State.NULL)
+
+    def on_message(self, _bus, message):
+        if message.type == Gst.MessageType.ASYNC_DONE and not self.prerolled:
+            self.prerolled = True
+            self.wait_for_first_draw()
+        elif message.type == Gst.MessageType.EOS:
+            # The last frame stays on screen while the windows fade.
+            self.fade_out(FADE_MS)
+        elif message.type == Gst.MessageType.ERROR:
+            err, _debug = message.parse_error()
+            print(f"ohmydebn-theme-intro-play: {err.message}", file=sys.stderr)
+            self.quit(1)
+
+
+# The light intro's timeline, in seconds: the light front travels from the
+# top of the picture to the bottom, then the band of light crosses corner
+# to corner, and the still holds a moment before the windows fade (over the
+# same still on the desktop, so the fade itself doesn't show).
+LIGHT = (0.15, 2.1)
+SHIMMER = (2.0, 2.9)
+LIGHT_DURATION = 3.0
+# Twilight: each channel scaled (cooler and darker), then a third of the
+# color taken out.
+TWILIGHT_RGB = (0.385, 0.476, 0.665)
+TWILIGHT_DESATURATE = 0.3
+# The light front's soft edge, in picture heights, and how much of the
+# warmth reaches the whole scene at once (so the lower part doesn't sit in
+# flat shadow until the front gets there).
+FRONT_EDGE = 0.45
+AMBIENT = 0.25
+# The shimmer, as in ohmydebn-fastfetch-logo-generate: half-width of the
+# band along the diagonal, and how far it lifts the picture toward white.
+BAND = 0.12
+STRENGTH = 0.32
+
+
+def ease(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def cover_surface(pixbuf, width, height):
+    """The image scaled to cover width x height and centered, as Cinnamon's
+    "zoom" option shows a background."""
+    scale = max(width / pixbuf.get_width(), height / pixbuf.get_height())
+    sw = max(1, round(pixbuf.get_width() * scale))
+    sh = max(1, round(pixbuf.get_height() * scale))
+    scaled = pixbuf.scale_simple(sw, sh, GdkPixbuf.InterpType.BILINEAR)
+    surface = cairo.ImageSurface(cairo.FORMAT_RGB24, width, height)
+    cr = cairo.Context(surface)
+    Gdk.cairo_set_source_pixbuf(cr, scaled, (width - sw) / 2, (height - sh) / 2)
+    cr.paint()
+    return surface
+
+
+def twilight_surface(still):
+    surface = cairo.ImageSurface(cairo.FORMAT_RGB24, still.get_width(), still.get_height())
+    cr = cairo.Context(surface)
+    cr.set_source_surface(still, 0, 0)
+    cr.paint()
+    cr.set_operator(cairo.OPERATOR_MULTIPLY)
+    cr.set_source_rgb(*TWILIGHT_RGB)
+    cr.paint()
+    cr.set_operator(cairo.OPERATOR_HSL_SATURATION)
+    cr.set_source_rgba(0.5, 0.5, 0.5, TWILIGHT_DESATURATE)
+    cr.paint()
+    return surface
+
+
+def band_mask(width, height):
+    """The shimmer's band of light as an alpha mask, centered on the
+    diagonal (position 0.5). draw_light() slides it into place each frame:
+    moving it by (s * width, s * height) moves the band s along the
+    diagonal, and a whole-pixel offset of a plain mask is several times
+    cheaper than working out a gradient across the screen every frame. The
+    mask is twice the screen each way, with the screen in its middle, so
+    the band is never cut off wherever it's slid to."""
+    mask = cairo.ImageSurface(cairo.FORMAT_A8, 2 * width, 2 * height)
+    cr = cairo.Context(mask)
+    # In a unit square for the screen, where the diagonal position is
+    # (u+v)/2.
+    cr.translate(width / 2, height / 2)
+    cr.scale(width, height)
+    band = cairo.LinearGradient(0.5 - BAND, 0.5 - BAND, 0.5 + BAND, 0.5 + BAND)
+    for i in range(11):
+        d = abs(i / 5 - 1)
+        band.add_color_stop_rgba(i / 10, 1, 1, 1, (1 - d * d) ** 2 * STRENGTH)
+    cr.set_source(band)
+    cr.paint()
+    mask.flush()
+    return mask
+
+
+def draw_light(cr, still, dusk, band, width, height, t):
+    """One frame of the light intro, t seconds in, in device pixels."""
+    cr.set_source_surface(still, 0, 0)
+    cr.paint()
+
+    x = ease((t - LIGHT[0]) / (LIGHT[1] - LIGHT[0]))
+    if x < 1:
+        # Twilight over the still: none above the front's soft edge, full
+        # (less the ambient warmth) below the front. The gradient pads
+        # beyond its ends, and at x = 0 the whole picture is below it.
+        front = x * (1 + FRONT_EDGE) * height
+        mask = cairo.LinearGradient(0, front - FRONT_EDGE * height, 0, front)
+        mask.add_color_stop_rgba(0, 0, 0, 0, 0)
+        mask.add_color_stop_rgba(1, 0, 0, 0, 1 - AMBIENT * x)
+        cr.set_source_surface(dusk, 0, 0)
+        cr.mask(mask)
+
+    if SHIMMER[0] <= t < SHIMMER[1]:
+        # Starts just off the top-left corner and ends just past the
+        # bottom-right one, as on the grin. (p - 0.5) slides the band from
+        # the middle; the other half a screen is where the screen sits in
+        # the mask.
+        p = -0.15 + 1.3 * (t - SHIMMER[0]) / (SHIMMER[1] - SHIMMER[0])
+        cr.set_source_rgb(1, 1, 1)
+        cr.mask_surface(band, round((p - 1) * width), round((p - 1) * height))
+
+
+class LightIntro(Intro):
+    """The light intro, drawn live from the image: twilight, the light
+    arriving from the top down, then the shimmer."""
+
+    def __init__(self, image):
+        super().__init__()
+        try:
+            self.pixbuf = GdkPixbuf.Pixbuf.new_from_file(image)
+        except GLib.Error as err:
+            raise RuntimeError(f"can't load {image}: {err.message}") from err
+        self.surfaces = {}
+        self.started = None
+        for i, monitor in enumerate(self.monitors()):
+            area = Gtk.DrawingArea()
+            area.connect("draw", self.on_draw, monitor)
+            self.widgets.append(area)
+            self.windows.append(self.make_window(i, area))
+
+    def elapsed(self):
+        if self.started is None:
+            return 0.0
+        return (GLib.get_monotonic_time() - self.started) / 1e6
+
+    def on_draw(self, area, cr, monitor):
+        # Device pixels, so a HiDPI monitor gets a sharp picture.
+        scale = area.get_scale_factor()
+        width = area.get_allocated_width() * scale
+        height = area.get_allocated_height() * scale
+        key = (monitor, width, height)
+        if key not in self.surfaces:
+            still = cover_surface(self.pixbuf, width, height)
+            images = (still, twilight_surface(still), band_mask(width, height))
+            # Copied once into surfaces of the window's own kind (on X11,
+            # pixmaps on the X server), so each frame is composited there:
+            # painting the images themselves sent the whole picture to the
+            # server every frame, and held this to about 24 frames a second.
+            window = area.get_window()
+            self.surfaces[key] = tuple(self.server_copy(window, image, scale) for image in images)
+        still, dusk, band = self.surfaces[key]
+        cr.scale(1 / scale, 1 / scale)
+        t = self.elapsed()
+        draw_light(cr, still, dusk, band, width, height, t)
+        if t >= LIGHT_DURATION:
+            self.fade_out(FADE_MS)
+        return False
+
+    @staticmethod
+    def server_copy(window, image, scale):
+        content = cairo.CONTENT_ALPHA if image.get_format() == cairo.FORMAT_A8 else cairo.CONTENT_COLOR
+        # Logical size; GDK gives it the window's scale, so it holds the
+        # image's device pixels.
+        copy = window.create_similar_surface(content, image.get_width() // scale, image.get_height() // scale)
+        cr = cairo.Context(copy)
+        cr.scale(1 / scale, 1 / scale)
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_surface(image, 0, 0)
+        cr.paint()
+        copy.flush()
+        return copy
+
+    def prepare(self):
+        self.wait_for_first_draw()
+
+    def play(self):
+        self.started = GLib.get_monotonic_time()
+        for area in self.widgets:
+            # Redraw on every frame of the display's own clock.
+            area.add_tick_callback(lambda widget, _clock: widget.queue_draw() or True)
+
+
+def main():
+    args = sys.argv[1:]
+    light = bool(args) and args[0] == "--light"
+    if light:
+        args = args[1:]
+    if len(args) != 1 or not os.path.isfile(args[0]):
+        print("Usage: ohmydebn-theme-intro-play <clip>", file=sys.stderr)
+        print("       ohmydebn-theme-intro-play --light <image>", file=sys.stderr)
+        return 1
+    if Gdk.Display.get_default() is None:
+        print("ohmydebn-theme-intro-play: no display", file=sys.stderr)
+        return 1
+    Gtk.Window.set_default_icon_name("ohmydebn")
+    replace_running_intro()
+    write_pid_file()
+    try:
+        intro = LightIntro(args[0]) if light else ClipIntro(args[0])
+    except RuntimeError as err:
+        print(f"ohmydebn-theme-intro-play: {err}", file=sys.stderr)
+        remove_pid_file()
+        return 1
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: intro.quit(0) or False)
+    intro.start()
+    Gtk.main()
+    remove_pid_file()
+    return intro.status
+
+
+if __name__ == "__main__":
+    sys.exit(main())

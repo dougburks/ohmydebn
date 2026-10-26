@@ -271,7 +271,8 @@ def first_background(slug):
     except OSError:
         return None
     for name in entries:
-        if name.lower().endswith((".png", ".jpg", ".jpeg")):
+        # .webp: Omarchy's themes ship only WebP backgrounds from 4.5 on.
+        if name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
             return os.path.join(bg_dir, name)
     return None
 

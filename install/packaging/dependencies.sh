@@ -36,6 +36,12 @@ PACKAGES=(
   libspa-0.2-bluetooth
   gvfs-backends
   libnotify-bin
+  # WebP support for GdkPixbuf, which draws the desktop background, the
+  # theme carousel's previews and the light theme intro. Omarchy's themes
+  # ship their backgrounds as .webp from 4.5 on, and a user's own can be
+  # .webp already; without this they show as nothing. Today it's present
+  # only when an image viewer (Ristretto, Eye of GNOME) pulled it in.
+  webp-pixbuf-loader
 
   # ohmydebn-menu's Setup > Bluetooth/Printers targets. Only Recommends
   # of cinnamon-desktop-environment, and the batched install below runs

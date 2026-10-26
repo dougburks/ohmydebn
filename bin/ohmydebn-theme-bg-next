@@ -14,7 +14,11 @@ if [[ "${1:-}" == "--background" ]]; then
   fi
 fi
 
-THEME_NAME=$(<"$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
+# cat, not $(<file): with a redirect added, $(<file) is an empty command
+# rather than a read, and always came back empty - so the user's own
+# backgrounds for the theme (USER_BACKGROUNDS_PATH) were never looked in,
+# and the theme carousel, which does list them, applied the wrong one.
+THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
 THEME_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/current/theme/backgrounds/"
 USER_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/backgrounds/$THEME_NAME/"
 CURRENT_BACKGROUND_LINK="$HOME/.config/ohmydebn/current/background"

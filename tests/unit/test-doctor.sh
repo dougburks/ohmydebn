@@ -81,12 +81,12 @@ build_machine() {
   # Defaults, config files, shell and kernel mitigations: a browser that
   # resolves, an installed default AI, parseable TOML, Oh My Zsh, the menu
   # launcher, and both module blocks in place with none of them loaded.
-  mkdir -p "$ROOT/usr/share/applications" "$H/.config/alacritty" "$H/.oh-my-zsh" "$H/.local/share/applications" \
+  mkdir -p "$ROOT/usr/share/applications" "$H/.config/alacritty" "$ROOT/usr/share/oh-my-zsh" "$H/.local/share/applications" \
     "$ROOT/etc/modprobe.d" "$ROOT/proc"
   : >"$ROOT/usr/share/applications/firefox-esr.desktop"
   printf '[general]\nimport = ["~/.config/ohmydebn/current/theme/alacritty.toml"]\n' >"$H/.config/alacritty/alacritty.toml"
-  printf 'source $ZSH/oh-my-zsh.sh\n' >>"$H/.zshrc"
-  : >"$H/.oh-my-zsh/oh-my-zsh.sh"
+  printf 'export ZSH="/usr/share/oh-my-zsh"\nsource $ZSH/oh-my-zsh.sh\n' >>"$H/.zshrc"
+  : >"$ROOT/usr/share/oh-my-zsh/oh-my-zsh.sh"
   : >"$H/.local/share/applications/ohmydebn-menu.desktop"
   : >"$ROOT/etc/modprobe.d/disable-algif-aead.conf"; : >"$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
   printf 'ext4 1000 1 - Live 0x0\nvirtio_net 100 0 - Live 0x0\n' >"$ROOT/proc/modules"
@@ -275,7 +275,7 @@ assert_contains "healthy: clock synchronized (chrony)" "$OUTPUT" "ok - clock syn
 assert_not_contains "healthy: no OhMyDebn updates waiting" "$OUTPUT" "updates available"
 assert_contains "healthy: default browser installed" "$OUTPUT" "ok - default browser installed (firefox-esr.desktop)"
 assert_contains "healthy: default AI installed" "$OUTPUT" "ok - default AI assistant installed (opencode)"
-assert_contains "healthy: Oh My Zsh installed" "$OUTPUT" "ok - ~/.oh-my-zsh installed"
+assert_contains "healthy: Oh My Zsh installed" "$OUTPUT" "ok - Oh My Zsh installed in /usr/share/oh-my-zsh"
 assert_contains "healthy: menu launcher present" "$OUTPUT" "ok - ~/.local/share/applications/ohmydebn-menu.desktop present"
 mock_cleanup
 
@@ -413,7 +413,7 @@ mock_cleanup
 # --- defaults, config, shell and security problems: each caught and explained ---
 build_machine yes
 printf '[general\nbroken = ' >"$H/.config/alacritty/alacritty.toml"                 # unparseable
-rm "$H/.oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desktop"
+rm "$ROOT/usr/share/oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desktop"
 rm "$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
 run_doctor MOCK_BROWSER=gone.desktop MOCK_AI_INSTALLED=codex MOCK_LEAP="Not synchronised" "MOCK_UPGRADABLE=ohmydebn ohmydebn-neovim"
 assert_eq "defaults etc: exits 1" "1" "$EXIT_CODE"
@@ -421,11 +421,22 @@ assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal con
 assert_contains "defaults etc: Super+B does nothing" "$OUTPUT" "FAIL - Super+B opens a browser (the default (gone.desktop) isn't installed and there's no x-www-browser"
 assert_contains "defaults etc: uninstalled default AI is a note, not a failure" "$OUTPUT" "default AI assistant (opencode) isn't installed - Super+A offers to install it"
 assert_not_contains "defaults etc: no FAIL for the AI default" "$OUTPUT" "FAIL - default AI assistant"
-assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - ~/.oh-my-zsh installed"
+assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - Oh My Zsh installed in /usr/share/oh-my-zsh"
 assert_contains "defaults etc: missing menu launcher caught" "$OUTPUT" "FAIL - ~/.local/share/applications/ohmydebn-menu.desktop present"
 assert_contains "defaults etc: missing module block named" "$OUTPUT" "FAIL - vulnerable kernel modules blocked (missing /etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
 assert_contains "defaults etc: unsynced clock caught" "$OUTPUT" "FAIL - clock synchronized (chronyc tracking: Not synchronised)"
 assert_contains "defaults etc: waiting OhMyDebn updates listed" "$OUTPUT" "OhMyDebn updates available: ohmydebn ohmydebn-neovim - run: ohmydebn-update"
+mock_cleanup
+
+# --- a .zshrc still on the downloaded ~/.oh-my-zsh (one the update didn't move) ---
+build_machine yes
+sed -i 's#^export ZSH=.*#export ZSH="$HOME/.oh-my-zsh"#' "$H/.zshrc"
+run_doctor
+assert_contains "own ~/.oh-my-zsh, missing: that copy is what's checked" "$OUTPUT" "FAIL - ~/.oh-my-zsh installed (~/.zshrc uses it)"
+mkdir -p "$H/.oh-my-zsh"
+: >"$H/.oh-my-zsh/oh-my-zsh.sh"
+run_doctor
+assert_contains "own ~/.oh-my-zsh, present: ok" "$OUTPUT" "ok - ~/.oh-my-zsh installed (~/.zshrc uses it)"
 mock_cleanup
 
 # --- a default browser that's gone, with x-www-browser to fall back on; a

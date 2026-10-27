@@ -1,8 +1,13 @@
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
-# Path to your Oh My Zsh installation.
-export ZSH="$HOME/.oh-my-zsh"
+# Path to your Oh My Zsh installation. OhMyDebn installs it for the whole
+# machine (the ohmydebn-ohmyzsh package) and updates it with the rest of
+# OhMyDebn, so `omz update` doesn't apply.
+export ZSH="/usr/share/oh-my-zsh"
+
+# Your own Oh My Zsh plugins and themes go here, in plugins/ and themes/.
+export ZSH_CUSTOM="$HOME/.oh-my-zsh/custom"
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time Oh My Zsh is loaded, in which case,

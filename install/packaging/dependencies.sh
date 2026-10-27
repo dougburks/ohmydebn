@@ -111,8 +111,9 @@ PACKAGES=(
   gufw
   chrony
 
-  # Shell
+  # Shell (ohmydebn-ohmyzsh: Oh My Zsh, which ~/.zshrc loads)
   zsh
+  ohmydebn-ohmyzsh
   zsh-autosuggestions
   zsh-syntax-highlighting
   starship

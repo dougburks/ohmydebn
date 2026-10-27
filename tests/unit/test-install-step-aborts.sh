@@ -6,8 +6,6 @@
 # and a step whose one-time marker was never written fails the same way on
 # every update after. Each step here is sourced exactly that way.
 #
-# - config/ohmyzsh.sh: a failed Oh My Zsh download ran sh -c "" (which
-#   succeeds), then mv ~/.zshrc failed on the file that was never written.
 # - config/alacritty.sh: a stray ~/.config/alacritty.toml with no
 #   ~/.config/alacritty directory made its mv of that directory fail.
 # - config/theme.sh: ln -s of Aether's state link failed when the link
@@ -54,21 +52,6 @@ run_step() {
     </dev/null >"$MOCK_DIR/out" 2>&1
   assert_contains "$1: the install carries on past it" "$(cat "$MOCK_DIR/out")" "run finished"
 }
-
-# --- ohmyzsh.sh: the download fails ---
-setup
-printf '#!/bin/bash\nexit 22\n' | mock_bin curl
-run_step config/ohmyzsh.sh
-assert_contains "ohmyzsh: says the next update will try again" "$(cat "$MOCK_DIR/out")" "will try again"
-teardown
-
-# --- ohmyzsh.sh: the download works; its ~/.zshrc is set aside ---
-setup
-printf '#!/bin/bash\necho "mkdir -p \\$HOME/.oh-my-zsh; echo omz >\\$HOME/.zshrc"\n' | mock_bin curl
-run_step config/ohmyzsh.sh
-assert_eq "ohmyzsh: installed" "yes" "$([[ -d $SCRATCH_HOME/.oh-my-zsh ]] && echo yes || echo no)"
-assert_eq "ohmyzsh: its .zshrc is set aside" "omz" "$(cat "$SCRATCH_HOME/.zshrc.oh-my-zsh" 2>/dev/null)"
-teardown
 
 # --- alacritty.sh: ~/.config/alacritty.toml without ~/.config/alacritty ---
 setup

@@ -177,7 +177,7 @@ gnome-terminal and mate-terminal keep their settings in dconf, not in files:
 | starship | `~/.config/starship.toml` |
 | git | `~/.gitconfig` (written by `git config --global`) |
 | zsh | `~/.zshrc`, `~/.config/zsh/` |
-| oh my zsh | `~/.oh-my-zsh/` |
+| oh my zsh | `/usr/share/oh-my-zsh/` (the `ohmydebn-ohmyzsh` package, pinned to a tested commit and updated with OhMyDebn, so `omz update` doesn't apply); the user's own plugins and themes go in `~/.oh-my-zsh/custom/` (`ZSH_CUSTOM`) |
 | zoxide | No config folder; started by `eval "$(zoxide init zsh)"` in `~/.zshrc` |
 | eza | Configured via shell aliases |
 | bat | `~/.config/bat/config` |
@@ -225,7 +225,8 @@ ohmydebn-reset-config
 
 # The reset-config command:
 # 1. Renames ~/.config/{alacritty,bat,btop,cava,nvim,starship.toml},
-#    ~/.oh-my-zsh and ~/.zshrc to *-backup-<timestamp>
+#    ~/.oh-my-zsh (your own Oh My Zsh plugins and themes) and ~/.zshrc to
+#    *-backup-<timestamp>
 # 2. Clears only the state markers of the steps that write those files
 # 3. Re-runs OhMyDebn's configuration (ohmydebn.sh, without the system upgrade), which writes fresh defaults
 # 4. Reapplies the current theme (keeping the background)

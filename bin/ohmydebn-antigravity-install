@@ -19,10 +19,24 @@ if ! dpkg -s "antigravity" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
-  sudo mkdir -p /etc/apt/keyrings
 
-  curl -fsSL https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg |
-    sudo gpg --dearmor --yes -o /etc/apt/keyrings/antigravity-repo-key.gpg
+  # The key is checked against its fingerprint before apt trusts it (see
+  # ohmydebn-pgp-fingerprint), so a key swapped in transit or on the server
+  # is refused. Google doesn't print it beside its apt instructions: it's
+  # Artifact Registry's repository signing key, the same one
+  # packages.cloud.google.com/apt/doc/apt-key.gpg serves (checked
+  # 2026-10-27). If Google replaces the key, installs refuse it until the
+  # fingerprint here is updated.
+  KEY_URL=https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != 35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3 ]; then
+    echo "The signing key from $KEY_URL isn't Google's, so it wasn't installed."
+    exit 1
+  fi
+  sudo mkdir -p /etc/apt/keyrings
+  sudo gpg --dearmor --yes -o /etc/apt/keyrings/antigravity-repo-key.gpg "$KEY_FILE"
 
   echo "deb [signed-by=/etc/apt/keyrings/antigravity-repo-key.gpg] https://us-central1-apt.pkg.dev/projects/antigravity-auto-updater-dev/ antigravity-debian main" |
     sudo tee /etc/apt/sources.list.d/antigravity.list >/dev/null

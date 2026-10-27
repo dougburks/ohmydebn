@@ -1027,6 +1027,26 @@ done
 echo "  checked $CHECKED third-party-repo installers"
 
 echo
+echo "-- every downloaded apt signing key is checked against its fingerprint (regression guard) --"
+# apt trusts whatever key a repo's signed-by names, so a key fetched from
+# the vendor and installed unchecked lets anyone who can swap it (in
+# transit, or on the vendor's server) sign packages apt will install.
+# Antigravity, Cloudflare WARP, Helium and Tailscale went unchecked until
+# 4.14.0. A script that downloads something and names a keyring must
+# compare it with ohmydebn-pgp-fingerprint before apt sees it.
+mapfile -t KEYRING_SCRIPTS < <(grep -l 'keyrings/' "$REPO_ROOT"/bin/* 2>/dev/null)
+CHECKED=0
+for f in "${KEYRING_SCRIPTS[@]}"; do
+  grep -q '\bcurl\b' "$f" || continue
+  CHECKED=$((CHECKED + 1))
+  if ! grep -q 'ohmydebn-pgp-fingerprint' "$f"; then
+    echo "  FAIL - ${f#"$REPO_ROOT"/} downloads and installs an apt signing key without checking its fingerprint (ohmydebn-pgp-fingerprint)"
+    FAIL=$((FAIL + 1))
+  fi
+done
+echo "  checked $CHECKED key-fetching scripts"
+
+echo
 echo "-- apt pin filename agrees between each installer and its own remove script (regression guard) --"
 # The check above only catches installers that write sources.list.d
 # themselves - it can't see code/google-chrome-stable, whose repos are

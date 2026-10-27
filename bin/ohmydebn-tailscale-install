@@ -11,12 +11,30 @@ if ! dpkg -s "tailscale" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
+
+  # The key is checked against its fingerprint before apt trusts it (see
+  # ohmydebn-pgp-fingerprint), so a key swapped in transit or on the server
+  # is refused. Tailscale doesn't publish the fingerprint anywhere; this is
+  # the key every one of its repos (Debian, Ubuntu, Fedora) has served since
+  # 2020 (checked 2026-10-27). Its tailscale-archive-keyring package rotates
+  # the key on installed systems; a new install refuses a replaced key until
+  # the fingerprint here is updated.
+  KEY_URL=https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != 2596A99EAAB33821893C0A79458CA832957F5868 ]; then
+    echo "The signing key from $KEY_URL isn't Tailscale's, so it wasn't installed."
+    exit 1
+  fi
   sudo mkdir -p --mode=0755 /usr/share/keyrings
+  sudo install -m 0644 "$KEY_FILE" /usr/share/keyrings/tailscale-archive-keyring.gpg
 
-  curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg |
-    sudo /usr/bin/tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-
-  curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list |
+  # Written here rather than downloaded from Tailscale's
+  # trixie.tailscale-keyring.list (which holds just this line): a file
+  # fetched into sources.list.d as root could add any repo, or mark one
+  # trusted, as Brave's downloaded .sources could before ohmydebn-brave-repo.
+  echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian trixie main" |
     sudo /usr/bin/tee /etc/apt/sources.list.d/tailscale.list
 
   # Restricts this repo to the packages it's actually needed for - a bare

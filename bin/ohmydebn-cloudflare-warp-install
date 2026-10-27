@@ -52,10 +52,23 @@ if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
-  sudo mkdir -p /usr/share/keyrings
 
-  curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg |
-    sudo gpg --yes --dearmor --output "$WARP_KEYRING"
+  # The key is checked against its fingerprint before apt trusts it (see
+  # ohmydebn-pgp-fingerprint), so a key swapped in transit or on the server
+  # is refused. Cloudflare's install page names it for RPM as
+  # gpg-pubkey(4fa1c3ba-61abda35): this key's ID ends 4FA1C3BA and it was
+  # created at 0x61abda35 (checked 2026-10-27). If Cloudflare replaces the
+  # key, installs refuse the new one until the fingerprint here is updated.
+  KEY_URL=https://pkg.cloudflareclient.com/pubkey.gpg
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != C068A2B5771775193CBE1F2F6E2DD2174FA1C3BA ]; then
+    echo "The signing key from $KEY_URL isn't the one Cloudflare publishes, so it wasn't installed."
+    exit 1
+  fi
+  sudo mkdir -p /usr/share/keyrings
+  sudo gpg --yes --dearmor --output "$WARP_KEYRING" "$KEY_FILE"
 
   echo "deb [signed-by=$WARP_KEYRING] https://pkg.cloudflareclient.com/ $(warp_codename) main" |
     sudo tee "$WARP_LIST" >/dev/null

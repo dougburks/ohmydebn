@@ -316,12 +316,22 @@ exit 0
 EOF2
   # Writes whatever -o names, as the real curl would, so a downloaded .deb
   # exists for ohmydebn-apt-install-deb (the real helper, copied in below).
+  # Helium's signing key is the real one, for its installer's fingerprint
+  # check (the real ohmydebn-pgp-fingerprint, copied in below).
+  cp "$REPO_ROOT/tests/lib/helium-signing-key.asc" "$MOCK_DIR/helium.asc"
   mock_bin curl <<'EOF2'
 #!/bin/bash
-while [ $# -gt 0 ]; do [ "$1" = "-o" ] && : >"$2"; shift; done
+key=""
+[[ "$*" == *helium-linux*pubkey.asc* ]] && key="$MOCK_DIR/helium.asc"
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    if [ -n "$key" ]; then cp "$key" "$2"; else : >"$2"; fi
+  fi
+  shift
+done
 exit 0
 EOF2
-  cp "$REPO_ROOT/bin/ohmydebn-apt-install-deb" "$ROOT/usr/share/ohmydebn/bin/"
+  cp "$REPO_ROOT/bin/ohmydebn-apt-install-deb" "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$ROOT/usr/share/ohmydebn/bin/"
   mock_bin uname <<'EOF2'
 #!/bin/bash
 echo x86_64

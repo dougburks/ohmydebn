@@ -5,9 +5,10 @@
 # a profile that doesn't exist yet: a purge leaves ~/.config alone, so a
 # reinstall used to overwrite the user's own Helium preferences.
 #
-# dpkg reports Helium not installed, sudo/curl are loggers, and the
-# OhMyDebn config and bin directories are scratch ones, so nothing here
-# touches the real system.
+# dpkg reports Helium not installed, sudo is a logger, curl serves Helium's
+# real signing key (for the real fingerprint check), and the OhMyDebn
+# config and bin directories are scratch ones, so nothing here touches the
+# real system.
 
 set -uo pipefail
 
@@ -18,10 +19,13 @@ echo "=== bin/ohmydebn-helium-bin-install: profile seeding ==="
 
 setup() {
   mock_init
+  # curl -fsSL <url> -o <dest>
+  cp "$REPO_ROOT/tests/lib/helium-signing-key.asc" "$MOCK_DIR/key.asc"
   mock_bin curl <<'STUB'
 #!/bin/bash
-exit 0
+cp "$MOCK_DIR/key.asc" "${!#}"
 STUB
+  cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$MOCK_BIN/"
   # MOCK_APT_UPDATE_FAILS=1: `apt update` fails, as when the repo can't be
   # reached.
   mock_bin sudo <<'STUB'

@@ -72,6 +72,16 @@ PACKAGES=(
   # base (LCOS/Devuan XFCE) surfaced the gap.
   gir1.2-wnck-3.0
 
+  # ohmydebn-pdf-sign: Poppler's introspection data to show the pages,
+  # pikepdf to stamp a signed copy over the original pages without
+  # re-rendering them, Pillow to lift a signature off its paper, and the
+  # gi/cairo glue for drawing both on screen and into the PDF. Its
+  # commands (sign, add-signature) run without Poppler or a display.
+  gir1.2-poppler-0.18
+  python3-pikepdf
+  python3-pil
+  python3-gi-cairo
+
   # Dev toolchain
   gcc
   pkg-config

@@ -1,0 +1,1933 @@
+#!/usr/bin/python3
+#
+# ohmydebn-pdf-sign: sign and fill in PDFs. Open a PDF, drop a saved
+# signature, a line of text or today's date anywhere on a page, move and
+# size them, and save a signed copy beside the original. Modelled on
+# Omarchy's Signed (github.com/omacom/signed), which needs Qt 6 built
+# against each distro's own Qt (6.4, 6.8 and 6.10 across the bases
+# OhMyDebn supports), so it can't be packaged once; this one is Python +
+# GTK 3 like OhMyDebn's other GUIs and runs on all of them.
+#
+#   ohmydebn-pdf-sign [file.pdf]                       the app
+#   ohmydebn-pdf-sign sign in.pdf out.pdf --items items.json
+#   ohmydebn-pdf-sign signatures                       saved signatures
+#   ohmydebn-pdf-sign add-signature NAME IMAGE         save one from a scan
+#   ohmydebn-pdf-sign pages file.pdf                   page sizes in points
+#
+# The commands need no display, so a script or an AI agent can sign a PDF
+# with the user's saved signatures.
+#
+# How a signed copy is written: the original pages are never re-rendered.
+# Each page that has items gets a one-page cairo PDF the size of its
+# shown MediaBox with the items drawn on it, and pikepdf stamps that page
+# over the original as a form XObject (Page.add_overlay). Text stays selectable, the
+# original's own content stream is kept byte for byte (wrapped in q/Q), and
+# the stamped text is real text cairo embeds the font for.
+#
+# Coordinates everywhere (items.json, the GUI) are PDF points from the
+# top-left corner of the page as a viewer shows it: the CropBox, turned by
+# the page's /Rotate. page_transform() maps that onto the overlay, so a
+# signature placed upright on a rotated page lands upright there too.
+#
+# No digital seal: Signed's optional PKCS#7 seal needs pyHanko or NSS
+# tooling neither Debian nor Ubuntu packages for Python. Stamping a PDF
+# that already carries one invalidates it in the copy, so both the app and
+# `sign` warn about that.
+
+import io
+import json
+import locale
+import os
+import sys
+import tempfile
+import time
+
+import cairo
+import gi
+
+gi.require_version("Pango", "1.0")
+gi.require_version("PangoCairo", "1.0")
+from gi.repository import Pango, PangoCairo  # noqa: E402
+
+PROG = "ohmydebn-pdf-sign"
+
+# The size a signature gets the first time it's placed, and text's font
+# size, in points. 150 pt is about 5 cm: a handwritten signature's size on
+# a printed form.
+DEFAULT_SIGNATURE_WIDTH = 150.0
+DEFAULT_TEXT_SIZE = 12.0
+TEXT_FONT = "Sans"
+TEXT_COLOR = "#000000"
+
+# Paper threshold, 0..100: higher removes more of the paper (shadows,
+# texture), lower keeps fainter strokes. The default suits a scan or a
+# well-lit phone photo.
+DEFAULT_THRESHOLD = 50
+
+# Scans and phone photos are scaled down to this before processing: a
+# signature 150 pt wide needs nothing like a 12-megapixel photo, and the
+# saved PNG stays small.
+MAX_SIGNATURE_SIDE = 1600
+
+SIGNED_SUFFIX = "-signed"
+
+
+class SignError(Exception):
+    """A problem to report to the user, with no traceback."""
+
+
+# ---------- saved signatures ----------
+
+
+def signatures_dir():
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(base, "ohmydebn", "signatures")
+
+
+def check_signature_name(name):
+    """The name is the file name (<name>.png), so it can't be a path or a
+    hidden file."""
+    if not name or not name.strip():
+        raise SignError("A signature needs a name.")
+    if "/" in name or "\0" in name or name.startswith(".") or len(name) > 100:
+        raise SignError(f"'{name}' can't be a signature name: no '/', no leading '.', at most 100 characters.")
+    if any(ord(c) < 32 for c in name):
+        raise SignError("A signature name can't contain control characters.")
+
+
+def signature_path(name):
+    check_signature_name(name)
+    return os.path.join(signatures_dir(), name + ".png")
+
+
+def list_signatures():
+    try:
+        names = [f[:-4] for f in os.listdir(signatures_dir()) if f.endswith(".png") and not f.startswith(".")]
+    except OSError:
+        return []
+    return sorted(names, key=str.casefold)
+
+
+def last_used_signature():
+    """The signature S places: the last one placed or added, if it still
+    exists, else the first by name."""
+    names = list_signatures()
+    try:
+        with open(os.path.join(signatures_dir(), ".last-used"), encoding="utf-8") as f:
+            name = f.read().strip()
+        if name in names:
+            return name
+    except OSError:
+        pass
+    return names[0] if names else None
+
+
+def set_last_used_signature(name):
+    try:
+        os.makedirs(signatures_dir(), exist_ok=True)
+        with open(os.path.join(signatures_dir(), ".last-used"), "w", encoding="utf-8") as f:
+            f.write(name + "\n")
+    except OSError:
+        pass
+
+
+def has_transparency(img):
+    if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
+        alpha = img.convert("RGBA").getchannel("A")
+        return alpha.getextrema()[0] < 255
+    return False
+
+
+def extract_signature(img, threshold=DEFAULT_THRESHOLD):
+    """A scan or photo of a signature on paper -> an RGBA image of just the
+    ink, cropped to it. An image that's already transparent is only
+    cropped.
+
+    The paper is found by luminance against the paper's own local
+    brightness rather than one global cut, because a phone photo is
+    brighter near the lamp than in the hand's shadow: the background is
+    estimated by shrinking the image, taking a local maximum (which wipes
+    out pen strokes) and blurring, and a pixel counts as ink by how much
+    darker it is than that. Ink fades in over a soft band, so stroke edges
+    stay smooth. Every ink pixel gets one colour, the strokes' average
+    with the paper's tint taken out, so blue ink stays blue and the result
+    looks like pen, not like a photo of it."""
+    from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
+
+    img = ImageOps.exif_transpose(img)
+    if max(img.size) > MAX_SIGNATURE_SIDE:
+        img = img.copy()
+        img.thumbnail((MAX_SIGNATURE_SIDE, MAX_SIGNATURE_SIDE), Image.LANCZOS)
+
+    if has_transparency(img):
+        out = img.convert("RGBA")
+        return crop_to_ink(out)
+
+    rgb = img.convert("RGB")
+    gray = rgb.convert("L")
+    w, h = gray.size
+    small = gray.resize((max(1, w // 8), max(1, h // 8)), Image.BOX)
+    small = small.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(2))
+    paper = small.resize((w, h), Image.BILINEAR)
+    darkness = ImageChops.subtract(paper, gray)
+
+    threshold = min(100, max(0, threshold))
+    lo = 8 + threshold * 0.64
+    hi = lo + 40
+    alpha = darkness.point(lambda v: 0 if v <= lo else 255 if v >= hi else int((v - lo) * 255 / (hi - lo)))
+    # Drop specks: paper grain, dust, the edge of a hard shadow. A median
+    # over the ink mask keeps only marks at least a few pixels across, and
+    # growing what's left back out keeps the strokes' soft edges.
+    keep = alpha.point(lambda v: 255 if v > 24 else 0).filter(ImageFilter.MedianFilter(5))
+    alpha = ImageChops.multiply(alpha, keep.filter(ImageFilter.MaxFilter(7)))
+
+    solid = alpha.point(lambda v: 255 if v >= 250 else 0)
+    if solid.getbbox() is None:
+        solid = alpha.point(lambda v: 255 if v > 0 else 0)
+    if solid.getbbox() is None:
+        raise SignError("No ink found in the image. Try a lower paper threshold, or a darker pen.")
+    ink = ImageStat.Stat(rgb, mask=solid).mean
+    paper_level = ImageStat.Stat(paper, mask=solid).mean[0] or 255
+    color = tuple(min(255, round(c * 255 / paper_level)) for c in ink)
+
+    out = Image.new("RGBA", (w, h), color + (0,))
+    out.putalpha(alpha)
+    return crop_to_ink(out)
+
+
+def crop_to_ink(img, pad=4):
+    """Crop an RGBA image to its visible pixels. Faint specks (alpha 24 or
+    less) don't stretch the box."""
+    bbox = img.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+    if bbox is None:
+        raise SignError("The image has nothing visible in it.")
+    x0, y0, x1, y1 = bbox
+    return img.crop((max(0, x0 - pad), max(0, y0 - pad), min(img.width, x1 + pad), min(img.height, y1 + pad)))
+
+
+def save_signature(name, img):
+    """Write an extracted signature as <name>.png (atomically, so a reader
+    never sees half a file) and make it the last used."""
+    path = signature_path(name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp-", suffix=".png")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            img.save(f, "PNG")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    set_last_used_signature(name)
+    return path
+
+
+def add_signature(name, image_path, threshold=DEFAULT_THRESHOLD):
+    from PIL import Image, UnidentifiedImageError
+
+    check_signature_name(name)
+    try:
+        with Image.open(image_path) as img:
+            img.load()
+            out = extract_signature(img, threshold)
+    except (OSError, UnidentifiedImageError) as e:
+        raise SignError(f"Can't read {image_path} as an image: {e}") from e
+    return save_signature(name, out)
+
+
+# ---------- placed items ----------
+
+
+class Item:
+    """One thing placed on a page. x, y, w, h are points from the
+    top-left corner of the page as shown (see the header). A text item's
+    w and h follow from its text and size; a signature's are set."""
+
+    def __init__(self, kind, page, x, y, w=0.0, h=0.0, path=None, name=None, text="", size=DEFAULT_TEXT_SIZE,
+                 color=TEXT_COLOR):
+        self.kind = kind
+        self.page = page
+        self.x, self.y, self.w, self.h = x, y, w, h
+        self.path = path
+        self.name = name
+        self.text = text
+        self.size = size
+        self.color = color
+        if kind == "text":
+            self.measure()
+
+    def measure(self):
+        self.w, self.h = measure_text(self.text, self.size)
+
+    def copy(self):
+        dup = Item(self.kind, self.page, self.x, self.y, self.w, self.h, self.path, self.name, self.text,
+                   self.size, self.color)
+        return dup
+
+
+def parse_color(value):
+    h = value.strip().lstrip("#")
+    if len(h) != 6:
+        raise ValueError(value)
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def today_text():
+    """Today's date in the locale's own format (LC_TIME), the way the
+    user writes it."""
+    return time.strftime("%x")
+
+
+def text_layout(ctx, text, size):
+    """A Pango layout at 72 dpi (one point per cairo unit) with hinting
+    off, so text measures and draws the same on screen and in the PDF."""
+    layout = PangoCairo.create_layout(ctx)
+    pctx = layout.get_context()
+    PangoCairo.context_set_resolution(pctx, 72)
+    options = cairo.FontOptions()
+    options.set_hint_metrics(cairo.HINT_METRICS_OFF)
+    options.set_hint_style(cairo.HINT_STYLE_NONE)
+    PangoCairo.context_set_font_options(pctx, options)
+    layout.context_changed()
+    desc = Pango.FontDescription.from_string(TEXT_FONT)
+    desc.set_size(max(1, round(size * Pango.SCALE)))
+    layout.set_font_description(desc)
+    layout.set_text(text, -1)
+    return layout
+
+
+_MEASURE_CTX = None
+
+
+def measure_text(text, size):
+    global _MEASURE_CTX
+    if _MEASURE_CTX is None:
+        _MEASURE_CTX = cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, 1, 1))
+    _ink, logical = text_layout(_MEASURE_CTX, text or " ", size).get_extents()
+    return logical.width / Pango.SCALE, logical.height / Pango.SCALE
+
+
+_SURFACES = {}
+
+
+def image_surface(path):
+    """A cairo surface for a signature or image, cached by path and mtime
+    so the GUI doesn't decode the PNG on every redraw. Anything that isn't
+    a PNG goes through Pillow first."""
+    mtime = os.stat(path).st_mtime_ns
+    cached = _SURFACES.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with open(path, "rb") as f:
+            surface = cairo.ImageSurface.create_from_png(f)
+    except (cairo.Error, MemoryError):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        with Image.open(path) as img:
+            img.convert("RGBA").save(buf, "PNG")
+        buf.seek(0)
+        surface = cairo.ImageSurface.create_from_png(buf)
+    _SURFACES[path] = (mtime, surface)
+    return surface
+
+
+def draw_item(ctx, item):
+    if item.kind == "signature":
+        surface = image_surface(item.path)
+        sw, sh = surface.get_width(), surface.get_height()
+        if sw == 0 or sh == 0 or item.w <= 0 or item.h <= 0:
+            return
+        ctx.save()
+        ctx.translate(item.x, item.y)
+        ctx.scale(item.w / sw, item.h / sh)
+        ctx.set_source_surface(surface, 0, 0)
+        ctx.get_source().set_filter(cairo.FILTER_BEST)
+        ctx.paint()
+        ctx.restore()
+    else:
+        ctx.save()
+        ctx.set_source_rgb(*parse_color(item.color))
+        ctx.move_to(item.x, item.y)
+        PangoCairo.show_layout(ctx, text_layout(ctx, item.text, item.size))
+        ctx.restore()
+
+
+# ---------- page geometry and stamping ----------
+
+
+def _inherited(obj, key):
+    """A page attribute, looked up the /Parent chain the way the PDF spec
+    lets /Rotate, /MediaBox and /CropBox be inherited."""
+    for _ in range(64):
+        if obj is None:
+            return None
+        if key in obj:
+            return obj[key]
+        obj = obj.get("/Parent")
+    return None
+
+
+def _box(value):
+    try:
+        x0, y0, x1, y1 = (float(v) for v in value)
+    except (TypeError, ValueError):
+        return None
+    return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+
+
+def page_geometry(page_obj):
+    """(MediaBox, visible CropBox, rotation) of a page, as Poppler and
+    every viewer read them: the CropBox clipped to the MediaBox, and
+    /Rotate snapped to a quarter turn."""
+    media = _box(_inherited(page_obj, "/MediaBox")) or (0.0, 0.0, 612.0, 792.0)
+    crop = _box(_inherited(page_obj, "/CropBox")) or media
+    crop = (max(crop[0], media[0]), max(crop[1], media[1]), min(crop[2], media[2]), min(crop[3], media[3]))
+    if crop[2] <= crop[0] or crop[3] <= crop[1]:
+        crop = media
+    try:
+        rotate = int(_inherited(page_obj, "/Rotate") or 0)
+    except (TypeError, ValueError):
+        rotate = 0
+    rotate = (round(rotate / 90) * 90) % 360
+    return media, crop, rotate
+
+
+def view_size(geometry):
+    _media, crop, rotate = geometry
+    w, h = crop[2] - crop[0], crop[3] - crop[1]
+    return (h, w) if rotate in (90, 270) else (w, h)
+
+
+def _turn(u, v, rotate, w, h):
+    """A point of an unrotated w x h page (top-left origin, y down) where
+    it shows once the page is turned clockwise by `rotate`."""
+    return {0: (u, v), 90: (h - v, u), 180: (w - u, h - v), 270: (v, w - u)}[rotate]
+
+
+def overlay_size(geometry):
+    """The overlay page's size: the whole MediaBox as it's shown, turned
+    by /Rotate (see page_transform())."""
+    media, _crop, rotate = geometry
+    w, h = media[2] - media[0], media[3] - media[1]
+    return (h, w) if rotate in (90, 270) else (w, h)
+
+
+def page_transform(geometry):
+    """The cairo matrix from view coordinates (top-left of the shown page,
+    y down) to the overlay page's own. QPDF's placement, which
+    add_overlay() uses, turns a form XObject against the target page's
+    /Rotate (invert_transformations) so the form shows upright, which
+    means the overlay is drawn the way the MediaBox is shown, and only the
+    CropBox's offset inside it is left to apply: a translation to where
+    the CropBox's shown top-left corner sits."""
+    media, crop, rotate = geometry
+    w, h = media[2] - media[0], media[3] - media[1]
+    # The CropBox's corners in unrotated top-down MediaBox coordinates,
+    # then shown; the shown top-left is the smallest of each.
+    corners = [_turn(u, v, rotate, w, h) for u in (crop[0] - media[0], crop[2] - media[0])
+               for v in (media[3] - crop[3], media[3] - crop[1])]
+    return cairo.Matrix(1, 0, 0, 1, min(c[0] for c in corners), min(c[1] for c in corners))
+
+
+def has_digital_signature(pdf):
+    """True when a signature field has a value (a PKCS#7 signature), or the
+    document has DocMDP/UR permissions, both of which a stamped copy
+    breaks."""
+    root = pdf.Root
+    if "/Perms" in root:
+        return True
+    acroform = root.get("/AcroForm")
+    if acroform is None:
+        return False
+    stack = list(acroform.get("/Fields") or [])
+    seen = 0
+    while stack and seen < 10000:
+        field = stack.pop()
+        seen += 1
+        try:
+            if field.get("/FT") == "/Sig" and field.get("/V") is not None:
+                return True
+            stack.extend(field.get("/Kids") or [])
+        except (AttributeError, TypeError):
+            continue
+    return False
+
+
+def import_pikepdf():
+    try:
+        import pikepdf
+    except ImportError as e:
+        raise SignError("Reading and writing PDFs needs pikepdf (the python3-pikepdf package).") from e
+    return pikepdf
+
+
+def open_pdf(path):
+    pikepdf = import_pikepdf()
+    try:
+        return pikepdf.open(path)
+    except pikepdf.PasswordError as e:
+        raise SignError(f"{path} is password protected, which isn't supported.") from e
+    except (pikepdf.PdfError, OSError) as e:
+        raise SignError(f"Can't open {path}: {e}") from e
+
+
+def build_overlay(pdf, items):
+    """One cairo PDF with a page per stamped page, each the size of that
+    page's MediaBox as shown. Returns (overlay bytes, [page index, ...] in overlay
+    page order)."""
+    by_page = {}
+    for item in items:
+        by_page.setdefault(item.page, []).append(item)
+    order = sorted(by_page)
+    buf = io.BytesIO()
+    surface = None
+    for index in order:
+        geometry = page_geometry(pdf.pages[index].obj)
+        mw, mh = overlay_size(geometry)
+        if surface is None:
+            surface = cairo.PDFSurface(buf, mw, mh)
+        else:
+            surface.set_size(mw, mh)
+        ctx = cairo.Context(surface)
+        ctx.transform(page_transform(geometry))
+        vw, vh = view_size(geometry)
+        ctx.rectangle(0, 0, vw, vh)
+        ctx.clip()
+        for item in by_page[index]:
+            draw_item(ctx, item)
+        del ctx
+        surface.show_page()
+    if surface is not None:
+        surface.finish()
+    return buf.getvalue(), order
+
+
+def same_file(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.realpath(a) == os.path.realpath(b)
+
+
+def write_signed(in_path, out_path, items):
+    """Stamp items onto a copy of in_path and write it to out_path. The
+    input is only read. The copy goes to a temporary file in the target
+    folder and is renamed into place, so a failed save leaves no half
+    file and never replaces anything with one."""
+    pikepdf = import_pikepdf()
+    if same_file(in_path, out_path):
+        raise SignError("The signed copy can't replace the original. Choose another file name.")
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    if not os.path.isdir(out_dir):
+        raise SignError(f"The folder {out_dir} doesn't exist.")
+    pdf = open_pdf(in_path)
+    with pdf:
+        for item in items:
+            if not 0 <= item.page < len(pdf.pages):
+                raise SignError(f"There's no page {item.page + 1}; the PDF has {len(pdf.pages)}.")
+        data, order = build_overlay(pdf, items)
+        if order:
+            overlay = pikepdf.open(io.BytesIO(data))
+            for n, index in enumerate(order):
+                page = pdf.pages[index]
+                media, _crop, rotate = page_geometry(page.obj)
+                # QPDF's placement reads the page's own /Rotate as it is,
+                # so spell out what viewers show: -90 as 270, and an
+                # inherited one on the page itself.
+                own = page.obj.get("/Rotate")
+                if int(own if own is not None else 0) != rotate:
+                    page.obj.Rotate = rotate
+                # Copied into this PDF first: add_overlay won't take an
+                # object owned by another one.
+                formx = pdf.copy_foreign(overlay.pages[n].as_form_xobject())
+                page.add_overlay(formx, pikepdf.Rectangle(*media))
+        fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=".tmp-", suffix=".pdf")
+        os.close(fd)
+        try:
+            pdf.save(tmp)
+            # mkstemp makes the file private; give it the mode any new file
+            # gets under the user's umask.
+            umask = os.umask(0)
+            os.umask(umask)
+            os.chmod(tmp, 0o666 & ~umask)
+            os.replace(tmp, out_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+
+def default_signed_path(pdf_path):
+    stem, ext = os.path.splitext(pdf_path)
+    return stem + SIGNED_SUFFIX + (ext or ".pdf")
+
+
+# ---------- items.json ----------
+
+ITEMS_HELP = """items.json is a list of items (or {"items": [...]}), each one of:
+
+  {"signature": "Alex", "page": 1, "x": 72, "bottom": 700, "width": 150}
+  {"image": "stamp.png", "page": 1, "x": 400, "y": 80, "height": 40}
+  {"text": "Alex Morgan", "page": 1, "x": 72, "y": 710, "size": 12}
+  {"date": true, "page": 1, "x": 300, "y": 710}
+
+page counts from 1. x and y (or bottom, for the item's lower edge) are
+points from the top-left corner of the page as a viewer shows it, after
+its rotation; `pages` lists every page's size. A signature or image gets
+width or height (or both; default width 150) and keeps its proportions
+when only one is given. Text and dates take an optional size (points,
+default 12) and color ("#rrggbb"); "date": true is today in this
+locale's format, and a string there is used as it is. Text may hold
+newlines.
+"""
+
+
+def _number(entry, key, errors, where, positive=False):
+    value = entry.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        errors.append(f"{where}: '{key}' must be a number.")
+        return None
+    if positive and value <= 0:
+        errors.append(f"{where}: '{key}' must be more than 0.")
+        return None
+    return float(value)
+
+
+def parse_items(data, page_sizes):
+    """items.json's contents -> ([Item], [problem, ...]). Every item is
+    checked and every problem reported, so one run lists them all."""
+    if isinstance(data, dict):
+        data = data.get("items")
+    if not isinstance(data, list):
+        return [], ["items.json must be a list of items, or an object with an \"items\" list."]
+    items, errors = [], []
+    kinds = ("signature", "image", "text", "date")
+    for n, entry in enumerate(data, 1):
+        where = f"item {n}"
+        if not isinstance(entry, dict):
+            errors.append(f"{where}: must be an object.")
+            continue
+        found = [k for k in kinds if k in entry]
+        if len(found) != 1:
+            errors.append(f"{where}: needs exactly one of {', '.join(kinds)}.")
+            continue
+        kind = found[0]
+        unknown = set(entry) - set(kinds) - {"page", "x", "y", "bottom", "width", "height", "size", "color"}
+        if unknown:
+            errors.append(f"{where}: unknown key(s) {', '.join(sorted(unknown))}.")
+        page = entry.get("page")
+        if isinstance(page, bool) or not isinstance(page, int) or not 1 <= page <= len(page_sizes):
+            errors.append(f"{where}: 'page' must be a page number from 1 to {len(page_sizes)}.")
+            page = None
+        x = _number(entry, "x", errors, where)
+        if ("y" in entry) == ("bottom" in entry):
+            errors.append(f"{where}: needs one of 'y' (top edge) or 'bottom'.")
+            y = bottom = None
+        else:
+            y = _number(entry, "y", errors, where) if "y" in entry else None
+            bottom = _number(entry, "bottom", errors, where) if "bottom" in entry else None
+
+        item = None
+        if kind in ("signature", "image"):
+            value = entry[kind]
+            path = None
+            if not isinstance(value, str) or not value:
+                errors.append(f"{where}: '{kind}' must be a name or path.")
+            elif kind == "signature":
+                try:
+                    path = signature_path(value)
+                except SignError as e:
+                    errors.append(f"{where}: {e}")
+                if path and not os.path.isfile(path):
+                    saved = ", ".join(list_signatures()) or "none"
+                    errors.append(f"{where}: no saved signature '{value}' (saved: {saved}).")
+                    path = None
+            else:
+                path = os.path.abspath(os.path.expanduser(value))
+            img_size = None
+            if path:
+                try:
+                    surface = image_surface(path)
+                    img_size = (surface.get_width(), surface.get_height())
+                except (OSError, cairo.Error, MemoryError) as e:
+                    errors.append(f"{where}: can't read {value}: {e}")
+                except Exception as e:  # Pillow's UnidentifiedImageError and friends
+                    errors.append(f"{where}: can't read {value} as an image: {e}")
+            width = _number(entry, "width", errors, where, positive=True) if "width" in entry else None
+            height = _number(entry, "height", errors, where, positive=True) if "height" in entry else None
+            if img_size and img_size[0] and img_size[1]:
+                aspect = img_size[1] / img_size[0]
+                if width is None and height is None:
+                    width = DEFAULT_SIGNATURE_WIDTH
+                if width is None:
+                    width = height / aspect
+                if height is None:
+                    height = width * aspect
+                item = Item("signature", 0, 0, 0, width, height, path=path,
+                            name=value if kind == "signature" else None)
+        else:
+            if "width" in entry or "height" in entry:
+                errors.append(f"{where}: text is sized with 'size', not width/height.")
+            if kind == "date":
+                value = entry["date"]
+                if value is True:
+                    text = today_text()
+                elif isinstance(value, str) and value:
+                    text = value
+                else:
+                    errors.append(f"{where}: 'date' must be true or the date text.")
+                    text = None
+            else:
+                text = entry["text"]
+                if not isinstance(text, str) or not text.strip():
+                    errors.append(f"{where}: 'text' must be some text.")
+                    text = None
+            size = _number(entry, "size", errors, where, positive=True) if "size" in entry else DEFAULT_TEXT_SIZE
+            color = entry.get("color", TEXT_COLOR)
+            try:
+                parse_color(color)
+            except (ValueError, AttributeError):
+                errors.append(f"{where}: 'color' must look like \"#1a2b3c\".")
+                color = None
+            if text is not None and size is not None and color is not None:
+                item = Item("text", 0, 0, 0, text=text, size=size, color=color)
+
+        if item is None or page is None or x is None or (y is None and bottom is None):
+            continue
+        item.page = page - 1
+        item.x = x
+        item.y = y if y is not None else bottom - item.h
+        pw, ph = page_sizes[page - 1]
+        if item.x >= pw or item.y >= ph or item.x + item.w <= 0 or item.y + item.h <= 0:
+            errors.append(f"{where}: lies entirely outside page {page}, which is {pw:g} x {ph:g} points.")
+            continue
+        items.append(item)
+    return items, errors
+
+
+def page_sizes(pdf):
+    return [view_size(page_geometry(page.obj)) for page in pdf.pages]
+
+
+# ---------- command line ----------
+
+USAGE = f"""usage: {PROG} [file.pdf]
+       {PROG} sign in.pdf out.pdf --items items.json [--json]
+       {PROG} pages file.pdf [--json]
+       {PROG} signatures [--json]
+       {PROG} add-signature NAME IMAGE [--threshold 0-100]
+       {PROG} remove-signature NAME
+       {PROG} help items
+
+With no command (or `open`), opens the app. The commands need no display.
+"""
+
+
+def cmd_sign(args):
+    import argparse
+
+    p = argparse.ArgumentParser(prog=f"{PROG} sign", description="Place items on a copy of a PDF.",
+                                epilog="Run `" + PROG + " help items` for the items.json format.")
+    p.add_argument("input")
+    p.add_argument("output")
+    p.add_argument("--items", required=True, help="items.json, or - for standard input")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    a = p.parse_args(args)
+
+    if same_file(a.input, a.output):
+        raise SignError("The output can't be the input: the original is never changed.")
+    try:
+        if a.items == "-":
+            data = json.load(sys.stdin)
+        else:
+            with open(a.items, encoding="utf-8") as f:
+                data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SignError(f"Can't read {a.items}: {e}") from e
+
+    pdf = open_pdf(a.input)
+    with pdf:
+        sizes = page_sizes(pdf)
+        sealed = has_digital_signature(pdf)
+    items, errors = parse_items(data, sizes)
+    if errors:
+        raise SignError("\n".join(errors))
+    if sealed:
+        print(f"{PROG}: warning: {a.input} carries a digital signature, which won't be valid in the "
+              "signed copy (the original keeps it).", file=sys.stderr)
+    write_signed(a.input, a.output, items)
+    for item in items:
+        if item.name:
+            set_last_used_signature(item.name)
+    if a.json:
+        print(json.dumps({"output": os.path.abspath(a.output), "items": len(items),
+                          "digitally_signed_input": sealed}))
+    else:
+        print(f"Wrote {a.output} ({len(items)} item{'s' if len(items) != 1 else ''}).")
+
+
+def cmd_pages(args):
+    import argparse
+
+    p = argparse.ArgumentParser(prog=f"{PROG} pages", description="List page sizes in points, as shown.")
+    p.add_argument("pdf")
+    p.add_argument("--json", action="store_true")
+    a = p.parse_args(args)
+    pdf = open_pdf(a.pdf)
+    with pdf:
+        sizes = page_sizes(pdf)
+        rotations = [page_geometry(page.obj)[2] for page in pdf.pages]
+        sealed = has_digital_signature(pdf)
+    if a.json:
+        print(json.dumps({"pages": [{"page": n, "width": w, "height": h, "rotate": r}
+                                    for n, ((w, h), r) in enumerate(zip(sizes, rotations), 1)],
+                          "digitally_signed": sealed}))
+        return
+    for n, ((w, h), r) in enumerate(zip(sizes, rotations), 1):
+        print(f"{n}\t{w:g} x {h:g}" + (f"\t(rotated {r})" if r else ""))
+    if sealed:
+        print("This PDF carries a digital signature; a signed copy won't keep it valid.")
+
+
+def cmd_signatures(args):
+    import argparse
+
+    p = argparse.ArgumentParser(prog=f"{PROG} signatures", description="List the saved signatures.")
+    p.add_argument("--json", action="store_true")
+    a = p.parse_args(args)
+    names = list_signatures()
+    last = last_used_signature()
+    if a.json:
+        print(json.dumps([{"name": n, "path": signature_path(n), "last_used": n == last} for n in names]))
+        return
+    for name in names:
+        print(name)
+
+
+def cmd_add_signature(args):
+    import argparse
+
+    p = argparse.ArgumentParser(prog=f"{PROG} add-signature",
+                                description="Save a signature from a scan or photo of it on white paper.")
+    p.add_argument("name")
+    p.add_argument("image")
+    p.add_argument("--threshold", type=int, default=DEFAULT_THRESHOLD,
+                   help=f"0-100, default {DEFAULT_THRESHOLD}: higher if shadows show, lower if faint strokes vanish")
+    a = p.parse_args(args)
+    path = add_signature(a.name, a.image, a.threshold)
+    print(f"Saved '{a.name}' to {path}.")
+
+
+def cmd_remove_signature(args):
+    if len(args) != 1:
+        raise SignError(f"usage: {PROG} remove-signature NAME")
+    path = signature_path(args[0])
+    try:
+        os.unlink(path)
+    except FileNotFoundError as e:
+        raise SignError(f"No saved signature '{args[0]}'.") from e
+    print(f"Removed '{args[0]}'.")
+
+
+COMMANDS = {
+    "sign": cmd_sign,
+    "pages": cmd_pages,
+    "signatures": cmd_signatures,
+    "add-signature": cmd_add_signature,
+    "remove-signature": cmd_remove_signature,
+}
+
+
+def main(argv):
+    try:
+        locale.setlocale(locale.LC_ALL, "")
+    except locale.Error:
+        pass
+    if argv and argv[0] in ("-h", "--help", "help"):
+        if argv[1:2] == ["items"]:
+            print(ITEMS_HELP, end="")
+        elif argv[1:2] and argv[1] in COMMANDS:
+            COMMANDS[argv[1]](["--help"])
+        else:
+            print(USAGE, end="")
+        return 0
+    if argv and argv[0] in COMMANDS:
+        try:
+            COMMANDS[argv[0]](argv[1:])
+        except (SignError, OSError) as e:
+            for line in str(e).splitlines():
+                print(f"{PROG}: {line}", file=sys.stderr)
+            return 1
+        return 0
+    if argv and argv[0] == "open":
+        argv = argv[1:]
+    if len(argv) > 1 or (argv and argv[0].startswith("-")):
+        print(USAGE, end="", file=sys.stderr)
+        return 1
+    return run_gui(argv[0] if argv else None)
+
+
+# ---------- the app ----------
+
+
+def theme_palette():
+    """(accent, canvas) colours as (r, g, b, a). The accent is the current
+    theme's `accent` from colors.toml, falling back to the picker
+    palette's (which ohmydebn-theme-set-picker derives from the same key)
+    and then to its default; the canvas behind the pages is the palette's
+    solid surface colour."""
+    import re
+
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    from ohmydebn_theme_colors import load_theme_colors, parse_hex_color
+
+    colors = load_theme_colors()
+    accent = colors["bg3"]
+    try:
+        with open(os.path.expanduser("~/.config/ohmydebn/current/theme/colors.toml"), encoding="utf-8",
+                  errors="replace") as f:
+            # Line by line, not tomllib: themes applied before 4.9.0 have
+            # a colors.toml that isn't strict TOML (see the carousel).
+            match = re.search(r'^\s*accent\s*=\s*"(#[0-9A-Fa-f]{6})"', f.read(), re.MULTILINE)
+        if match:
+            accent = parse_hex_color(match.group(1)) or accent
+    except OSError:
+        pass
+    return accent, colors["bg1"]
+
+
+HOTKEYS = [
+    ("Ctrl+O", "Open a PDF"),
+    ("Ctrl+S", "Save a signed copy"),
+    ("Ctrl+Shift+S", "Save a signed copy as…"),
+    ("S", "Place the last-used signature"),
+    ("Shift+S", "Open the signature menu"),
+    ("T", "Place text"),
+    ("D", "Place today's date"),
+    ("Enter", "Edit the selected text"),
+    ("Arrows / Shift+Arrows", "Nudge the selection 1 pt / 10 pt"),
+    ("[ / ]", "Make the selection smaller / larger"),
+    ("Ctrl+D", "Duplicate the selection"),
+    ("Delete, Backspace, X", "Remove the selection"),
+    ("Esc", "Deselect"),
+    ("Page Up / Page Down", "Previous / next page"),
+    ("Ctrl+= / Ctrl+- / Ctrl+0", "Zoom in / out / fit (or Ctrl+scroll)"),
+    ("Q", "Quit"),
+    ("?", "Show these hotkeys"),
+]
+
+
+def run_gui(path):
+    try:
+        gi.require_version("Gtk", "3.0")
+        gi.require_version("Gdk", "3.0")
+        gi.require_version("Poppler", "0.18")
+        from gi.repository import Gdk, GLib, Gtk, Poppler
+    except (ImportError, ValueError) as e:
+        print(f"{PROG}: the app needs GTK 3 and Poppler's GObject bindings (gir1.2-poppler-0.18): {e}",
+              file=sys.stderr)
+        return 1
+    # WM_CLASS ohmydebn-pdf-sign for both strings, which is what a tile
+    # rule or a launcher's StartupWMClass would match.
+    GLib.set_prgname(PROG)
+    Gdk.set_program_class(PROG)
+    if not Gtk.init_check(sys.argv)[0]:
+        print(f"{PROG}: no display to open the app on. The commands work without one; see --help.",
+              file=sys.stderr)
+        return 1
+
+    accent, canvas = theme_palette()
+    HANDLE = 9  # corner handle size, in screen pixels
+    PAGE_GAP = 18
+    MIN_ITEM = 6.0  # points
+
+    def ask(parent, title, text, ok_label, destructive=False):
+        """A yes/no question whose default answer is No."""
+        dialog = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                   text=title)
+        dialog.format_secondary_text(text)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        ok = dialog.add_button(ok_label, Gtk.ResponseType.OK)
+        ok.get_style_context().add_class("destructive-action" if destructive else "suggested-action")
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        answer = dialog.run()
+        dialog.destroy()
+        return answer == Gtk.ResponseType.OK
+
+    def tell(parent, title, text, kind=Gtk.MessageType.ERROR):
+        dialog = Gtk.MessageDialog(transient_for=parent, modal=True, message_type=kind,
+                                   buttons=Gtk.ButtonsType.CLOSE, text=title)
+        dialog.format_secondary_text(text)
+        dialog.run()
+        dialog.destroy()
+
+    def pil_to_surface(img):
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        return cairo.ImageSurface.create_from_png(buf)
+
+    class AddSignatureDialog(Gtk.Dialog):
+        """Name a signature and pick how much paper to remove, with the
+        result previewed over a checkerboard so leftover paper shows."""
+
+        def __init__(self, parent, image_path):
+            from PIL import Image
+
+            super().__init__(title="Add signature", transient_for=parent, modal=True)
+            self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            self.save_button = self.add_button("Save signature", Gtk.ResponseType.OK)
+            self.save_button.get_style_context().add_class("suggested-action")
+            self.set_default_response(Gtk.ResponseType.OK)
+            self.set_default_size(560, -1)
+            with Image.open(image_path) as img:
+                img.load()
+                self.source = img.copy()
+            self.result = None
+            self.surface = None
+            self.pending = 0
+
+            box = self.get_content_area()
+            box.set_spacing(10)
+            box.set_border_width(14)
+            self.preview = Gtk.DrawingArea()
+            self.preview.set_size_request(520, 220)
+            self.preview.connect("draw", self.on_draw)
+            box.pack_start(self.preview, True, True, 0)
+
+            self.transparent = has_transparency(self.source)
+            row = Gtk.Box(spacing=8)
+            row.pack_start(Gtk.Label(label="Paper threshold"), False, False, 0)
+            row.pack_start(Gtk.Label(label="Less"), False, False, 0)
+            self.scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+            self.scale.set_value(DEFAULT_THRESHOLD)
+            self.scale.set_draw_value(False)
+            self.scale.connect("value-changed", lambda *_: self.schedule())
+            row.pack_start(self.scale, True, True, 0)
+            row.pack_start(Gtk.Label(label="More"), False, False, 0)
+            box.pack_start(row, False, False, 0)
+            self.note = Gtk.Label(xalign=0)
+            self.note.set_line_wrap(True)
+            if self.transparent:
+                row.set_sensitive(False)
+                self.note.set_text("This image is already transparent, so it's used as it is.")
+            else:
+                self.note.set_text("Move toward More if shadows show up, or toward Less if faint strokes disappear.")
+            box.pack_start(self.note, False, False, 0)
+
+            name_row = Gtk.Box(spacing=8)
+            name_row.pack_start(Gtk.Label(label="Name"), False, False, 0)
+            self.name = Gtk.Entry()
+            self.name.set_activates_default(True)
+            self.name.set_placeholder_text("e.g. your name, or Initials")
+            if not list_signatures():
+                self.name.set_text(GLib.get_real_name() if GLib.get_real_name() not in ("", "Unknown") else "")
+            self.name.connect("changed", lambda *_: self.update_save())
+            name_row.pack_start(self.name, True, True, 0)
+            box.pack_start(name_row, False, False, 0)
+            self.show_all()
+            # Typing goes to the name, and Enter saves (the default
+            # response), rather than pressing whichever button had focus.
+            self.name.grab_focus()
+            self.process()
+
+        def schedule(self):
+            # Re-processing a big photo takes a moment, so wait for the
+            # slider to settle.
+            if self.pending:
+                GLib.source_remove(self.pending)
+            self.pending = GLib.timeout_add(150, self.process)
+
+        def process(self):
+            self.pending = 0
+            try:
+                self.result = extract_signature(self.source, int(self.scale.get_value()))
+                self.surface = pil_to_surface(self.result)
+                if not self.transparent:
+                    self.note.set_text("Move toward More if shadows show up, or toward Less if faint strokes "
+                                       "disappear.")
+            except SignError as e:
+                self.result = self.surface = None
+                self.note.set_text(str(e))
+            self.preview.queue_draw()
+            self.update_save()
+            return False
+
+        def update_save(self):
+            self.save_button.set_sensitive(self.result is not None and bool(self.name.get_text().strip()))
+
+        def on_draw(self, widget, ctx):
+            w, h = widget.get_allocated_width(), widget.get_allocated_height()
+            for y in range(0, h, 12):
+                for x in range(0, w, 12):
+                    shade = 0.92 if (x // 12 + y // 12) % 2 else 0.82
+                    ctx.set_source_rgb(shade, shade, shade)
+                    ctx.rectangle(x, y, 12, 12)
+                    ctx.fill()
+            if self.surface:
+                sw, sh = self.surface.get_width(), self.surface.get_height()
+                scale = min((w - 20) / sw, (h - 20) / sh, 4)
+                ctx.translate((w - sw * scale) / 2, (h - sh * scale) / 2)
+                ctx.scale(scale, scale)
+                ctx.set_source_surface(self.surface, 0, 0)
+                ctx.paint()
+            return False
+
+    class SignWindow(Gtk.Window):
+        def __init__(self):
+            super().__init__(title="Sign PDF")
+            self.set_icon_name("document-edit-symbolic")
+            self.path = None
+            self.doc = None
+            self.page_sizes = []
+            self.views = []
+            self.items = []
+            self.selected = None
+            self.drag = None
+            self.pointer = None
+            self.zoom = 1.0
+            self.fit = True
+            self.cache = {}
+            self.dirty = False
+            self.saved_to = None
+            self.sealed = False
+            self.sealed_ok = False
+            self.editing = None
+            self.sig_widths = {}
+            self.text_size = DEFAULT_TEXT_SIZE
+            self.last_width = 0
+
+            display = Gdk.Display.get_default()
+            monitor = display.get_primary_monitor() or display.get_monitor(0)
+            area = monitor.get_workarea() if monitor else None
+            self.set_default_size(min(1000, area.width - 80) if area else 1000,
+                                  max(500, area.height - 120) if area else 900)
+            self.apply_css()
+
+            header = Gtk.HeaderBar(show_close_button=True, title="Sign PDF")
+            self.set_titlebar(header)
+            open_button = Gtk.Button.new_from_icon_name("document-open-symbolic", Gtk.IconSize.BUTTON)
+            open_button.set_tooltip_text("Open a PDF (Ctrl+O)")
+            open_button.connect("clicked", lambda *_: self.choose_pdf())
+            header.pack_start(open_button)
+
+            self.sig_button = Gtk.MenuButton(label="Signature")
+            self.sig_button.set_tooltip_text("Saved signatures (S places the last used, Shift+S opens this)")
+            self.sig_popover = Gtk.Popover()
+            self.sig_button.set_popover(self.sig_popover)
+            self.sig_button.connect("toggled", self.on_sig_menu)
+            header.pack_start(self.sig_button)
+            for label, tip, action in (("Text", "Place text (T)", self.place_text),
+                                       ("Date", "Place today's date (D)", self.place_date)):
+                button = Gtk.Button(label=label)
+                button.set_tooltip_text(tip)
+                button.connect("clicked", lambda _b, a=action: a(None))
+                header.pack_start(button)
+                setattr(self, label.lower() + "_button", button)
+
+            self.save_button = Gtk.Button(label="Save signed copy")
+            self.save_button.set_tooltip_text("Write <name>-signed.pdf beside the original (Ctrl+S)")
+            self.save_button.get_style_context().add_class("suggested-action")
+            self.save_button.connect("clicked", lambda *_: self.save())
+            header.pack_end(self.save_button)
+            keys = Gtk.Button.new_from_icon_name("input-keyboard-symbolic", Gtk.IconSize.BUTTON)
+            keys.set_tooltip_text("Hotkeys (?)")
+            keys.connect("clicked", lambda *_: self.show_hotkeys())
+            header.pack_end(keys)
+
+            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.add(outer)
+            self.scroller = Gtk.ScrolledWindow()
+            self.scroller.set_name("canvas")
+            self.scroller.connect("size-allocate", self.on_scroller_size)
+            self.scroller.connect("scroll-event", self.on_scroll)
+            outer.pack_start(self.scroller, True, True, 0)
+            self.column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=PAGE_GAP)
+            self.column.set_halign(Gtk.Align.CENTER)
+            self.column.set_margin_top(PAGE_GAP)
+            self.column.set_margin_bottom(PAGE_GAP)
+            self.empty = Gtk.Label(label="Open a PDF with Ctrl+O, or drop one here.")
+            self.empty.get_style_context().add_class("empty")
+            self.empty.set_vexpand(True)
+            self.column.pack_start(self.empty, True, True, 0)
+            self.scroller.add(self.column)
+
+            self.status = Gtk.Label(xalign=0)
+            self.status.get_style_context().add_class("status")
+            outer.pack_start(self.status, False, False, 0)
+            self.hint()
+
+            self.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
+            self.drag_dest_add_uri_targets()
+            self.connect("drag-data-received", self.on_drop)
+            self.connect("key-press-event", self.on_key)
+            self.connect("delete-event", self.on_delete)
+            self.update_buttons()
+
+        # ---------- chrome ----------
+
+        def apply_css(self):
+            from ohmydebn_theme_colors import css_rgba
+
+            css = f"""
+            #canvas, #canvas viewport {{ background-color: {css_rgba(canvas)}; }}
+            .empty {{ font-size: 130%; opacity: 0.7; }}
+            .status {{ padding: 4px 10px; font-size: 90%; }}
+            button.suggested-action {{ background-image: none; background-color: {css_rgba(accent)};
+                                       border-color: {css_rgba(accent)}; }}
+            """.encode("utf-8")
+            provider = Gtk.CssProvider()
+            provider.load_from_data(css)
+            Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider,
+                                                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            # Text on the accent button: black or white, whichever reads.
+            from ohmydebn_theme_colors import contrast_ratio
+
+            on_accent = max(((0, 0, 0, 1), (1, 1, 1, 1)), key=lambda c: contrast_ratio(c, accent))
+            provider2 = Gtk.CssProvider()
+            provider2.load_from_data(f"button.suggested-action, button.suggested-action label {{ color: "
+                                     f"{css_rgba(on_accent)}; }}".encode("utf-8"))
+            Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider2,
+                                                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        def hint(self, message=None):
+            if message is None:
+                message = ("S signature · T text · D date · drag to move, corner to scale · "
+                           "double-click text to edit · Ctrl+S save · ? hotkeys") if self.doc else ""
+            self.status.set_text(message)
+
+        def update_buttons(self):
+            has_doc = self.doc is not None
+            for widget in (self.sig_button, self.text_button, self.date_button, self.save_button):
+                widget.set_sensitive(has_doc)
+
+        def set_dirty(self, dirty=True):
+            self.dirty = dirty
+            if self.path:
+                name = os.path.basename(self.path)
+                self.get_titlebar().set_title(("• " if dirty else "") + name)
+                self.get_titlebar().set_subtitle(os.path.dirname(os.path.abspath(self.path)))
+
+        def show_hotkeys(self):
+            dialog = Gtk.Dialog(title="Hotkeys", transient_for=self, modal=True)
+            dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+            grid = Gtk.Grid(column_spacing=24, row_spacing=6)
+            grid.set_border_width(16)
+            for row, (key, action) in enumerate(HOTKEYS):
+                k = Gtk.Label(xalign=0)
+                k.set_markup(f"<b>{GLib.markup_escape_text(key)}</b>")
+                grid.attach(k, 0, row, 1, 1)
+                grid.attach(Gtk.Label(label=action, xalign=0), 1, row, 1, 1)
+            note = Gtk.Label(label="Letter keys do nothing while you're typing.", xalign=0)
+            grid.attach(note, 0, len(HOTKEYS), 2, 1)
+            dialog.get_content_area().add(grid)
+            dialog.show_all()
+            dialog.run()
+            dialog.destroy()
+
+        # ---------- opening ----------
+
+        def confirm_discard(self):
+            if not self.dirty:
+                return True
+            return ask(self, "Discard what you've placed?",
+                       "The signatures and text placed on this PDF haven't been saved in a signed copy.",
+                       "Discard", destructive=True)
+
+        def choose_pdf(self):
+            dialog = Gtk.FileChooserDialog(title="Open a PDF", transient_for=self, action=Gtk.FileChooserAction.OPEN)
+            dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Open", Gtk.ResponseType.OK)
+            pdfs = Gtk.FileFilter()
+            pdfs.set_name("PDF documents")
+            pdfs.add_mime_type("application/pdf")
+            pdfs.add_pattern("*.pdf")
+            pdfs.add_pattern("*.PDF")
+            dialog.add_filter(pdfs)
+            if self.path:
+                dialog.set_current_folder(os.path.dirname(os.path.abspath(self.path)))
+            chosen = dialog.get_filename() if dialog.run() == Gtk.ResponseType.OK else None
+            dialog.destroy()
+            if chosen:
+                self.open_pdf(chosen)
+
+        def open_pdf(self, path):
+            if not self.confirm_discard():
+                return
+            try:
+                doc = Poppler.Document.new_from_file(GLib.filename_to_uri(os.path.abspath(path), None), None)
+            except GLib.Error as e:
+                if "encrypted" in e.message.lower() or "password" in e.message.lower():
+                    tell(self, "Can't open this PDF", "Password-protected PDFs aren't supported.")
+                else:
+                    tell(self, "Can't open this PDF", f"{path}: {e.message}")
+                return
+            try:
+                pdf = open_pdf(path)
+                with pdf:
+                    self.sealed = has_digital_signature(pdf)
+            except SignError as e:
+                tell(self, "Can't open this PDF", str(e))
+                return
+            self.path = path
+            self.doc = doc
+            self.items = []
+            self.selected = None
+            self.saved_to = None
+            self.sealed_ok = False
+            self.cache.clear()
+            self.page_sizes = [doc.get_page(i).get_size() for i in range(doc.get_n_pages())]
+            for child in self.column.get_children():
+                self.column.remove(child)
+            self.views = []
+            for index in range(len(self.page_sizes)):
+                view = Gtk.DrawingArea()
+                view.index = index
+                view.set_can_focus(False)
+                view.set_halign(Gtk.Align.CENTER)
+                view.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
+                                | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+                view.connect("draw", self.on_draw)
+                view.connect("button-press-event", self.on_press)
+                view.connect("button-release-event", self.on_release)
+                view.connect("motion-notify-event", self.on_motion)
+                view.connect("leave-notify-event", self.on_leave)
+                self.column.pack_start(view, False, False, 0)
+                self.views.append(view)
+            self.column.show_all()
+            self.fit = True
+            self.last_width = 0
+            self.apply_zoom(self.fit_zoom())
+            self.scroller.get_vadjustment().set_value(0)
+            self.set_dirty(False)
+            self.update_buttons()
+            self.hint("This PDF carries a digital signature. A signed copy won't keep it valid; the original "
+                      "does." if self.sealed else None)
+
+        def on_drop(self, _widget, _context, _x, _y, data, _info, _time):
+            for uri in data.get_uris() or []:
+                try:
+                    path = GLib.filename_from_uri(uri)[0]
+                except GLib.Error:
+                    continue
+                if path.lower().endswith(".pdf"):
+                    GLib.idle_add(self.open_pdf, path)
+                else:
+                    GLib.idle_add(self.add_signature_from, path)
+                return
+
+        # ---------- zoom and layout ----------
+
+        def fit_zoom(self):
+            if not self.page_sizes:
+                return 1.0
+            width = self.scroller.get_allocated_width() or 900
+            widest = max(w for w, _h in self.page_sizes)
+            return max(0.2, min(2.0, (width - 2 * PAGE_GAP - 16) / widest))
+
+        def apply_zoom(self, zoom, keep_fit=False):
+            vadj = self.scroller.get_vadjustment()
+            old_total = max(1.0, vadj.get_upper())
+            ratio = vadj.get_value() / old_total
+            self.zoom = max(0.2, min(6.0, zoom))
+            self.fit = keep_fit or self.fit
+            self.cache.clear()
+            for view, (w, h) in zip(self.views, self.page_sizes):
+                view.set_size_request(round(w * self.zoom), round(h * self.zoom))
+            # Keep roughly the same place in the document across a zoom.
+            GLib.idle_add(lambda: vadj.set_value(ratio * vadj.get_upper()) and False)
+
+        def on_scroller_size(self, _widget, allocation):
+            if self.fit and self.doc and abs(allocation.width - self.last_width) > 4:
+                self.last_width = allocation.width
+                GLib.idle_add(lambda: self.apply_zoom(self.fit_zoom(), keep_fit=True) and False)
+
+        def on_scroll(self, _widget, event):
+            if not event.state & Gdk.ModifierType.CONTROL_MASK or not self.doc:
+                return False
+            ok, _dx, dy = event.get_scroll_deltas()
+            if event.direction == Gdk.ScrollDirection.UP or (ok and dy < 0):
+                self.zoom_by(1.1)
+            elif event.direction == Gdk.ScrollDirection.DOWN or (ok and dy > 0):
+                self.zoom_by(1 / 1.1)
+            return True
+
+        def zoom_by(self, factor):
+            self.fit = False
+            self.apply_zoom(self.zoom * factor)
+
+        def page_top(self, index):
+            return self.views[index].get_allocation().y
+
+        def current_page(self):
+            """The page that fills most of the window."""
+            vadj = self.scroller.get_vadjustment()
+            top, bottom = vadj.get_value(), vadj.get_value() + vadj.get_page_size()
+            best, best_overlap = 0, -1
+            for view in self.views:
+                a = view.get_allocation()
+                overlap = min(bottom, a.y + a.height) - max(top, a.y)
+                if overlap > best_overlap:
+                    best, best_overlap = view.index, overlap
+            return best
+
+        def go_to_page(self, index):
+            index = max(0, min(len(self.views) - 1, index))
+            self.scroller.get_vadjustment().set_value(self.page_top(index) - PAGE_GAP / 2)
+
+        # ---------- drawing ----------
+
+        def page_surface(self, view):
+            scale = view.get_scale_factor()
+            key = view.index
+            cached = self.cache.get(key)
+            if cached and cached[0] == (self.zoom, scale):
+                return cached[1]
+            w, h = self.page_sizes[view.index]
+            surface = cairo.ImageSurface(cairo.FORMAT_RGB24, max(1, round(w * self.zoom * scale)),
+                                         max(1, round(h * self.zoom * scale)))
+            ctx = cairo.Context(surface)
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.paint()
+            ctx.scale(self.zoom * scale, self.zoom * scale)
+            self.doc.get_page(view.index).render(ctx)
+            # Pages render as they come into view; keep the most recent
+            # few rather than a whole long document's worth of bitmaps.
+            if len(self.cache) >= 12:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[key] = ((self.zoom, scale), surface)
+            return surface
+
+        def on_draw(self, view, ctx):
+            surface = self.page_surface(view)
+            scale = view.get_scale_factor()
+            ctx.save()
+            ctx.scale(1 / scale, 1 / scale)
+            ctx.set_source_surface(surface, 0, 0)
+            ctx.paint()
+            ctx.restore()
+            ctx.save()
+            ctx.scale(self.zoom, self.zoom)
+            for item in self.items:
+                if item.page == view.index:
+                    try:
+                        draw_item(ctx, item)
+                    except (OSError, cairo.Error):
+                        pass
+            ctx.restore()
+            item = self.selected
+            if item and item.page == view.index:
+                x, y, w, h = (v * self.zoom for v in (item.x, item.y, item.w, item.h))
+                ctx.set_source_rgba(*accent[:3], 1)
+                ctx.set_line_width(1.5)
+                ctx.set_dash([5, 3])
+                ctx.rectangle(x - 2, y - 2, w + 4, h + 4)
+                ctx.stroke()
+                ctx.set_dash([])
+                for cx, cy in self.corners(item):
+                    ctx.rectangle(cx - HANDLE / 2, cy - HANDLE / 2, HANDLE, HANDLE)
+                    ctx.set_source_rgb(1, 1, 1)
+                    ctx.fill_preserve()
+                    ctx.set_source_rgba(*accent[:3], 1)
+                    ctx.stroke()
+            return False
+
+        def corners(self, item):
+            x, y, w, h = (v * self.zoom for v in (item.x, item.y, item.w, item.h))
+            return [(x - 2, y - 2), (x + w + 2, y - 2), (x - 2, y + h + 2), (x + w + 2, y + h + 2)]
+
+        def redraw(self, item=None):
+            if item is not None and 0 <= item.page < len(self.views):
+                self.views[item.page].queue_draw()
+            else:
+                for view in self.views:
+                    view.queue_draw()
+
+        # ---------- placing ----------
+
+        def place_point(self):
+            """Where a new item goes: under the pointer when it's over a
+            page, else the middle of the page in view."""
+            if self.pointer:
+                return self.pointer, True
+            index = self.current_page()
+            w, h = self.page_sizes[index]
+            vadj = self.scroller.get_vadjustment()
+            top = (vadj.get_value() - self.page_top(index)) / self.zoom
+            visible_mid = top + vadj.get_page_size() / self.zoom / 2
+            return (index, w / 2, max(0, min(h, visible_mid))), False
+
+        def add_item(self, item):
+            self.clamp(item)
+            self.items.append(item)
+            self.select(item)
+            self.set_dirty()
+
+        def clamp(self, item):
+            pw, ph = self.page_sizes[item.page]
+            item.x = min(max(item.x, 0), max(0, pw - item.w))
+            item.y = min(max(item.y, 0), max(0, ph - item.h))
+
+        def select(self, item):
+            old = self.selected
+            self.selected = item
+            if old is not None:
+                self.redraw(old)
+            if item is not None:
+                self.redraw(item)
+
+        def place_signature(self, name=None):
+            if not self.doc:
+                return
+            name = name or last_used_signature()
+            if name is None:
+                self.add_signature()
+                return
+            try:
+                surface = image_surface(signature_path(name))
+            except (OSError, cairo.Error, SignError) as e:
+                tell(self, "Can't use this signature", str(e))
+                return
+            (index, px, py), _ = self.place_point()
+            w = self.sig_widths.get(name, DEFAULT_SIGNATURE_WIDTH)
+            h = w * surface.get_height() / max(1, surface.get_width())
+            set_last_used_signature(name)
+            self.add_item(Item("signature", index, px - w / 2, py - h / 2, w, h, path=signature_path(name),
+                               name=name))
+
+        def place_text(self, text=None):
+            if not self.doc:
+                return
+            (index, px, py), under_pointer = self.place_point()
+            item = Item("text", index, 0, 0, text=text or "", size=self.text_size)
+            # Text starts at the pointer, the way a caret would.
+            item.x = px if under_pointer else px - item.w / 2
+            item.y = py - item.h / 2
+            self.add_item(item)
+            if not text:
+                self.edit_text(item)
+
+        def place_date(self, _unused=None):
+            self.place_text(today_text())
+
+        def remove_selected(self):
+            item = self.selected
+            if item in self.items:
+                self.items.remove(item)
+                self.selected = None
+                self.redraw(item)
+                self.set_dirty()
+
+        def duplicate_selected(self):
+            if self.selected:
+                dup = self.selected.copy()
+                dup.x += 12
+                dup.y += 12
+                self.add_item(dup)
+
+        def nudge(self, dx, dy):
+            item = self.selected
+            item.x += dx
+            item.y += dy
+            self.clamp(item)
+            self.redraw(item)
+            self.set_dirty()
+
+        def rescale_selected(self, factor):
+            item = self.selected
+            cx, cy = item.x + item.w / 2, item.y + item.h / 2
+            self.resize(item, factor, (cx, cy), centre=True)
+            self.redraw(item)
+            self.set_dirty()
+
+        def resize(self, item, factor, anchor, centre=False, base=None):
+            """Scale an item to `factor` times `base` (its size when the
+            drag started), keeping its proportions, with `anchor` (the
+            opposite corner, or its centre) left where it is."""
+            bw, bh, bsize = base or (item.w, item.h, item.size)
+            factor = max(factor, MIN_ITEM / max(1e-6, min(bw, bh)))
+            if item.kind == "text":
+                item.size = max(2.0, bsize * factor)
+                item.measure()
+                self.text_size = item.size
+            else:
+                item.w, item.h = bw * factor, bh * factor
+                if item.name:
+                    self.sig_widths[item.name] = item.w
+            ax, ay = anchor[0], anchor[1]
+            if centre:
+                item.x, item.y = ax - item.w / 2, ay - item.h / 2
+            else:
+                left, top = anchor[2], anchor[3]
+                item.x = ax - item.w if left else ax
+                item.y = ay - item.h if top else ay
+
+        # ---------- text editing ----------
+
+        def edit_text(self, item):
+            view = self.views[item.page]
+            popover = Gtk.Popover.new(view)
+            rect = Gdk.Rectangle()
+            rect.x, rect.y = round(item.x * self.zoom), round(item.y * self.zoom)
+            rect.width, rect.height = max(1, round(item.w * self.zoom)), max(1, round(item.h * self.zoom))
+            popover.set_pointing_to(rect)
+            popover.set_position(Gtk.PositionType.BOTTOM)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            box.set_border_width(8)
+            textview = Gtk.TextView()
+            textview.set_size_request(320, 60)
+            buffer = textview.get_buffer()
+            buffer.set_text(item.text)
+            box.pack_start(textview, True, True, 0)
+            hint = Gtk.Label(label="Enter or Esc to finish · Shift+Enter for a new line", xalign=0)
+            hint.get_style_context().add_class("dim-label")
+            box.pack_start(hint, False, False, 0)
+            popover.add(box)
+
+            def changed(buf):
+                item.text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+                item.measure()
+                self.redraw(item)
+                self.set_dirty()
+
+            def key(_tv, event):
+                enter = event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter)
+                if (enter and not event.state & Gdk.ModifierType.SHIFT_MASK) or event.keyval == Gdk.KEY_Escape:
+                    popover.popdown()
+                    return True
+                return False
+
+            def closed(_p):
+                self.editing = None
+                if not item.text.strip() and item in self.items:
+                    self.items.remove(item)
+                    if self.selected is item:
+                        self.selected = None
+                    self.redraw(item)
+                GLib.idle_add(popover.destroy)
+
+            buffer.connect("changed", changed)
+            textview.connect("key-press-event", key)
+            popover.connect("closed", closed)
+            self.editing = popover
+            popover.show_all()
+            popover.popup()
+            textview.grab_focus()
+
+        # ---------- pointer ----------
+
+        def hit(self, view, ex, ey):
+            """(item, corner index or None) under a point, topmost first:
+            the selection's corner handles, then any item's box."""
+            item = self.selected
+            if item and item.page == view.index:
+                for n, (cx, cy) in enumerate(self.corners(item)):
+                    if abs(ex - cx) <= HANDLE and abs(ey - cy) <= HANDLE:
+                        return item, n
+            px, py = ex / self.zoom, ey / self.zoom
+            slack = 3 / self.zoom
+            for item in reversed(self.items):
+                if (item.page == view.index and item.x - slack <= px <= item.x + item.w + slack
+                        and item.y - slack <= py <= item.y + item.h + slack):
+                    return item, None
+            return None, None
+
+        def on_press(self, view, event):
+            if event.button != 1:
+                return False
+            item, corner = self.hit(view, event.x, event.y)
+            if event.type == Gdk.EventType._2BUTTON_PRESS:
+                if item and item.kind == "text":
+                    self.drag = None
+                    self.edit_text(item)
+                return True
+            if event.type != Gdk.EventType.BUTTON_PRESS:
+                return True
+            self.select(item)
+            if item is None:
+                self.drag = None
+                return True
+            # Bring it to the top, like any stack of paper.
+            self.items.remove(item)
+            self.items.append(item)
+            if corner is None:
+                self.drag = ("move", item, event.x, event.y, item.x, item.y)
+            else:
+                left, top = corner in (0, 2), corner in (0, 1)
+                ax = item.x + item.w if left else item.x
+                ay = item.y + item.h if top else item.y
+                self.drag = ("resize", item, (ax, ay, left, top), (item.w, item.h, item.size))
+            return True
+
+        def on_motion(self, view, event):
+            px, py = event.x / self.zoom, event.y / self.zoom
+            self.pointer = (view.index, px, py)
+            if self.drag and self.drag[1].page == view.index:
+                item = self.drag[1]
+                if self.drag[0] == "move":
+                    _, _, sx, sy, ix, iy = self.drag
+                    item.x = ix + (event.x - sx) / self.zoom
+                    item.y = iy + (event.y - sy) / self.zoom
+                    self.clamp(item)
+                else:
+                    _, _, anchor, base = self.drag
+                    factor = max(abs(px - anchor[0]) / max(1e-6, base[0]), abs(py - anchor[1]) / max(1e-6, base[1]))
+                    self.resize(item, factor, anchor, base=base)
+                self.redraw(item)
+                self.set_dirty()
+            else:
+                item, corner = self.hit(view, event.x, event.y)
+                name = "default"
+                if corner is not None:
+                    name = "nwse-resize" if corner in (0, 3) else "nesw-resize"
+                elif item is not None:
+                    name = "move"
+                window = view.get_window()
+                if window is not None:
+                    window.set_cursor(Gdk.Cursor.new_from_name(view.get_display(), name))
+            return True
+
+        def on_release(self, _view, event):
+            if event.button == 1:
+                self.drag = None
+            return True
+
+        def on_leave(self, _view, _event):
+            if not self.drag:
+                self.pointer = None
+            return False
+
+        # ---------- signatures ----------
+
+        def on_sig_menu(self, button):
+            if not button.get_active():
+                return
+            for child in self.sig_popover.get_children():
+                self.sig_popover.remove(child)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            box.set_border_width(6)
+            last = last_used_signature()
+            for name in list_signatures():
+                row = Gtk.Box(spacing=4)
+                place = Gtk.ModelButton(text=name + ("  ✓" if name == last else ""))
+                place.connect("clicked", lambda _b, n=name: self.place_signature(n))
+                row.pack_start(place, True, True, 0)
+                delete = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.MENU)
+                delete.set_relief(Gtk.ReliefStyle.NONE)
+                delete.set_tooltip_text(f"Delete '{name}' (anything already placed stays)")
+                delete.connect("clicked", lambda _b, n=name: self.delete_signature(n))
+                row.pack_start(delete, False, False, 0)
+                box.pack_start(row, False, False, 0)
+            if list_signatures():
+                box.pack_start(Gtk.Separator(), False, False, 4)
+            add = Gtk.ModelButton(text="Add signature…")
+            add.connect("clicked", lambda *_: GLib.idle_add(self.add_signature))
+            box.pack_start(add, False, False, 0)
+            self.sig_popover.add(box)
+            box.show_all()
+
+        def delete_signature(self, name):
+            self.sig_popover.popdown()
+            if ask(self, f"Delete the signature '{name}'?",
+                   "Anything you've already placed with it stays where it is.", "Delete", destructive=True):
+                try:
+                    # Placed copies keep drawing from the cached surface.
+                    image_surface(signature_path(name))
+                    os.unlink(signature_path(name))
+                except OSError as e:
+                    tell(self, "Can't delete the signature", str(e))
+
+        def add_signature(self):
+            dialog = Gtk.FileChooserDialog(title="Choose a scan or photo of your signature", transient_for=self,
+                                           action=Gtk.FileChooserAction.OPEN)
+            dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Choose", Gtk.ResponseType.OK)
+            images = Gtk.FileFilter()
+            images.set_name("Images")
+            for pattern in ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.PNG", "*.JPG", "*.JPEG", "*.WEBP"):
+                images.add_pattern(pattern)
+            dialog.add_filter(images)
+            pictures = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
+            if pictures and os.path.isdir(pictures):
+                dialog.set_current_folder(pictures)
+            chosen = dialog.get_filename() if dialog.run() == Gtk.ResponseType.OK else None
+            dialog.destroy()
+            if chosen:
+                self.add_signature_from(chosen)
+            return False
+
+        def add_signature_from(self, image_path):
+            try:
+                dialog = AddSignatureDialog(self, image_path)
+            except OSError as e:
+                tell(self, "Can't read this image", str(e))
+                return False
+            while dialog.run() == Gtk.ResponseType.OK:
+                name = dialog.name.get_text().strip()
+                try:
+                    check_signature_name(name)
+                except SignError as e:
+                    tell(self, "Choose another name", str(e))
+                    continue
+                if name in list_signatures() and not ask(
+                        self, f"Replace the signature '{name}'?", "Anything already placed with it stays as it is.",
+                        "Replace", destructive=True):
+                    continue
+                try:
+                    save_signature(name, dialog.result)
+                except OSError as e:
+                    tell(self, "Can't save the signature", str(e))
+                    continue
+                dialog.destroy()
+                self.sig_widths.pop(name, None)
+                if self.doc:
+                    self.place_signature(name)
+                return False
+            dialog.destroy()
+            return False
+
+        # ---------- saving ----------
+
+        def save(self, choose=False):
+            if not self.doc:
+                return
+            if not self.items:
+                self.hint("Place a signature, text or a date first (S, T or D).")
+                return
+            if self.sealed and not self.sealed_ok:
+                if not ask(self, "This PDF is digitally signed",
+                           "Placing anything on it breaks that digital signature in the signed copy. The original "
+                           "stays as it is, still signed.", "Save anyway"):
+                    return
+                self.sealed_ok = True
+            target = self.saved_to or default_signed_path(self.path)
+            folder = os.path.dirname(os.path.abspath(target))
+            # Replace a copy saved from this window without asking, but
+            # nothing else: <name>-signed.pdf may be a copy someone else
+            # signed.
+            if choose or (os.path.exists(target) and target != self.saved_to) or not os.access(folder, os.W_OK):
+                target = self.choose_target(target)
+                if not target:
+                    return
+            try:
+                write_signed(self.path, target, self.items)
+            except (SignError, OSError) as e:
+                tell(self, "Can't save the signed copy", str(e))
+                return
+            except Exception as e:  # pikepdf's own errors, cairo's
+                tell(self, "Can't save the signed copy", f"{type(e).__name__}: {e}")
+                return
+            self.saved_to = target
+            self.set_dirty(False)
+            self.hint(f"Saved {target}")
+
+        def choose_target(self, suggested):
+            dialog = Gtk.FileChooserDialog(title="Save signed copy", transient_for=self,
+                                           action=Gtk.FileChooserAction.SAVE)
+            dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save", Gtk.ResponseType.OK)
+            dialog.set_do_overwrite_confirmation(True)
+            folder = os.path.dirname(os.path.abspath(suggested))
+            if os.access(folder, os.W_OK):
+                dialog.set_current_folder(folder)
+            else:
+                dialog.set_current_folder(GLib.get_home_dir())
+            dialog.set_current_name(os.path.basename(suggested))
+            while True:
+                if dialog.run() != Gtk.ResponseType.OK:
+                    dialog.destroy()
+                    return None
+                chosen = dialog.get_filename()
+                if chosen and same_file(chosen, self.path):
+                    tell(self, "Choose another name", "The signed copy can't replace the original.")
+                    continue
+                dialog.destroy()
+                return chosen
+
+        # ---------- keys ----------
+
+        def on_key(self, _widget, event):
+            if self.editing is not None:
+                return False
+            mods = event.state & Gtk.accelerator_get_default_mod_mask()
+            ctrl = bool(mods & Gdk.ModifierType.CONTROL_MASK)
+            shift = bool(mods & Gdk.ModifierType.SHIFT_MASK)
+            k = event.keyval
+            lower = Gdk.keyval_to_lower(k)
+            if ctrl:
+                if lower == Gdk.KEY_o:
+                    self.choose_pdf()
+                elif lower == Gdk.KEY_s:
+                    self.save(choose=shift)
+                elif lower == Gdk.KEY_d and self.selected:
+                    self.duplicate_selected()
+                elif k in (Gdk.KEY_equal, Gdk.KEY_plus, Gdk.KEY_KP_Add):
+                    self.zoom_by(1.2)
+                elif k in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                    self.zoom_by(1 / 1.2)
+                elif k in (Gdk.KEY_0, Gdk.KEY_KP_0):
+                    self.fit = True
+                    self.apply_zoom(self.fit_zoom())
+                elif lower in (Gdk.KEY_q, Gdk.KEY_w):
+                    self.close()
+                else:
+                    return False
+                return True
+            if k == Gdk.KEY_question:
+                self.show_hotkeys()
+            elif lower == Gdk.KEY_q and not shift:
+                self.close()
+            elif not self.doc:
+                return False
+            elif k == Gdk.KEY_S:
+                self.sig_button.set_active(True)
+            elif k == Gdk.KEY_s:
+                self.place_signature()
+            elif k == Gdk.KEY_t:
+                self.place_text()
+            elif k == Gdk.KEY_d:
+                self.place_date()
+            elif k in (Gdk.KEY_Page_Down, Gdk.KEY_Page_Up):
+                self.go_to_page(self.current_page() + (1 if k == Gdk.KEY_Page_Down else -1))
+            elif self.selected is None:
+                return False
+            elif k in (Gdk.KEY_Delete, Gdk.KEY_BackSpace, Gdk.KEY_x):
+                self.remove_selected()
+            elif k == Gdk.KEY_Escape:
+                self.select(None)
+            elif k in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and self.selected.kind == "text":
+                self.edit_text(self.selected)
+            elif k in (Gdk.KEY_Left, Gdk.KEY_Right, Gdk.KEY_Up, Gdk.KEY_Down):
+                step = 10 if shift else 1
+                dx = {Gdk.KEY_Left: -step, Gdk.KEY_Right: step}.get(k, 0)
+                dy = {Gdk.KEY_Up: -step, Gdk.KEY_Down: step}.get(k, 0)
+                self.nudge(dx, dy)
+            elif k == Gdk.KEY_bracketleft:
+                self.rescale_selected(1 / 1.1)
+            elif k == Gdk.KEY_bracketright:
+                self.rescale_selected(1.1)
+            else:
+                return False
+            return True
+
+        def on_delete(self, *_):
+            return not self.confirm_discard()
+
+    window = SignWindow()
+    window.connect("destroy", Gtk.main_quit)
+    window.show_all()
+    if path:
+        if not os.path.isfile(path):
+            tell(window, "Can't open this PDF", f"{path} doesn't exist.")
+        else:
+            GLib.idle_add(lambda: window.open_pdf(path) and False)
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

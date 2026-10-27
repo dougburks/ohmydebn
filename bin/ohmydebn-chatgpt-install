@@ -7,7 +7,7 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
   echo "ChatGPT is not currently installed."
   echo
   echo "Continuing will install it from:"
-  echo "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/"
+  echo "https://persistent.oaistatic.com/codex-app-prod/linux/deb/"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
@@ -21,20 +21,45 @@ if ! dpkg -s "chatgpt" >/dev/null 2>&1; then
     echo "x86_64 and aarch64 are the only supported architectures!"
     exit 1
   fi
-  echo "ChatGPT is a large download and may take a few minutes."
-  # Through apt, so its dependencies come too and a failed download stops
-  # here - see ohmydebn-apt-install-deb. OpenAI publishes no checksum.
-  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "ChatGPT" "https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_$DEB_ARCH.deb"
 
-  # ChatGPT's own postinst registers OpenAI's repo as an apt source
-  # (/etc/apt/sources.list.d/chatgpt.sources, signed by
-  # /usr/share/keyrings/chatgpt-archive-keyring.gpg; its postrm removes
-  # both on purge) - same reasoning/pattern as ohmydebn-code-install's own
-  # pin: OhMyDebn never creates that source file itself, so restricting it
-  # has to happen here. A bare signed-by trusts OpenAI's key to sign any
-  # package name. Its dependencies are all ordinary distro libraries.
+  # Installed from OpenAI's apt repository, so apt checks the package's
+  # signature before installing it. Downloading the .deb directly, as this
+  # used to, installed whatever the URL served (OpenAI publishes no
+  # checksum) and ran its scripts as root. The source, pin and keyring are
+  # the ones ChatGPT's own postinst sets up, under the same names, so it
+  # keeps them and its postrm removes them on purge.
+  #
+  # OpenAI doesn't publish the repository's key anywhere but inside the
+  # package, so OhMyDebn ships it, taken from ChatGPT 26.1023.50603's
+  # postinst ("Codex Linux Repository",
+  # 3BFA0E4AE8B8CC16A2D9BA684A3B4A566C4660E4, which signs the repository;
+  # checked 2026-10-27). If OpenAI replaces the key, installs fail at apt
+  # update until it's updated here.
+  CHATGPT_KEYRING=/usr/share/keyrings/chatgpt-archive-keyring.gpg
+  CHATGPT_SOURCES=/etc/apt/sources.list.d/chatgpt.sources
+  CHATGPT_PREF=/etc/apt/preferences.d/chatgpt.pref
+
+  # Restricts OpenAI's repo to chatgpt, written before the repo is: a bare
+  # signed-by trusts OpenAI's key to sign any package name. Its
+  # dependencies are all ordinary distro libraries.
   printf 'Package: *\nPin: origin "persistent.oaistatic.com"\nPin-Priority: -1\n\nPackage: chatgpt\nPin: origin "persistent.oaistatic.com"\nPin-Priority: 500\n' |
-    sudo tee /etc/apt/preferences.d/chatgpt.pref >/dev/null
+    sudo tee "$CHATGPT_PREF" >/dev/null
+  sudo install -D -m 0644 /usr/share/ohmydebn/config/apt-keys/chatgpt-archive-keyring.gpg "$CHATGPT_KEYRING"
+  printf 'Types: deb\nURIs: https://persistent.oaistatic.com/codex-app-prod/linux/deb\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: %s\n' \
+    "$DEB_ARCH" "$CHATGPT_KEYRING" | sudo tee "$CHATGPT_SOURCES" >/dev/null
+
+  # A source apt can't refresh fails every later apt update, and with it
+  # every ohmydebn-update, so it's taken out again, as
+  # ohmydebn-cloudflare-warp-install does.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f "$CHATGPT_SOURCES" "$CHATGPT_PREF" "$CHATGPT_KEYRING"
+    echo
+    echo "Couldn't refresh the package lists, so ChatGPT's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
+  echo "ChatGPT is a large download and may take a few minutes."
+  sudo /usr/bin/apt -y install chatgpt
 
   # Installed onto a system that may already have a default AI assistant:
   # ask before changing it (defaults to no, and says nothing when this is

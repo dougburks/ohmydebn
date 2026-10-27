@@ -401,7 +401,9 @@ def band_mask(width, height):
 
 
 def draw_light(cr, still, dusk, band, width, height, t):
-    """One frame of the light intro, t seconds in, in device pixels."""
+    """One frame of the light intro, t seconds in. width and height are
+    in cr's units (the window's own, logical pixels), which are also the
+    sizes still, dusk and band draw at."""
     cr.set_source_surface(still, 0, 0)
     cr.paint()
 
@@ -451,14 +453,20 @@ class LightIntro(Intro):
         return (GLib.get_monotonic_time() - self.started) / 1e6
 
     def on_draw(self, area, cr, monitor):
-        # Device pixels, so a HiDPI monitor gets a sharp picture.
+        # The images are made in device pixels, so a HiDPI monitor gets a
+        # sharp picture, and drawn in the window's own (logical) units: the
+        # server copies carry the window's scale, so each one draws at the
+        # logical size, its device pixels one for one. Scaling the context
+        # down to device pixels as well, as this used to, drew everything
+        # at half size on a 2x display - the background filled only the top
+        # left quarter of the screen.
         scale = area.get_scale_factor()
-        width = area.get_allocated_width() * scale
-        height = area.get_allocated_height() * scale
-        key = (monitor, width, height)
+        width = area.get_allocated_width()
+        height = area.get_allocated_height()
+        key = (monitor, width, height, scale)
         if key not in self.surfaces:
-            still = cover_surface(self.pixbuf, width, height)
-            images = (still, twilight_surface(still), band_mask(width, height))
+            still = cover_surface(self.pixbuf, width * scale, height * scale)
+            images = (still, twilight_surface(still), band_mask(width * scale, height * scale))
             # Copied once into surfaces of the window's own kind (on X11,
             # pixmaps on the X server), so each frame is composited there:
             # painting the images themselves sent the whole picture to the
@@ -466,7 +474,6 @@ class LightIntro(Intro):
             window = area.get_window()
             self.surfaces[key] = tuple(self.server_copy(window, image, scale) for image in images)
         still, dusk, band = self.surfaces[key]
-        cr.scale(1 / scale, 1 / scale)
         t = self.elapsed()
         draw_light(cr, still, dusk, band, width, height, t)
         if t >= LIGHT_DURATION:
@@ -477,7 +484,7 @@ class LightIntro(Intro):
     def server_copy(window, image, scale):
         content = cairo.CONTENT_ALPHA if image.get_format() == cairo.FORMAT_A8 else cairo.CONTENT_COLOR
         # Logical size; GDK gives it the window's scale, so it holds the
-        # image's device pixels.
+        # image's device pixels, and draws at the logical size.
         copy = window.create_similar_surface(content, image.get_width() // scale, image.get_height() // scale)
         cr = cairo.Context(copy)
         cr.scale(1 / scale, 1 / scale)

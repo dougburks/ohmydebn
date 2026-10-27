@@ -416,6 +416,111 @@ check("a reversed box is normalised",
       pdf_sign.page_geometry(pikepdf.Dictionary(MediaBox=[100, 200, 0, 0]))[0] == (0, 0, 100, 200))
 check("a signed copy is named <name>-signed.pdf", pdf_sign.default_signed_path("/a/lease.pdf") == "/a/lease-signed.pdf")
 
+# ---------- undo and redo ----------
+
+print("undo / redo")
+
+
+class Clock:
+    now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+clock = Clock()
+history = pdf_sign.History(clock=clock)
+Item = pdf_sign.Item
+items = []
+
+
+def xs(item_list):
+    return [round(i.x) for i in item_list]
+
+
+# Place two signatures, move one by dragging, delete the other.
+history.record(items)
+items.append(Item("signature", 0, 10, 10, 50, 20, path=saved, name="Red"))
+history.record(items)
+items.append(Item("signature", 0, 100, 10, 50, 20, path=saved, name="Red"))
+history.begin(items)
+items[0].x = 30
+history.commit(items)
+history.record(items)
+del items[1]
+check("four steps are recorded", len(history.done) == 4, str(len(history.done)))
+
+items = history.undo(items)
+check("undo brings back a deleted item", xs(items) == [30, 100], str(xs(items)))
+items = history.undo(items)
+check("undo puts a dragged item back", xs(items) == [10, 100], str(xs(items)))
+items = history.redo(items)
+check("redo moves it again", xs(items) == [30, 100], str(xs(items)))
+items = history.undo(items)
+items = history.undo(items)
+items = history.undo(items)
+check("undo goes back to before anything was placed", items == [], str(xs(items)))
+check("undo with nothing left returns None", history.undo(items) is None)
+items = history.redo(items)
+check("redo after undoing everything places the first again", xs(items) == [10], str(xs(items)))
+
+snapshot_item = items[0]
+history.record(items)
+items.append(Item("text", 0, 5, 5, text="new"))
+check("a new change clears what could be redone", history.redo(items) is None)
+items = history.undo(items)
+check("undone items are copies, not the live objects", items[0] is not snapshot_item and xs(items) == [10])
+
+history = pdf_sign.History(clock=clock)
+items = [Item("signature", 0, 10, 10, 50, 20, path=saved, name="Red")]
+history.begin(items)
+history.commit(items)
+check("a drag that didn't move anything leaves no step", history.done == [])
+history.begin(items)
+items[0].w = 80
+history.commit(items)
+check("a corner resize is one step", len(history.done) == 1 and history.undo(items)[0].w == 50)
+
+history = pdf_sign.History(clock=clock)
+items = [Item("signature", 0, 10, 10, 50, 20, path=saved, name="Red")]
+for n in range(5):
+    clock.now += 0.2
+    history.record(items, merge=("nudge", 1))
+    items[0].x += 1
+clock.now += 5
+history.record(items, merge=("nudge", 1))
+items[0].x += 1
+check("nudges close together share one step, a later one starts another", len(history.done) == 2,
+      str(len(history.done)))
+items = history.undo(items)
+items = history.undo(items)
+check("undoing the nudges goes back to the start", xs(items) == [10], str(xs(items)))
+
+history = pdf_sign.History(clock=clock)
+items = []
+history.record(items)
+items.append(Item("text", 0, 5, 5, text=""))
+history.drop_last()
+items.pop()
+check("a text box closed while empty leaves no step", history.done == [] and history.undo(items) is None)
+
+history = pdf_sign.History(clock=clock)
+items = [Item("text", 0, 5, 5, text="draft")]
+history.begin(items)
+items[0].text = "final"
+items[0].measure()
+history.commit(items)
+check("a text edit is one step that undoes to the old text", history.undo(items)[0].text == "draft")
+
+history = pdf_sign.History(clock=clock)
+items = []
+for n in range(pdf_sign.History.LIMIT + 20):
+    history.record(items)
+check("history keeps at most LIMIT steps", len(history.done) == pdf_sign.History.LIMIT)
+
+keys = dict(pdf_sign.HOTKEYS)
+check("the ? hotkey list has undo and redo", keys.get("Ctrl+Z") == "Undo" and keys.get("Ctrl+Shift+Z / Ctrl+Y") == "Redo")
+
 shutil.rmtree(TMP)
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

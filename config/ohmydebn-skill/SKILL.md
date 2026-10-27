@@ -365,6 +365,21 @@ Additional tools available in OhMyDebn:
 - **System Monitoring**: btop performance monitor via `Super + T`
 - **Audio Visualization**: Cava via terminal or `Ctrl + Super + A`
 
+### Signing PDFs
+
+`ohmydebn-pdf-sign` places the user's saved signatures, text and dates on a PDF and writes a separate signed copy; the original is never changed. Its commands need no display, so you can sign a PDF for the user:
+
+```bash
+ohmydebn-pdf-sign signatures --json                 # the user's saved signatures, by name
+ohmydebn-pdf-sign pages lease.pdf --json            # each page's size in points, and whether it's digitally signed
+pdftotext -cropbox -bbox lease.pdf -               # where the text is, in the same coordinates (poppler-utils, if installed)
+ohmydebn-pdf-sign sign lease.pdf lease-signed.pdf --items items.json --json
+ohmydebn-pdf-sign help items                        # the whole items.json format
+ohmydebn-pdf-sign add-signature "Initials" photo.jpg  # save one from a scan or photo on white paper
+```
+
+`items.json` is a list such as `[{"signature": "Alex", "page": 1, "x": 72, "bottom": 700, "width": 150}, {"date": true, "page": 1, "x": 300, "y": 690}, {"text": "Alex Morgan", "page": 1, "x": 72, "y": 710, "size": 12}]`: points from the top-left corner of the page as shown, pages counted from 1. `sign` checks every item first, reports all problems at once and writes nothing then. Use only signatures the user has saved, and only to sign what they asked you to; tell them if the PDF is digitally signed (`pages` says so), since a signed copy breaks that. `ohmydebn-pdf-sign file.pdf` opens the app (Apps > Office > Sign a PDF).
+
 
 ### System
 

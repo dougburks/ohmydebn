@@ -267,6 +267,88 @@ class Item:
                    self.size, self.color)
         return dup
 
+    def state(self):
+        return (self.kind, self.page, self.x, self.y, self.w, self.h, self.path, self.text, self.size, self.color)
+
+
+def items_state(items):
+    return tuple(item.state() for item in items)
+
+
+class History:
+    """Undo and redo for the app's placed items, kept as whole snapshots
+    of the item list: a page holds a handful of items, so copying them is
+    cheap, and a snapshot can't drift out of step the way a log of
+    individual changes can.
+
+    record() goes before a change that happens at once (placing,
+    deleting). A change that builds up over several events (a drag, a
+    text edit) calls begin() when it starts and commit() when it ends, and
+    leaves no step behind if nothing actually changed. Repeated nudges or
+    resizes of one item from the keyboard, close together, share a step
+    (the `merge` key), so undo doesn't walk back one point at a time."""
+
+    LIMIT = 200
+    MERGE_SECONDS = 1.0
+
+    def __init__(self, clock=time.monotonic):
+        self.done = []
+        self.undone = []
+        self.pending = None
+        self.clock = clock
+        self.last_merge = None
+
+    @staticmethod
+    def snapshot(items):
+        return [item.copy() for item in items]
+
+    def _push(self, snapshot):
+        self.done.append(snapshot)
+        del self.done[:-self.LIMIT]
+        self.undone.clear()
+
+    def record(self, items, merge=None):
+        now = self.clock()
+        if merge is not None and self.last_merge and self.last_merge[0] == merge \
+                and now - self.last_merge[1] < self.MERGE_SECONDS and self.done:
+            self.last_merge = (merge, now)
+            return
+        self.last_merge = (merge, now) if merge is not None else None
+        self._push(self.snapshot(items))
+
+    def begin(self, items):
+        self.pending = self.snapshot(items)
+        self.last_merge = None
+
+    def commit(self, items):
+        pending, self.pending = self.pending, None
+        if pending is not None and items_state(pending) != items_state(items):
+            self._push(pending)
+
+    def drop_last(self):
+        """Forget the latest step, for a change that turned out not to
+        happen (a text box closed while still empty)."""
+        if self.done:
+            self.done.pop()
+
+    def undo(self, items):
+        """The item list to show after undoing, or None with nothing to
+        undo. `items` is the current list, kept for redo."""
+        self.pending = None
+        self.last_merge = None
+        if not self.done:
+            return None
+        self.undone.append(self.snapshot(items))
+        return self.done.pop()
+
+    def redo(self, items):
+        self.pending = None
+        self.last_merge = None
+        if not self.undone:
+            return None
+        self.done.append(self.snapshot(items))
+        return self.undone.pop()
+
 
 def parse_color(value):
     h = value.strip().lstrip("#")
@@ -915,6 +997,8 @@ HOTKEYS = [
     ("Arrows / Shift+Arrows", "Nudge the selection 1 pt / 10 pt"),
     ("[ / ]", "Make the selection smaller / larger"),
     ("Ctrl+D", "Duplicate the selection"),
+    ("Ctrl+Z", "Undo"),
+    ("Ctrl+Shift+Z / Ctrl+Y", "Redo"),
     ("Delete, Backspace, X", "Remove the selection"),
     ("Esc", "Deselect"),
     ("Page Up / Page Down", "Previous / next page"),
@@ -943,6 +1027,9 @@ def run_gui(path):
               file=sys.stderr)
         return 1
 
+    # Like every OhMyDebn window, the full-colour OhMyDebn icon in the
+    # window list and switcher (the launcher has its own).
+    Gtk.Window.set_default_icon_name("ohmydebn")
     accent, canvas = theme_palette()
     HANDLE = 9  # corner handle size, in screen pixels
     PAGE_GAP = 18
@@ -1082,8 +1169,7 @@ def run_gui(path):
 
     class SignWindow(Gtk.Window):
         def __init__(self):
-            super().__init__(title="Sign PDF")
-            self.set_icon_name("document-edit-symbolic")
+            super().__init__(title="Sign a PDF")
             self.path = None
             self.doc = None
             self.page_sizes = []
@@ -1096,6 +1182,8 @@ def run_gui(path):
             self.fit = True
             self.cache = {}
             self.dirty = False
+            self.history = History()
+            self.clean_state = ()
             self.saved_to = None
             self.sealed = False
             self.sealed_ok = False
@@ -1111,7 +1199,7 @@ def run_gui(path):
                                   max(500, area.height - 120) if area else 900)
             self.apply_css()
 
-            header = Gtk.HeaderBar(show_close_button=True, title="Sign PDF")
+            header = Gtk.HeaderBar(show_close_button=True, title="Sign a PDF")
             self.set_titlebar(header)
             open_button = Gtk.Button.new_from_icon_name("document-open-symbolic", Gtk.IconSize.BUTTON)
             open_button.set_tooltip_text("Open a PDF (Ctrl+O)")
@@ -1279,6 +1367,8 @@ def run_gui(path):
             self.doc = doc
             self.items = []
             self.selected = None
+            self.history = History()
+            self.clean_state = ()
             self.saved_to = None
             self.sealed_ok = False
             self.cache.clear()
@@ -1465,9 +1555,10 @@ def run_gui(path):
 
         def add_item(self, item):
             self.clamp(item)
+            self.history.record(self.items)
             self.items.append(item)
             self.select(item)
-            self.set_dirty()
+            self.update_dirty()
 
         def clamp(self, item):
             pw, ph = self.page_sizes[item.page]
@@ -1511,7 +1602,7 @@ def run_gui(path):
             item.y = py - item.h / 2
             self.add_item(item)
             if not text:
-                self.edit_text(item)
+                self.edit_text(item, new=True)
 
         def place_date(self, _unused=None):
             self.place_text(today_text())
@@ -1519,10 +1610,11 @@ def run_gui(path):
         def remove_selected(self):
             item = self.selected
             if item in self.items:
+                self.history.record(self.items)
                 self.items.remove(item)
                 self.selected = None
                 self.redraw(item)
-                self.set_dirty()
+                self.update_dirty()
 
         def duplicate_selected(self):
             if self.selected:
@@ -1533,18 +1625,20 @@ def run_gui(path):
 
         def nudge(self, dx, dy):
             item = self.selected
+            self.history.record(self.items, merge=("nudge", id(item)))
             item.x += dx
             item.y += dy
             self.clamp(item)
             self.redraw(item)
-            self.set_dirty()
+            self.update_dirty()
 
         def rescale_selected(self, factor):
             item = self.selected
+            self.history.record(self.items, merge=("scale", id(item)))
             cx, cy = item.x + item.w / 2, item.y + item.h / 2
             self.resize(item, factor, (cx, cy), centre=True)
             self.redraw(item)
-            self.set_dirty()
+            self.update_dirty()
 
         def resize(self, item, factor, anchor, centre=False, base=None):
             """Scale an item to `factor` times `base` (its size when the
@@ -1570,8 +1664,13 @@ def run_gui(path):
 
         # ---------- text editing ----------
 
-        def edit_text(self, item):
+        def edit_text(self, item, new=False):
+            """Edit a text item in a popover. A new item's placing is the
+            undo step, so its first edit adds none; editing an existing
+            item is one step, however much is typed."""
             view = self.views[item.page]
+            if not new:
+                self.history.begin(self.items)
             popover = Gtk.Popover.new(view)
             rect = Gdk.Rectangle()
             rect.x, rect.y = round(item.x * self.zoom), round(item.y * self.zoom)
@@ -1594,7 +1693,7 @@ def run_gui(path):
                 item.text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
                 item.measure()
                 self.redraw(item)
-                self.set_dirty()
+                self.update_dirty()
 
             def key(_tv, event):
                 enter = event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter)
@@ -1610,6 +1709,12 @@ def run_gui(path):
                     if self.selected is item:
                         self.selected = None
                     self.redraw(item)
+                    if new:
+                        # Left empty: as though it was never placed.
+                        self.history.drop_last()
+                if not new:
+                    self.history.commit(self.items)
+                self.update_dirty()
                 GLib.idle_add(popover.destroy)
 
             buffer.connect("changed", changed)
@@ -1653,9 +1758,11 @@ def run_gui(path):
             if item is None:
                 self.drag = None
                 return True
-            # Bring it to the top, like any stack of paper.
+            # Bring it to the top, like any stack of paper. Before begin(),
+            # so a click that only selects leaves no undo step.
             self.items.remove(item)
             self.items.append(item)
+            self.history.begin(self.items)
             if corner is None:
                 self.drag = ("move", item, event.x, event.y, item.x, item.y)
             else:
@@ -1680,7 +1787,7 @@ def run_gui(path):
                     factor = max(abs(px - anchor[0]) / max(1e-6, base[0]), abs(py - anchor[1]) / max(1e-6, base[1]))
                     self.resize(item, factor, anchor, base=base)
                 self.redraw(item)
-                self.set_dirty()
+                self.update_dirty()
             else:
                 item, corner = self.hit(view, event.x, event.y)
                 name = "default"
@@ -1694,8 +1801,10 @@ def run_gui(path):
             return True
 
         def on_release(self, _view, event):
-            if event.button == 1:
+            if event.button == 1 and self.drag:
                 self.drag = None
+                self.history.commit(self.items)
+                self.update_dirty()
             return True
 
         def on_leave(self, _view, _event):
@@ -1823,6 +1932,7 @@ def run_gui(path):
                 tell(self, "Can't save the signed copy", f"{type(e).__name__}: {e}")
                 return
             self.saved_to = target
+            self.clean_state = items_state(self.items)
             self.set_dirty(False)
             self.hint(f"Saved {target}")
 
@@ -1865,6 +1975,10 @@ def run_gui(path):
                     self.save(choose=shift)
                 elif lower == Gdk.KEY_d and self.selected:
                     self.duplicate_selected()
+                elif lower == Gdk.KEY_z:
+                    self.undo(redo=shift)
+                elif lower == Gdk.KEY_y:
+                    self.undo(redo=True)
                 elif k in (Gdk.KEY_equal, Gdk.KEY_plus, Gdk.KEY_KP_Add):
                     self.zoom_by(1.2)
                 elif k in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
@@ -1913,6 +2027,28 @@ def run_gui(path):
             else:
                 return False
             return True
+
+        # ---------- undo ----------
+
+        def undo(self, redo=False):
+            if not self.doc or self.drag:
+                return
+            restored = (self.history.redo if redo else self.history.undo)(self.items)
+            if restored is None:
+                self.hint("Nothing to redo." if redo else "Nothing to undo.")
+                return
+            self.items = restored
+            self.selected = None
+            self.redraw()
+            self.update_dirty()
+            self.hint()
+
+        def update_dirty(self):
+            """Unsaved when the items differ from the last saved copy (or,
+            before any save, from none), so undoing back to it is clean."""
+            # Sorted: clicking an item brings it to the top, which alone
+            # isn't something to save.
+            self.set_dirty(sorted(items_state(self.items)) != sorted(self.clean_state))
 
         def on_delete(self, *_):
             return not self.confirm_discard()

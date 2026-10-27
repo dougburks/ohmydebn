@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Sign a PDF
+GenericName=PDF Signer
+Comment=Place your signature, text or today's date on a PDF and save a signed copy
+Exec=/usr/share/ohmydebn/bin/ohmydebn-pdf-sign %f
+Icon=ohmydebn-pdf-sign
+Terminal=false
+Categories=Office;
+Keywords=PDF;sign;signature;fill;form;
+MimeType=application/pdf;
+StartupNotify=true
+StartupWMClass=ohmydebn-pdf-sign

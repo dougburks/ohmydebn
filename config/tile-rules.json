@@ -33,5 +33,6 @@
   { "wmClass": "Brave-browser", "grid": [2, 2, 0, 0, 2, 2] },
   { "wmClass": "KeePassXC", "grid": [2, 2, 0, 0, 2, 2] },
   { "wmClass": "Gedit", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "ohmydebn-pdf-sign", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Aether", "grid": [2, 2, 1, 0, 1, 2] }
 ]

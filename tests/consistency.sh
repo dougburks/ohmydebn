@@ -1304,7 +1304,8 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether)
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether
+  ohmydebn-pdf-sign)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
   if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
     echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""
@@ -1352,7 +1353,9 @@ while IFS= read -r f; do
     FAIL=$((FAIL + 1))
   fi
 # The underscored .py files are modules the windows import, not windows.
-done < <(grep -lE '^from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+# Indented imports count: ohmydebn-pdf-sign imports Gtk only inside its
+# app, so its commands run without a display.
+done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
 echo "  checked $CHECKED notifications and GTK scripts"
 
 echo

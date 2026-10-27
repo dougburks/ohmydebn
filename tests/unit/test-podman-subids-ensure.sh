@@ -27,7 +27,7 @@ setup_mocks() {
   export FAKE_ACCOUNTS
   mock_bin id <<'EOF'
 #!/bin/bash
-echo testuser
+[[ "${1:-}" == -u ]] && echo 1000 || echo testuser
 EOF
   mock_bin getent <<'EOF'
 #!/bin/bash
@@ -156,6 +156,17 @@ run_ensure
 assert_eq "malformed lines: exit 0" "0" "$(cat "$MOCK_DIR/rc")"
 assert_contains "malformed lines: allocation unaffected" "$(cat "$MOCK_CALLS")" \
   "usermod --add-subuids 165536-231071 --add-subgids 165536-231071 testuser"
+mock_cleanup
+
+# Scenario 9: ranges held under the user's numeric UID rather than the
+# name count as theirs: nothing is added (a second range was).
+mock_init
+setup_mocks testuser
+printf '1000:100000:65536\n' >"$SUBUID"
+printf '1000:100000:65536\n' >"$SUBGID"
+run_ensure
+assert_eq "owner as numeric UID: exit 0" "0" "$(cat "$MOCK_DIR/rc")"
+assert_eq "owner as numeric UID: nothing invoked" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
 test_summary

@@ -244,7 +244,13 @@ fi
 # when the download fails, and an empty keyring used to stick - every rerun
 # saw the file, skipped this, and apt kept failing with NO_PUBKEY. -s (not
 # -f) also repairs a machine that already has the empty file.
+#
+# The key must also be OhMyDebn's own, and only that one: apt trusts every
+# key in the keyring, so one swapped or added in transit (or on the download
+# server) would be trusted for every later update. Checked with gpg itself,
+# since ohmydebn-pgp-fingerprint isn't installed yet at this point.
 KEYRING="${OHMYDEBN_TEST_KEYRING:-/usr/share/keyrings/ohmydebn-keyring.gpg}"
+OHMYDEBN_KEY_FINGERPRINT=983364A21C37D16AB53B959E7D8932E3EE41B9D1
 if [ ! -s "$KEYRING" ]; then
   KEY_DIR=$(mktemp -d)
   if ! curl -fsSL https://packages.ohmydebn.org/repo-key.asc -o "$KEY_DIR/repo-key.asc" ||
@@ -252,6 +258,14 @@ if [ ! -s "$KEYRING" ]; then
     [ ! -s "$KEY_DIR/ohmydebn-keyring.gpg" ]; then
     rm -rf "$KEY_DIR"
     echo "Couldn't download the OhMyDebn repository key. Check your Internet connection and run the installer again." >&2
+    exit 1
+  fi
+  # The fingerprint of each primary key (the fpr line right after a pub line).
+  KEY_FINGERPRINTS=$(gpg --homedir "$KEY_DIR" --show-keys --with-colons "$KEY_DIR/repo-key.asc" 2>/dev/null |
+    awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }')
+  if [ "$KEY_FINGERPRINTS" != "$OHMYDEBN_KEY_FINGERPRINT" ]; then
+    rm -rf "$KEY_DIR"
+    echo "The downloaded OhMyDebn repository key isn't OhMyDebn's, so it wasn't installed. Nothing was changed; try again later." >&2
     exit 1
   fi
   sudo install -m 644 "$KEY_DIR/ohmydebn-keyring.gpg" "$KEYRING"

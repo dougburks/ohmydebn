@@ -2,9 +2,17 @@
 set -euo pipefail
 
 # Cycles through the background images available
-# Usage: ohmydebn-theme-bg-next [--background <arg>]
+# Usage: ohmydebn-theme-bg-next [--print] [--background <arg>]
 #   <arg> can be "random" or a number (1-based index)
+#   --print prints the background that would be chosen instead of setting
+#   it: ohmydebn-theme-set starts the background's intro first, so the
+#   switch happens underneath it.
 
+PRINT_ONLY=false
+if [[ "${1:-}" == "--print" ]]; then
+  PRINT_ONLY=true
+  shift
+fi
 BG_ARG=""
 if [[ "${1:-}" == "--background" ]]; then
   BG_ARG="${2:-}"
@@ -14,7 +22,11 @@ if [[ "${1:-}" == "--background" ]]; then
   fi
 fi
 
-THEME_NAME=$(<"$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
+# cat, not $(<file): with a redirect added, $(<file) is an empty command
+# rather than a read, and always came back empty - so the user's own
+# backgrounds for the theme (USER_BACKGROUNDS_PATH) were never looked in,
+# and the theme carousel, which does list them, applied the wrong one.
+THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
 THEME_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/current/theme/backgrounds/"
 USER_BACKGROUNDS_PATH="$HOME/.config/ohmydebn/backgrounds/$THEME_NAME/"
 CURRENT_BACKGROUND_LINK="$HOME/.config/ohmydebn/current/background"
@@ -54,8 +66,12 @@ else
     RANDOM_INDEX=$(( RANDOM % TOTAL ))
     NEW_BACKGROUND="${BACKGROUNDS[$RANDOM_INDEX]}"
   elif [[ "$BG_ARG" =~ ^[0-9]+$ ]]; then
-    # 1-based index, clamp to valid range
-    SPECIFIC_INDEX=$(( (BG_ARG - 1) % TOTAL ))
+    # 1-based index, wrapping past the last one. 10#: a leading zero ("08")
+    # would otherwise be read as octal and abort the switch half done; 0
+    # means the first, not (wrapping backwards) the last.
+    SPECIFIC_INDEX=$((10#$BG_ARG))
+    ((SPECIFIC_INDEX >= 1)) || SPECIFIC_INDEX=1
+    SPECIFIC_INDEX=$(((SPECIFIC_INDEX - 1) % TOTAL))
     NEW_BACKGROUND="${BACKGROUNDS[$SPECIFIC_INDEX]}"
   elif [[ $INDEX -eq -1 ]]; then
     # Use the first background when no match was found
@@ -65,5 +81,9 @@ else
     NEW_BACKGROUND="${BACKGROUNDS[$NEXT_INDEX]}"
   fi
 
-  /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
+  if [[ "$PRINT_ONLY" == true ]]; then
+    echo "$NEW_BACKGROUND"
+  else
+    /usr/share/ohmydebn/bin/ohmydebn-theme-bg-set "$NEW_BACKGROUND"
+  fi
 fi

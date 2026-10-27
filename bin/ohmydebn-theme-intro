@@ -1,0 +1,130 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-theme-intro: play a background's intro, if intros should play
+# here. Usage: ohmydebn-theme-intro [--wait] [<background>]
+#   <background> defaults to the current one (what the login autostart
+#   entry uses). --wait returns once the intro covers the screen, or after
+#   a few seconds if it never does, so ohmydebn-theme-set can switch the
+#   theme underneath it; without it this returns straight away. The intro
+#   itself always runs on its own, and this never fails: an intro that
+#   can't play just means the still background shows as before.
+#
+# A background with a clip of its own plays that: a short video named after
+# it, in an intros/ folder beside it, so backgrounds/1-in-the-groove.jpg
+# plays backgrounds/intros/1-in-the-groove.webm (or .mp4). Every other
+# background gets the light intro, drawn live from the image itself
+# (ohmydebn-theme-intro-play --light): twilight, the light arriving from
+# the top down, and the grin's shimmer crossing the scene. So does a
+# background whose clip can't play - GStreamer's pieces for clips come with
+# the Omarchy intros package, which can be removed, and no H.264 decoder is
+# installed for an .mp4 - rather than no intro at all.
+#
+# Clips are looked for in two places only:
+# - a stock theme in /usr/share/ohmydebn-themes, when the user has no theme
+#   of their own by that name (theirs would be the one in use), and
+# - the user's own backgrounds folder for the theme,
+#   ~/.config/ohmydebn/backgrounds/<theme>/intros/.
+# Not in a theme installed from a git repo: playing a stranger's video
+# means feeding it to a video decoder, which a still image never was. Its
+# backgrounds get the light intro, from the image Cinnamon shows anyway.
+#
+# Intros don't play when Cinnamon's desktop effects or animations are off
+# (the fade needs the compositor, and someone who turned animations off
+# doesn't want a clip either), on a Raspberry Pi (no hardware help
+# decoding it), or when turned off with ohmydebn-theme-intro-toggle. They
+# do play in a virtual machine: a KVM guest's software graphics played a
+# full-screen intro without dropping a frame.
+
+INTROS_OFF="$HOME/.config/ohmydebn/theme-intros-off"
+STOCK_THEMES=/usr/share/ohmydebn-themes
+DEVICE_TREE_MODEL="${OHMYDEBN_TEST_DEVICE_TREE_MODEL:-/proc/device-tree/model}"
+PLAYER=/usr/share/ohmydebn/bin/ohmydebn-theme-intro-play
+# How long --wait gives the player to cover the screen. It takes about a
+# third of a second; a theme switch shouldn't stall for long on one that
+# never manages it.
+WAIT_SECONDS=3
+
+WAIT=false
+if [[ "${1:-}" == "--wait" ]]; then
+  WAIT=true
+  shift
+fi
+BACKGROUND="${1:-$HOME/.config/ohmydebn/current/background}"
+
+intros_wanted() {
+  [[ -n "${DISPLAY:-}" ]] || return 1
+  [[ -e "$INTROS_OFF" ]] && return 1
+  if command -v gsettings >/dev/null; then
+    [[ "$(gsettings get org.cinnamon desktop-effects-workspace 2>/dev/null)" == false ]] && return 1
+    [[ "$(gsettings get org.cinnamon.desktop.interface enable-animations 2>/dev/null)" == false ]] && return 1
+  fi
+  if [[ -r "$DEVICE_TREE_MODEL" ]] && tr -d '\0' <"$DEVICE_TREE_MODEL" | grep -q 'Raspberry Pi'; then
+    return 1
+  fi
+  return 0
+}
+
+# Prints the intro clip for $1, or nothing.
+find_intro() {
+  local background theme stem dir candidates=() clip
+  background=$(readlink -f -- "$1" 2>/dev/null) || return 0
+  [[ -f "$background" ]] || return 0
+  theme=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || return 0
+  [[ -n "$theme" && "$theme" != .* && "$theme" != */* ]] || return 0
+  stem=$(basename "$background")
+  stem="${stem%.*}"
+  dir=$(dirname "$background")
+
+  if [[ "$dir" == "$(readlink -f -- "$HOME/.config/ohmydebn/backgrounds/$theme" 2>/dev/null)" ]]; then
+    candidates=("$dir/intros/$stem.webm" "$dir/intros/$stem.mp4")
+  elif [[ "$dir" == "$(readlink -f -- "$HOME/.config/ohmydebn/current/theme/backgrounds" 2>/dev/null)" &&
+    ! -e "$HOME/.config/ohmydebn/themes/$theme" && -d "$STOCK_THEMES/$theme" ]]; then
+    # The background is ohmydebn-theme-set's copy of a stock theme's; the
+    # intros stay where the theme package put them (they aren't copied).
+    candidates=("$STOCK_THEMES/$theme/backgrounds/intros/$stem.webm" "$STOCK_THEMES/$theme/backgrounds/intros/$stem.mp4")
+  fi
+  for clip in "${candidates[@]}"; do
+    if [[ -f "$clip" ]]; then
+      echo "$clip"
+      return 0
+    fi
+  done
+}
+
+# start_player <player arguments...>: starts the intro and returns once it
+# covers the screen (the player says "ready") or WAIT_SECONDS have passed.
+# Fails only when the player ended without ever showing anything (a clip it
+# couldn't play); one that's just slow is left to it, so two intros never
+# run at once. setsid: the intro outlives this script and whatever started
+# it (the theme carousel quits as soon as the switch is done), and its
+# stdout is only ever the one "ready" line read here.
+start_player() {
+  local status=0
+  exec 3< <(setsid "$PLAYER" "$@" </dev/null 2>/dev/null)
+  read -r -t "$WAIT_SECONDS" -u 3 _ || status=$?
+  exec 3<&-
+  # 0: ready. Over 128: timed out, still starting. Anything else: the
+  # player's stdout closed with nothing said, so it's gone.
+  ((status == 0 || status > 128))
+}
+
+play_intro() {
+  if [[ -n "$CLIP" ]] && start_player "$CLIP"; then
+    return 0
+  fi
+  start_player --light "$IMAGE" || true
+}
+
+intros_wanted || exit 0
+[[ -x "$PLAYER" ]] || exit 0
+IMAGE=$(readlink -f -- "$BACKGROUND" 2>/dev/null) || exit 0
+[[ -f "$IMAGE" ]] || exit 0
+CLIP=$(find_intro "$BACKGROUND")
+
+if [[ "$WAIT" == true ]]; then
+  play_intro
+else
+  play_intro </dev/null >/dev/null 2>&1 &
+fi
+exit 0

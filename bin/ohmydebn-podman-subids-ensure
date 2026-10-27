@@ -24,9 +24,13 @@ RANGE_COUNT=65536
 RANGE_MIN=100000
 
 user="$(id -un)"
+uid="$(id -u)"
 
+# By name or by numeric UID: the owner field can be either (see
+# next_free_start), and a range held under the UID is just as much the
+# user's - missing it added a second, duplicate range.
 has_range() {
-  grep -q "^${user}:" "$1" 2>/dev/null
+  grep -q -e "^${user}:" -e "^${uid}:" "$1" 2>/dev/null
 }
 
 need_uid=false

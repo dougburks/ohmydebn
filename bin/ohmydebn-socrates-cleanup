@@ -6,7 +6,7 @@ IMAGE_PREFIX="ghcr.io/dougburks/so-crates"
 # same value; tests/unit/test-socrates-cleanup.sh checks they match). It's
 # always kept as well as the newest: after a run of another tag it used to
 # be removed as "older", and the next normal launch downloaded it again.
-DEFAULT_IMAGE="$IMAGE_PREFIX@sha256:008e9cb64985da47106072c8bf4eedaf1ec8f6c0746143fbfc7442cd791dab36"
+DEFAULT_IMAGE="$IMAGE_PREFIX@sha256:956c595795f424b658f8f88623da69ac24971016ab8596bbdd65be730d2114af"
 FORCE=false
 
 usage() {

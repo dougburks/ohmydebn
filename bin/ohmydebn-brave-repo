@@ -63,7 +63,12 @@ ensure)
   fi
   sudo mkdir -p "$(dirname "$KEYRING")" "$(dirname "$SOURCES")" "$(dirname "$PREF")"
   sudo install -m 0644 "$KEY_FILE" "$KEYRING"
-  sudo curl -fsSLo "$SOURCES" "https://$BRAVE_REPO_HOST/brave-browser.sources"
+  # Written here rather than downloaded (Brave publishes the same stanza as
+  # brave-browser.sources): a downloaded one would be installed as root
+  # unchecked, so a tampered copy could point apt at another host or mark
+  # it trusted, undoing the key check above.
+  printf 'Types: deb\nURIs: https://%s\nSuites: stable\nComponents: main\nArchitectures: amd64 arm64\nSigned-By: %s\n' "$BRAVE_REPO_HOST" "$KEYRING" |
+    sudo tee "$SOURCES" >/dev/null
   printf 'Package: *\nPin: origin "%s"\nPin-Priority: -1\n\nPackage: brave-browser brave-origin brave-keyring\nPin: origin "%s"\nPin-Priority: 500\n' "$BRAVE_REPO_HOST" "$BRAVE_REPO_HOST" |
     sudo tee "$PREF" >/dev/null
   ;;

@@ -23,6 +23,11 @@ mkdir -p "$H/.config/ohmydebn/themes/$SLUG/backgrounds" "$H/.config/ohmydebn/cur
 for name in Beach.jpg aurora.jpg _lake.png 2-hills.jpg; do
   : >"$H/.config/ohmydebn/themes/$SLUG/backgrounds/$name"
 done
+# One of the user's own for this theme, which both list too. bg-next read
+# the theme's name in a way that always came back empty, so it never saw
+# these, and background N was off by one from the carousel's.
+mkdir -p "$H/.config/ohmydebn/backgrounds/$SLUG"
+: >"$H/.config/ohmydebn/backgrounds/$SLUG/mine.png"
 echo "$SLUG" >"$H/.config/ohmydebn/current/theme.name"
 ln -s "$H/.config/ohmydebn/themes/$SLUG" "$H/.config/ohmydebn/current/theme"
 mock_bin ohmydebn-theme-bg-set <<'STUB'
@@ -43,13 +48,29 @@ print(" ".join(os.path.basename(p) for p in carousel.list_backgrounds_for_theme(
 PY
 )
 BG_NEXT=""
-for n in 1 2 3 4; do
+for n in 1 2 3 4 5; do
   : >"$MOCK_CALLS"
   LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --background "$n" </dev/null >/dev/null 2>&1
   BG_NEXT+="$(cat "$MOCK_CALLS") "
 done
-assert_eq "the carousel's list was read" "4" "$(wc -w <<<"$CAROUSEL")"
+assert_eq "the carousel's list was read" "5" "$(wc -w <<<"$CAROUSEL")"
 assert_eq "background N is the carousel's N-th, whatever the locale" "$CAROUSEL" "${BG_NEXT% }"
+
+# A leading zero isn't octal ("08" aborted the run), and 0 is the first
+# background, not the last.
+: >"$MOCK_CALLS"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --background 09 </dev/null >/dev/null 2>&1
+assert_eq "--background 09: read as decimal 9, wrapping to the fourth of five" "$(cut -d' ' -f4 <<<"$CAROUSEL")" "$(cat "$MOCK_CALLS")"
+: >"$MOCK_CALLS"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --background 0 </dev/null >/dev/null 2>&1
+assert_eq "--background 0: the first" "$(cut -d' ' -f1 <<<"$CAROUSEL")" "$(cat "$MOCK_CALLS")"
+
+# --print (what ohmydebn-theme-set uses, to start the background's intro
+# before setting it): the same choice, printed rather than set.
+: >"$MOCK_CALLS"
+PRINTED=$(HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --print --background 2 </dev/null 2>/dev/null)
+assert_eq "--print: prints the background --background N would set" "$(cut -d' ' -f2 <<<"$CAROUSEL")" "$(basename "$PRINTED")"
+assert_eq "--print: sets nothing" "" "$(cat "$MOCK_CALLS")"
 
 mock_cleanup
 test_summary

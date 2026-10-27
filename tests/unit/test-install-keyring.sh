@@ -19,8 +19,12 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
 echo "=== install.sh: repository key ==="
 
-# setup <curl: ok|fail>
+OURS=983364A21C37D16AB53B959E7D8932E3EE41B9D1
+
+# setup <curl: ok|fail> [<fingerprint(s) of the served key, space-separated>]
 setup() {
+  # What the stand-in gpg --show-keys reports for the downloaded key.
+  export MOCK_KEY_FPRS="${2:-$OURS}"
   mock_init
   mock_bin dpkg <<'STUB'
 #!/bin/bash
@@ -62,10 +66,23 @@ while [[ $# -gt 0 ]]; do
   -o) OUT="$2"; shift ;;
   --homedir) shift ;;
   --dearmor) ;;
+  --show-keys) SHOW=1 ;;
+  --with-colons) ;;
   *) IN="$1" ;;
   esac
   shift
 done
+if [[ -n "${SHOW:-}" ]]; then
+  # One pub line and its fpr per key, then a subkey's (which isn't a
+  # primary key and mustn't be counted).
+  for f in $MOCK_KEY_FPRS; do
+    echo "pub:u:4096:1:${f: -16}:1763146575:::u:::scESC:"
+    echo "fpr:::::::::$f:"
+    echo "sub:u:4096:1:022ADEF6938655DE:1763146575::::::e:"
+    echo "fpr:::::::::C9F855EEC9E932FF90304026022ADEF6938655DE:"
+  done
+  exit 0
+fi
 : >"$OUT"
 if [[ -s "$IN" ]]; then
   echo key >"$OUT"
@@ -99,6 +116,21 @@ run
 assert_eq "download works: install continues" "0" "$EXIT_CODE"
 assert_contains "download works: keyring installed" "$(cat "$MOCK_CALLS")" "sudo install -m 644"
 assert_contains "download works: at the keyring path" "$(cat "$MOCK_CALLS")" "$KEYRING"
+mock_cleanup
+
+# A key that isn't OhMyDebn's, or OhMyDebn's with another added: refused,
+# nothing installed.
+setup ok 47D32A74E9A9E013A4B4926C68D513D36A73CD96
+run
+assert_eq "someone else's key: install stops" "1" "$EXIT_CODE"
+assert_contains "someone else's key: says why" "$OUTPUT" "isn't OhMyDebn's, so it wasn't installed"
+assert_not_contains "someone else's key: no keyring installed" "$(cat "$MOCK_CALLS")" "sudo install"
+mock_cleanup
+
+setup ok "$OURS 47D32A74E9A9E013A4B4926C68D513D36A73CD96"
+run
+assert_eq "OhMyDebn's key plus another: install stops" "1" "$EXIT_CODE"
+assert_not_contains "OhMyDebn's key plus another: no keyring installed" "$(cat "$MOCK_CALLS")" "sudo install"
 mock_cleanup
 
 # An empty keyring left by an earlier failed run is replaced, not skipped.

@@ -567,5 +567,14 @@ real_banner = _sp.run([os.path.join(BIN, "ohmydebn-headline"), "Configuring Alac
 w = gui.StreamWatcher()
 check_eq("real banner: one stage event, the bare title", w.feed(real_banner), [("stage", "Configuring Alacritty")])
 
+# main() ignores SIGUSR1 before taking the instance lock: a second launch
+# signals the holder, and until the window's own handler is installed the
+# default action killed it, so two quick launches opened no window at all.
+import inspect  # noqa: E402
+main_src = inspect.getsource(gui.main)
+ignore_at = main_src.find("signal.signal(signal.SIGUSR1, signal.SIG_IGN)")
+lock_at = main_src.find("acquire_instance_lock(")
+check("main: SIGUSR1 is ignored before the instance lock is taken", 0 <= ignore_at < lock_at)
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

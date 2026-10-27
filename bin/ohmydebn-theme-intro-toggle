@@ -1,0 +1,35 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-theme-intro-toggle: turn theme intros (the short clip a theme
+# plays when switched to, and at login) off, or back on. Usage:
+# ohmydebn-theme-intro-toggle [on|off]; with no argument, flips the current
+# setting. Off is a marker file that ohmydebn-theme-intro checks; on, the
+# default, is its absence. Stopping a running intro is left to a click or
+# a keypress.
+
+INTROS_OFF="$HOME/.config/ohmydebn/theme-intros-off"
+
+case "${1:-}" in
+on) WANT=on ;;
+off) WANT=off ;;
+"") if [[ -e "$INTROS_OFF" ]]; then WANT=on; else WANT=off; fi ;;
+*)
+  echo "Usage: ohmydebn-theme-intro-toggle [on|off]" >&2
+  exit 1
+  ;;
+esac
+
+if [[ "$WANT" == off ]]; then
+  mkdir -p "$(dirname "$INTROS_OFF")"
+  : >"$INTROS_OFF"
+  MESSAGE="Theme intros are off"
+else
+  rm -f "$INTROS_OFF"
+  MESSAGE="Theme intros are on"
+fi
+
+echo "$MESSAGE"
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send -i ohmydebn "$MESSAGE" -t 2000 || true
+fi

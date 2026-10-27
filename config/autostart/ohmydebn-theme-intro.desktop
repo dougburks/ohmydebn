@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=OhMyDebn Theme Intro
+Comment=Plays the current background's intro at login
+Exec=/usr/share/ohmydebn/bin/ohmydebn-theme-intro
+OnlyShowIn=X-Cinnamon;
+NoDisplay=true

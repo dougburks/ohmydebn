@@ -22,8 +22,12 @@ fi
 BTOP_THEMES_DIR=~/.config/btop/themes
 mkdir -p $BTOP_THEMES_DIR
 
+# The link that follows the desktop theme is made only where there's
+# nothing at all: a current.theme of the user's own used to be replaced by
+# the link on every update. No release has written it as anything but this
+# link.
 BTOP_CURRENT_THEME=$BTOP_THEMES_DIR/current.theme
-if [ ! -L $BTOP_CURRENT_THEME ]; then
+if [ ! -e $BTOP_CURRENT_THEME ] && [ ! -L $BTOP_CURRENT_THEME ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring btop theme"
   ln -snf ~/.config/ohmydebn/current/theme/btop.theme $BTOP_CURRENT_THEME
 fi

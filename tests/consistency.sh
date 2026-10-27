@@ -1190,6 +1190,7 @@ echo "-- tile-rules.json titles match their launcher's --title (regression guard
 # independently after the fact.
 TITLE_OWNERS=(
   "ohmydebn-cliamp:cliamp"
+  "ohmydebn-velo:velo"
   "ohmydebn-claude-code:Claude Code"
   "ohmydebn-opencode:OpenCode"
   "ohmydebn-pi:Pi"

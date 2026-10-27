@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "velo" >/dev/null 2>&1; then
+  echo
+  echo "velo is not currently installed."
+  echo
+  echo "Continuing will install a package built from:"
+  echo "https://github.com/bjarneo/velo"
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install velo
+
+  cat <<EOM
+
+================================================================================
+
+velo is now installed.
+
+You can start it from the command line with velo, or from the OhMyDebn
+Menu: Trigger > Speed Test.
+
+EOM
+fi

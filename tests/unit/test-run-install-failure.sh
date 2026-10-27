@@ -57,6 +57,7 @@ ohmydebn-omp-run ohmydebn-omp-install
 ohmydebn-opencode-run ohmydebn-opencode-install
 ohmydebn-pi-run ohmydebn-pi-install
 ohmydebn-cliamp-run ohmydebn-cliamp-install
+ohmydebn-velo-run ohmydebn-velo-install
 ohmydebn-socrates-launch ohmydebn-podman-install
 LIST
 

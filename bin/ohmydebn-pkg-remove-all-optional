@@ -74,7 +74,7 @@ fi
 DISTRO_APPS=(abiword brasero calligra deja-dup duplicity gnome-calculator gnome-chess gnome-games gnumeric
   goldendict-ng hexchat hoichess "libreoffice*" pidgin remmina tcpdump thunderbird "transmission*" tshark
   wireshark x11vnc)
-OHMYDEBN_APPS=(cliamp distrobox docker.io emacs gnome-boxes localsend ohmydebn-opencode-cli uxplay)
+OHMYDEBN_APPS=(cliamp distrobox docker.io emacs gnome-boxes localsend ohmydebn-opencode-cli uxplay velo)
 CANDIDATES=("${DISTRO_APPS[@]}")
 [ "$DISTRO_ONLY" = false ] && CANDIDATES+=("${OHMYDEBN_APPS[@]}")
 

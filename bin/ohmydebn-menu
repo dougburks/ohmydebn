@@ -446,9 +446,10 @@ show_trigger_menu() {
 }
 
 show_speed_test_menu() {
-  menu "Speed Test" "󰓄  Network Speed Test\n  Disk Speed Test"
+  menu "Speed Test" "󰓄  Network Speed Test\n󰓅  Speed and Bufferbloat (velo)\n  Disk Speed Test"
   case "$MENU_RESULT" in
   *Network*) /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-gui ;;
+  *velo*) /usr/share/ohmydebn/bin/ohmydebn-velo ;;
   *Disk*) /usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-gui ;;
   *) show_trigger_menu ;;
   esac

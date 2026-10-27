@@ -137,13 +137,16 @@ run_scenario "Pop!_OS 24.04 (Ubuntu noble-based, ID=pop)" "yes" \
 run_scenario "Pop!_OS 22.04 (unsupported release)" "no" \
   'NAME="Pop!_OS"' "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=jammy" "UBUNTU_CODENAME=jammy"
 
-# --- apt sources: an Ubuntu derivative's are kept, a broken Debian one's repaired ---
+# --- apt sources: only Debian's are ever repaired; every other distro's are kept ---
 # OHMYDEBN_TEST_APT_DIR points install.sh's sources check at a scratch
-# directory with no debian.sources, Mint or Proxmox file - the case where
-# install.sh used to rename sources.list and write Debian's repos, which on
-# an Ubuntu derivative (its own ID, ID_LIKE=ubuntu) would put Debian
-# packages on an Ubuntu system. sudo is mocked, so nothing is moved.
-# run_sources_scenario <description> <expect: kept|repaired> <os-release lines...>
+# directory with no debian.sources or Proxmox file and a sources.list with
+# no debian.org line - the case where install.sh renames sources.list and
+# writes Debian's repos. That's right for a Debian install left without
+# sources, but it used to happen on any distro that wasn't named in the
+# check, putting Debian packages on an Ubuntu derivative, or on an
+# unsupported distro like Parrot or Raspbian once the user went past the
+# warning. sudo is mocked, so nothing is moved.
+# run_sources_scenario <description> <expect: kept|found|repaired> <os-release lines...>
 run_sources_scenario() {
   local desc="$1" expect="$2"
   shift 2
@@ -152,12 +155,19 @@ run_sources_scenario() {
   printf '%s\n' "$@" >"$MOCK_DIR/os-release"
   mkdir -p "$MOCK_DIR/apt/sources.list.d"
   echo "# managed elsewhere" >"$MOCK_DIR/apt/sources.list"
+  if [[ "$expect" == "found" ]]; then
+    echo "Types: deb" >"$MOCK_DIR/apt/sources.list.d/debian.sources"
+  fi
   SCRATCH_HOME=$(mktemp -d)
   OUTPUT=$(HOME="$SCRATCH_HOME" OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" OHMYDEBN_TEST_KEYRING="$MOCK_DIR/keyring.gpg" \
     OHMYDEBN_TEST_APT_DIR="$MOCK_DIR/apt" OHMYDEBN_TEST_SKIP_CONFIG=1 PATH="$(mock_path)" \
     bash "$SCRIPT" < <(printf '\n\n') 2>&1)
-  if [[ "$expect" == "kept" ]]; then
-    assert_contains "$desc: keeps its own package sources" "$OUTPUT" "Found an APT sources file"
+  if [[ "$expect" == "kept" || "$expect" == "found" ]]; then
+    if [[ "$expect" == "kept" ]]; then
+      assert_contains "$desc: keeps its own package sources" "$OUTPUT" "own APT sources"
+    else
+      assert_contains "$desc: finds its Debian sources" "$OUTPUT" "Found an APT sources file"
+    fi
     assert_not_contains "$desc: adds no Debian repos" "$(cat "$MOCK_CALLS")" "debian.sources"
     assert_not_contains "$desc: doesn't move sources.list aside" "$(cat "$MOCK_CALLS")" "sources.list.orig"
   else
@@ -175,6 +185,30 @@ run_sources_scenario "Zorin OS 18 (ID=zorin, ID_LIKE=ubuntu)" "kept" \
 
 run_sources_scenario "Debian 13 with no Debian sources configured" "repaired" \
   "ID=debian" "VERSION_CODENAME=trixie"
+
+run_sources_scenario "MX Linux 25 (reports Debian 13, has debian.sources)" "found" \
+  'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"' "ID=debian" "VERSION_CODENAME=trixie"
+
+# Supported distros the check used to name one by one.
+run_sources_scenario "Kali (sources.list only)" "kept" \
+  "ID=kali" "ID_LIKE=debian" "VERSION_CODENAME=kali-rolling"
+
+run_sources_scenario "Devuan 6 (sources.list at deb.devuan.org)" "kept" \
+  "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=excalibur"
+
+run_sources_scenario "LMDE 7 without Mint's own list file" "kept" \
+  "ID=linuxmint" "ID_LIKE=debian" "VERSION_CODENAME=gigi" "DEBIAN_CODENAME=trixie"
+
+# Unsupported distros that report ID_LIKE=debian: the user can go past
+# the warning (Enter here), and their own repos must survive it.
+run_sources_scenario "Parrot OS (ID=parrot, unsupported)" "kept" \
+  'PRETTY_NAME="Parrot Security 6.4"' "ID=parrot" "ID_LIKE=debian" "VERSION_CODENAME=lory"
+
+run_sources_scenario "old Raspbian (ID=raspbian, unsupported)" "kept" \
+  "ID=raspbian" "ID_LIKE=debian" "VERSION_CODENAME=bookworm"
+
+run_sources_scenario "PureOS (ID=pureos, unsupported)" "kept" \
+  "ID=pureos" "ID_LIKE=debian" "VERSION_CODENAME=crimson"
 
 # --- The unsupported-distro warning asks once per release ---
 # Every ohmydebn-update reruns install.sh; on an unsupported release the

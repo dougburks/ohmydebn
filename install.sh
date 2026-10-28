@@ -74,10 +74,11 @@ if [ -f "$OS_RELEASE" ]; then
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
     ;;
-  pop)
-    # Pop!_OS is built on Ubuntu (ID_LIKE="ubuntu debian"). Its own
-    # VERSION_CODENAME happens to match Ubuntu's, but UBUNTU_CODENAME is the
-    # one that names the base.
+  pop | zorin)
+    # Pop!_OS and Zorin OS are built on Ubuntu (ID_LIKE="ubuntu debian").
+    # Their own VERSION_CODENAME happens to match Ubuntu's, but
+    # UBUNTU_CODENAME is the one that names the base: Zorin OS 18 is noble,
+    # Zorin OS 17 jammy.
     [ "$UBUNTU_CODENAME" = "noble" ] && DISTRO_OK=true
     ;;
   ubuntu)
@@ -104,7 +105,7 @@ elif [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, Raspberry Pi OS, and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 

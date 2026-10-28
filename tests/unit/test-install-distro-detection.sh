@@ -137,6 +137,14 @@ run_scenario "Pop!_OS 24.04 (Ubuntu noble-based, ID=pop)" "yes" \
 run_scenario "Pop!_OS 22.04 (unsupported release)" "no" \
   'NAME="Pop!_OS"' "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=jammy" "UBUNTU_CODENAME=jammy"
 
+# Zorin OS 18.1's os-release, from a real install.
+run_scenario "Zorin OS 18 (Ubuntu noble-based, ID=zorin)" "yes" \
+  'PRETTY_NAME="Zorin OS 18.1"' 'NAME="Zorin OS"' 'VERSION_ID="18"' 'VERSION="18.1"' "VERSION_CODENAME=noble" \
+  "ID=zorin" 'ID_LIKE="ubuntu debian"' "UBUNTU_CODENAME=noble" "LOGO=zorin-logo"
+
+run_scenario "Zorin OS 17 (unsupported release)" "no" \
+  'NAME="Zorin OS"' "ID=zorin" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=jammy" "UBUNTU_CODENAME=jammy"
+
 # --- apt sources: only Debian's are ever repaired; every other distro's are kept ---
 # OHMYDEBN_TEST_APT_DIR points install.sh's sources check at a scratch
 # directory with no debian.sources or Proxmox file and a sources.list with
@@ -181,7 +189,7 @@ run_sources_scenario "Pop!_OS 24.04 (ID=pop, ID_LIKE=ubuntu)" "kept" \
   'NAME="Pop!_OS"' "ID=pop" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
 
 run_sources_scenario "Zorin OS 18 (ID=zorin, ID_LIKE=ubuntu)" "kept" \
-  "ID=zorin" "ID_LIKE=ubuntu" "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
+  'NAME="Zorin OS"' "ID=zorin" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=noble" "UBUNTU_CODENAME=noble"
 
 run_sources_scenario "Debian 13 with no Debian sources configured" "repaired" \
   "ID=debian" "VERSION_CODENAME=trixie"

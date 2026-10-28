@@ -18,7 +18,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai / bin/ohmydebn-ai-set-default ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode ohmydebn-claude-code ohmydebn-claude-desktop ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-crush ohmydebn-omp ohmydebn-pi ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode ohmydebn-opencode-desktop ohmydebn-claude-code ohmydebn-claude-desktop ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-crush ohmydebn-omp ohmydebn-pi ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -51,6 +51,7 @@ declare -A EXPECTED=(
   [opencode]="ohmydebn-opencode"
   [claude-code]="ohmydebn-claude-code"
   [claude-desktop]="ohmydebn-claude-desktop"
+  [opencode-desktop]="ohmydebn-opencode-desktop"
   [chatgpt]="ohmydebn-chatgpt"
   [codex]="ohmydebn-codex"
   [grok]="ohmydebn-grok"
@@ -86,7 +87,7 @@ set_default() {
   HOME="$SCRATCH_HOME" bash "$SET_DEFAULT_SCRIPT" "$1" >/dev/null 2>&1
 }
 
-for name in opencode claude-code claude-desktop chatgpt codex grok crush omp pi t3code vscode antigravity; do
+for name in opencode opencode-desktop claude-code claude-desktop chatgpt codex grok crush omp pi t3code vscode antigravity; do
   if ! set_default "$name"; then
     assert_eq "accepts valid name '$name'" "accepted" "rejected"
   else

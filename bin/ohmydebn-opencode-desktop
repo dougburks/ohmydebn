@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# Opens OpenCode Desktop, OpenCode's GUI app, installing it first (in a
+# window of its own, like Claude Desktop) if needed.
+
+set -euo pipefail
+
+if ! dpkg -s "opencode" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "OpenCode Desktop" /usr/share/ohmydebn/bin/ohmydebn-opencode-desktop-install
+fi
+
+if dpkg -s "opencode" >/dev/null 2>&1; then
+  exec /opt/OpenCode/ai.opencode "$@"
+fi

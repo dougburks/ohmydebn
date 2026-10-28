@@ -677,6 +677,7 @@ declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-opencode-install]=opencode
   [ohmydebn-claude-code-install]=claude-code
   [ohmydebn-claude-desktop-install]=claude-desktop
+  [ohmydebn-opencode-desktop-install]=opencode-desktop
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
@@ -1275,6 +1276,7 @@ fi
 PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-chatgpt:ChatGPT"
   "ohmydebn-claude-desktop:Claude Desktop"
+  "ohmydebn-opencode-desktop:OpenCode Desktop"
   "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
   "ohmydebn-antigravity:Antigravity"

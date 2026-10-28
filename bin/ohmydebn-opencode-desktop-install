@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Installs OpenCode Desktop, OpenCode's GUI app, from the OhMyDebn repo:
+# OpenCode's own package, republished there by ohmydebn-package-build on
+# the same release as the terminal app (they share their data) and without
+# its self-updater, so apt keeps both up to date together.
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "opencode" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "OpenCode Desktop is not currently installed."
+    echo
+    echo "Continuing will install it, packaged from OpenCode's release:"
+    echo "https://opencode.ai"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+
+  case "$(dpkg --print-architecture)" in
+  amd64 | arm64) ;;
+  *)
+    echo "OpenCode Desktop is only available for x86_64 and arm64."
+    exit 1
+    ;;
+  esac
+
+  # This runs standalone, on demand (via ohmydebn-opencode-desktop), outside
+  # install.sh/ohmydebn-update's own flow, so it needs its own apt update
+  # first - see ohmydebn-grok-install.
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install opencode
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask opencode-desktop || true
+  fi
+fi

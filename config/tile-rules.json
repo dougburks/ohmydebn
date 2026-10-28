@@ -18,6 +18,7 @@
   { "wmClass": "OhMyDebn", "titleRegex": "^SO-CRATES$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^ChatGPT$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Claude Desktop$", "grid": [2, 2, 1, 0, 1, 2] },
+  { "wmClass": "OhMyDebn", "titleRegex": "^OpenCode Desktop$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^T3 Code$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^VSCode$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Antigravity$", "grid": [2, 2, 1, 0, 1, 2] },

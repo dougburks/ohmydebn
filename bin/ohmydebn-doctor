@@ -548,7 +548,7 @@ for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
 done
 DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "unset - opencode")
 case "$DEFAULT_AI" in
-opencode | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
 for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-crush-cli ohmydebn-omp-cli ohmydebn-pi-cli; do

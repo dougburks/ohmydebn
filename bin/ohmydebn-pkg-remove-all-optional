@@ -102,7 +102,8 @@ DEDICATED=("antigravity antigravity" "brave-browser brave-browser" "chatgpt chat
   "google-chrome-stable google-chrome-stable" "helium-bin helium-bin" "powershell powershell"
   "simplescreenrecorder simplescreenrecorder" "tailscale tailscale"
   "ohmydebn-pi-coding-agent pi" "ohmydebn-codex-cli codex" "ohmydebn-t3code t3code"
-  "ohmydebn-grok-build grok" "ohmydebn-oh-my-pi omp" "crush crush")
+  "ohmydebn-grok-build grok" "ohmydebn-oh-my-pi omp" "crush crush"
+  "opencode opencode-desktop")
 TO_REMOVE=()
 if [ "$DISTRO_ONLY" = false ]; then
   for PAIR in "${DEDICATED[@]}"; do

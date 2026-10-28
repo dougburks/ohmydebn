@@ -3,14 +3,13 @@
 # Note: We cannot use `jq` to update settings.json because it’s JSONC (allows comments),
 # which jq doesn’t support.
 
-# Parameters: [EDITOR_CMD] [SETTINGS_PATH] [SKIP_FLAG], VS Code's by default
+# Parameters: [EDITOR_CMD] [SETTINGS_PATH], VS Code's by default
 # (ohmydebn-theme-set-antigravity passes Antigravity's)
 EDITOR_CMD="${1:-code}"
 SETTINGS_PATH="${2:-$HOME/.config/Code/User/settings.json}"
-SKIP_FLAG="${3:-$HOME/.local/state/ohmydebn/toggles/skip-vscode-theme-changes}"
 VS_CODE_THEME="$HOME/.config/ohmydebn/current/theme/vscode.json"
 
-if /usr/share/ohmydebn/bin/ohmydebn-cmd-present "$EDITOR_CMD" && [[ ! -f "$SKIP_FLAG" ]] && command -v jq >/dev/null 2>&1; then
+if /usr/share/ohmydebn/bin/ohmydebn-cmd-present "$EDITOR_CMD" && command -v jq >/dev/null 2>&1; then
   if [[ -f "$VS_CODE_THEME" ]]; then
     # // empty: a missing key is no value, not the string "null" - which
     # used to run `--install-extension null` and set the theme to "null".

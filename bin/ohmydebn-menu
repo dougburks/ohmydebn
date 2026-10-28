@@ -758,11 +758,16 @@ show_update_password_menu() {
   esac
 }
 
-show_style_menu() {
-  menu "Style" "  Effects\n  Notifications\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
+show_appearance_menu() {
+  menu "Appearance" "󰸉  Background\n  Effects\n  Fonts\n  Notifications\n󱂩  Panel\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
   case "$MENU_RESULT" in
+  # The carousel's Up/Down browse the theme's backgrounds, and Enter
+  # applies the one shown, as Ctrl + Super + B does.
+  *Background*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *Effects*) cinnamon-settings effects ;;
+  *Fonts*) cinnamon-settings fonts ;;
   *Notifications*) cinnamon-settings notifications ;;
+  *Panel*) cinnamon-settings panel ;;
   *Screensaver*) cinnamon-settings screensaver ;;
   # Before *Theme*, which would match it too.
   *Intros*) /usr/share/ohmydebn/bin/ohmydebn-theme-intro-toggle ;;
@@ -882,7 +887,7 @@ show_main_menu() {
   # (bin/ohmydebn-menu-tree) - it's real, executed bash (passed as an
   # argument below), not a comment, so it can't silently drift out of
   # sync the way dead/unused data could.
-  local go_items="󰀻  Apps\n󰧑  Learn\n  Trigger\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  Setup\n  About\n  Demo\n  System"
+  local go_items="󰀻  Apps\n󰧑  Learn\n  Trigger\n  Appearance\n󰉉  Install\n󰭌  Remove\n  Update\n  Setup\n  About\n  Demo\n  System"
   menu "Go" "$go_items"
   go_to_menu "$MENU_RESULT"
 }
@@ -896,7 +901,7 @@ go_to_menu() {
   *apps*) show_apps_menu ;;
   *trigger*) show_trigger_menu ;;
   *learn*) show_learn_menu ;;
-  *style*) show_style_menu ;;
+  *appearance*) show_appearance_menu ;;
   *install*) show_install_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;

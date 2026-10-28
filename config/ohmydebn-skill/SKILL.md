@@ -248,11 +248,11 @@ ohmydebn-theme-install <url>     # Install from git repo
 ```
 
 **Theme Management:**
-- GUI: OhMyDebn Menu → Style → Theme or hotkey `Ctrl + Super + T`
-- Background switching: `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`
+- GUI: OhMyDebn Menu → Appearance → Theme or hotkey `Ctrl + Super + T`
+- Background switching: OhMyDebn Menu → Appearance → Background or `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`. Each theme remembers its last background
 - Build custom themes: `Ctrl + Shift + A` (Aether theme builder)
 - Browse more themes: press B in the theme carousel (`Ctrl + Super + T`)
-- Theme intros: switching themes and logging in play a short intro that fades into the background: the background itself at twilight with the light arriving and a shimmer, drawn live, or for some Omarchy backgrounds Omarchy's own clip. Turn them off or on with `ohmydebn-theme-intro-toggle` (Style > Theme Intros). A user's own background in `~/.config/ohmydebn/backgrounds/<theme>/` can have its own clip at `intros/<same name>.webm` (WebM/VP9; an .mp4 may not play, and a clip that can't play falls back to the drawn intro)
+- Theme intros: switching themes and logging in play a short intro that fades into the background: the background itself at twilight with the light arriving and a shimmer, drawn live, or for some Omarchy backgrounds Omarchy's own clip. Turn them off or on with `ohmydebn-theme-intro-toggle` (Appearance > Theme Intros). A user's own background in `~/.config/ohmydebn/backgrounds/<theme>/` can have its own clip at `intros/<same name>.webm` (WebM/VP9; an .mp4 may not play, and a clip that can't play falls back to the drawn intro)
 
 ### Keybindings
 
@@ -349,7 +349,7 @@ For advanced window management, additional extensions can be installed from Cinn
 
 ### Fonts
 
-Fonts are managed through Cinnamon Settings > Fonts, which provides options to:
+Fonts are managed through Cinnamon Settings > Fonts (OhMyDebn Menu → Appearance → Fonts), which provides options to:
 - Change interface font, document font, monospace font, and window title font
 - Adjust font rendering settings (hinting, antialiasing, scaling factor)
 - Set font sizes for different UI elements
@@ -436,7 +436,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 
 ## Example Requests
 
-- "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
+- "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Appearance → Theme
 - "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "Gmail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`

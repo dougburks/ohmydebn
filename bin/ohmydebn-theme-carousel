@@ -3,9 +3,10 @@
 # ohmydebn-theme-carousel: full-screen, Omarchy-style theme AND background
 # browser - launched by Ctrl+Super+T, Ctrl+Super+B (both bound to this same
 # script - see install/keybinding/keybinding-custom.txt), and ohmydebn-menu's
-# Style entry directly. Used to be two separate scripts/hotkeys/menu entries
-# (this one for themes only, ohmydebn-theme-bg-carousel for backgrounds
-# within the current theme only); folded into one after this version proved
+# Appearance > Theme and Appearance > Background entries directly. Used to
+# be two separate scripts/hotkeys/menu entries (this one for themes only,
+# ohmydebn-theme-bg-carousel for backgrounds within the current theme
+# only); folded into one after this version proved
 # out a D-pad that handles both without the old bg-carousel's separate
 # "applies live on every keypress" model - here, nothing touches the live
 # desktop until Enter, for backgrounds exactly the same way it always worked

@@ -485,6 +485,10 @@ assert_contains "Ubuntu-based with Debian sources: caught" "$OUTPUT" "FAIL - Ubu
 rm "$ROOT/etc/apt/sources.list.d/debian.sources"
 run_doctor
 assert_contains "Ubuntu-based with its own sources: ok" "$OUTPUT" "ok - Ubuntu-based: no Debian apt sources mixed in"
+assert_contains "Zorin OS 18: a supported distro" "$OUTPUT" "ok - supported distro"
+printf 'PRETTY_NAME="Zorin OS 17.3"\nID=zorin\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=jammy\nUBUNTU_CODENAME=jammy\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Zorin OS 17: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
 mock_cleanup
 
 # --- Neovim, broken in each of the ways the doctor checks ---
@@ -624,6 +628,19 @@ assert_contains "chatgpt repo without its pin: flagged" "$OUTPUT" "no pin for: c
 : >"$ROOT/etc/apt/preferences.d/chatgpt.pref"
 run_doctor
 assert_contains "chatgpt repo with its pin: counted as pinned" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (2)"
+mock_cleanup
+
+# --- Brave's repo is OhMyDebn's only as .sources: Zorin OS ships its own
+# brave-browser-release.list, unpinned, and that's not a failure ---
+build_machine yes
+echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" \
+  >"$ROOT/etc/apt/sources.list.d/brave-browser-release.list"
+run_doctor
+assert_not_contains "Zorin OS's own Brave .list: not flagged" "$OUTPUT" "no pin for"
+assert_contains "Zorin OS's own Brave .list: not counted as ours" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (1)"
+: >"$ROOT/etc/apt/sources.list.d/brave-browser-release.sources"
+run_doctor
+assert_contains "OhMyDebn's Brave .sources without its pin: flagged by name" "$OUTPUT" "no pin for: brave-browser-release"
 mock_cleanup
 
 # --- the header's display scale: Cinnamon's own answer, else the setting ---

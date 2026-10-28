@@ -102,6 +102,18 @@ prune
 assert_eq "distro's Brave source: left alone" "yes" "$(there /etc/apt/sources.list.d/brave.list)"
 mock_cleanup
 
+# --- ...even with OhMyDebn's name: Zorin OS ships brave-browser-release.list
+# (Brave's own instructions' name), with the keyring brave-keyring owns ---
+setup
+echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" \
+  >"$APT/sources.list.d/brave-browser-release.list"
+: >"$ROOT/usr/share/keyrings/brave-browser-archive-keyring.gpg"
+prune
+assert_eq "Zorin OS's Brave .list, no Brave installed: left alone" "yes" "$(there /etc/apt/sources.list.d/brave-browser-release.list)"
+assert_eq "Zorin OS's Brave .list: its keyring left alone" "yes" "$(there /usr/share/keyrings/brave-browser-archive-keyring.gpg)"
+assert_eq "Zorin OS's Brave .list: nothing said" "" "$OUT"
+mock_cleanup
+
 # --- vendor-owned repos: the vendor's package removes the repo; the pin follows ---
 setup
 for pin in claude-desktop.pref google-chrome.pref chatgpt.pref code.pref; do

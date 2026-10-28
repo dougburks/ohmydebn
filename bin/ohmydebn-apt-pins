@@ -5,8 +5,10 @@
 # packages, and what's left of them once their app is gone.
 #
 # Usage: ohmydebn-apt-pins --list | --prune
-#   --list   print "<repo name>:<pin file>" for each one - the doctor checks
-#            that every repo present has its pin.
+#   --list   print "<repo>:<pin file>" for each one - the doctor checks
+#            that every repo present has its pin. <repo> is a sources
+#            file's name without its extension, matching .list or .sources,
+#            or with it when only that one is OhMyDebn's.
 #   --prune  clean up after apps removed with the menu's Remove > Package or
 #            with apt directly, rather than with their own
 #            ohmydebn-<app>-remove:
@@ -18,7 +20,9 @@
 #              Desktop, VS Code), but leaves OhMyDebn's pin.
 #            A repo with any of its packages installed is never touched, nor
 #            is anything not on the list below (a distro's own source for
-#            the same vendor has another file name: LCOS's brave.list).
+#            the same vendor: LCOS's brave.list, or Zorin OS's
+#            brave-browser-release.list, which has OhMyDebn's name but not
+#            its extension).
 #            Run by Remove > Package and on every update.
 #
 # OHMYDEBN_TEST_ROOT prefixes every path in the unit tests.
@@ -31,13 +35,15 @@ APT_DIR="$ROOT/etc/apt"
 # <repo>:<pin file>:<packages>:<key>. Packages and key are given for the
 # repos OhMyDebn's installers write (the same files their
 # ohmydebn-<app>-remove deletes) and left empty for the ones a vendor's own
-# package adds and removes. Both Brave variants share one repo.
+# package adds and removes. Both Brave variants share one repo, and only
+# its .sources is OhMyDebn's: Brave's own instructions, and distros that
+# set Brave up themselves (Zorin OS), name theirs brave-browser-release.list.
 # PowerShell's is kept while Microsoft's own setup package is installed:
 # then the sources file is that package's (on a machine the update hasn't
 # moved off it yet, or where the user installed it for something else).
 PINS=(
   "antigravity:antigravity.pref:antigravity:/etc/apt/keyrings/antigravity-repo-key.gpg"
-  "brave-browser-release:brave-browser-release.pref:brave-browser brave-origin:/usr/share/keyrings/brave-browser-archive-keyring.gpg"
+  "brave-browser-release.sources:brave-browser-release.pref:brave-browser brave-origin:/usr/share/keyrings/brave-browser-archive-keyring.gpg"
   "claude-code:claude-code.pref:claude-code:/usr/share/keyrings/claude-code.asc"
   "cloudflare-client:cloudflare-client.pref:cloudflare-warp:/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg"
   "helium:helium.pref:helium-bin:/usr/share/keyrings/helium.gpg"
@@ -48,6 +54,15 @@ PINS=(
   "google-chrome:google-chrome.pref::"
   "vscode:code.pref::"
 )
+
+# The sources files a <repo> entry names: exactly that file when it has
+# an extension, otherwise .list and .sources.
+sources_of() {
+  case "$1" in
+  *.list | *.sources) echo "$APT_DIR/sources.list.d/$1" ;;
+  *) printf '%s\n' "$APT_DIR/sources.list.d/$1.list" "$APT_DIR/sources.list.d/$1.sources" ;;
+  esac
+}
 
 # Installed, not just known to dpkg: a package removed without purging
 # still answers dpkg -s.
@@ -65,9 +80,13 @@ case "${1:-}" in
 --prune)
   for entry in "${PINS[@]}"; do
     IFS=: read -r repo pin packages key <<<"$entry"
-    sources=("$APT_DIR/sources.list.d/$repo.list" "$APT_DIR/sources.list.d/$repo.sources")
+    mapfile -t sources < <(sources_of "$repo")
     pin="$APT_DIR/preferences.d/$pin"
-    if [ -e "${sources[0]}" ] || [ -e "${sources[1]}" ]; then
+    present=false
+    for file in "${sources[@]}"; do
+      [ -e "$file" ] && present=true
+    done
+    if [ "$present" = true ]; then
       [ -n "$packages" ] || continue
       in_use=false
       for package in $packages; do
@@ -75,7 +94,7 @@ case "${1:-}" in
       done
       [ "$in_use" = false ] || continue
       sudo rm -f "${sources[@]}" "$ROOT$key" "$pin"
-      echo "Removed the $repo apt repository: nothing from it is installed any more."
+      echo "Removed the ${repo%.sources} apt repository: nothing from it is installed any more."
     elif [ -f "$pin" ]; then
       sudo rm -f "$pin"
       echo "Removed $pin: its repository is gone."

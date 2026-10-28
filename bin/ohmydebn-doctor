@@ -100,7 +100,7 @@ if [ -f "$OS_RELEASE" ]; then
   linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
-  pop) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
+  pop | zorin) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
   esac
   if [ "$DISTRO_OK" = true ]; then ok "supported distro"; else fail "supported distro" "install.sh would warn: unsupported"; fi
   # install.sh adds Debian's sources on Debian-based distros only: mixing
@@ -147,15 +147,21 @@ fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
 # vendor's own packages, so it can't replace anyone else's. VS Code's,
 # Chrome's, ChatGPT's and Claude Desktop's repos are added or kept up to
-# date by the vendors' own packages (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
+# date by the vendors' own packages (.list or .sources). The list of repos
+# and pins is ohmydebn-apt-pins'; a repo named with its extension is only
+# OhMyDebn's in that form (Brave's .sources: Zorin OS ships its own
+# brave-browser-release.list, unpinned, as its own choice).
 mapfile -t PINS < <("$OHMYDEBN/bin/ohmydebn-apt-pins" --list 2>/dev/null)
 PINNED=0
 MISSING=()
 for entry in "${PINS[@]}"; do
   source_name=${entry%%:*}
   pref=${entry#*:}
-  [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.list" ] || [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.sources" ] || continue
-  if [ -f "$SYSROOT/etc/apt/preferences.d/$pref" ]; then PINNED=$((PINNED + 1)); else MISSING+=("$source_name"); fi
+  case "$source_name" in
+  *.list | *.sources) [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name" ] || continue ;;
+  *) [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.list" ] || [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.sources" ] || continue ;;
+  esac
+  if [ -f "$SYSROOT/etc/apt/preferences.d/$pref" ]; then PINNED=$((PINNED + 1)); else MISSING+=("${source_name%.*}"); fi
 done
 if [ ${#MISSING[@]} -gt 0 ]; then fail "third-party apt repos pinned to their own packages" "no pin for: ${MISSING[*]}"; elif [ "$PINNED" -gt 0 ]; then ok "third-party apt repos pinned to their own packages ($PINNED)"; fi
 

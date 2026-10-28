@@ -191,9 +191,14 @@ if [[ -n "$OLD_THEME_NAME" && "$OLD_THEME_NAME" != "$THEME_NAME" &&
   "$OLD_THEME_NAME" != .* && "$OLD_THEME_NAME" != */* ]]; then
   OLD_BACKGROUND=$(readlink -- "$HOME/.config/ohmydebn/current/background" 2>/dev/null) || true
   if [[ -n "$OLD_BACKGROUND" ]]; then
-    BACKGROUND_MEMORY="$HOME/.local/state/ohmydebn/theme-backgrounds/$OLD_THEME_NAME"
-    mkdir -p "${BACKGROUND_MEMORY%/*}"
-    printf '%s\n' "$OLD_BACKGROUND" >"$BACKGROUND_MEMORY.tmp" && mv "$BACKGROUND_MEMORY.tmp" "$BACKGROUND_MEMORY"
+    # Not under ~/.local/state/ohmydebn: that's a file, the installation-
+    # complete marker. And only a nicety, so a memory that can't be written
+    # never stops the theme change (set -e would end the script here).
+    BACKGROUND_MEMORY="$HOME/.local/state/ohmydebn-theme-backgrounds/$OLD_THEME_NAME"
+    if mkdir -p "${BACKGROUND_MEMORY%/*}" 2>/dev/null &&
+      printf '%s\n' "$OLD_BACKGROUND" 2>/dev/null >"$BACKGROUND_MEMORY.tmp"; then
+      mv -f "$BACKGROUND_MEMORY.tmp" "$BACKGROUND_MEMORY" 2>/dev/null || true
+    fi
   fi
 fi
 

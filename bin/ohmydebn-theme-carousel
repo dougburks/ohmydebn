@@ -88,7 +88,7 @@ CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
 CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/background")
 # Where ohmydebn-theme-set keeps the background each theme was showing
 # when it was last left (one file per theme, holding the path).
-THEME_BACKGROUNDS_MEMORY_DIR = os.path.expanduser("~/.local/state/ohmydebn/theme-backgrounds")
+THEME_BACKGROUNDS_MEMORY_DIR = os.path.expanduser("~/.local/state/ohmydebn-theme-backgrounds")
 
 # Persists load_cover_pixbuf's decoded-and-cropped output across separate
 # carousel launches (each Ctrl+Super+T is a fresh process - the in-memory

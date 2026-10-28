@@ -12,6 +12,11 @@
 # set by a stand-in that only moves the link (as the real one does, to the
 # resolved path), and every other script theme-set calls is a stand-in.
 # The carousel's choice comes from its own starting_background_index().
+#
+# HOME has what every real install has: ~/.local/state/ohmydebn is a file,
+# the installation-complete marker. The memory used to be kept under it, as
+# a folder, so on a real install every theme switch after the first failed
+# (mkdir: Not a directory), while these tests, with no marker, passed.
 
 set -uo pipefail
 
@@ -28,8 +33,9 @@ setup() {
   mock_init
   H="$MOCK_DIR/home"
   STOCK="$MOCK_DIR/stock"
-  MEMORY="$H/.local/state/ohmydebn/theme-backgrounds"
-  mkdir -p "$H/.config/ohmydebn/themes" "$H/.config/ohmydebn/current"
+  MEMORY="$H/.local/state/ohmydebn-theme-backgrounds"
+  mkdir -p "$H/.config/ohmydebn/themes" "$H/.config/ohmydebn/current" "$H/.local/state"
+  : >"$H/.local/state/ohmydebn"
   for theme in aurora boreal; do
     mkdir -p "$STOCK/$theme/backgrounds"
     echo "$COLORS" >"$STOCK/$theme/colors.toml"
@@ -54,7 +60,10 @@ EOF
   sed -e "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" -e "s#/usr/share/ohmydebn-themes#$STOCK#g" \
     "$REPO_ROOT/bin/ohmydebn-theme-set" >"$MOCK_DIR/theme-set"
 }
-set_theme() { HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/theme-set" "$@" </dev/null >"$MOCK_DIR/out" 2>&1; }
+set_theme() {
+  HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/theme-set" "$@" </dev/null >"$MOCK_DIR/out" 2>&1
+  STATUS=$?
+}
 showing() { basename "$(readlink "$H/.config/ohmydebn/current/background" 2>/dev/null)"; }
 exists() { [[ -e "$1" ]] && echo yes || echo no; }
 
@@ -65,6 +74,7 @@ assert_eq "first theme ever: its first background" "1-aurora.jpg" "$(showing)"
 set_theme --background 3 aurora
 assert_eq "background 3 picked" "3-aurora.jpg" "$(showing)"
 set_theme boreal
+assert_eq "switching on a real install (the marker is a file): succeeds" "0" "$STATUS"
 assert_eq "another theme, never shown before: its first" "1-boreal.jpg" "$(showing)"
 assert_contains "the theme left records what it was showing" "$(cat "$MEMORY/aurora" 2>/dev/null)" "3-aurora.jpg"
 set_theme --background 2 boreal
@@ -77,6 +87,16 @@ assert_eq "--background still picks exactly that one" "1-aurora.jpg" "$(showing)
 set_theme boreal
 set_theme aurora
 assert_eq "the newer pick is the one remembered" "1-aurora.jpg" "$(showing)"
+mock_cleanup
+
+# --- the memory can't be written: the theme still changes ---
+setup
+set_theme --background 3 aurora
+: >"$MEMORY"   # a file where the folder would go
+set_theme boreal
+assert_eq "memory unwritable: the switch still succeeds" "0" "$STATUS"
+assert_eq "memory unwritable: the new theme is applied" "boreal" "$(cat "$H/.config/ohmydebn/current/theme.name")"
+assert_eq "memory unwritable: nothing printed about it" "" "$(grep -i 'not a directory\|cannot' "$MOCK_DIR/out")"
 mock_cleanup
 
 # --- a remembered background that's gone: the first, as before ---

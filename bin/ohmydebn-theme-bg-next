@@ -84,7 +84,7 @@ else
     NEW_BACKGROUND="${BACKGROUNDS[0]}"
     REMEMBERED=""
     if [[ -n "$THEME_NAME" && "$THEME_NAME" != .* && "$THEME_NAME" != */* ]]; then
-      REMEMBERED=$(cat "$HOME/.local/state/ohmydebn/theme-backgrounds/$THEME_NAME" 2>/dev/null) || true
+      REMEMBERED=$(cat "$HOME/.local/state/ohmydebn-theme-backgrounds/$THEME_NAME" 2>/dev/null) || true
     fi
     if [[ -n "$REMEMBERED" ]]; then
       for CANDIDATE in "${BACKGROUNDS[@]}"; do

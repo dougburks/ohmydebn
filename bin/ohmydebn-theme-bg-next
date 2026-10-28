@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cycles through the background images available
+# Cycles through the background images available. Without --background,
+# the next one after the current; on a theme switch (the current one isn't
+# the theme's), the one the theme last showed, or its first.
 # Usage: ohmydebn-theme-bg-next [--print] [--background <arg>]
 #   <arg> can be "random" or a number (1-based index)
 #   --print prints the background that would be chosen instead of setting
@@ -74,8 +76,24 @@ else
     SPECIFIC_INDEX=$(((SPECIFIC_INDEX - 1) % TOTAL))
     NEW_BACKGROUND="${BACKGROUNDS[$SPECIFIC_INDEX]}"
   elif [[ $INDEX -eq -1 ]]; then
-    # Use the first background when no match was found
+    # The current background isn't one of this theme's: a theme switch.
+    # Show the background this theme had when it was last left
+    # (ohmydebn-theme-set remembers it), if it's still one of its own, and
+    # otherwise its first. Compared resolved, as ohmydebn-theme-bg-set
+    # stores the link's target.
     NEW_BACKGROUND="${BACKGROUNDS[0]}"
+    REMEMBERED=""
+    if [[ -n "$THEME_NAME" && "$THEME_NAME" != .* && "$THEME_NAME" != */* ]]; then
+      REMEMBERED=$(cat "$HOME/.local/state/ohmydebn/theme-backgrounds/$THEME_NAME" 2>/dev/null) || true
+    fi
+    if [[ -n "$REMEMBERED" ]]; then
+      for CANDIDATE in "${BACKGROUNDS[@]}"; do
+        if [[ "$CANDIDATE" == "$REMEMBERED" || "$(readlink -f -- "$CANDIDATE")" == "$REMEMBERED" ]]; then
+          NEW_BACKGROUND="$CANDIDATE"
+          break
+        fi
+      done
+    fi
   else
     NEXT_INDEX=$(((INDEX + 1) % TOTAL))
     NEW_BACKGROUND="${BACKGROUNDS[$NEXT_INDEX]}"

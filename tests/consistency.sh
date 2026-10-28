@@ -680,6 +680,7 @@ declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
+  [ohmydebn-crush-install]=crush
   [ohmydebn-omp-install]=omp
   [ohmydebn-pi-install]=pi
   [ohmydebn-t3code-install]=t3code
@@ -1061,6 +1062,7 @@ echo "-- apt pin filename agrees between each installer and its own remove scrip
 # repo), so both map to the same filename here.
 PIN_FILE_OWNERS=(
   "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
+  "ohmydebn-crush-install:ohmydebn-crush-remove:charm-crush.pref"
   "ohmydebn-claude-desktop-install:ohmydebn-claude-desktop-remove:claude-desktop.pref"
   "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
@@ -1196,6 +1198,7 @@ TITLE_OWNERS=(
   "ohmydebn-pi:Pi"
   "ohmydebn-codex:Codex"
   "ohmydebn-grok:Grok Build"
+  "ohmydebn-crush:Crush"
   "ohmydebn-omp:Oh My Pi"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"

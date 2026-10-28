@@ -99,6 +99,16 @@ EOF
   touch $GROK_ALIAS_STATE
 fi
 
+CRUSH_ALIAS_STATE=~/.local/state/ohmydebn-config/crush-alias
+if [ ! -f $CRUSH_ALIAS_STATE ]; then
+  cat <<EOF >>~/.zshrc
+
+# Crush (Charm) CLI coding agent, run in the current terminal
+alias crush='/usr/share/ohmydebn/bin/ohmydebn-crush-cli'
+EOF
+  touch $CRUSH_ALIAS_STATE
+fi
+
 OMP_ALIAS_STATE=~/.local/state/ohmydebn-config/omp-alias
 if [ ! -f $OMP_ALIAS_STATE ]; then
   cat <<EOF >>~/.zshrc

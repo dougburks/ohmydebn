@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Unit tests for the signing-key checks in the Antigravity, Cloudflare
-# WARP, Helium, Tailscale and Google Chrome installers. Each used to hand
+# WARP, Helium, Tailscale, Google Chrome and Crush installers. Each used to hand
 # whatever key its vendor's URL served straight to apt, so a key swapped in
 # transit or on the vendor's server was trusted for every package from
 # that repo. Now the key is checked against the vendor's fingerprint first,
@@ -26,7 +26,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== vendor signing keys: antigravity, cloudflare-warp, helium-bin, tailscale, google-chrome-stable, chatgpt installers ==="
+echo "=== vendor signing keys: antigravity, cloudflare-warp, helium-bin, tailscale, google-chrome-stable, chatgpt, crush installers ==="
 
 # One scratch root for every case (setup empties it), so the paths each
 # case checks can be worked out before its setup runs.
@@ -142,6 +142,9 @@ check_vendor "Tailscale" ohmydebn-tailscale-install tailscale-signing-key.gpg \
 check_vendor "Google Chrome" ohmydebn-google-chrome-stable-install google-signing-key.asc \
   /usr/share/keyrings/google-chrome.gpg /etc/apt/sources.list.d/google-chrome.sources \
   /etc/apt/preferences.d/google-chrome.pref google-chrome-stable
+check_vendor "Crush" ohmydebn-crush-install charm-signing-key.asc \
+  /usr/share/keyrings/charm-crush.gpg /etc/apt/sources.list.d/charm-crush.sources \
+  /etc/apt/preferences.d/charm-crush.pref crush
 
 # --- Google Chrome: from the repo its own postinst writes, not a .deb ---
 setup

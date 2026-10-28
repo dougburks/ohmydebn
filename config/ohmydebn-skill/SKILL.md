@@ -55,7 +55,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
-- **AI assistants**: optional installs from Apps > AI (OpenCode, Claude Code, Codex, Grok Build, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
+- **AI assistants**: optional installs from Apps > AI (OpenCode, Claude Code, Codex, Grok Build, Crush, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
 - **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps → Other Apps
 
 ## System Architecture

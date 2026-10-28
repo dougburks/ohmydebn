@@ -44,6 +44,7 @@ APT_DIR="$ROOT/etc/apt"
 PINS=(
   "antigravity:antigravity.pref:antigravity:/etc/apt/keyrings/antigravity-repo-key.gpg"
   "brave-browser-release.sources:brave-browser-release.pref:brave-browser brave-origin:/usr/share/keyrings/brave-browser-archive-keyring.gpg"
+  "charm-crush.sources:charm-crush.pref:crush:/usr/share/keyrings/charm-crush.gpg"
   "claude-code:claude-code.pref:claude-code:/usr/share/keyrings/claude-code.asc"
   "cloudflare-client:cloudflare-client.pref:cloudflare-warp:/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg"
   "helium:helium.pref:helium-bin:/usr/share/keyrings/helium.gpg"

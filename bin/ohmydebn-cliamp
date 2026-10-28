@@ -5,8 +5,8 @@
 # gives one window for both steps: the terminal opens straight onto the
 # payload (-e), which installs cliamp if it's missing and then runs it in
 # that same window, rather than an install window followed by a second
-# one for the app. The launchers for claude-code, codex, grok, omp,
-# opencode, pi and socrates follow the same shape. gTile-OhMyDebn's own
+# one for the app. The launchers for claude-code, codex, crush, grok,
+# omp, opencode, pi and socrates follow the same shape. gTile-OhMyDebn's own
 # window-created auto-tile handler tiles this window itself, matching its
 # alacritty --title against /usr/share/ohmydebn/config/tile-rules.json -
 # no separate *-tiled wrapper needed.

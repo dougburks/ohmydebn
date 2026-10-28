@@ -95,6 +95,23 @@ assert_eq "neither installed: the shared repo goes (.sources)" "no" "$(there /et
 assert_eq "neither installed: its pin goes" "no" "$(there /etc/apt/preferences.d/brave-browser-release.pref)"
 mock_cleanup
 
+# --- Crush: OhMyDebn's Charm source (.sources) goes with it; a charm.list
+# the user added for Charm's other tools is theirs ---
+setup
+: >"$APT/sources.list.d/charm-crush.sources"
+: >"$APT/preferences.d/charm-crush.pref"
+: >"$ROOT/usr/share/keyrings/charm-crush.gpg"
+echo "deb https://repo.charm.sh/apt/ * *" >"$APT/sources.list.d/charm.list"
+MOCK_INSTALLED="crush" prune
+assert_eq "Crush installed: its repo stays" "yes" "$(there /etc/apt/sources.list.d/charm-crush.sources)"
+prune
+assert_eq "Crush gone: OhMyDebn's Charm source goes" "no" "$(there /etc/apt/sources.list.d/charm-crush.sources)"
+assert_eq "Crush gone: its key goes" "no" "$(there /usr/share/keyrings/charm-crush.gpg)"
+assert_eq "Crush gone: its pin goes" "no" "$(there /etc/apt/preferences.d/charm-crush.pref)"
+assert_contains "Crush gone: says so" "$OUT" "Removed the charm-crush apt repository"
+assert_eq "Crush gone: the user's charm.list stays" "yes" "$(there /etc/apt/sources.list.d/charm.list)"
+mock_cleanup
+
 # --- a distro's own source for the same vendor is never touched (LCOS) ---
 setup
 echo "deb https://brave-browser-apt-release.s3.brave.com/ stable main" >"$APT/sources.list.d/brave.list"

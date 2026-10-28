@@ -53,6 +53,7 @@ done <<'LIST'
 ohmydebn-claude-code-run ohmydebn-claude-code-install
 ohmydebn-codex-run ohmydebn-codex-install
 ohmydebn-grok-run ohmydebn-grok-install
+ohmydebn-crush-run ohmydebn-crush-install
 ohmydebn-omp-run ohmydebn-omp-install
 ohmydebn-opencode-run ohmydebn-opencode-install
 ohmydebn-pi-run ohmydebn-pi-install

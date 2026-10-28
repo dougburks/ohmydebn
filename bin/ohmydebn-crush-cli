@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Runs Crush in the current terminal with its arguments, installing it
+# first if needed - the shape a shell alias needs, as ohmydebn-grok-cli is
+# to ohmydebn-grok.
+
+set -euo pipefail
+
+if ! dpkg -s "crush" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-crush-install
+fi
+
+exec /usr/bin/crush "$@"

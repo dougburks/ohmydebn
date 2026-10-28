@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "crush" >/dev/null 2>&1; then
+  echo
+  echo "Crush is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove Crush and OhMyDebn's source for its repo. Your"
+    echo "Crush settings and sessions in ~/.config/crush and ~/.local/share/crush"
+    echo "are kept."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # Only OhMyDebn's own files: a charm.list the user added for Charm's
+  # other tools stays (ohmydebn-crush-install used it instead).
+  sudo rm -f /usr/share/keyrings/charm-crush.gpg
+  sudo rm -f /etc/apt/sources.list.d/charm-crush.sources
+  sudo rm -f /etc/apt/preferences.d/charm-crush.pref
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge crush
+  sudo /usr/bin/apt -y autoremove
+fi

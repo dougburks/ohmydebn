@@ -642,7 +642,7 @@ show_ai_menu() {
   # Picking one just opens it. The default that ohmydebn-ai (Super+A)
   # launches is chosen when a tool is installed (its installer asks) or
   # later in Setup > Defaults > Agent (pick_default_agent).
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Crush (Charm, any model)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Desktop*) /usr/share/ohmydebn/bin/ohmydebn-claude-desktop ;;
@@ -650,6 +650,7 @@ show_ai_menu() {
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
   *Codex*) /usr/share/ohmydebn/bin/ohmydebn-codex ;;
   *Grok*) /usr/share/ohmydebn/bin/ohmydebn-grok ;;
+  *Crush*) /usr/share/ohmydebn/bin/ohmydebn-crush ;;
   *Stencil*) /usr/share/ohmydebn/bin/ohmydebn-omp ;;
   *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
   *T3*) /usr/share/ohmydebn/bin/ohmydebn-t3code ;;

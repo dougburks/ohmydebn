@@ -1062,7 +1062,6 @@ echo "-- apt pin filename agrees between each installer and its own remove scrip
 # repo), so both map to the same filename here.
 PIN_FILE_OWNERS=(
   "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
-  "ohmydebn-crush-install:ohmydebn-crush-remove:charm-crush.pref"
   "ohmydebn-claude-desktop-install:ohmydebn-claude-desktop-remove:claude-desktop.pref"
   "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"

@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # Runs Crush in a fresh ~/crush-sessions directory (like Codex's and Grok
-# Build's runners), installing it first if needed. apt updates it from
-# Charm's repository; Crush has no updater of its own.
+# Build's runners), installing it first if needed. apt updates it from the
+# OhMyDebn repo; Crush has no updater of its own.
 
 set -euo pipefail
 

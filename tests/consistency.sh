@@ -1308,7 +1308,8 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude com.t3tools.T3Code ai.opencode.desktop Brave-origin
+  Brave-browser KeePassXC Gedit Aether
   ohmydebn-pdf-sign)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
   if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then

@@ -4,7 +4,8 @@
 # themes. Each applied theme gets a full GTK/Cinnamon theme in
 # ~/.themes/ohmydebn-<name> (about 2.6 MB), and nothing removed the old
 # ones - 46 folders, 122 MB, on one machine. Now applying a theme removes
-# the other generated ones once Cinnamon has switched. HOME is a scratch
+# the other generated ones once Cinnamon has switched. Also its handling
+# of theme colors it can't read as #rrggbb. HOME is a scratch
 # directory, the template is a minimal stand-in, and gsettings is a logger.
 
 set -uo pipefail
@@ -50,5 +51,46 @@ assert_eq "a theme of the user's own is kept" "yes" "$([ -d "$T/My-Own-Theme" ] 
 assert_eq "a symlinked theme is kept" "yes" "$([ -L "$T/ohmydebn-dev-link" ] && echo yes || echo no)"
 assert_eq "...and so is what it points to" "yes" "$([ -d "$MOCK_DIR/dev-theme" ] && echo yes || echo no)"
 mock_cleanup
+
+# --- theme colors it can't read as hex pairs ---
+# "#f80" stopped the hook with a bash error, and ohmydebn-theme-set (set -e)
+# with it, leaving the desktop half switched. Short colors are written out;
+# a color that isn't one leaves Cinnamon's theme as it was, without
+# stopping the switch.
+# run_colors <key> <value>
+run_colors() {
+  mock_init
+  H="$MOCK_DIR/home"
+  T="$H/.themes"
+  TEMPLATES="$MOCK_DIR/templates"
+  mkdir -p "$TEMPLATES/Gruvbox-Yellow-Dark/gtk-3.0" "$T" "$H/.config/ohmydebn/current"
+  printf '[Desktop Entry]\nName=Gruvbox-Yellow-Dark\n[X-GNOME-Metatheme]\nGtkTheme=Gruvbox-Yellow-Dark\n' \
+    >"$TEMPLATES/Gruvbox-Yellow-Dark/index.theme"
+  echo "* { color: #d8a657; }" >"$TEMPLATES/Gruvbox-Yellow-Dark/gtk-3.0/gtk.css"
+  echo "nord" >"$H/.config/ohmydebn/current/theme.name"
+  printf '#!/bin/bash\nmock_log "gsettings $*"\n' | mock_bin gsettings
+  sed "s/^$1 = .*/$1 = \"$2\"/" "$REPO_ROOT/themes/ohmydebn/colors.toml" >"$MOCK_DIR/colors.toml"
+  sed "s#/usr/share/ohmydebn-templates#$TEMPLATES#g" "$REPO_ROOT/bin/ohmydebn-theme-set-cinnamon" >"$MOCK_DIR/hook"
+  OUT=$(HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/hook" nord "$MOCK_DIR/colors.toml" false </dev/null 2>&1)
+  STATUS=$?
+}
+
+run_colors accent "#f80"
+assert_eq "short accent: exits 0" "0" "$STATUS"
+assert_contains "short accent: written out in the theme" "$(cat "$T/ohmydebn-nord/gtk-3.0/gtk.css")" "#ff8800"
+mock_cleanup
+
+run_colors background "#123"
+assert_eq "short background: exits 0" "0" "$STATUS"
+assert_contains "short background: Cinnamon switched" "$(cat "$MOCK_CALLS")" "gsettings set org.cinnamon.theme name ohmydebn-nord"
+mock_cleanup
+
+for bad in "#zz0000" "orange" "#ff88"; do
+  run_colors background "$bad"
+  assert_eq "background $bad: exits 0, so the theme switch carries on" "0" "$STATUS"
+  assert_contains "background $bad: says why" "$OUT" "Cinnamon's theme is unchanged"
+  assert_eq "background $bad: Cinnamon not switched" "" "$(cat "$MOCK_CALLS")"
+  mock_cleanup
+done
 
 test_summary

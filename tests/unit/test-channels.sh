@@ -138,6 +138,19 @@ assert_contains "stable: explains it isn't downgraded" "$OUT" "It isn't downgrad
 assert_not_contains "stable: doesn't touch the installed version" "$(cat "$MOCK_CALLS")" "install"
 mock_cleanup
 
+# --- Claude Code: a source line edited by hand isn't switched, and says so ---
+setup yes
+EDITED='deb https://downloads.claude.ai/claude-code/apt/stable/ stable main'
+echo "$EDITED" >"$CLAUDE_LIST"
+OUT=$(printf 'y\n' | run ohmydebn-claude-code-channel latest 2>&1)
+STATUS=$?
+assert_eq "edited list: exits 1" "1" "$STATUS"
+assert_contains "edited list: says it couldn't switch" "$OUT" "Couldn't switch"
+assert_not_contains "edited list: no false success" "$OUT" "is now on the latest channel"
+assert_eq "edited list: left as it was" "$EDITED" "$(cat "$CLAUDE_LIST")"
+assert_not_contains "edited list: apt not run" "$(cat "$MOCK_CALLS")" "/usr/bin/apt"
+mock_cleanup
+
 # --- Claude Code: not installed ---
 setup no
 OUT=$(printf 'y\n' | run ohmydebn-claude-code-channel latest 2>&1)

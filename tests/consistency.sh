@@ -134,6 +134,9 @@ for dir in packaging config cleanup finalization; do
   for f in "$REPO_ROOT/install/$dir"/*.sh; do
     name=$(basename "$f")
     [[ "$name" == "all.sh" ]] && continue
+    # Kept only for updates from 4.5.0-4.7.0, whose own finalization/all.sh
+    # sources it by its old name (see its comment).
+    [[ "$dir/$name" == "finalization/hotkeys.sh" ]] && continue
     CHECKED=$((CHECKED + 1))
     if ! grep -q "$dir/$name" "$ALL_SH"; then
       echo "  FAIL - install/$dir/$name exists but isn't sourced from install/$dir/all.sh"
@@ -1329,10 +1332,14 @@ echo "-- install steps neither exit nor change shell options --"
 # instead. A `set -u` or `set -o pipefail` there stays on for every step
 # after it: updates.sh once turned on set -u, and finale.sh then died on an
 # unset $XDG_CURRENT_DESKTOP in any update run over ssh or from a TTY.
+# finalization/hotkeys.sh is the exception: only an old release's update
+# sources it, and ending that run, once this release's install has run in
+# its place, is its job.
 while IFS= read -r HIT; do
   echo "  FAIL - $HIT (sourced into install.sh; see this check's comment)"
   FAIL=$((FAIL + 1))
-done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##")
+done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##" |
+  grep -v '^install/finalization/hotkeys.sh:')
 echo "  checked every file under install/"
 
 echo

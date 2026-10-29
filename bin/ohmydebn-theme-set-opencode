@@ -1,8 +1,23 @@
 #!/bin/bash
 #
-# ohmydebn-theme-set-opencode: Set opencode theme configuration
+# ohmydebn-theme-set-opencode: Have OpenCode's terminal app reload its theme
 # Usage: ohmydebn-theme-set-opencode
 #
+# OpenCode's "system" theme (OhMyDebn's default, in ~/.config/opencode/
+# cli.json) takes its colors from the terminal, and the terminal app reloads
+# it on SIGUSR2. Nothing else of OpenCode's handles that signal, and it ends
+# them: its servers also run as opencode-cli (the background one the
+# terminal app starts, and those T3 Code and OpenCode Desktop start), as do
+# its other commands. So it goes only to an opencode-cli on a terminal that
+# isn't running one of those commands (OpenCode 2.2.1's list; run and mini
+# reload like the terminal app). Servers started from a terminal keep it as
+# their own, so "serve" in the list is what spares them.
 
-# If opencode-cli is running, then ask it to reload config for new theme to take effect
-pkill -SIGUSR2 opencode-cli 2>/dev/null || true
+OTHER_COMMANDS=' (upgrade|uninstall|acp|api|debug|auth|mcp|plugin|models|stats|session|service|reload|pair|serve) '
+for PID in $(pgrep -x opencode-cli); do
+  read -r TTY ARGS < <(ps -o tty=,args= -p "$PID" 2>/dev/null) || continue
+  [ "$TTY" = "?" ] && continue
+  [[ " $ARGS " =~ $OTHER_COMMANDS ]] && continue
+  kill -USR2 "$PID" 2>/dev/null || true
+done
+exit 0

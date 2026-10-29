@@ -27,8 +27,14 @@ fi
 OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
 OPENCODE_CONFIG_BACKUP="$HOME/.config/opencode/opencode.json.before.disabling.autoupdate"
 if [ -f "$OPENCODE_CONFIG" ] && [ ! -f "$OPENCODE_CONFIG_BACKUP" ] && command -v jq >/dev/null 2>&1; then
-  cp "$OPENCODE_CONFIG" "$OPENCODE_CONFIG_BACKUP"
-  jq '.autoupdate = false' "$OPENCODE_CONFIG" >"${OPENCODE_CONFIG}.tmp" && mv "${OPENCODE_CONFIG}.tmp" "$OPENCODE_CONFIG"
+  # The backup marks this done, so it's made only once the change is: a
+  # config jq can't read (comments) is left as it is, with nothing behind.
+  if jq '.autoupdate = false' "$OPENCODE_CONFIG" >"${OPENCODE_CONFIG}.tmp" 2>/dev/null; then
+    cp "$OPENCODE_CONFIG" "$OPENCODE_CONFIG_BACKUP"
+    mv "${OPENCODE_CONFIG}.tmp" "$OPENCODE_CONFIG"
+  else
+    rm -f "${OPENCODE_CONFIG}.tmp"
+  fi
 fi
 
 # Install the package. This runs standalone, on-demand (via

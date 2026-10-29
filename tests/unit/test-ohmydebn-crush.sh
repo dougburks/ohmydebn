@@ -33,7 +33,7 @@ EOF2
 #!/bin/bash
 mock_log "crush${*:+ $*} in ${PWD/#"$HOME"/"~"}"
 EOF2
-  for stub in ohmydebn-show-logo ohmydebn-show-done ohmydebn-terminal ohmydebn-ai-set-default; do
+  for stub in ohmydebn-show-logo ohmydebn-show-done ohmydebn-terminal ohmydebn-ai-set-default ohmydebn-theme-set-crush; do
     printf '#!/bin/bash\nmock_log "%s${*:+ $*}"\n' "$stub" | mock_bin "$stub"
   done
   for script in ohmydebn-crush ohmydebn-crush-run ohmydebn-crush-cli ohmydebn-crush-install ohmydebn-crush-remove; do
@@ -64,8 +64,9 @@ setup
 run ohmydebn-crush-install $'\n'
 assert_eq "install: exits 0" "0" "$STATUS"
 assert_contains "install: asks before changing anything" "$OUTPUT" "Press Enter to continue or Ctrl-C to cancel."
-assert_eq "install: refreshes apt, installs crush, asks about the default" "sudo /usr/bin/apt update
+assert_eq "install: refreshes apt, installs crush, selects the OhMyDebn theme, asks about the default" "sudo /usr/bin/apt update
 sudo /usr/bin/apt -y install crush
+ohmydebn-theme-set-crush --activate
 ohmydebn-ai-set-default --ask crush" "$CALLS"
 mock_cleanup
 

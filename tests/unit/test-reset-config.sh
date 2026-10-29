@@ -105,11 +105,12 @@ mock_cleanup
 # its part of the config unwritten after a reset. That includes the theme
 # hooks the reset reapplies: ohmydebn-theme-set-starship's marker was
 # missed once, and Starship came back on its built-in prompt.
-# nvim-plugins-seeded is the exception: it tracks Neovim's plugin data,
-# which a reset keeps.
+# nvim-plugins-seeded is an exception: it tracks Neovim's plugin data,
+# which a reset keeps. So is crush-theme-20261029: it tracks selecting
+# OhMyDebn's theme in Crush's own config, which a reset doesn't touch.
 mapfile -t STEP_MARKERS < <(grep -ohE 'ohmydebn-config/[A-Za-z0-9._-]+|\$NVIM_STATE_DIR/[A-Za-z0-9._-]+' \
   "$REPO_ROOT"/install/config/{bat,btop,zsh,nvim}.sh "$REPO_ROOT"/bin/ohmydebn-theme-set* |
-  sed 's#.*/##' | grep -vx 'nvim-plugins-seeded' | sort -u)
+  sed 's#.*/##' | grep -vxE 'nvim-plugins-seeded|crush-theme-20261029' | sort -u)
 LISTED=$(sed -n '/^CONFIG_MARKERS=(/,/)/p' "$SCRIPT")
 MISSING=""
 for marker in "${STEP_MARKERS[@]}"; do

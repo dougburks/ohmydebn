@@ -319,6 +319,9 @@ fi
 # Use COLORS_SOURCE to update the Oh My Pi theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-omp "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
+# Use COLORS_SOURCE to update the Crush theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-crush "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
 # If COLORS_SOURCE was dynamically generated, delete it
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"
 

@@ -42,7 +42,7 @@ setup() {
     for n in 1 2 3; do : >"$STOCK/$theme/backgrounds/$n-$theme.jpg"; done
   done
   for cmd in ohmydebn-theme-set-templates ohmydebn-theme-set-cinnamon ohmydebn-theme-set-picker \
-    ohmydebn-theme-set-claude ohmydebn-theme-set-t3code ohmydebn-theme-set-omp \
+    ohmydebn-theme-set-claude ohmydebn-theme-set-t3code ohmydebn-theme-set-omp ohmydebn-theme-set-crush \
     ohmydebn-theme-set-colors-delete ohmydebn-theme-set-icon ohmydebn-theme-set-terminal \
     ohmydebn-theme-set-btop ohmydebn-theme-set-gedit ohmydebn-theme-set-starship \
     ohmydebn-theme-set-antigravity ohmydebn-theme-set-cava ohmydebn-theme-set-eza \

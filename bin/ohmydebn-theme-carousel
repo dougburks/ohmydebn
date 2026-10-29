@@ -201,6 +201,10 @@ def launch_env(pre_win):
     env = dict(os.environ)
     if pre_win:
         env["OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN"] = pre_win
+    else:
+        # The OhMyDebn menu exports it for its own launches, so a carousel
+        # opened from there inherits one meant for another window.
+        env.pop("OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN", None)
     return env
 
 

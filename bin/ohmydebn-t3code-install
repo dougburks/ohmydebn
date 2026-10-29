@@ -16,7 +16,7 @@ if ! dpkg -s "ohmydebn-t3code" >/dev/null 2>&1; then
     echo "https://github.com/pingdotgg/t3code"
     echo
     echo "T3 Code runs the AI coding agents you already have installed"
-    echo "(OpenCode, Claude Code, Codex, Grok Build) side by side in one window."
+    echo "(OpenCode, Claude Code, Codex, Grok Build, Pi) side by side in one window."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r

@@ -22,7 +22,7 @@ if ! dpkg -s "velo" >/dev/null 2>&1; then
 velo is now installed.
 
 You can start it from the command line with velo, or from the OhMyDebn
-Menu: Trigger > Speed Test.
+Menu: Trigger > Speed Test > Speed and Bufferbloat (velo).
 
 EOM
 fi

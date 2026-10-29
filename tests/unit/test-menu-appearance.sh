@@ -9,7 +9,8 @@
 # The search index comes from the real bin/ohmydebn-menu-tree reading the
 # real bin/ohmydebn-menu; the Go dispatch from the menu's own go_to_menu(),
 # sourced without its last line (which shows the menu) and with every
-# show_*_menu it calls replaced by a stand-in that only logs.
+# show_*_menu it calls replaced by a stand-in that only logs. The same
+# setup checks that an app picked from a search ends the menu there.
 
 set -uo pipefail
 
@@ -58,6 +59,27 @@ GO=$(
 assert_eq "Go: Appearance opens the Appearance menu, and Apps still Apps" \
   "show_appearance_menu
 show_apps_menu" "$GO"
+
+# --- an app picked from a search: launched by the picker, nothing more ---
+# The picker replies with the app's desktop id; matched like a label,
+# mintupdate.desktop opened the Update menu, and system-config-printer's
+# the System menu.
+for app in mintupdate.desktop system-config-printer.desktop firefox.desktop; do
+  for caller in show_main_menu show_apps_menu; do
+    OPENED=$(
+      # shellcheck disable=SC1090
+      source <(sed '/^show_main_menu$/d' "$REPO_ROOT/bin/ohmydebn-menu") 2>/dev/null
+      for f in $(declare -F | awk '$3 ~ /^show_.*_menu$/ {print $3}'); do
+        [[ $f == "$caller" ]] || eval "$f() { echo $f; }"
+      done
+      # shellcheck disable=SC2034 # read by the sourced menu()
+      get_picker_result() { MENU_PICKER_RESULT="$app"; }
+      "$caller" 2>/dev/null
+      echo "carried on"
+    )
+    assert_eq "search pick of $app from $caller: no menu opens after it" "" "$OPENED"
+  done
+done
 
 mock_cleanup
 test_summary

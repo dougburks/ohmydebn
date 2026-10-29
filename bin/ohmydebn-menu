@@ -388,6 +388,17 @@ menu() {
   get_picker_result "$options" "$breadcrumb_prefix"
   local result="$MENU_PICKER_RESULT"
 
+  # An app picked from a search that merges in Other Apps (at the top, in
+  # Apps, and in the lists built at runtime): the picker has already
+  # launched it and replies with its desktop id, which is no label here.
+  # Left to the caller's case, it was matched like one - picking Update
+  # Manager (mintupdate.desktop) went on to open the Update menu, and in
+  # Apps the fallback arm brought the Go menu back. There's nothing left
+  # to do.
+  if [[ "$result" == *.desktop ]]; then
+    exit 0
+  fi
+
   if [[ "$result" == *" > "* ]]; then
     # A searched descendant. ohmydebn-menu-picker always returns the full
     # absolute breadcrumb, so strip this call's own prefix off the front

@@ -10,13 +10,14 @@
 #   ~/.gemini/antigravity/global_skills  Antigravity - reads nothing else.
 #   ~/.agents/skills                     The Agent Skills spec's shared,
 #                                        vendor-neutral directory: Pi and
-#                                        OpenCode scan it (Codex, Amp,
-#                                        Cursor, Copilot CLI and Gemini CLI
-#                                        do as well). Pi does NOT read
-#                                        ~/.claude/skills unless a user
-#                                        opts in via its settings - which
-#                                        is how Pi went without the skill
-#                                        before this directory was added.
+#                                        OpenCode scan it (Codex, Crush,
+#                                        Amp, Cursor, Copilot CLI and
+#                                        Gemini CLI do as well). Pi does
+#                                        NOT read ~/.claude/skills unless a
+#                                        user opts in via its settings -
+#                                        which is how Pi went without the
+#                                        skill before this directory was
+#                                        added.
 #
 # Idempotent by inspecting the links themselves rather than a one-time
 # state marker: a link the user (or an agent's uninstaller) removed comes

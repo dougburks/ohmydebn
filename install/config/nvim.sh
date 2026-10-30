@@ -26,28 +26,51 @@ if dpkg -s "ohmydebn-neovim-plugins" >/dev/null 2>&1; then
     mv $NVIM_PLUGINS/core.lua $NVIM_PLUGINS/core.lua.disabled
   fi
 
+  # The link that follows the desktop theme is made only where there's
+  # nothing at all: a theme.lua of the user's own (one Neovim theme whatever
+  # the desktop's) used to be replaced by the link on every update. No
+  # release has written theme.lua as anything but this link.
   NVIM_THEME=$NVIM_PLUGINS/theme.lua
-  if [ ! -L $NVIM_THEME ]; then
+  if [ ! -e $NVIM_THEME ] && [ ! -L $NVIM_THEME ]; then
     /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring neovim theme"
     ln -snf ~/.config/ohmydebn/current/theme/neovim.lua $NVIM_THEME
   fi
 
+  # OhMyDebn's own Neovim settings below are each added once, under a
+  # marker, so deleting one turns it off for good (deleting
+  # snacks-animated-scrolling-off.lua brings animated scrolling back, say).
+  # They used to be copied whenever missing, so a deleted one came back
+  # with the next update. A config that already has the file just gets the
+  # marker; a setting added in a later release reaches existing configs
+  # through a marker of its own.
   LAZYVIM=$NVIM_CONFIG_DIR/lazyvim.json
-  if [ ! -f $LAZYVIM ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $LAZYVIM"
-    cp -av /usr/share/ohmydebn/config/nvim/lazyvim.json $LAZYVIM
+  LAZYVIM_STATE=$NVIM_STATE_DIR/nvim-lazyvim-json-20261027
+  if [ ! -f $LAZYVIM_STATE ]; then
+    if [ ! -f $LAZYVIM ]; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $LAZYVIM"
+      cp -av /usr/share/ohmydebn/config/nvim/lazyvim.json $LAZYVIM
+    fi
+    touch $LAZYVIM_STATE
   fi
 
   SCROLLING=$NVIM_PLUGINS/snacks-animated-scrolling-off.lua
-  if [ ! -f $SCROLLING ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $SCROLLING"
-    cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-animated-scrolling-off.lua $SCROLLING
+  SCROLLING_STATE=$NVIM_STATE_DIR/nvim-scrolling-off-20261027
+  if [ ! -f $SCROLLING_STATE ]; then
+    if [ ! -f $SCROLLING ]; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $SCROLLING"
+      cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-animated-scrolling-off.lua $SCROLLING
+    fi
+    touch $SCROLLING_STATE
   fi
 
   DASHBOARD_STATUSLINE=$NVIM_PLUGINS/snacks-dashboard-statusline.lua
-  if [ ! -f $DASHBOARD_STATUSLINE ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $DASHBOARD_STATUSLINE"
-    cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-dashboard-statusline.lua $DASHBOARD_STATUSLINE
+  DASHBOARD_STATUSLINE_STATE=$NVIM_STATE_DIR/nvim-dashboard-statusline-20261027
+  if [ ! -f $DASHBOARD_STATUSLINE_STATE ]; then
+    if [ ! -f $DASHBOARD_STATUSLINE ]; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $DASHBOARD_STATUSLINE"
+      cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/snacks-dashboard-statusline.lua $DASHBOARD_STATUSLINE
+    fi
+    touch $DASHBOARD_STATUSLINE_STATE
   fi
 
   TRANSPARENCY=$NVIM_CONFIG_DIR/plugin/after/transparency.lua
@@ -75,16 +98,25 @@ if dpkg -s "ohmydebn-neovim-plugins" >/dev/null 2>&1; then
     touch $NVIM_RELATIVENUMBER_STATE
   fi
 
+  # Added once, like the settings above.
   ALL_THEMES=$NVIM_PLUGINS/all-themes.lua
-  if [ ! -f $ALL_THEMES ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $ALL_THEMES"
-    cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/all-themes.lua $ALL_THEMES
+  ALL_THEMES_STATE=$NVIM_STATE_DIR/nvim-all-themes-20261027
+  if [ ! -f $ALL_THEMES_STATE ]; then
+    if [ ! -f $ALL_THEMES ]; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $ALL_THEMES"
+      cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/all-themes.lua $ALL_THEMES
+    fi
+    touch $ALL_THEMES_STATE
   fi
 
   HOTRELOAD=$NVIM_PLUGINS/omarchy-theme-hotreload.lua
-  if [ ! -f $HOTRELOAD ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $HOTRELOAD"
-    cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/omarchy-theme-hotreload.lua $HOTRELOAD
+  HOTRELOAD_STATE=$NVIM_STATE_DIR/nvim-theme-hotreload-20261027
+  if [ ! -f $HOTRELOAD_STATE ]; then
+    if [ ! -f $HOTRELOAD ]; then
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Creating $HOTRELOAD"
+      cp -av /usr/share/ohmydebn/config/nvim/lua/plugins/omarchy-theme-hotreload.lua $HOTRELOAD
+    fi
+    touch $HOTRELOAD_STATE
   fi
 
   # 20260926 Neovim now comes from ohmydebn-neovim (current upstream) instead

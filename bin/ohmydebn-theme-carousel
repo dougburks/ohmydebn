@@ -3,9 +3,10 @@
 # ohmydebn-theme-carousel: full-screen, Omarchy-style theme AND background
 # browser - launched by Ctrl+Super+T, Ctrl+Super+B (both bound to this same
 # script - see install/keybinding/keybinding-custom.txt), and ohmydebn-menu's
-# Style entry directly. Used to be two separate scripts/hotkeys/menu entries
-# (this one for themes only, ohmydebn-theme-bg-carousel for backgrounds
-# within the current theme only); folded into one after this version proved
+# Appearance > Theme and Appearance > Background entries directly. Used to
+# be two separate scripts/hotkeys/menu entries (this one for themes only,
+# ohmydebn-theme-bg-carousel for backgrounds within the current theme
+# only); folded into one after this version proved
 # out a D-pad that handles both without the old bg-carousel's separate
 # "applies live on every keypress" model - here, nothing touches the live
 # desktop until Enter, for backgrounds exactly the same way it always worked
@@ -85,6 +86,9 @@ USER_THEMES_DIR = os.path.expanduser("~/.config/ohmydebn/themes")
 SYSTEM_THEMES_DIR = "/usr/share/ohmydebn-themes"
 CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
 CURRENT_BACKGROUND_LINK = os.path.expanduser("~/.config/ohmydebn/current/background")
+# Where ohmydebn-theme-set keeps the background each theme was showing
+# when it was last left (one file per theme, holding the path).
+THEME_BACKGROUNDS_MEMORY_DIR = os.path.expanduser("~/.local/state/ohmydebn-theme-backgrounds")
 
 # Persists load_cover_pixbuf's decoded-and-cropped output across separate
 # carousel launches (each Ctrl+Super+T is a fresh process - the in-memory
@@ -197,6 +201,10 @@ def launch_env(pre_win):
     env = dict(os.environ)
     if pre_win:
         env["OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN"] = pre_win
+    else:
+        # The OhMyDebn menu exports it for its own launches, so a carousel
+        # opened from there inherits one meant for another window.
+        env.pop("OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN", None)
     return env
 
 
@@ -414,6 +422,42 @@ def current_background_path():
         return os.readlink(CURRENT_BACKGROUND_LINK)
     except OSError:
         return None
+
+
+def remembered_background_path(slug):
+    """The background `slug` was showing when it was last switched away
+    from, as ohmydebn-theme-set recorded it, or None."""
+    if not slug or slug.startswith(".") or "/" in slug:
+        return None
+    try:
+        with open(os.path.join(THEME_BACKGROUNDS_MEMORY_DIR, slug), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def starting_background_index(slug, backgrounds):
+    """Which of `backgrounds` (list_backgrounds_for_theme's order) the
+    carousel first previews for `slug`: the live one for the theme that's
+    applied now, the one it last showed for any other (so Enter with no
+    navigation applies what the theme had before, as ohmydebn-theme-set
+    does without --background), and otherwise the first.
+
+    Matched by filename, not full path: the live symlink points into
+    ~/.config/ohmydebn/current/theme/backgrounds/, which ohmydebn-theme-set
+    fills with a real copy (cp -r) of theme_dir(slug) - a different path
+    string from `backgrounds` (built from theme_dir(slug) directly) for
+    every background except the user's own, which live at the same path on
+    both sides. An exact-path comparison matched nothing for any stock
+    background, leaving the preview at the first, so Enter with no
+    navigation silently reverted the desktop to background #1."""
+    wanted = current_background_path() if slug == current_theme_slug() else remembered_background_path(slug)
+    if wanted:
+        wanted_name = os.path.basename(wanted)
+        for i, path in enumerate(backgrounds):
+            if os.path.basename(path) == wanted_name:
+                return i
+    return 0
 
 
 def get_monitor_geometry():
@@ -1667,39 +1711,16 @@ class Carousel(Gtk.Window):
 
     def _load_backgrounds(self):
         """Recompute the background list for whichever theme is now
-        selected, and reset which one is previewed - seeded from the live
-        symlink when this happens to be the theme that's actually currently
-        applied, the same idea self.index above uses to seed from
-        current_theme_slug()."""
+        selected, and reset which one is previewed (see
+        starting_background_index) - the same idea self.index above uses
+        to seed from current_theme_slug()."""
         if not self.slugs:
             self.backgrounds = []
             self.bg_index = 0
             return
         slug = self.slugs[self.index]
         self.backgrounds = list_backgrounds_for_theme(slug)
-        self.bg_index = 0
-        if slug == current_theme_slug():
-            live = current_background_path()
-            if live:
-                # Match by filename, not full path - confirmed by hand
-                # against the real ~/.config/ohmydebn/current/background
-                # symlink: it points into
-                # ~/.config/ohmydebn/current/theme/backgrounds/, which
-                # ohmydebn-theme-set populates with `cp -r` (a real copy,
-                # not a symlink) from theme_dir(slug) - a different path
-                # string than self.backgrounds (built from theme_dir(slug)
-                # directly) for every background except user overrides,
-                # which do already live at the same path on both sides.
-                # An exact-path comparison here silently matched nothing
-                # for any non-override background, leaving bg_index stuck
-                # at 0 on open even when a different background was
-                # actually live - so pressing Enter with no navigation at
-                # all would silently revert the desktop to background #1.
-                live_name = os.path.basename(live)
-                for i, path in enumerate(self.backgrounds):
-                    if os.path.basename(path) == live_name:
-                        self.bg_index = i
-                        break
+        self.bg_index = starting_background_index(slug, self.backgrounds)
 
     def _cache_lookup(self, key):
         """(hit, pixbuf) - hit distinguishes a cached None (a file that

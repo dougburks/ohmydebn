@@ -1,0 +1,25 @@
+#!/bin/bash
+#
+# Runs Crush in a fresh ~/crush-sessions directory (like Codex's and Grok
+# Build's runners), installing it first if needed. apt updates it from the
+# OhMyDebn repo; Crush has no updater of its own.
+
+set -euo pipefail
+
+if ! dpkg -s "crush" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  # A failed install would otherwise end the script here (set -e) and close
+  # the terminal before its error could be read.
+  if ! /usr/share/ohmydebn/bin/ohmydebn-crush-install; then
+    echo
+    echo "The install didn't finish - see the messages above."
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+    exit 1
+  fi
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+
+if dpkg -s "crush" >/dev/null 2>&1; then
+  mkdir -p ~/crush-sessions && cd "$(mktemp -d ~/crush-sessions/session-XXXXXX)"
+  exec /usr/bin/crush
+fi

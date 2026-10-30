@@ -40,7 +40,7 @@ build_machine() {
   echo "4.8.0" >"$OMD/VERSION"
   printf 'PACKAGES=(\n  alacritty\n  bat # comment\n  cinnamon-desktop-environment\n)\n' >"$OMD/install/packaging/dependencies.sh"
   printf 'keybinding-custom 0 "Browser" "/usr/share/ohmydebn/bin/ohmydebn-browser-tiled" "['"'"'<Super>B'"'"']" "Press Super + B"\nkeybinding-custom 1 "Update" "/usr/share/ohmydebn/bin/ohmydebn-update-gui" "['"'"'<Ctrl><Super>U'"'"']" "Press Ctrl+Super+U"\n' >"$OMD/install/keybinding/keybinding-custom.txt"
-  for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli ohmydebn-power omarchy; do
+  for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-crush-cli ohmydebn-omp-cli ohmydebn-pi-cli ohmydebn-power omarchy; do
     printf '#!/bin/bash\n' >"$OMD/bin/$w"; chmod +x "$OMD/bin/$w"
   done
   : >"$ROOT/etc/apt/sources.list.d/ohmydebn.sources"; echo key >"$ROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
@@ -55,7 +55,7 @@ build_machine() {
   echo opencode >"$H/.config/ohmydebn/current/default-ai"
   printf '{"autoclose": {"type": "checkbox", "default": true, "value": true}}\n' >"$H/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
   for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do ln -s /usr/share/ohmydebn/config/ohmydebn-skill "$H/$d/ohmydebn"; done
-  printf "alias c='x'\nalias pi='x'\nalias codex='x'\nalias grok='x'\nalias omp='x'\nalias claude='x'\nalias a='x'\n" >"$H/.zshrc"
+  printf "alias c='x'\nalias pi='x'\nalias codex='x'\nalias grok='x'\nalias crush='x'\nalias omp='x'\nalias claude='x'\nalias a='x'\n" >"$H/.zshrc"
   ln -s "$H/.config/ohmydebn" "$H/.config/omarchy"
   ln -s /usr/share/ohmydebn-themes "$H/.local/share/omarchy/themes"
   ln -s "$H/.config/ohmydebn/current" "$H/.local/state/omarchy/current"
@@ -81,12 +81,12 @@ build_machine() {
   # Defaults, config files, shell and kernel mitigations: a browser that
   # resolves, an installed default AI, parseable TOML, Oh My Zsh, the menu
   # launcher, and both module blocks in place with none of them loaded.
-  mkdir -p "$ROOT/usr/share/applications" "$H/.config/alacritty" "$H/.oh-my-zsh" "$H/.local/share/applications" \
+  mkdir -p "$ROOT/usr/share/applications" "$H/.config/alacritty" "$ROOT/usr/share/oh-my-zsh" "$H/.local/share/applications" \
     "$ROOT/etc/modprobe.d" "$ROOT/proc"
   : >"$ROOT/usr/share/applications/firefox-esr.desktop"
   printf '[general]\nimport = ["~/.config/ohmydebn/current/theme/alacritty.toml"]\n' >"$H/.config/alacritty/alacritty.toml"
-  printf 'source $ZSH/oh-my-zsh.sh\n' >>"$H/.zshrc"
-  : >"$H/.oh-my-zsh/oh-my-zsh.sh"
+  printf 'export ZSH="/usr/share/oh-my-zsh"\nsource $ZSH/oh-my-zsh.sh\n' >>"$H/.zshrc"
+  : >"$ROOT/usr/share/oh-my-zsh/oh-my-zsh.sh"
   : >"$H/.local/share/applications/ohmydebn-menu.desktop"
   : >"$ROOT/etc/modprobe.d/disable-algif-aead.conf"; : >"$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
   printf 'ext4 1000 1 - Live 0x0\nvirtio_net 100 0 - Live 0x0\n' >"$ROOT/proc/modules"
@@ -275,7 +275,7 @@ assert_contains "healthy: clock synchronized (chrony)" "$OUTPUT" "ok - clock syn
 assert_not_contains "healthy: no OhMyDebn updates waiting" "$OUTPUT" "updates available"
 assert_contains "healthy: default browser installed" "$OUTPUT" "ok - default browser installed (firefox-esr.desktop)"
 assert_contains "healthy: default AI installed" "$OUTPUT" "ok - default AI assistant installed (opencode)"
-assert_contains "healthy: Oh My Zsh installed" "$OUTPUT" "ok - ~/.oh-my-zsh installed"
+assert_contains "healthy: Oh My Zsh installed" "$OUTPUT" "ok - Oh My Zsh installed in /usr/share/oh-my-zsh"
 assert_contains "healthy: menu launcher present" "$OUTPUT" "ok - ~/.local/share/applications/ohmydebn-menu.desktop present"
 mock_cleanup
 
@@ -413,7 +413,7 @@ mock_cleanup
 # --- defaults, config, shell and security problems: each caught and explained ---
 build_machine yes
 printf '[general\nbroken = ' >"$H/.config/alacritty/alacritty.toml"                 # unparseable
-rm "$H/.oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desktop"
+rm "$ROOT/usr/share/oh-my-zsh/oh-my-zsh.sh" "$H/.local/share/applications/ohmydebn-menu.desktop"
 rm "$ROOT/etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
 run_doctor MOCK_BROWSER=gone.desktop MOCK_AI_INSTALLED=codex MOCK_LEAP="Not synchronised" "MOCK_UPGRADABLE=ohmydebn ohmydebn-neovim"
 assert_eq "defaults etc: exits 1" "1" "$EXIT_CODE"
@@ -421,11 +421,22 @@ assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal con
 assert_contains "defaults etc: Super+B does nothing" "$OUTPUT" "FAIL - Super+B opens a browser (the default (gone.desktop) isn't installed and there's no x-www-browser"
 assert_contains "defaults etc: uninstalled default AI is a note, not a failure" "$OUTPUT" "default AI assistant (opencode) isn't installed - Super+A offers to install it"
 assert_not_contains "defaults etc: no FAIL for the AI default" "$OUTPUT" "FAIL - default AI assistant"
-assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - ~/.oh-my-zsh installed"
+assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - Oh My Zsh installed in /usr/share/oh-my-zsh"
 assert_contains "defaults etc: missing menu launcher caught" "$OUTPUT" "FAIL - ~/.local/share/applications/ohmydebn-menu.desktop present"
 assert_contains "defaults etc: missing module block named" "$OUTPUT" "FAIL - vulnerable kernel modules blocked (missing /etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"
 assert_contains "defaults etc: unsynced clock caught" "$OUTPUT" "FAIL - clock synchronized (chronyc tracking: Not synchronised)"
 assert_contains "defaults etc: waiting OhMyDebn updates listed" "$OUTPUT" "OhMyDebn updates available: ohmydebn ohmydebn-neovim - run: ohmydebn-update"
+mock_cleanup
+
+# --- a .zshrc still on the downloaded ~/.oh-my-zsh (one the update didn't move) ---
+build_machine yes
+sed -i 's#^export ZSH=.*#export ZSH="$HOME/.oh-my-zsh"#' "$H/.zshrc"
+run_doctor
+assert_contains "own ~/.oh-my-zsh, missing: that copy is what's checked" "$OUTPUT" "FAIL - ~/.oh-my-zsh installed (~/.zshrc uses it)"
+mkdir -p "$H/.oh-my-zsh"
+: >"$H/.oh-my-zsh/oh-my-zsh.sh"
+run_doctor
+assert_contains "own ~/.oh-my-zsh, present: ok" "$OUTPUT" "ok - ~/.oh-my-zsh installed (~/.zshrc uses it)"
 mock_cleanup
 
 # --- a default browser that's gone, with x-www-browser to fall back on; a
@@ -474,6 +485,10 @@ assert_contains "Ubuntu-based with Debian sources: caught" "$OUTPUT" "FAIL - Ubu
 rm "$ROOT/etc/apt/sources.list.d/debian.sources"
 run_doctor
 assert_contains "Ubuntu-based with its own sources: ok" "$OUTPUT" "ok - Ubuntu-based: no Debian apt sources mixed in"
+assert_contains "Zorin OS 18: a supported distro" "$OUTPUT" "ok - supported distro"
+printf 'PRETTY_NAME="Zorin OS 17.3"\nID=zorin\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=jammy\nUBUNTU_CODENAME=jammy\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Zorin OS 17: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
 mock_cleanup
 
 # --- Neovim, broken in each of the ways the doctor checks ---
@@ -613,6 +628,19 @@ assert_contains "chatgpt repo without its pin: flagged" "$OUTPUT" "no pin for: c
 : >"$ROOT/etc/apt/preferences.d/chatgpt.pref"
 run_doctor
 assert_contains "chatgpt repo with its pin: counted as pinned" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (2)"
+mock_cleanup
+
+# --- Brave's repo is OhMyDebn's only as .sources: Zorin OS ships its own
+# brave-browser-release.list, unpinned, and that's not a failure ---
+build_machine yes
+echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" \
+  >"$ROOT/etc/apt/sources.list.d/brave-browser-release.list"
+run_doctor
+assert_not_contains "Zorin OS's own Brave .list: not flagged" "$OUTPUT" "no pin for"
+assert_contains "Zorin OS's own Brave .list: not counted as ours" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (1)"
+: >"$ROOT/etc/apt/sources.list.d/brave-browser-release.sources"
+run_doctor
+assert_contains "OhMyDebn's Brave .sources without its pin: flagged by name" "$OUTPUT" "no pin for: brave-browser-release"
 mock_cleanup
 
 # --- the header's display scale: Cinnamon's own answer, else the setting ---

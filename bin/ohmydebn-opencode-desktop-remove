@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if ! dpkg -s "opencode" >/dev/null 2>&1; then
+  echo
+  echo "OpenCode Desktop is not currently installed."
+else
+  if [ "${1:-}" != "--skip-prompt" ]; then
+    echo
+    echo "Continuing will remove OpenCode Desktop. Your OpenCode settings and"
+    echo "conversations are kept, along with the OpenCode terminal app."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y purge opencode
+  sudo /usr/bin/apt -y autoremove
+fi

@@ -11,8 +11,23 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
+
+  # The key is checked against the fingerprint Helium publishes in its
+  # README (github.com/imputnet/helium-linux, checked 2026-10-27) before apt
+  # trusts it (see ohmydebn-pgp-fingerprint), so a key swapped in transit
+  # or in the repository is refused. The key expires in October 2028; when
+  # Helium replaces it, installs refuse the new one until the fingerprint
+  # here is updated.
+  KEY_URL=https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != BE677C1989D35EAB2C5F26C9351601AD01D6378E ]; then
+    echo "The signing key from $KEY_URL isn't the one Helium publishes, so it wasn't installed."
+    exit 1
+  fi
   sudo mkdir -p /usr/share/keyrings
-  curl -fsSL https://raw.githubusercontent.com/imputnet/helium-linux/main/pubkey.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg
+  sudo gpg --dearmor --yes -o /usr/share/keyrings/helium.gpg "$KEY_FILE"
   echo "deb [signed-by=/usr/share/keyrings/helium.gpg] https://pkg.helium.computer/deb stable main" | sudo tee /etc/apt/sources.list.d/helium.list >/dev/null
 
   # Restricts this repo to the one package it's actually needed for - a

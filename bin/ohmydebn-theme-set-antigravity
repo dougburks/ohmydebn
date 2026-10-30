@@ -2,9 +2,8 @@
 
 # Antigravity is a VS Code fork with the same settings.json and extension
 # handling, so it's themed by ohmydebn-theme-set-vscode, pointed at its
-# own binary, settings and skip toggle. This used to be a full copy of
-# that hook, settings escaping and all, kept in step by hand.
+# own binary and settings. This used to be a full copy of that hook,
+# settings escaping and all, kept in step by hand.
 exec /usr/share/ohmydebn/bin/ohmydebn-theme-set-vscode \
   /usr/share/antigravity/bin/antigravity \
-  "$HOME/.config/Antigravity/User/settings.json" \
-  "$HOME/.local/state/ohmydebn/toggles/skip-antigravity-theme-changes"
+  "$HOME/.config/Antigravity/User/settings.json"

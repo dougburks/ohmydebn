@@ -6,6 +6,7 @@
 # keeps one backup, config.backup-before-ohmydebn: the config as it was
 # before OhMyDebn first changed it. The per-switch backups already there
 # are folded in: the oldest becomes that backup, the rest are removed.
+# It also writes out short colors and passes over ones that aren't colors.
 # HOME is a scratch directory, and pkill a stand-in, so a cava running on
 # this machine isn't signalled.
 
@@ -62,6 +63,19 @@ for t in 20260201-090000 20260301-090000 20261001-090000; do echo "an OhMyDebn-c
 run
 assert_eq "old backups: folded into one" "config.backup-before-ohmydebn " "$(backups)"
 assert_eq "old backups: the oldest one is kept as the backup" "the user's own config" "$(cat "$CAVA/config.backup-before-ohmydebn")"
+mock_cleanup
+
+# --- theme colors it can't read as hex pairs ---
+# "#0f8" stopped the hook with a bash error, and ohmydebn-theme-set (set -e)
+# with it. Short colors are written out; one that isn't a color gives way
+# to the default.
+setup
+# (cava reads the color0-15 names; this theme's colors.toml has none.)
+printf 'color6 = "#0f8"\ncolor5 = "pink"\n' >>"$H/.config/ohmydebn/current/theme/colors.toml"
+run
+assert_eq "odd colors: exits 0" "0" "$STATUS"
+assert_contains "short color: written out" "$(cat "$CAVA/config")" "gradient_color_1 = '#00ff88'"
+assert_contains "not a color: the default instead" "$(cat "$CAVA/config")" "'#f5c2e7'"
 mock_cleanup
 
 test_summary

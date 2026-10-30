@@ -100,7 +100,7 @@ if [ -f "$OS_RELEASE" ]; then
   linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
-  pop) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
+  pop | zorin) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
   esac
   if [ "$DISTRO_OK" = true ]; then ok "supported distro"; else fail "supported distro" "install.sh would warn: unsupported"; fi
   # install.sh adds Debian's sources on Debian-based distros only: mixing
@@ -147,15 +147,21 @@ fi
 # Each third-party repo an OhMyDebn installer adds is pinned to that
 # vendor's own packages, so it can't replace anyone else's. VS Code's,
 # Chrome's, ChatGPT's and Claude Desktop's repos are added or kept up to
-# date by the vendors' own packages (.list or .sources). The list of repos and pins is ohmydebn-apt-pins'.
+# date by the vendors' own packages (.list or .sources). The list of repos
+# and pins is ohmydebn-apt-pins'; a repo named with its extension is only
+# OhMyDebn's in that form (Brave's .sources: Zorin OS ships its own
+# brave-browser-release.list, unpinned, as its own choice).
 mapfile -t PINS < <("$OHMYDEBN/bin/ohmydebn-apt-pins" --list 2>/dev/null)
 PINNED=0
 MISSING=()
 for entry in "${PINS[@]}"; do
   source_name=${entry%%:*}
   pref=${entry#*:}
-  [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.list" ] || [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.sources" ] || continue
-  if [ -f "$SYSROOT/etc/apt/preferences.d/$pref" ]; then PINNED=$((PINNED + 1)); else MISSING+=("$source_name"); fi
+  case "$source_name" in
+  *.list | *.sources) [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name" ] || continue ;;
+  *) [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.list" ] || [ -e "$SYSROOT/etc/apt/sources.list.d/$source_name.sources" ] || continue ;;
+  esac
+  if [ -f "$SYSROOT/etc/apt/preferences.d/$pref" ]; then PINNED=$((PINNED + 1)); else MISSING+=("${source_name%.*}"); fi
 done
 if [ ${#MISSING[@]} -gt 0 ]; then fail "third-party apt repos pinned to their own packages" "no pin for: ${MISSING[*]}"; elif [ "$PINNED" -gt 0 ]; then ok "third-party apt repos pinned to their own packages ($PINNED)"; fi
 
@@ -542,14 +548,14 @@ for d in .claude/skills .gemini/antigravity/global_skills .agents/skills; do
 done
 DEFAULT_AI=$(cat "$CONFIG/current/default-ai" 2>/dev/null || echo "unset - opencode")
 case "$DEFAULT_AI" in
-opencode | claude-code | claude-desktop | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
+opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode | antigravity | "unset - opencode") ok "default AI is valid ($DEFAULT_AI)" ;;
 *) fail "default AI is valid" "$DEFAULT_AI" ;;
 esac
-for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-omp-cli ohmydebn-pi-cli; do
+for w in ohmydebn-ai ohmydebn-ai-cli ohmydebn-opencode-cli ohmydebn-claude-code-cli ohmydebn-codex-cli ohmydebn-grok-cli ohmydebn-crush-cli ohmydebn-omp-cli ohmydebn-pi-cli; do
   check "wrapper $w executable" test -x "$OHMYDEBN/bin/$w"
 done
 if [ -f "$HOME/.zshrc" ]; then
-  for a in c pi omp codex grok claude a; do
+  for a in c pi omp codex grok crush claude a; do
     if grep -qE "^alias $a=" "$HOME/.zshrc"; then ok "zsh alias '$a' present"; else fail "zsh alias '$a' present"; fi
   done
 else
@@ -659,12 +665,19 @@ fi
 
 # ------------------------------------------------------------------ tools
 section "Tools other scripts rely on"
-# install/config/ohmyzsh.sh downloads Oh My Zsh at install time; if that
-# failed, OhMyDebn's ~/.zshrc sources a file that isn't there.
+# ~/.zshrc sources Oh My Zsh from where its ZSH line says: OhMyDebn's
+# package (/usr/share/oh-my-zsh), or for a .zshrc install/config/ohmyzsh.sh
+# didn't move onto the package, the copy once downloaded into ~/.oh-my-zsh.
+# Either way a missing oh-my-zsh.sh means every new terminal starts with an
+# error.
 if grep -q 'oh-my-zsh.sh' "$HOME/.zshrc" 2>/dev/null; then
-  # The tilde is descriptive, not a path to expand.
-  # shellcheck disable=SC2088
-  check "~/.oh-my-zsh installed (~/.zshrc uses it)" test -f "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+  if grep -qF 'export ZSH="$HOME/.oh-my-zsh"' "$HOME/.zshrc"; then
+    # The tilde is descriptive, not a path to expand.
+    # shellcheck disable=SC2088
+    check "~/.oh-my-zsh installed (~/.zshrc uses it)" test -f "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+  else
+    check "Oh My Zsh installed in /usr/share/oh-my-zsh (~/.zshrc uses it)" test -f "$SYSROOT/usr/share/oh-my-zsh/oh-my-zsh.sh"
+  fi
 fi
 # shellcheck disable=SC2088
 check "~/.local/share/applications/ohmydebn-menu.desktop present (the OhMyDebn Menu launcher)" test -f "$HOME/.local/share/applications/ohmydebn-menu.desktop"

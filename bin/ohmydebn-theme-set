@@ -181,6 +181,27 @@ if theme_came_from_a_repo "$THEME_PATH" && [[ -L "$THEME_PATH/colors.toml" || -L
   exit 1
 fi
 
+# Remember the background the theme being left was showing, so coming
+# back to it later shows that one again instead of the theme's first
+# (ohmydebn-theme-bg-next reads it when no background is asked for). Kept
+# per theme name, as the path the background link points to; one that's
+# gone by then just falls back to the first. The name came from theme.name,
+# so it's checked as THEME_NAME is before being used as a file name.
+if [[ -n "$OLD_THEME_NAME" && "$OLD_THEME_NAME" != "$THEME_NAME" &&
+  "$OLD_THEME_NAME" != .* && "$OLD_THEME_NAME" != */* ]]; then
+  OLD_BACKGROUND=$(readlink -- "$HOME/.config/ohmydebn/current/background" 2>/dev/null) || true
+  if [[ -n "$OLD_BACKGROUND" ]]; then
+    # Not under ~/.local/state/ohmydebn: that's a file, the installation-
+    # complete marker. And only a nicety, so a memory that can't be written
+    # never stops the theme change (set -e would end the script here).
+    BACKGROUND_MEMORY="$HOME/.local/state/ohmydebn-theme-backgrounds/$OLD_THEME_NAME"
+    if mkdir -p "${BACKGROUND_MEMORY%/*}" 2>/dev/null &&
+      printf '%s\n' "$OLD_BACKGROUND" 2>/dev/null >"$BACKGROUND_MEMORY.tmp"; then
+      mv -f "$BACKGROUND_MEMORY.tmp" "$BACKGROUND_MEMORY" 2>/dev/null || true
+    fi
+  fi
+fi
+
 # Setup clean next theme directory (for atomic theme config swapping)
 rm -rf "$NEXT_THEME_PATH"
 mkdir -p "$NEXT_THEME_PATH"
@@ -297,6 +318,9 @@ fi
 
 # Use COLORS_SOURCE to update the Oh My Pi theme
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-omp "$COLORS_SOURCE" "$IS_LIGHT_MODE"
+
+# Use COLORS_SOURCE to update the Crush theme
+/usr/share/ohmydebn/bin/ohmydebn-theme-set-crush "$COLORS_SOURCE" "$IS_LIGHT_MODE"
 
 # If COLORS_SOURCE was dynamically generated, delete it
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$COLORS_SOURCE"

@@ -1,0 +1,11 @@
+#!/bin/bash
+#
+# Opens a terminal running ohmydebn-velo-run - the
+# install-if-needed-then-run payload lives there, not here, so the install
+# and the speed test share one window, as ohmydebn-cliamp does.
+# gTile-OhMyDebn tiles the window itself, matching its --title against
+# /usr/share/ohmydebn/config/tile-rules.json.
+
+set -euo pipefail
+
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'velo' -e /usr/share/ohmydebn/bin/ohmydebn-velo-run

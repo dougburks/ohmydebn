@@ -1,0 +1,199 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-crush: publishes the current OhMyDebn theme as a Crush
+# custom theme, ~/.config/crush/themes/ohmydebn.json. Crush reads its theme
+# only when it starts, so a theme switch shows from Crush's next start.
+#
+# Crush's own colors are fixed per theme rather than taken from the
+# terminal. A theme file sets Crush's color tokens (a missing token comes
+# from Crush's default theme), and a theme from a file is drawn from those
+# tokens alone, so light themes work as well as dark ones. The mapping
+# follows Crush's built-in gruvbox-dark, which maps a standard palette onto
+# the same tokens; the shades between background and foreground are mixed
+# from the theme's own two, so they read correctly on a light theme too.
+# The 16 ANSI tokens, which Crush uses for output of shell commands run in
+# it, are the terminal's own color0-15, so that output looks as it does in
+# the terminal. Omarchy 4+ themes provide every semantic key used here
+# except orange in a few (yellow stands in); older themes fall back to the
+# color0-15 aliases every normalized colors.toml has (see
+# ohmydebn-theme-set-colors). Crush's theme editor saves to the same file,
+# so editing "ohmydebn" there lasts only until the next theme switch.
+#
+# Usage: ohmydebn-theme-set-crush [--activate] [<colors-source> <is-light-mode>]
+#   <colors-source>  normalized colors.toml (default: the current theme's)
+#   <is-light-mode>  accepted for the same call shape as the other theme
+#                    hooks, but not needed (see above)
+#   --activate       also select "ohmydebn" as Crush's theme, once per user
+#                    (run by ohmydebn-crush-install and, for installs that
+#                    had Crush before this hook, install/config/crush.sh).
+#                    It goes in the user's ~/.config/crush/crush.json; a
+#                    theme picked in Crush itself is saved to
+#                    ~/.local/share/crush/crush.json, which Crush reads
+#                    after it, so the user's own pick always wins. An
+#                    active_theme already in crush.json is kept, and a
+#                    crush.json jq can't read (comments) is left alone.
+#
+# Does nothing unless Crush is installed.
+
+set -euo pipefail
+
+ACTIVATE=false
+if [[ "${1:-}" == "--activate" ]]; then
+  ACTIVATE=true
+  shift
+fi
+
+CURRENT_THEME="$HOME/.config/ohmydebn/current/theme"
+COLORS_SOURCE="${1:-$CURRENT_THEME/colors.toml}"
+
+CRUSH_BIN=/usr/bin/crush
+CRUSH_CONFIG_DIR="$HOME/.config/crush"
+CRUSH_CONFIG="$CRUSH_CONFIG_DIR/crush.json"
+THEME_NAME="ohmydebn"
+THEME_FILE="$CRUSH_CONFIG_DIR/themes/$THEME_NAME.json"
+ACTIVATE_STATE=~/.local/state/ohmydebn-config/crush-theme-20261029
+
+[[ -x "$CRUSH_BIN" ]] || exit 0
+[[ -f "$COLORS_SOURCE" ]] || exit 0
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ohmydebn-theme-set-crush: jq is required, skipping Crush theme" >&2
+  exit 0
+fi
+
+parse_color() {
+  grep -E "^\s*$1\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/' || true
+}
+
+# First key that holds a #rrggbb color, so a missing or malformed key falls
+# through to the next.
+pick() {
+  local key value
+  for key in "$@"; do
+    value=$(parse_color "$key")
+    if [[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+      echo "$value"
+      return
+    fi
+  done
+}
+
+# Same math as Omarchy's omarchy-theme-set-templates mix_color: amount of
+# the second color blended into the first.
+mix() {
+  awk -v start="${1#\#}" -v end="${2#\#}" -v amount="$3" '
+    function hex(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+    function pair(h, i) { return hex(substr(h, i, 1)) * 16 + hex(substr(h, i + 1, 1)) }
+    BEGIN {
+      printf "#%02x%02x%02x\n",
+        int(pair(start, 1) * (1 - amount) + pair(end, 1) * amount + 0.5),
+        int(pair(start, 3) * (1 - amount) + pair(end, 3) * amount + 0.5),
+        int(pair(start, 5) * (1 - amount) + pair(end, 5) * amount + 0.5)
+    }'
+}
+
+BACKGROUND=$(pick background color0)
+FOREGROUND=$(pick foreground color7)
+ACCENT=$(pick accent color4)
+if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
+  echo "ohmydebn-theme-set-crush: missing background/foreground/accent in $COLORS_SOURCE, skipping" >&2
+  exit 0
+fi
+RED=$(pick red color1)
+RED=${RED:-$ACCENT}
+GREEN=$(pick green color2)
+GREEN=${GREEN:-$ACCENT}
+YELLOW=$(pick yellow color3)
+YELLOW=${YELLOW:-$ACCENT}
+BLUE=$(pick blue color4)
+BLUE=${BLUE:-$ACCENT}
+MAGENTA=$(pick magenta color5)
+MAGENTA=${MAGENTA:-$ACCENT}
+CYAN=$(pick cyan color6)
+CYAN=${CYAN:-$ACCENT}
+ORANGE=$(pick orange)
+ORANGE=${ORANGE:-$YELLOW}
+BRIGHT_RED=$(pick bright_red color9)
+BRIGHT_RED=${BRIGHT_RED:-$RED}
+BRIGHT_GREEN=$(pick bright_green color10)
+BRIGHT_GREEN=${BRIGHT_GREEN:-$GREEN}
+BRIGHT_YELLOW=$(pick bright_yellow color11)
+BRIGHT_YELLOW=${BRIGHT_YELLOW:-$YELLOW}
+BRIGHT_BLUE=$(pick bright_blue color12)
+BRIGHT_BLUE=${BRIGHT_BLUE:-$BLUE}
+BRIGHT_MAGENTA=$(pick bright_magenta color13)
+BRIGHT_MAGENTA=${BRIGHT_MAGENTA:-$MAGENTA}
+BRIGHT_CYAN=$(pick bright_cyan color14)
+BRIGHT_CYAN=${BRIGHT_CYAN:-$CYAN}
+BRIGHT_FOREGROUND=$(pick bright_foreground color15)
+BRIGHT_FOREGROUND=${BRIGHT_FOREGROUND:-$FOREGROUND}
+MUTED=$(pick muted color8 dark_foreground)
+MUTED=${MUTED:-$(mix "$FOREGROUND" "$BACKGROUND" 0.52)}
+
+# The ANSI tokens take color0-15 first: exactly the terminal's palette.
+ansi() {
+  local value
+  value=$(pick "$1")
+  echo "${value:-$2}"
+}
+
+THEME_JSON=$(jq -n \
+  --arg background "$BACKGROUND" --arg foreground "$FOREGROUND" --arg accent "$ACCENT" \
+  --arg red "$RED" --arg green "$GREEN" --arg yellow "$YELLOW" --arg blue "$BLUE" \
+  --arg magenta "$MAGENTA" --arg cyan "$CYAN" --arg orange "$ORANGE" --arg muted "$MUTED" \
+  --arg bright_red "$BRIGHT_RED" --arg bright_green "$BRIGHT_GREEN" \
+  --arg bright_yellow "$BRIGHT_YELLOW" --arg bright_blue "$BRIGHT_BLUE" \
+  --arg fg20 "$(mix "$FOREGROUND" "$BACKGROUND" 0.20)" \
+  --arg fg34 "$(mix "$FOREGROUND" "$BACKGROUND" 0.34)" \
+  --arg fg52 "$(mix "$FOREGROUND" "$BACKGROUND" 0.52)" \
+  --arg bg06 "$(mix "$BACKGROUND" "$FOREGROUND" 0.06)" \
+  --arg bg10 "$(mix "$BACKGROUND" "$FOREGROUND" 0.10)" \
+  --arg bg20 "$(mix "$BACKGROUND" "$FOREGROUND" 0.20)" \
+  --arg blue40 "$(mix "$BLUE" "$BACKGROUND" 0.40)" \
+  --arg c0 "$(ansi color0 "$BACKGROUND")" --arg c1 "$(ansi color1 "$RED")" \
+  --arg c2 "$(ansi color2 "$GREEN")" --arg c3 "$(ansi color3 "$YELLOW")" \
+  --arg c4 "$(ansi color4 "$BLUE")" --arg c5 "$(ansi color5 "$MAGENTA")" \
+  --arg c6 "$(ansi color6 "$CYAN")" --arg c7 "$(ansi color7 "$FOREGROUND")" \
+  --arg c8 "$(ansi color8 "$MUTED")" --arg c9 "$(ansi color9 "$BRIGHT_RED")" \
+  --arg c10 "$(ansi color10 "$BRIGHT_GREEN")" --arg c11 "$(ansi color11 "$BRIGHT_YELLOW")" \
+  --arg c12 "$(ansi color12 "$BRIGHT_BLUE")" --arg c13 "$(ansi color13 "$BRIGHT_MAGENTA")" \
+  --arg c14 "$(ansi color14 "$BRIGHT_CYAN")" --arg c15 "$(ansi color15 "$BRIGHT_FOREGROUND")" \
+  '{
+    primary: $accent, secondary: $magenta, accent: $green, keyword: $orange,
+    fg_base: $foreground, fg_subtle: $fg20, fg_more_subtle: $fg34, fg_most_subtle: $fg52,
+    bg_base: $background, bg_least_visible: $bg06, bg_less_visible: $bg10, bg_most_visible: $bg20,
+    on_primary: $background, separator: $bg20,
+    destructive: $bright_red, error: $red,
+    warning: $yellow, warning_subtle: $bright_yellow,
+    attention: $orange, busy: $bright_yellow,
+    info: $blue, info_more_subtle: $bright_blue, info_most_subtle: $blue40,
+    success: $green, success_more_subtle: $bright_green, success_most_subtle: $cyan,
+    diff_insert_fg: $green, diff_delete_fg: $red,
+    yolo: $yellow, plan: $magenta, plan_more_subtle: $bg20,
+    button: $accent, button_subtle: $bg10, button_inactive: $bg20, button_hovered: $muted,
+    ansi_black: $c0, ansi_red: $c1, ansi_green: $c2, ansi_yellow: $c3,
+    ansi_blue: $c4, ansi_magenta: $c5, ansi_cyan: $c6, ansi_white: $c7,
+    ansi_bright_black: $c8, ansi_bright_red: $c9, ansi_bright_green: $c10, ansi_bright_yellow: $c11,
+    ansi_bright_blue: $c12, ansi_bright_magenta: $c13, ansi_bright_cyan: $c14, ansi_bright_white: $c15
+  }')
+
+# Temporary file, then rename: Crush reads it only at start, and never
+# sees half a file.
+mkdir -p "$(dirname "$THEME_FILE")"
+TMP=$(mktemp "$THEME_FILE.XXXXXX")
+printf '%s\n' "$THEME_JSON" >"$TMP"
+mv -f "$TMP" "$THEME_FILE"
+
+if [[ "$ACTIVATE" == true && ! -f "$ACTIVATE_STATE" ]]; then
+  if [[ ! -f "$CRUSH_CONFIG" ]]; then
+    jq -n --arg name "$THEME_NAME" '{options: {tui: {active_theme: $name}}}' >"$CRUSH_CONFIG"
+  elif ! jq -e '.options.tui.active_theme' "$CRUSH_CONFIG" >/dev/null 2>&1; then
+    TMP=$(mktemp "$CRUSH_CONFIG.XXXXXX")
+    if jq --arg name "$THEME_NAME" '.options.tui.active_theme = $name' "$CRUSH_CONFIG" >"$TMP" 2>/dev/null; then
+      mv -f "$TMP" "$CRUSH_CONFIG"
+    else
+      rm -f "$TMP"
+    fi
+  fi
+  mkdir -p "$(dirname "$ACTIVATE_STATE")"
+  touch "$ACTIVATE_STATE"
+fi

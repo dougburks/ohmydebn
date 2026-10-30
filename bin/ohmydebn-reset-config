@@ -10,27 +10,33 @@ set -e
 # rewrote git aliases, and changed the default browser and terminal - far
 # more than "reset your config files to OhMyDebn defaults". Not Aether's:
 # OhMyDebn has no default config for it, so a reset only moved the user's
-# Aether folder (with their themes in progress) aside.
+# Aether folder (with their themes in progress) aside. ~/.oh-my-zsh holds
+# the user's own Oh My Zsh plugins and themes (custom/); Oh My Zsh itself
+# comes from the ohmydebn-ohmyzsh package, which a reset leaves alone (on
+# installs from before 4.14.0 the folder also holds the old downloaded
+# copy, which the reset clears away with it).
 CONFIGS=(~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.config/nvim
   ~/.config/starship.toml ~/.oh-my-zsh ~/.zshrc)
 
 # The state markers of the install steps that write those configs, cleared
 # so the steps write them again: bat.sh and btop.sh copy their configs only
 # once; zsh.sh writes .zshrc and then adds its own lines to it (grc, man
-# colors, the AI tool aliases); nvim.sh adds its transparency file to a
-# config; ohmydebn-theme-set-starship writes the Starship config once, when
+# colors, the AI tool aliases); nvim.sh adds its transparency file and its
+# own settings files to a config once each; ohmydebn-theme-set-starship writes the Starship config once, when
 # the theme is reapplied below (missing its marker here left Starship on
-# its built-in prompt after a reset). Alacritty, cava, Oh My Zsh and
-# Neovim's base config are recreated whenever they're missing.
+# its built-in prompt after a reset). Alacritty, cava and Neovim's base
+# config are recreated whenever they're missing.
 # tests/unit/test-reset-config.sh checks that every marker those steps and
 # the theme hooks use is listed here.
 CONFIG_MARKERS=(bat-20251110 btop-config-20250916 starship-20251109 starship-logo-20261018
-  zshrc-20260116 grc color-man pi-alias codex-alias grok-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias prompt-speed-20261018
-  nvim-transparency-20260308 nvim-relativenumber-20260929 nvim-plugins-20260926)
+  zshrc-20260116 grc color-man pi-alias codex-alias grok-alias crush-alias omp-alias opencode-cli-alias claude-alias ai-cli-alias prompt-speed-20261018
+  nvim-transparency-20260308 nvim-relativenumber-20260929 nvim-plugins-20260926
+  nvim-lazyvim-json-20261027 nvim-scrolling-off-20261027 nvim-dashboard-statusline-20261027
+  nvim-all-themes-20261027 nvim-theme-hotreload-20261027)
 
 echo "WARNING!"
 echo "Continuing will reset these config files to OhMyDebn defaults:"
-echo "Alacritty, bat, btop, cava, Neovim, Starship, Oh My Zsh and ~/.zshrc."
+echo "Alacritty, bat, btop, cava, Neovim, Starship, your own Oh My Zsh plugins and themes, and ~/.zshrc."
 echo "Your current ones are kept as backups (renamed to <name>-backup-<date and time>)."
 echo "Your desktop, panel, keybindings, theme and default apps are not changed."
 echo
@@ -62,17 +68,6 @@ done
 RESET_STATUS=0
 OHMYDEBN_RESET=1 OHMYDEBN_SKIP_UPGRADE=1 PATH="/usr/share/ohmydebn/bin:$PATH" \
   bash -e /usr/share/ohmydebn/ohmydebn.sh || RESET_STATUS=$?
-
-# Oh My Zsh is downloaded, not shipped: offline, its step can't fetch a new
-# copy, and ~/.zshrc then failed to load it in every new terminal until an
-# update ran online. It's code rather than settings, so the previous copy
-# goes back - also when a later step failed.
-OHMYZSH_BACKUP=~/.oh-my-zsh-backup-$TIMESTAMP
-if [ ! -e ~/.oh-my-zsh ] && [ -d "$OHMYZSH_BACKUP" ]; then
-  mv "$OHMYZSH_BACKUP" ~/.oh-my-zsh
-  echo
-  echo "Couldn't download a new copy of Oh My Zsh, so your previous one was kept."
-fi
 
 if [ "$RESET_STATUS" -ne 0 ]; then
   exit "$RESET_STATUS"

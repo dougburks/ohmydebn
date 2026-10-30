@@ -14,8 +14,9 @@ else
     read -r
   fi
   # Purge first so Chrome's own maintainer scripts clean up the apt source
-  # its postinst self-registered; the rm -f lines only catch leftovers, so
-  # this stays correct even if Google renames the file again.
+  # and key (the installer writes them under the names Chrome's postinst
+  # uses); the rm -f lines only catch leftovers, so this stays correct even
+  # if Google renames the files again.
   sudo /usr/bin/apt -y purge google-chrome-stable
   sudo /usr/bin/apt -y autoremove
   # If it was the default browser, another installed one takes over, so

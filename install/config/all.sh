@@ -9,6 +9,7 @@ source $OHMYDEBN_INSTALL/config/chromium.sh
 source $OHMYDEBN_INSTALL/config/chrony.sh
 source $OHMYDEBN_INSTALL/config/cinnamon.sh
 source $OHMYDEBN_INSTALL/config/cinnamon-applet-ids.sh
+source $OHMYDEBN_INSTALL/config/crush.sh
 source $OHMYDEBN_INSTALL/config/cursor.sh
 source $OHMYDEBN_INSTALL/config/gedit.sh
 source $OHMYDEBN_INSTALL/config/git.sh

@@ -55,7 +55,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
-- **AI assistants**: optional installs from Apps > AI (OpenCode, Claude Code, Codex, Grok Build, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
+- **AI assistants**: optional installs from Apps > AI (OpenCode and OpenCode Desktop, Claude Code, Codex, Grok Build, Crush, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
 - **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps → Other Apps
 
 ## System Architecture
@@ -177,7 +177,7 @@ gnome-terminal and mate-terminal keep their settings in dconf, not in files:
 | starship | `~/.config/starship.toml` |
 | git | `~/.gitconfig` (written by `git config --global`) |
 | zsh | `~/.zshrc`, `~/.config/zsh/` |
-| oh my zsh | `~/.oh-my-zsh/` |
+| oh my zsh | `/usr/share/oh-my-zsh/` (the `ohmydebn-ohmyzsh` package, pinned to a tested commit and updated with OhMyDebn, so `omz update` doesn't apply); the user's own plugins and themes go in `~/.oh-my-zsh/custom/` (`ZSH_CUSTOM`) |
 | zoxide | No config folder; started by `eval "$(zoxide init zsh)"` in `~/.zshrc` |
 | eza | Configured via shell aliases |
 | bat | `~/.config/bat/config` |
@@ -225,7 +225,8 @@ ohmydebn-reset-config
 
 # The reset-config command:
 # 1. Renames ~/.config/{alacritty,bat,btop,cava,nvim,starship.toml},
-#    ~/.oh-my-zsh and ~/.zshrc to *-backup-<timestamp>
+#    ~/.oh-my-zsh (your own Oh My Zsh plugins and themes) and ~/.zshrc to
+#    *-backup-<timestamp>
 # 2. Clears only the state markers of the steps that write those files
 # 3. Re-runs OhMyDebn's configuration (ohmydebn.sh, without the system upgrade), which writes fresh defaults
 # 4. Reapplies the current theme (keeping the background)
@@ -247,11 +248,11 @@ ohmydebn-theme-install <url>     # Install from git repo
 ```
 
 **Theme Management:**
-- GUI: OhMyDebn Menu → Style → Theme or hotkey `Ctrl + Super + T`
-- Background switching: `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`
+- GUI: OhMyDebn Menu → Appearance → Theme or hotkey `Ctrl + Super + T`
+- Background switching: OhMyDebn Menu → Appearance → Background or `Ctrl + Super + B` opens the theme carousel (Up/Down picks a background), or run `ohmydebn-theme-bg-next`. Each theme remembers its last background
 - Build custom themes: `Ctrl + Shift + A` (Aether theme builder)
 - Browse more themes: press B in the theme carousel (`Ctrl + Super + T`)
-- Theme intros: switching themes and logging in play a short intro that fades into the background: the background itself at twilight with the light arriving and a shimmer, drawn live, or for some Omarchy backgrounds Omarchy's own clip. Turn them off or on with `ohmydebn-theme-intro-toggle` (Style > Theme Intros). A user's own background in `~/.config/ohmydebn/backgrounds/<theme>/` can have its own clip at `intros/<same name>.webm` (WebM/VP9; an .mp4 may not play, and a clip that can't play falls back to the drawn intro)
+- Theme intros: switching themes and logging in play a short intro that fades into the background: the background itself at twilight with the light arriving and a shimmer, drawn live, or for some Omarchy backgrounds Omarchy's own clip. Turn them off or on with `ohmydebn-theme-intro-toggle` (Appearance > Theme Intros). A user's own background in `~/.config/ohmydebn/backgrounds/<theme>/` can have its own clip at `intros/<same name>.webm` (WebM/VP9; an .mp4 may not play, and a clip that can't play falls back to the drawn intro)
 
 ### Keybindings
 
@@ -348,7 +349,7 @@ For advanced window management, additional extensions can be installed from Cinn
 
 ### Fonts
 
-Fonts are managed through Cinnamon Settings > Fonts, which provides options to:
+Fonts are managed through Cinnamon Settings > Fonts (OhMyDebn Menu → Appearance → Fonts), which provides options to:
 - Change interface font, document font, monospace font, and window title font
 - Adjust font rendering settings (hinting, antialiasing, scaling factor)
 - Set font sizes for different UI elements
@@ -363,6 +364,21 @@ Additional tools available in OhMyDebn:
 - **System Summary**: GUI version of fastfetch via OhMyDebn menu or `Ctrl + Shift + S`
 - **System Monitoring**: btop performance monitor via `Super + T`
 - **Audio Visualization**: Cava via terminal or `Ctrl + Super + A`
+
+### Signing PDFs
+
+`ohmydebn-pdf-sign` places the user's saved signatures, text and dates on a PDF and writes a separate signed copy; the original is never changed. Its commands need no display, so you can sign a PDF for the user:
+
+```bash
+ohmydebn-pdf-sign signatures --json                 # the user's saved signatures, by name
+ohmydebn-pdf-sign pages lease.pdf --json            # each page's size in points, and whether it's digitally signed
+pdftotext -cropbox -bbox lease.pdf -               # where the text is, in the same coordinates (poppler-utils, if installed)
+ohmydebn-pdf-sign sign lease.pdf lease-signed.pdf --items items.json --json
+ohmydebn-pdf-sign help items                        # the whole items.json format
+ohmydebn-pdf-sign add-signature "Initials" photo.jpg  # save one from a scan or photo on white paper
+```
+
+`items.json` is a list such as `[{"signature": "Alex", "page": 1, "x": 72, "bottom": 700, "width": 150}, {"date": true, "page": 1, "x": 300, "y": 690}, {"text": "Alex Morgan", "page": 1, "x": 72, "y": 710, "size": 12}]`: points from the top-left corner of the page as shown, pages counted from 1. `sign` checks every item first, reports all problems at once and writes nothing then. Use only signatures the user has saved, and only to sign what they asked you to; tell them if the PDF is digitally signed (`pages` says so), since a signed copy breaks that. `ohmydebn-pdf-sign file.pdf` opens the app (Apps > Office > Sign a PDF).
 
 
 ### System
@@ -420,7 +436,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 
 ## Example Requests
 
-- "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Style → Theme
+- "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Appearance → Theme
 - "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "Gmail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
 - "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`

@@ -3,8 +3,21 @@
 EZA_CONFIG=~/.config/eza
 mkdir -p "$EZA_CONFIG"
 
+# theme.yml is OhMyDebn's link to the theme's eza.yml (every release has
+# written it as one), and goes when the theme has none. Anything else there
+# is the user's own theme, or their own link to one, and is left alone: a
+# theme without an eza.yml used to delete it.
+EZA_THEME="$EZA_CONFIG/theme.yml"
+if [ -e "$EZA_THEME" ] || [ -L "$EZA_THEME" ]; then
+  [ -L "$EZA_THEME" ] || exit 0
+  case "$(readlink "$EZA_THEME")" in
+  "$HOME"/.config/ohmydebn/current/*) ;;
+  *) exit 0 ;;
+  esac
+fi
+
 if [ -f ~/.config/ohmydebn/current/theme/eza.yml ]; then
-  ln -snf ~/.config/ohmydebn/current/theme/eza.yml "$EZA_CONFIG/theme.yml"
+  ln -snf ~/.config/ohmydebn/current/theme/eza.yml "$EZA_THEME"
 else
-  rm -f "$EZA_CONFIG/theme.yml"
+  rm -f "$EZA_THEME"
 fi

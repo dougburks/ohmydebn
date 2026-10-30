@@ -2,7 +2,9 @@
 #
 # Unit tests for bin/ohmydebn-theme-set-fastfetch's SIGUSR2 refresh of an
 # already-open ohmydebn-fastfetch-gui window (bin/ohmydebn-fastfetch-pause),
-# and its order: the logo is made before the window is signaled.
+# and its order: the logo is made before the window is signaled. Also
+# that it keeps its own config link current but leaves a config.jsonc of
+# the user's own alone.
 # `kill` is a bash builtin, so it can't be mocked via PATH like pkill is for
 # btop/cava - these spawn a real short-lived background process and check
 # whether it actually received SIGUSR2, rather than mocking the signal send.
@@ -122,6 +124,56 @@ assert_eq "logo made, then the window signaled" "logo generated
 window signaled" "$(cat "$MOCK_CALLS")"
 kill "$FAKE_PID" 2>/dev/null
 wait "$FAKE_PID" 2>/dev/null
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# --- the config link: OhMyDebn's is kept current, the user's own is kept ---
+# setup_link <what's at config.jsonc: none|theme|default|file|own-link>
+setup_link() {
+  mock_init
+  SCRATCH_HOME=$(mktemp -d)
+  LINK="$SCRATCH_HOME/.config/fastfetch/config.jsonc"
+  THEME_CONFIG="$SCRATCH_HOME/.config/ohmydebn/current/theme/config.jsonc"
+  mkdir -p "$(dirname "$LINK")" "$(dirname "$THEME_CONFIG")"
+  echo '{"theme": true}' >"$THEME_CONFIG"
+  case "$1" in
+  theme) ln -s "$THEME_CONFIG" "$LINK" ;;
+  default) ln -s /usr/share/ohmydebn/config/fastfetch/config-default.jsonc "$LINK" ;;
+  file) echo '{"mine": true}' >"$LINK" ;;
+  own-link) echo '{"mine": true}' >"$SCRATCH_HOME/dotfiles.jsonc" && ln -s "$SCRATCH_HOME/dotfiles.jsonc" "$LINK" ;;
+  esac
+}
+
+setup_link none
+run_theme_set_fastfetch "$SCRATCH_HOME"
+assert_eq "no config: linked to the theme's" "$THEME_CONFIG" "$(readlink "$LINK")"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+setup_link default
+run_theme_set_fastfetch "$SCRATCH_HOME"
+assert_eq "OhMyDebn's default link: moved to the theme's config" "$THEME_CONFIG" "$(readlink "$LINK")"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+setup_link theme
+rm "$THEME_CONFIG"
+run_theme_set_fastfetch "$SCRATCH_HOME"
+assert_eq "OhMyDebn's link, theme without a config: the default" \
+  /usr/share/ohmydebn/config/fastfetch/config-default.jsonc "$(readlink "$LINK")"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+setup_link file
+run_theme_set_fastfetch "$SCRATCH_HOME"
+assert_eq "the user's own config.jsonc: kept" '{"mine": true}' "$(cat "$LINK")"
+assert_eq "the user's own config.jsonc: not made a link" "no" "$([ -L "$LINK" ] && echo yes || echo no)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+setup_link own-link
+run_theme_set_fastfetch "$SCRATCH_HOME"
+assert_eq "the user's own link: kept" "$SCRATCH_HOME/dotfiles.jsonc" "$(readlink "$LINK")"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

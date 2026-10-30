@@ -14,23 +14,58 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   echo "Google Chrome is not currently installed."
   echo
   echo "Continuing will install it from:"
-  echo "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+  echo "https://dl.google.com/linux/chrome-stable/deb/"
   echo
   echo "Press Enter to continue or Ctrl-C to cancel."
   read -r
 
-  # Through apt, so its dependencies come too - see
-  # ohmydebn-apt-install-deb. Google publishes no checksum for this file.
-  /usr/share/ohmydebn/bin/ohmydebn-apt-install-deb "Google Chrome" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  # Installed from Google's apt repository, so apt checks the package's
+  # signature before installing it. Downloading the .deb directly, as this
+  # used to, installed whatever the URL served (Google publishes no
+  # checksum) and ran its scripts as root. The source and keyring are the
+  # ones Chrome's own postinst writes, under the same names, so it keeps
+  # them up to date and the remove script cleans them up.
+  #
+  # The key is checked against the fingerprint Google publishes on
+  # https://www.google.com/linuxrepositories/ (checked 2026-10-27) before
+  # apt trusts it (see ohmydebn-pgp-fingerprint), so a key swapped in
+  # transit or on the server is refused. Its signing subkeys rotate under
+  # that same primary key, which is what's checked.
+  KEY_URL=https://dl.google.com/linux/linux_signing_key.pub
+  KEY_FILE=$(mktemp)
+  trap 'rm -f "$KEY_FILE"' EXIT
+  curl -fsSL "$KEY_URL" -o "$KEY_FILE"
+  if [ "$(/usr/share/ohmydebn/bin/ohmydebn-pgp-fingerprint "$KEY_FILE" || true)" != EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796 ]; then
+    echo "The signing key from $KEY_URL isn't the one Google publishes, so it wasn't installed."
+    exit 1
+  fi
+  CHROME_KEYRING=/usr/share/keyrings/google-chrome.gpg
+  CHROME_SOURCES=/etc/apt/sources.list.d/google-chrome.sources
+  CHROME_PREF=/etc/apt/preferences.d/google-chrome.pref
 
-  # Google Chrome's own postinst self-registers dl.google.com as an apt
-  # source (see /etc/apt/sources.list.d/google-chrome.sources) - same
-  # reasoning/pattern as ohmydebn-code-install's own pin: ohmydebn never
-  # creates that source file itself, so restricting it has to happen
-  # here instead. Confirmed via `apt-cache depends google-chrome-stable` -
-  # no same-repo dependency, just ordinary system libraries.
+  # Restricts Google's repo to google-chrome-stable, written before the
+  # repo is: a bare signed-by trusts the repo's key to sign anything, and
+  # the repo also carries the beta, unstable and canary channels.
+  # Confirmed via `apt-cache depends google-chrome-stable` - no same-repo
+  # dependency, just ordinary system libraries.
   printf 'Package: *\nPin: origin "dl.google.com"\nPin-Priority: -1\n\nPackage: google-chrome-stable\nPin: origin "dl.google.com"\nPin-Priority: 500\n' |
-    sudo tee /etc/apt/preferences.d/google-chrome.pref >/dev/null
+    sudo tee "$CHROME_PREF" >/dev/null
+  sudo mkdir -p /usr/share/keyrings
+  sudo gpg --dearmor --yes -o "$CHROME_KEYRING" "$KEY_FILE"
+  printf 'Types: deb\nURIs: https://dl.google.com/linux/chrome-stable/deb/\nSuites: stable\nComponents: main\nArchitectures: amd64\nSigned-By: %s\n' \
+    "$CHROME_KEYRING" | sudo tee "$CHROME_SOURCES" >/dev/null
+
+  # A source apt can't refresh fails every later apt update, and with it
+  # every ohmydebn-update, so it's taken out again, as
+  # ohmydebn-cloudflare-warp-install does.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f "$CHROME_SOURCES" "$CHROME_PREF" "$CHROME_KEYRING"
+    echo
+    echo "Couldn't refresh the package lists, so Google Chrome's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
+  sudo /usr/bin/apt -y install google-chrome-stable
 
   # Installed onto a system that already has a default browser: ask before
   # taking it over (defaults to no - see ohmydebn-browser-set-default). A

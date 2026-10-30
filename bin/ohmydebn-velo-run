@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# The install-if-needed-then-run payload for velo, meant to run inside an
+# already-open terminal (via -e) rather than opening one of its own - see
+# ohmydebn-velo, which wraps this in a terminal.
+
+set -euo pipefail
+
+if ! dpkg -s "velo" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-show-logo
+  # A failed install would otherwise end the script here (set -e) and close
+  # the terminal before its error could be read.
+  if ! /usr/share/ohmydebn/bin/ohmydebn-velo-install; then
+    echo
+    echo "The install didn't finish - see the messages above."
+    /usr/share/ohmydebn/bin/ohmydebn-show-done
+    exit 1
+  fi
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi
+if dpkg -s "velo" >/dev/null 2>&1; then
+  # Not exec'd: when velo quits it prints the last run's result, which the
+  # window would otherwise take with it as it closed.
+  /usr/bin/velo || true
+  /usr/share/ohmydebn/bin/ohmydebn-show-done
+fi

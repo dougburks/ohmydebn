@@ -36,13 +36,28 @@ parse_toml() {
   grep -E "^\s*${key}\s*=" "$COLORS_TOML" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
 }
 
-BACKGROUND=$(parse_toml "background")
-FOREGROUND=$(parse_toml "foreground")
-ACCENT=$(parse_toml "accent")
+# A #rrggbb color, with #rgb written out; anything else is empty. The
+# arithmetic below reads each color as three hex pairs, and a color it
+# can't read (a theme's "#f80") stopped this hook with a bash error. Under
+# ohmydebn-theme-set's set -e that also stopped every hook after this one,
+# leaving the desktop half switched.
+hex_color() {
+  if [[ "$1" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+    echo "$1"
+  elif [[ "$1" =~ ^#([0-9A-Fa-f])([0-9A-Fa-f])([0-9A-Fa-f])$ ]]; then
+    echo "#${BASH_REMATCH[1]}${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[3]}"
+  fi
+}
 
+BACKGROUND=$(hex_color "$(parse_toml "background")")
+FOREGROUND=$(hex_color "$(parse_toml "foreground")")
+ACCENT=$(hex_color "$(parse_toml "accent")")
+
+# Without them there's no Cinnamon theme to make, which isn't a reason to
+# stop the theme switch: Cinnamon keeps the theme it has.
 if [[ -z "$BACKGROUND" || -z "$FOREGROUND" || -z "$ACCENT" ]]; then
-  echo "Error: Required colors (background, foreground, accent) not found in $COLORS_TOML" >&2
-  exit 1
+  echo "Background, foreground or accent missing or not a #rrggbb color in $COLORS_TOML; Cinnamon's theme is unchanged" >&2
+  exit 0
 fi
 
 # Determine which template to use based on is_light_mode parameter

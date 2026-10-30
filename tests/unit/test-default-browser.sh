@@ -314,14 +314,25 @@ setup_installer() {
 #!/bin/bash
 exit 0
 EOF2
-  # Writes whatever -o names, as the real curl would, so a downloaded .deb
-  # exists for ohmydebn-apt-install-deb (the real helper, copied in below).
+  # Writes whatever -o names, as the real curl would: Helium's and Google's
+  # signing keys are the real ones, for their installers' fingerprint
+  # checks (the real ohmydebn-pgp-fingerprint, copied in below).
+  cp "$REPO_ROOT/tests/lib/helium-signing-key.asc" "$MOCK_DIR/helium.asc"
+  cp "$REPO_ROOT/tests/lib/google-signing-key.asc" "$MOCK_DIR/google.asc"
   mock_bin curl <<'EOF2'
 #!/bin/bash
-while [ $# -gt 0 ]; do [ "$1" = "-o" ] && : >"$2"; shift; done
+key=""
+[[ "$*" == *helium-linux*pubkey.asc* ]] && key="$MOCK_DIR/helium.asc"
+[[ "$*" == *linux_signing_key.pub* ]] && key="$MOCK_DIR/google.asc"
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    if [ -n "$key" ]; then cp "$key" "$2"; else : >"$2"; fi
+  fi
+  shift
+done
 exit 0
 EOF2
-  cp "$REPO_ROOT/bin/ohmydebn-apt-install-deb" "$ROOT/usr/share/ohmydebn/bin/"
+  cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$ROOT/usr/share/ohmydebn/bin/"
   mock_bin uname <<'EOF2'
 #!/bin/bash
 echo x86_64
@@ -341,9 +352,7 @@ for spec in "ohmydebn-brave-origin-install brave-origin skip" \
   setup_installer "$installer"
   run_input "" "$MOCK_DIR/installer.sh"
   CALLS=$(cat "$MOCK_CALLS")
-  # A vendor .deb (Google Chrome) goes through ohmydebn-apt-install-deb,
-  # so it shows up as an apt install of the downloaded file.
-  assert_eq "$installer: installs the package" "yes" "$(grep -qE "apt -y install ($pkg|.*\.deb)" "$MOCK_CALLS" && echo yes || echo no)"
+  assert_eq "$installer: installs the package" "yes" "$(grep -q "apt -y install $pkg" "$MOCK_CALLS" && echo yes || echo no)"
   assert_eq "$installer: asks about the default browser, after the install" "yes" \
     "$(grep -q "ohmydebn-browser-set-default --ask $pkg" <<<"$(grep -A99 -E "apt -y install" "$MOCK_CALLS")" && echo yes || echo no)"
   mock_cleanup

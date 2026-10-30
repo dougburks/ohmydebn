@@ -50,6 +50,7 @@ Unit test rules:
   - ask "Press Enter to continue or Ctrl-C to cancel." before changing anything, unless called with `--skip-prompt`, which means "part of an install or automation: ask nothing"
   - run `sudo /usr/bin/apt update` before `apt install`
   - pin any third-party apt repo to its own packages in `/etc/apt/preferences.d/`, and have the `-remove` script delete the same pin file
+  - check a downloaded apt signing key with `ohmydebn-pgp-fingerprint` against the fingerprint the vendor publishes before installing it, and write the apt source line yourself rather than downloading it
   - install a vendor's `.deb` download with `ohmydebn-apt-install-deb <name> <url> [sha256]` (never `dpkg -i`), which installs its dependencies too; pass the vendor's checksum when they publish one
 - Any yes/no question that follows "Press Enter" defaults to No (`[y/N]`), so a reflexive second Enter changes nothing.
 - A new package dependency goes in exactly one place: `install/packaging/dependencies.sh`, `install/packaging/power-user.sh`, or the `ohmydebn` package's `--depends` in `ohmydebn-package-build/build-package-ohmydebn.sh`.

@@ -33,12 +33,6 @@ else
   COLORS_SOURCE="$2"
   IS_LIGHT_MODE="$3"
 fi
-SKIP_FLAG="$HOME/.local/state/ohmydebn/toggles/skip-claude-theme-changes"
-
-if [[ -f "$SKIP_FLAG" ]]; then
-  exit 0
-fi
-
 # A theme hook does nothing when its app isn't installed (AGENTS.md): this
 # one used to write ~/.claude/themes and ~/.claude/settings.json for every
 # user on every theme switch. Claude Code from OhMyDebn's package, or a

@@ -224,4 +224,44 @@ run
 assert_eq "relativenumber: a line of the user's is left alone" "0" "$(grep -c 'relativenumber = false' "$CFG/lua/config/options.lua")"
 teardown
 
+# --- a theme.lua of the user's own stays, and a deleted setting stays deleted ---
+# The theme link used to replace a regular theme.lua on every run, and the
+# five settings files below were copied back whenever they were missing.
+SETTINGS=(lazyvim.json lua/plugins/snacks-animated-scrolling-off.lua lua/plugins/snacks-dashboard-statusline.lua
+  lua/plugins/all-themes.lua lua/plugins/omarchy-theme-hotreload.lua)
+SETTINGS_MARKERS=(nvim-lazyvim-json-20261027 nvim-scrolling-off-20261027 nvim-dashboard-statusline-20261027
+  nvim-all-themes-20261027 nvim-theme-hotreload-20261027)
+setup yes
+run
+for f in "${SETTINGS[@]}"; do
+  assert_eq "new user: $f added" "yes" "$(exists "$CFG/$f")"
+done
+for m in "${SETTINGS_MARKERS[@]}"; do
+  assert_eq "new user: marker $m set" "yes" "$(exists "$STATE/$m")"
+done
+rm "$CFG/lua/plugins/theme.lua"
+echo 'return { "mine" }' >"$CFG/lua/plugins/theme.lua"
+for f in "${SETTINGS[@]}"; do rm "$CFG/$f"; done
+run
+assert_eq "own theme.lua: kept, not replaced by the link" 'return { "mine" }' "$(cat "$CFG/lua/plugins/theme.lua")"
+assert_eq "own theme.lua: still a regular file" "no" "$([[ -L "$CFG/lua/plugins/theme.lua" ]] && echo yes || echo no)"
+for f in "${SETTINGS[@]}"; do
+  assert_eq "deleted $f: stays deleted" "no" "$(exists "$CFG/$f")"
+done
+teardown
+
+# --- a config from before the markers: what's there is kept, what's missing added once ---
+setup yes
+run
+for m in "${SETTINGS_MARKERS[@]}"; do rm "$STATE/$m"; done
+echo '-- my edit' >>"$CFG/lua/plugins/all-themes.lua"
+rm "$CFG/lua/plugins/snacks-animated-scrolling-off.lua"
+run
+assert_contains "before the markers: an existing file is left as it is" "$(cat "$CFG/lua/plugins/all-themes.lua")" "-- my edit"
+assert_eq "before the markers: a missing file is added" "yes" "$(exists "$CFG/lua/plugins/snacks-animated-scrolling-off.lua")"
+rm "$CFG/lua/plugins/snacks-animated-scrolling-off.lua"
+run
+assert_eq "before the markers: deleted after that, it stays deleted" "no" "$(exists "$CFG/lua/plugins/snacks-animated-scrolling-off.lua")"
+teardown
+
 test_summary

@@ -388,6 +388,17 @@ menu() {
   get_picker_result "$options" "$breadcrumb_prefix"
   local result="$MENU_PICKER_RESULT"
 
+  # An app picked from a search that merges in Other Apps (at the top, in
+  # Apps, and in the lists built at runtime): the picker has already
+  # launched it and replies with its desktop id, which is no label here.
+  # Left to the caller's case, it was matched like one - picking Update
+  # Manager (mintupdate.desktop) went on to open the Update menu, and in
+  # Apps the fallback arm brought the Go menu back. There's nothing left
+  # to do.
+  if [[ "$result" == *.desktop ]]; then
+    exit 0
+  fi
+
   if [[ "$result" == *" > "* ]]; then
     # A searched descendant. ohmydebn-menu-picker always returns the full
     # absolute breadcrumb, so strip this call's own prefix off the front
@@ -446,9 +457,10 @@ show_trigger_menu() {
 }
 
 show_speed_test_menu() {
-  menu "Speed Test" "󰓄  Network Speed Test\n  Disk Speed Test"
+  menu "Speed Test" "󰓄  Network Speed Test\n󰓅  Speed and Bufferbloat (velo)\n  Disk Speed Test"
   case "$MENU_RESULT" in
   *Network*) /usr/share/ohmydebn/bin/ohmydebn-network-speedtest-gui ;;
+  *velo*) /usr/share/ohmydebn/bin/ohmydebn-velo ;;
   *Disk*) /usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-gui ;;
   *) show_trigger_menu ;;
   esac
@@ -494,12 +506,13 @@ show_install_menu() {
 }
 
 show_office_menu() {
-  menu "Office" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord"
+  menu "Office" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord\n󱧃  Sign a PDF"
   case "$MENU_RESULT" in
   *LibreOffice*) /usr/share/ohmydebn/bin/ohmydebn-libreoffice ;;
   *Calligra*) /usr/share/ohmydebn/bin/ohmydebn-calligra ;;
   *Gnumeric*) /usr/share/ohmydebn/bin/ohmydebn-gnumeric ;;
   *AbiWord*) /usr/share/ohmydebn/bin/ohmydebn-abiword ;;
+  *Sign*) /usr/share/ohmydebn/bin/ohmydebn-pdf-sign ;;
   *) show_apps_menu ;;
   esac
 }
@@ -640,14 +653,18 @@ show_ai_menu() {
   # Picking one just opens it. The default that ohmydebn-ai (Super+A)
   # launches is chosen when a tool is installed (its installer asks) or
   # later in Setup > Defaults > Agent (pick_default_agent).
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  OpenCode App (desktop GUI)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Crush (Charm, any model)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
   case "$MENU_RESULT" in
+  # Before *OpenCode*, which would match it too. (The menu tree and its
+  # checks read one-word patterns, so not *OpenCode Desktop*.)
+  *App*) /usr/share/ohmydebn/bin/ohmydebn-opencode-desktop ;;
   *OpenCode*) /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
   *Desktop*) /usr/share/ohmydebn/bin/ohmydebn-claude-desktop ;;
   *Claude*) /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
   *ChatGPT*) /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
   *Codex*) /usr/share/ohmydebn/bin/ohmydebn-codex ;;
   *Grok*) /usr/share/ohmydebn/bin/ohmydebn-grok ;;
+  *Crush*) /usr/share/ohmydebn/bin/ohmydebn-crush ;;
   *Stencil*) /usr/share/ohmydebn/bin/ohmydebn-omp ;;
   *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
   *T3*) /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
@@ -756,11 +773,16 @@ show_update_password_menu() {
   esac
 }
 
-show_style_menu() {
-  menu "Style" "  Effects\n  Notifications\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
+show_appearance_menu() {
+  menu "Appearance" "󰸉  Background\n  Effects\n  Fonts\n  Notifications\n󱂩  Panel\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
   case "$MENU_RESULT" in
+  # The carousel's Up/Down browse the theme's backgrounds, and Enter
+  # applies the one shown, as Ctrl + Super + B does.
+  *Background*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *Effects*) cinnamon-settings effects ;;
+  *Fonts*) cinnamon-settings fonts ;;
   *Notifications*) cinnamon-settings notifications ;;
+  *Panel*) cinnamon-settings panel ;;
   *Screensaver*) cinnamon-settings screensaver ;;
   # Before *Theme*, which would match it too.
   *Intros*) /usr/share/ohmydebn/bin/ohmydebn-theme-intro-toggle ;;
@@ -880,7 +902,7 @@ show_main_menu() {
   # (bin/ohmydebn-menu-tree) - it's real, executed bash (passed as an
   # argument below), not a comment, so it can't silently drift out of
   # sync the way dead/unused data could.
-  local go_items="󰀻  Apps\n󰧑  Learn\n  Trigger\n  Style\n󰉉  Install\n󰭌  Remove\n  Update\n  Setup\n  About\n  Demo\n  System"
+  local go_items="󰀻  Apps\n󰧑  Learn\n  Trigger\n  Appearance\n󰉉  Install\n󰭌  Remove\n  Update\n  Setup\n  About\n  Demo\n  System"
   menu "Go" "$go_items"
   go_to_menu "$MENU_RESULT"
 }
@@ -894,7 +916,7 @@ go_to_menu() {
   *apps*) show_apps_menu ;;
   *trigger*) show_trigger_menu ;;
   *learn*) show_learn_menu ;;
-  *style*) show_style_menu ;;
+  *appearance*) show_appearance_menu ;;
   *install*) show_install_menu ;;
   *remove*) show_remove_menu ;;
   *update*) show_update_menu ;;

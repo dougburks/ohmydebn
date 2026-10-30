@@ -3,13 +3,13 @@
 # ohmydebn-ai-cli: launches the user's default AI assistant in-place - the
 # shape the `a` shell alias needs, matching how
 # ohmydebn-opencode-cli/ohmydebn-claude-code-cli/ohmydebn-codex-cli/
-# ohmydebn-grok-cli/ohmydebn-omp-cli/ohmydebn-pi-cli run their
+# ohmydebn-grok-cli/ohmydebn-crush-cli/ohmydebn-omp-cli/ohmydebn-pi-cli run their
 # tool in the caller's existing terminal instead of opening a new window the
 # way ohmydebn-ai (Super+A) does. Three of the defaults (chatgpt/vscode/
 # antigravity) are GUI editors with no terminal-native form, so those are
-# opened on $PWD instead of run inside the terminal itself. T3 Code and Claude
-# Desktop are GUIs too, but they have no "open this directory" argument, so
-# they just open.
+# opened on $PWD instead of run inside the terminal itself. T3 Code, Claude
+# Desktop and OpenCode Desktop are GUIs too, but they have no "open this
+# directory" argument, so they just open.
 #
 # Same default-lookup/fallback logic as ohmydebn-ai - see that script's own
 # comment for why an unset or corrupted stored value falls back to opencode.
@@ -22,7 +22,7 @@ name="opencode"
 if [[ -f "$DEFAULT_AI_FILE" ]]; then
   stored=$(<"$DEFAULT_AI_FILE")
   case "$stored" in
-  opencode | claude-code | claude-desktop | chatgpt | codex | grok | omp | pi | t3code | vscode | antigravity) name="$stored" ;;
+  opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode | antigravity) name="$stored" ;;
   esac
 fi
 
@@ -31,11 +31,13 @@ opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode-cli ;;
 claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code-cli ;;
 codex) exec /usr/share/ohmydebn/bin/ohmydebn-codex-cli ;;
 grok) exec /usr/share/ohmydebn/bin/ohmydebn-grok-cli ;;
+crush) exec /usr/share/ohmydebn/bin/ohmydebn-crush-cli ;;
 omp) exec /usr/share/ohmydebn/bin/ohmydebn-omp-cli ;;
 pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi-cli ;;
 chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt "$PWD" ;;
 t3code) exec /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
 claude-desktop) exec /usr/share/ohmydebn/bin/ohmydebn-claude-desktop ;;
+opencode-desktop) exec /usr/share/ohmydebn/bin/ohmydebn-opencode-desktop ;;
 vscode) exec /usr/share/ohmydebn/bin/ohmydebn-code "$PWD" ;;
 antigravity) exec /usr/share/ohmydebn/bin/ohmydebn-antigravity "$PWD" ;;
 esac

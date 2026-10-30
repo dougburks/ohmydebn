@@ -10,8 +10,9 @@
 # use) must get a codename Cloudflare serves, and a source apt can't
 # refresh must be removed again. An Ubuntu release Cloudflare doesn't serve
 # yet (a 404 for its repo) falls back to the newest supported LTS. sudo,
-# apt, curl and gpg are mocked, and the system paths point into a scratch
-# directory.
+# apt, curl and gpg are mocked (curl serves Cloudflare's real signing key,
+# for the real fingerprint check), and the system paths point into a
+# scratch directory.
 
 set -uo pipefail
 
@@ -23,7 +24,9 @@ echo "=== bin/ohmydebn-cloudflare-warp-install ==="
 setup() {
   mock_init
   ROOT="$MOCK_DIR/root"
-  mkdir -p "$ROOT/etc/apt/sources.list.d" "$ROOT/etc/apt/preferences.d"
+  mkdir -p "$ROOT/etc/apt/sources.list.d" "$ROOT/etc/apt/preferences.d" "$ROOT/usr/share/ohmydebn/bin"
+  cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$ROOT/usr/share/ohmydebn/bin/"
+  cp "$REPO_ROOT/tests/lib/cloudflare-signing-key.asc" "$MOCK_DIR/key.asc"
   mock_bin sudo <<'EOF2'
 #!/bin/bash
 exec "$@"
@@ -45,11 +48,14 @@ if [[ "$url" == */dists/*/Release ]]; then
   [[ " ${MOCK_CURL_404:-} " == *" $codename "* ]] && printf 404 || printf 200
   exit 0
 fi
-echo "key"
+# The signing key: curl -fsSL <url> -o <dest>
+cp "$MOCK_DIR/key.asc" "${!#}"
 EOF2
+  # gpg --yes --dearmor --output <dest> <src>: copies it.
   mock_bin gpg <<'EOF2'
 #!/bin/bash
-while [ $# -gt 0 ]; do [ "$1" = --output ] && { cat >"$2"; exit 0; }; shift; done
+while [ $# -gt 1 ]; do [ "$1" = --output ] && dest="$2"; shift; done
+cp "$1" "$dest"
 EOF2
   # What lsb_release -cs really prints: the distro's own codename.
   mock_bin lsb_release <<'EOF2'
@@ -64,6 +70,7 @@ mock_log "apt $*"
 exit 0
 EOF2
   sed -e "s#/usr/share/keyrings#$ROOT/usr/share/keyrings#g" -e "s#/etc/apt#$ROOT/etc/apt#g" \
+    -e "s#/usr/share/ohmydebn#$ROOT/usr/share/ohmydebn#g" \
     -e "s#/usr/bin/apt#$MOCK_BIN/apt#g" \
     "$REPO_ROOT/bin/ohmydebn-cloudflare-warp-install" >"$MOCK_DIR/warp-install.sh"
 }

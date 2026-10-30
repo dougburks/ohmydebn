@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Installs Crush, Charm's terminal coding agent, from the OhMyDebn repo
+# (Charm's own package, republished there by ohmydebn-package-build), which
+# apt then keeps up to date.
+
+set -euo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "crush" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Crush is not currently installed."
+    echo
+    echo "Continuing will install it, packaged from Charm's release:"
+    echo "https://github.com/charmbracelet/crush"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
+  # This runs standalone, on demand (via ohmydebn-crush-run when Super+A's
+  # default AI assistant is Crush and it isn't installed yet), outside
+  # install.sh/ohmydebn-update's own flow, so it needs its own apt update
+  # first - see ohmydebn-grok-install.
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install crush
+
+  # Match Crush to the current OhMyDebn theme from its first start, and keep
+  # it matched (see ohmydebn-theme-set-crush).
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-crush --activate || true
+
+  # Installed onto a system that may already have a default AI assistant:
+  # ask before changing it (defaults to no, and says nothing when this is
+  # already the default - see ohmydebn-ai-set-default). A setting that
+  # couldn't be saved mustn't abort the install.
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai-set-default --ask crush || true
+  fi
+fi

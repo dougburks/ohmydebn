@@ -134,6 +134,9 @@ for dir in packaging config cleanup finalization; do
   for f in "$REPO_ROOT/install/$dir"/*.sh; do
     name=$(basename "$f")
     [[ "$name" == "all.sh" ]] && continue
+    # Kept only for updates from 4.5.0-4.7.0, whose own finalization/all.sh
+    # sources it by its old name (see its comment).
+    [[ "$dir/$name" == "finalization/hotkeys.sh" ]] && continue
     CHECKED=$((CHECKED + 1))
     if ! grep -q "$dir/$name" "$ALL_SH"; then
       echo "  FAIL - install/$dir/$name exists but isn't sourced from install/$dir/all.sh"
@@ -677,9 +680,11 @@ declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-opencode-install]=opencode
   [ohmydebn-claude-code-install]=claude-code
   [ohmydebn-claude-desktop-install]=claude-desktop
+  [ohmydebn-opencode-desktop-install]=opencode-desktop
   [ohmydebn-chatgpt-install]=chatgpt
   [ohmydebn-codex-install]=codex
   [ohmydebn-grok-install]=grok
+  [ohmydebn-crush-install]=crush
   [ohmydebn-omp-install]=omp
   [ohmydebn-pi-install]=pi
   [ohmydebn-t3code-install]=t3code
@@ -1027,6 +1032,26 @@ done
 echo "  checked $CHECKED third-party-repo installers"
 
 echo
+echo "-- every downloaded apt signing key is checked against its fingerprint (regression guard) --"
+# apt trusts whatever key a repo's signed-by names, so a key fetched from
+# the vendor and installed unchecked lets anyone who can swap it (in
+# transit, or on the vendor's server) sign packages apt will install.
+# Antigravity, Cloudflare WARP, Helium and Tailscale went unchecked until
+# 4.14.0. A script that downloads something and names a keyring must
+# compare it with ohmydebn-pgp-fingerprint before apt sees it.
+mapfile -t KEYRING_SCRIPTS < <(grep -l 'keyrings/' "$REPO_ROOT"/bin/* 2>/dev/null)
+CHECKED=0
+for f in "${KEYRING_SCRIPTS[@]}"; do
+  grep -q '\bcurl\b' "$f" || continue
+  CHECKED=$((CHECKED + 1))
+  if ! grep -q 'ohmydebn-pgp-fingerprint' "$f"; then
+    echo "  FAIL - ${f#"$REPO_ROOT"/} downloads and installs an apt signing key without checking its fingerprint (ohmydebn-pgp-fingerprint)"
+    FAIL=$((FAIL + 1))
+  fi
+done
+echo "  checked $CHECKED key-fetching scripts"
+
+echo
 echo "-- apt pin filename agrees between each installer and its own remove script (regression guard) --"
 # The check above only catches installers that write sources.list.d
 # themselves - it can't see code/google-chrome-stable, whose repos are
@@ -1170,11 +1195,13 @@ echo "-- tile-rules.json titles match their launcher's --title (regression guard
 # independently after the fact.
 TITLE_OWNERS=(
   "ohmydebn-cliamp:cliamp"
+  "ohmydebn-velo:velo"
   "ohmydebn-claude-code:Claude Code"
   "ohmydebn-opencode:OpenCode"
   "ohmydebn-pi:Pi"
   "ohmydebn-codex:Codex"
   "ohmydebn-grok:Grok Build"
+  "ohmydebn-crush:Crush"
   "ohmydebn-omp:Oh My Pi"
   "ohmydebn-socrates:SO-CRATES"
   "ohmydebn-fastfetch-gui:OhMyDebn fastfetch"
@@ -1252,6 +1279,7 @@ fi
 PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-chatgpt:ChatGPT"
   "ohmydebn-claude-desktop:Claude Desktop"
+  "ohmydebn-opencode-desktop:OpenCode Desktop"
   "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
   "ohmydebn-antigravity:Antigravity"
@@ -1283,7 +1311,9 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude Brave-origin Brave-browser KeePassXC Gedit Aether)
+WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude com.t3tools.T3Code ai.opencode.desktop Brave-origin
+  Brave-browser KeePassXC Gedit Aether
+  ohmydebn-pdf-sign)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
   if ! grep -qF "\"wmClass\": \"$WMCLASS\"" "$REPO_ROOT/config/tile-rules.json"; then
     echo "  FAIL - tile-rules.json has no entry for wmClass \"$WMCLASS\""
@@ -1302,10 +1332,14 @@ echo "-- install steps neither exit nor change shell options --"
 # instead. A `set -u` or `set -o pipefail` there stays on for every step
 # after it: updates.sh once turned on set -u, and finale.sh then died on an
 # unset $XDG_CURRENT_DESKTOP in any update run over ssh or from a TTY.
+# finalization/hotkeys.sh is the exception: only an old release's update
+# sources it, and ending that run, once this release's install has run in
+# its place, is its job.
 while IFS= read -r HIT; do
   echo "  FAIL - $HIT (sourced into install.sh; see this check's comment)"
   FAIL=$((FAIL + 1))
-done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##")
+done < <(grep -rnE '^[[:space:]]*(exit([[:space:]]|$)|set[[:space:]]+(-[a-zA-Z]*[uo]|\+))' "$REPO_ROOT/install" | sed "s#^$REPO_ROOT/##" |
+  grep -v '^install/finalization/hotkeys.sh:')
 echo "  checked every file under install/"
 
 echo
@@ -1331,7 +1365,9 @@ while IFS= read -r f; do
     FAIL=$((FAIL + 1))
   fi
 # The underscored .py files are modules the windows import, not windows.
-done < <(grep -lE '^from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+# Indented imports count: ohmydebn-pdf-sign imports Gtk only inside its
+# app, so its commands run without a display.
+done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
 echo "  checked $CHECKED notifications and GTK scripts"
 
 echo

@@ -87,6 +87,15 @@ fi
 
 /usr/share/ohmydebn/bin/ohmydebn-headline "Switching Claude Code to the $TARGET channel"
 sudo sed -i -E "s#/claude-code/apt/(stable|latest) (stable|latest) #/claude-code/apt/$TARGET $TARGET #" "$LIST_FILE"
+# The sed only matches the source line as the installer wrote it; one
+# edited since (the channel shows as "unknown") is left as it is, so say
+# so rather than report a switch that didn't happen.
+if [[ "$(current_channel)" != "$TARGET" ]]; then
+  echo
+  echo "Couldn't switch: $LIST_FILE isn't the way OhMyDebn set it up."
+  echo "Remove Claude Code and install it again to reset it."
+  exit 1
+fi
 sudo /usr/bin/apt update
 if [[ "$TARGET" == "latest" ]]; then
   sudo /usr/bin/apt -y install --only-upgrade claude-code

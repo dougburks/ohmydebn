@@ -42,6 +42,19 @@ interpolate_colors() {
     done
 }
 
+# A #rrggbb color, with #rgb written out; anything else is empty, so the
+# next source or the default is used. interpolate_colors reads each color
+# as three hex pairs, and one it couldn't read (a theme's "#f80") stopped
+# this hook with a bash error, and with it every hook after it in
+# ohmydebn-theme-set.
+hex_color() {
+    if [[ "$1" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
+        echo "$1"
+    elif [[ "$1" =~ ^#([0-9A-Fa-f])([0-9A-Fa-f])([0-9A-Fa-f])$ ]]; then
+        echo "#${BASH_REMATCH[1]}${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[3]}"
+    fi
+}
+
 # Function to get color from colors.toml or alacritty.toml
 get_theme_color() {
     local color_name=$1
@@ -51,6 +64,7 @@ get_theme_color() {
         # Try to get from colors.toml
         local color
         color=$(grep -E "^\s*${color_name}\s*=" "$COLORS_FILE" | head -1 | sed -E 's/.*=\s*["'\''"]+([^"'\''"]+)["'\''"]+.*/\1/')
+        color=$(hex_color "$color")
         if [[ -n "$color" ]]; then
             echo "$color"
             return
@@ -88,6 +102,7 @@ get_theme_color() {
                 color=$(grep -E "^\s*(.*\.)?cyan\s*=" "$THEME_DIR/alacritty.toml" | head -1 | sed -E "s/.*=\s*['\"]+([^'\"]+)['\"]+.*/\1/" | sed 's|^0x|#|')
                 ;;
         esac
+        color=$(hex_color "$color")
         if [[ -n "$color" ]]; then
             echo "$color"
             return

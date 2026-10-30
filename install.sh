@@ -74,10 +74,11 @@ if [ -f "$OS_RELEASE" ]; then
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
     ;;
-  pop)
-    # Pop!_OS is built on Ubuntu (ID_LIKE="ubuntu debian"). Its own
-    # VERSION_CODENAME happens to match Ubuntu's, but UBUNTU_CODENAME is the
-    # one that names the base.
+  pop | zorin)
+    # Pop!_OS and Zorin OS are built on Ubuntu (ID_LIKE="ubuntu debian").
+    # Their own VERSION_CODENAME happens to match Ubuntu's, but
+    # UBUNTU_CODENAME is the one that names the base: Zorin OS 18 is noble,
+    # Zorin OS 17 jammy.
     [ "$UBUNTU_CODENAME" = "noble" ] && DISTRO_OK=true
     ;;
   ubuntu)
@@ -104,7 +105,7 @@ elif [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, Raspberry Pi OS, and Ubuntu 24.04/26.04.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -172,27 +173,21 @@ EOF
   APT_DIR="${OHMYDEBN_TEST_APT_DIR:-/etc/apt}"
   DEBIANSOURCES=$APT_DIR/sources.list.d/debian.sources
   PROXMOXSOURCES=$APT_DIR/sources.list.d/proxmox.sources
-  MINTSOURCES=$APT_DIR/sources.list.d/official-package-repositories.list
-  # Ubuntu derivatives (ID_LIKE includes ubuntu: Pop!_OS, Zorin OS,
-  # elementary OS, KDE neon, TUXEDO OS...) report their own ID and keep
-  # their repos in files of their own, so none of the other checks match
-  # them - and the repair below would add Debian's repos to an Ubuntu
-  # system. Whether a derivative is supported is the distro check's call
-  # (it warns first); this only keeps its package sources intact.
-  if [ -f $DEBIANSOURCES ] ||
-    [ -f $PROXMOXSOURCES ] ||
-    [ -f $MINTSOURCES ] ||
-    [ "$ID" = "kali" ] ||
-    [ "$ID" = "ubuntu" ] ||
-    [ "$ID" = "devuan" ] ||
-    [ "$ID" = "lcos" ] ||
-    [[ " ${ID_LIKE:-} " == *" ubuntu "* ]]; then
+  # The repair below is only for Debian itself (and what reports itself as
+  # Debian: MX Linux, Raspberry Pi OS, Proxmox). Every other distro keeps
+  # its sources exactly as they are, whatever they look like: Mint, Kali,
+  # Devuan and LCOS, Ubuntu and its derivatives (their own ID, with
+  # ID_LIKE=ubuntu) all keep their repos somewhere this doesn't look, and
+  # so would any unsupported distro the user goes ahead on after the
+  # warning above (or with --yes, which skips it), such as Parrot or the
+  # old Raspbian. Replacing those with Debian trixie's repos would mix
+  # another distro's packages in (Devuan's would pull systemd back in).
+  if [ "$ID" != "debian" ]; then
+    echo "Keeping ${ID:-this distro}'s own APT sources"
+  elif [ -f $DEBIANSOURCES ] || [ -f $PROXMOXSOURCES ]; then
     echo "Found an APT sources file in /etc/apt/sources.list.d/"
   else
     # Some Debian installation methods have a broken APT configuration so try to work around that.
-    # Devuan (and LCOS, built on it) is excluded above: its sources.list
-    # points at deb.devuan.org (no "debian.org" match), and replacing it
-    # with Debian's repos would pull systemd back in and break the system.
     SOURCESLIST=$APT_DIR/sources.list
     if ! grep -q "debian.org" $SOURCESLIST >/dev/null 2>&1; then
       echo "$SOURCESLIST does not have any debian.org references."
@@ -200,10 +195,8 @@ EOF
         echo "Renaming $SOURCESLIST to $SOURCESLIST.orig"
         sudo mv $SOURCESLIST $SOURCESLIST.orig
       fi
-      # Reaching this point already guarantees $DEBIANSOURCES and
-      # $MINTSOURCES don't exist (the outer if above checks both, plus
-      # $PROXMOXSOURCES, Kali, Ubuntu, Devuan, and LCOS, before ever
-      # entering this else branch), so no need to re-check either here.
+      # Reaching this point already guarantees $DEBIANSOURCES doesn't
+      # exist (checked above), so no need to re-check it here.
       echo "Creating $DEBIANSOURCES and adding the following:"
       cat <<EOF | sudo tee -a $DEBIANSOURCES
 Types: deb

@@ -39,6 +39,10 @@ Unit test rules:
 - New behavior gets a test. A bug fix gets a test that fails without the fix; check that it does.
 - Never run `install.sh`, `ohmydebn-update` or an installer on your own machine to try a change. Test real runs in a VM.
 
+## What OhMyDebn installs
+
+Every app OhMyDebn offers is a standard Debian package, installed system-wide with apt and updated by apt: from the vendor's own signed apt repository, as a `.deb` the vendor publishes, or built by `ohmydebn-package-build` and served from OhMyDebn's repository. Never a vendor's `curl | bash` install script, a per-user install into `~/.local/bin`, or a binary that updates itself. So before adding an app, check that the vendor has an apt repository or `.deb`, or that its license lets OhMyDebn repackage and redistribute it. If neither, leave the app out rather than download it onto the user's machine some other way. Antigravity's CLI and Task Manager OG were both left out for this.
+
 ## Script conventions
 
 - `#!/bin/bash` and `set -euo pipefail` for new scripts, two-space indentation.
@@ -73,6 +77,8 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 ## Checklists
 
 ### Adding an AI tool
+
+First check it can be installed the way [What OhMyDebn installs](#what-ohmydebn-installs) requires.
 
 1. If OhMyDebn packages it, a build script in `ohmydebn-package-build`. Turn off the app's self-updater: apt updates it.
 2. `bin/ohmydebn-<name>`, `-install`, `-remove`, and `-run`/`-cli` for terminal tools. The installer asks `ohmydebn-ai-set-default --ask <name> || true` unless `--skip-prompt`.
@@ -111,6 +117,18 @@ Neovim comes from `ohmydebn-neovim` (upstream's release build) and each user's L
 1. A Neovim bug-fix release: bump `VERSION` in `build-package-ohmydebn-neovim.sh` and rebuild it. The plugin package accepts any Neovim in the same minor series.
 2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. A plugin set that differs from the one published under the script's `VERSION` is built as a candidate in `ohmydebn-packages-candidates`, not published. Install it on a VM with `sudo apt install --reinstall --allow-downgrades ./<deb>`, run `ohmydebn-update` there (which puts the new plugins into the user's Neovim), and test Neovim; then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
 3. A new Neovim minor release (such as 0.13): do both, since the plugin package depends on the minor version it was built with.
+
+### Updating the Omarchy themes
+
+`ohmydebn-themes-omarchy` and `ohmydebn-themes-omarchy-intros` are built in `ohmydebn-package-build` from one Omarchy release, in the omarchy checkout next to it.
+
+1. Check out the release's tag there (`git fetch --tags`, then `git checkout <tag>`), set `OMARCHY_THEMES_TAG` in `common.sh`, and set `OMARCHY_TAG`, `OMARCHY_COMMIT` and `VERSION` in the intros script. A release candidate's version uses `~` (`4.5.0~rc3`) so the final release sorts above it; the themes script does this itself. Set both scripts' `REVISION` back to 1.
+2. See what changed: `git diff --stat <old tag> <new tag> -- themes`. Look at every new or changed background and intro clip. One showing the OMARCHY wordmark is left out: backgrounds named `*omarchy*` are left out by name; any other goes in `EXCLUDED_BACKGROUNDS` or `EXCLUDED_INTROS`, by its exact file name, extension included (4.5 moved every background to `.webp`).
+3. Read the commits that add themes or backgrounds for anything not covered by Omarchy's MIT license, and trace where images came from. Starship (SpaceX's photographs) is in `EXCLUDED_THEMES`, and Tokyo Night's Liftoff, a recolored SpaceX photograph, in `EXCLUDED_BACKGROUNDS`.
+4. A theme Omarchy removes or renames stays applied for users who have it (their copy is in `~/.config/ohmydebn/current`), but drops out of the pickers and fails the doctor's theme check. Switch them to its replacement once, as `install/config/theme-replaced.sh` does for Osaka Jade. Test for the old theme's `colors.toml`, not its folder: config steps run before the update's package upgrades, and the old intros package can keep the folder until then.
+5. Where this repo depends on the new themes (a switch like that), raise the `ohmydebn-themes-omarchy` version `build-package-ohmydebn.sh` requires. The intros package requires the themes from its own release by itself.
+6. Update theme names in `bin/ohmydebn-theme-set-icon`. In `ohmydebn-docs`: the theme sections and the list of themes with intros in `desktop-themes.md`, the swatches in `overrides/home.html`, screenshots taken with `tools/theme-screenshots`, and the release notes.
+7. Build the themes, then the intros, then `ohmydebn` if step 5 changed it. Check the themes package against the tag's `themes/` folder minus what's left out. It should have no `backgrounds/intros` folders: Omarchy keeps its original clips there, and only the intros package ships them, re-encoded.
 
 ### Theming another app
 

@@ -129,4 +129,56 @@ assert_not_contains "dotted name: already-installed, no install call" "$CALLS" "
 assert_contains "dotted name: correctly marked manual" "$CALLS" "apt-mark manual libglib2.0-bin"
 mock_cleanup
 
+# Scenario 6: a library installed from backports (Parrot's libxkbcommon0)
+# makes apt refuse the -dev package that needs it at main's version. apt's
+# message, from a real Parrot 7 install, names the version to ask for.
+# MOCK_MADISON lists the versions apt-cache madison reports.
+setup_conflict_mocks() {
+  setup_common_mocks
+  mock_bin sudo <<'EOF'
+#!/bin/bash
+mock_log "sudo $*"
+if [[ "$1" == "/usr/bin/apt" ]]; then
+  [[ " $* " == *" libgtk-4-dev "* && " $* " != *" libxkbcommon-dev=1.13.1-1~bpo13+1 "* ]] && {
+    echo "Unsatisfied dependencies:"
+    echo " libxkbcommon-dev : Depends: libxkbcommon0 (= 1.7.0-2) but 1.13.1-1~bpo13+1 is to be installed"
+    echo "Error: Unable to correct problems, you have held broken packages."
+    exit 100
+  }
+  for p in "${@:5}"; do echo "${p%%=*}" >>"$MOCK_DIR/installed.txt"; done
+fi
+exit 0
+EOF
+  mock_bin apt-cache <<'EOF'
+#!/bin/bash
+[[ "$1" == "madison" ]] || exit 0
+for v in $MOCK_MADISON; do printf ' %s | %16s | https://deb.parrot.sh/parrot echo main amd64 Packages\n' "$2" "$v"; done
+EOF
+}
+
+mock_init
+setup_conflict_mocks
+OUTPUT=$(MOCK_MADISON="1.13.1-1~bpo13+1 1.7.0-2" PATH="$(mock_path)" bash "$SCRIPT" libgtk-4-dev htop 2>&1)
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "backports library: asks for the -dev at the library's version" "$CALLS" \
+  "install libgtk-4-dev libxkbcommon-dev=1.13.1-1~bpo13+1"
+assert_contains "backports library: says what it's trying" "$OUTPUT" \
+  "trying libxkbcommon-dev at 1.13.1-1~bpo13+1"
+assert_contains "backports library: the -dev it asked for is left to apt (auto)" "$CALLS" "apt-mark auto libxkbcommon-dev"
+assert_contains "backports library: the package asked for is installed and manual" "$CALLS" "apt-mark manual libgtk-4-dev htop"
+assert_not_contains "backports library: not reported as failed" "$OUTPUT" "failed to install"
+mock_cleanup
+
+# No version of the -dev package matches the installed library: one try,
+# then it's skipped as before, rather than retried for nothing.
+mock_init
+setup_conflict_mocks
+OUTPUT=$(MOCK_MADISON="1.7.0-2" PATH="$(mock_path)" bash "$SCRIPT" libgtk-4-dev htop 2>&1)
+CALLS=$(cat "$MOCK_CALLS")
+assert_not_contains "no matching version: nothing pinned" "$CALLS" "libxkbcommon-dev="
+assert_eq "no matching version: tried once on its own" "1" "$(grep -cx "sudo /usr/bin/apt -y --no-install-recommends install libgtk-4-dev" "$MOCK_CALLS")"
+assert_contains "no matching version: reported as failed" "$OUTPUT" "failed to install 'libgtk-4-dev'"
+assert_contains "no matching version: the rest still installs" "$CALLS" "apt-mark manual htop"
+mock_cleanup
+
 test_summary

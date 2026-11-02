@@ -12,7 +12,8 @@ WARP_PREF=/etc/apt/preferences.d/cloudflare-client.pref
 # update then failed on every run - including every ohmydebn-update. Use
 # the Ubuntu base where there is one (Ubuntu, Mint, Pop - UBUNTU_CODENAME,
 # or VERSION_CODENAME on Ubuntu itself), and otherwise trixie, the one
-# Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Devuan, LCOS).
+# Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Parrot, Devuan,
+# LCOS).
 #
 # Cloudflare also publishes a new Ubuntu release's repo some time after the
 # release itself (26.10 "stonking" had none on release day), so an Ubuntu

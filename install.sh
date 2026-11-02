@@ -74,6 +74,12 @@ if [ -f "$OS_RELEASE" ]; then
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
     ;;
+  parrot)
+    # Parrot 7 "echo" is built on Debian 13 (its os-release carries
+    # DEBIAN_VERSION_FULL=13.x) but reports its own ID and codename, with
+    # its own repos at deb.parrot.sh.
+    [ "$VERSION_CODENAME" = "echo" ] && DISTRO_OK=true
+    ;;
   pop | zorin)
     # Pop!_OS and Zorin OS are built on Ubuntu (ID_LIKE="ubuntu debian").
     # Their own VERSION_CODENAME happens to match Ubuntu's, but
@@ -105,7 +111,7 @@ elif [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Parrot OS 7, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 
@@ -176,11 +182,11 @@ EOF
   # The repair below is only for Debian itself (and what reports itself as
   # Debian: MX Linux, Raspberry Pi OS, Proxmox). Every other distro keeps
   # its sources exactly as they are, whatever they look like: Mint, Kali,
-  # Devuan and LCOS, Ubuntu and its derivatives (their own ID, with
+  # Parrot, Devuan and LCOS, Ubuntu and its derivatives (their own ID, with
   # ID_LIKE=ubuntu) all keep their repos somewhere this doesn't look, and
   # so would any unsupported distro the user goes ahead on after the
-  # warning above (or with --yes, which skips it), such as Parrot or the
-  # old Raspbian. Replacing those with Debian trixie's repos would mix
+  # warning above (or with --yes, which skips it), such as the old
+  # Raspbian. Replacing those with Debian trixie's repos would mix
   # another distro's packages in (Devuan's would pull systemd back in).
   if [ "$ID" != "debian" ]; then
     echo "Keeping ${ID:-this distro}'s own APT sources"

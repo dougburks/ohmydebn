@@ -99,6 +99,7 @@ if [ -f "$OS_RELEASE" ]; then
   devuan | lcos) [ "${VERSION_CODENAME:-}" = excalibur ] && DISTRO_OK=true ;;
   linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
+  parrot) [ "${VERSION_CODENAME:-}" = echo ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
   pop | zorin) [ "${UBUNTU_CODENAME:-}" = noble ] && DISTRO_OK=true ;;
   esac

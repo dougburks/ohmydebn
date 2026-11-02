@@ -2,17 +2,24 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 # Nothing to do when it's already installed.
 if ! dpkg -s "touchegg" >/dev/null 2>&1; then
-  echo
-  echo "Touchegg (touchpad gestures) is not currently installed."
-  echo
-  echo "Continuing will install it, built from:"
-  echo "https://github.com/JoseExposito/touchegg"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Touchegg (touchpad gestures) is not currently installed."
+    echo
+    echo "Continuing will install it, built from:"
+    echo "https://github.com/JoseExposito/touchegg"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
 
-  read -r
+    read -r
+  fi
 
   # Install touchegg and dependency. This runs standalone, on-demand
   # (Ctrl+Alt+G), independent of install.sh/ohmydebn-update's own flow, so

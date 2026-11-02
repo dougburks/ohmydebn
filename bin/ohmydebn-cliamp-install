@@ -2,15 +2,22 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 if ! dpkg -s "cliamp" >/dev/null 2>&1; then
-  echo
-  echo "cliamp is not currently installed."
-  echo
-  echo "Continuing will install a package built from:"
-  echo "https://github.com/bjarneo/cliamp"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "cliamp is not currently installed."
+    echo
+    echo "Continuing will install a package built from:"
+    echo "https://github.com/bjarneo/cliamp"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 
   # Install packages
   sudo /usr/bin/apt update

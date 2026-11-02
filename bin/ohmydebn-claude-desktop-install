@@ -66,7 +66,16 @@ if ! dpkg -s "claude-desktop" >/dev/null 2>&1; then
   printf 'Package: *\nPin: origin "downloads.claude.ai"\nPin-Priority: -1\n\nPackage: claude-desktop\nPin: origin "downloads.claude.ai"\nPin-Priority: 500\n' |
     sudo tee /etc/apt/preferences.d/claude-desktop.pref >/dev/null
 
-  sudo /usr/bin/apt update
+  # A source that fails to refresh would fail every later apt update
+  # (ohmydebn-update included), so it's taken out again, as
+  # ohmydebn-chatgpt-install does.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f /etc/apt/sources.list.d/claude-desktop.list /etc/apt/preferences.d/claude-desktop.pref "$KEYRING"
+    echo
+    echo "Couldn't refresh the package lists, so Claude Desktop's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
   # Its recommended packages (QEMU, its UEFI firmware, virtiofsd) are what
   # the virtual machine Claude runs larger tasks in needs - once the
   # Cowork tab, now part of every chat. Anthropic counts on apt installing

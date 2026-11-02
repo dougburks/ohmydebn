@@ -13,9 +13,9 @@ if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
   NEWLY_INSTALLED=true
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "The ohmydebn-opencode-cli package is not currently installed."
+    echo "OpenCode is not currently installed."
     echo
-    echo "Continuing will install this package which was built from:"
+    echo "Continuing will install it, built from:"
     echo "https://github.com/anomalyco/opencode"
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."

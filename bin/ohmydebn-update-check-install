@@ -94,8 +94,3 @@ fi
 systemctl --user restart "$TIMER_NAME"
 echo "Started timer: $TIMER_NAME (interval: ${INTERVAL_SEC}s)"
 
-#echo "Installation complete."
-#echo "To view logs:"
-#echo "journalctl --user -u $SERVICE_NAME -f"
-#echo "To change interval, edit $TIMER_PATH and then run:"
-#echo "systemctl --user daemon-reload"

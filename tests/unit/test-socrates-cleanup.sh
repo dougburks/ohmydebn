@@ -30,6 +30,11 @@ setup() {
 case "$1 $2" in
 "images "*)
   echo "2026-10-01 10:00:00|aaaaaaaaaaaa|ghcr.io/dougburks/so-crates:newer"
+  # MOCK_TWO_TAGS: the newest and the oldest each have a second tag.
+  if [[ -n "${MOCK_TWO_TAGS:-}" ]]; then
+    echo "2026-10-01 10:00:00|aaaaaaaaaaaa|ghcr.io/dougburks/so-crates:latest"
+    echo "2026-08-01 10:00:00|cccccccccccc|ghcr.io/dougburks/so-crates:older"
+  fi
   echo "2026-09-01 10:00:00|bbbbbbbbbbbb|ghcr.io/dougburks/so-crates:<none>"
   echo "2026-08-01 10:00:00|cccccccccccc|ghcr.io/dougburks/so-crates:old"
   ;;
@@ -80,6 +85,15 @@ mock_cleanup
 setup ""
 run --bogus
 assert_eq "an unknown option is an error" "1" "$STATUS"
+mock_cleanup
+
+# Images with two tags are listed twice: the newest isn't removed by its
+# second row, and an older one is removed once.
+setup ""
+MOCK_TWO_TAGS=1 run --force
+assert_eq "two tags: exits 0" "0" "$STATUS"
+assert_not_contains "two tags: the newest isn't removed by its second tag" "$CALLS" "rmi aaaaaaaaaaaa"
+assert_eq "two tags: an older one is removed once" "1" "$(grep -c 'rmi cccccccccccc' "$MOCK_CALLS")"
 mock_cleanup
 
 test_summary

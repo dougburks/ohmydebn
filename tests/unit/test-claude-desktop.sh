@@ -84,6 +84,8 @@ EOF
 #!/bin/bash
 mock_log "sudo $*"
 [ "$1" = tee ] && cat >"$MOCK_DIR/wrote-$(basename "$2")"
+# MOCK_APT_UPDATE_FAILS: the new repository can't be refreshed.
+[[ "$*" == "/usr/bin/apt update" && -n "${MOCK_APT_UPDATE_FAILS:-}" ]] && exit 100
 exit 0
 EOF
   mock_bin ohmydebn-ai-set-default <<'EOF'
@@ -121,6 +123,19 @@ assert_eq "install: apt update after the repo and pin, before the install" "yes"
 # turns off.
 assert_contains "install: with its recommends, even where they're off (MX)" "$CALLS" "--install-recommends install claude-desktop"
 assert_contains "install: then asks about the default AI" "$CALLS" "ai-set-default --ask claude-desktop"
+mock_cleanup
+
+# apt update fails: the source, pin and key are taken out again, so they
+# don't fail every later apt update, and nothing is installed.
+setup
+OUT=$(MOCK_APT_UPDATE_FAILS=1 run "$MOCK_DIR/install.sh" <<<"")
+STATUS=$?
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "apt update fails: the installer fails" "1" "$STATUS"
+assert_contains "apt update fails: the repository is taken out again" "$CALLS" \
+  "sudo rm -f /etc/apt/sources.list.d/claude-desktop.list /etc/apt/preferences.d/claude-desktop.pref /usr/share/keyrings/claude-desktop-archive-keyring.asc"
+assert_not_contains "apt update fails: nothing installed" "$CALLS" "install claude-desktop"
+assert_contains "apt update fails: says so" "$OUT" "Claude Desktop's package source was removed again"
 mock_cleanup
 
 # A key that isn't Anthropic's: refused before anything is changed

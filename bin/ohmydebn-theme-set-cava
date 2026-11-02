@@ -179,11 +179,15 @@ update_cava_theme() {
         fi
         
         # Remove old gradient and background settings from the color section
-        sed -i '/^\[color\]/,/^\[/ { /^background\s*=/d; /^gradient\s*=/d; /^gradient_color_[0-9]\+\s*=/d; /^$/d; }' "$CAVA_CONFIG"
+        sed -i --follow-symlinks '/^\[color\]/,/^\[/ { /^background\s*=/d; /^gradient\s*=/d; /^gradient_color_[0-9]\+\s*=/d; /^$/d; }' "$CAVA_CONFIG"
         
-        # Create a temporary file with the new color settings
-        local temp_file
-        temp_file=$(mktemp)
+        # Create a temporary file with the new color settings, next to the
+        # real config: a config that's a symlink (into a dotfiles repo, say)
+        # is rewritten where it points, instead of being replaced by a plain
+        # file, and the rename below stays on one filesystem.
+        local temp_file real_config
+        real_config=$(readlink -f -- "$CAVA_CONFIG")
+        temp_file=$(mktemp "${real_config%/*}/.config.XXXXXX")
         
         # Read the config and insert colors after [color] section
         awk -v bg="$background" \
@@ -213,7 +217,7 @@ update_cava_theme() {
         { print }' "$CAVA_CONFIG" > "$temp_file"
         
         # Replace original config with new one
-        mv "$temp_file" "$CAVA_CONFIG"
+        mv "$temp_file" "$real_config"
         
         # Reload cava colors if it's running
         reload_cava_colors

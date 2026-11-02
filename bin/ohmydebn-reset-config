@@ -22,8 +22,8 @@ CONFIGS=(~/.config/alacritty ~/.config/bat ~/.config/btop ~/.config/cava ~/.conf
 # so the steps write them again: bat.sh and btop.sh copy their configs only
 # once; zsh.sh writes .zshrc and then adds its own lines to it (grc, man
 # colors, the AI tool aliases); nvim.sh adds its transparency file and its
-# own settings files to a config once each; ohmydebn-theme-set-starship writes the Starship config once, when
-# the theme is reapplied below (missing its marker here left Starship on
+# own settings files to a config once each; ohmydebn-theme-set-starship
+# writes the Starship config once, when the theme is reapplied below (missing its marker here left Starship on
 # its built-in prompt after a reset). Alacritty, cava and Neovim's base
 # config are recreated whenever they're missing.
 # tests/unit/test-reset-config.sh checks that every marker those steps and

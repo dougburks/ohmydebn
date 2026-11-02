@@ -72,5 +72,18 @@ PRINTED=$(HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" --print --backg
 assert_eq "--print: prints the background --background N would set" "$(cut -d' ' -f2 <<<"$CAROUSEL")" "$(basename "$PRINTED")"
 assert_eq "--print: sets nothing" "" "$(cat "$MOCK_CALLS")"
 
+
+# "Next background" from one whose path is a symlink: ohmydebn-theme-bg-set
+# stores the resolved path, which never matched the listed one, so every
+# press went back to the same background instead of on to the next. Here
+# current/theme is itself a link, so every listed path resolves elsewhere.
+# The carousel's second background, one of the theme's (through the link),
+# and the one after it.
+FIRST=$(awk '{print $2}' <<<"$CAROUSEL")
+SECOND=$(awk '{print $3}' <<<"$CAROUSEL")
+ln -sfn "$(readlink -f -- "$H/.config/ohmydebn/current/theme/backgrounds/$FIRST")" "$H/.config/ohmydebn/current/background"
+: >"$MOCK_CALLS"
+HOME="$H" PATH="$(mock_path)" bash "$MOCK_DIR/bg-next" </dev/null >/dev/null 2>&1
+assert_eq "next from a background found through a symlink: moves on" "$SECOND" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 test_summary

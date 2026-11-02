@@ -32,10 +32,10 @@ fi
 
 # Tell Alacritty whether its window decorations should be light or dark
 if grep -q '^\s*decorations_theme_variant\s*=' "$ALACRITTY_CONFIG" 2>/dev/null; then
-  sed -i -E "s|^\s*decorations_theme_variant\s*=.*|decorations_theme_variant = \"$THEME_VARIANT\"|" "$ALACRITTY_CONFIG"
+  sed -i --follow-symlinks -E "s|^\s*decorations_theme_variant\s*=.*|decorations_theme_variant = \"$THEME_VARIANT\"|" "$ALACRITTY_CONFIG"
 else
   if grep -q '^\[window\]' "$ALACRITTY_CONFIG" 2>/dev/null; then
-    sed -i "/^\[window\]/a\\decorations_theme_variant = \"$THEME_VARIANT\"" "$ALACRITTY_CONFIG"
+    sed -i --follow-symlinks "/^\[window\]/a\\decorations_theme_variant = \"$THEME_VARIANT\"" "$ALACRITTY_CONFIG"
   else
     {
       echo ""

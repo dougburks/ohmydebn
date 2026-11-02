@@ -16,6 +16,14 @@ set -e
 # here would repeat every time - not worth it for a known, permanent version
 # gate that isn't actionable.
 
-# set theme-variant to dark and then to light to force update
-gsettings set org.gnome.gedit.preferences.ui theme-variant 'dark' || true
-gsettings set org.gnome.gedit.preferences.ui theme-variant 'light' || true
+# Flip theme-variant to another value and back, which makes a running gedit
+# reload its colors. Back to the value it had, not always 'light':
+# install/config/gedit.sh sets 'light' once, and a user who has since chosen
+# 'system' or 'dark' keeps it. No value (no such key): nothing to do.
+VARIANT=$(gsettings get org.gnome.gedit.preferences.ui theme-variant 2>/dev/null || true)
+if [ -n "$VARIANT" ]; then
+  OTHER="'dark'"
+  [ "$VARIANT" = "'dark'" ] && OTHER="'light'"
+  gsettings set org.gnome.gedit.preferences.ui theme-variant "$OTHER" || true
+  gsettings set org.gnome.gedit.preferences.ui theme-variant "$VARIANT" || true
+fi

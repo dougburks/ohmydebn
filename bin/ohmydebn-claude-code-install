@@ -43,7 +43,16 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
   printf 'Package: *\nPin: origin "downloads.claude.ai"\nPin-Priority: -1\n\nPackage: claude-code\nPin: origin "downloads.claude.ai"\nPin-Priority: 500\n' |
     sudo tee /etc/apt/preferences.d/claude-code.pref >/dev/null
 
-  sudo /usr/bin/apt update
+  # A source that fails to refresh would fail every later apt update
+  # (ohmydebn-update included), so it's taken out again, as
+  # ohmydebn-chatgpt-install does.
+  if ! sudo /usr/bin/apt update; then
+    sudo rm -f /etc/apt/sources.list.d/claude-code.list /etc/apt/preferences.d/claude-code.pref /usr/share/keyrings/claude-code.asc
+    echo
+    echo "Couldn't refresh the package lists, so Claude Code's package source was removed again."
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
   sudo /usr/bin/apt -y install claude-code
 
   # Theme it with the current OhMyDebn theme now: the theme hook skips

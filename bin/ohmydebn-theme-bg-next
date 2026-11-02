@@ -55,10 +55,16 @@ else
     CURRENT_BACKGROUND=""
   fi
 
-  # Find current background index
+  # Find current background index. ohmydebn-theme-bg-set stores the link's
+  # target fully resolved, so a background that is itself a symlink (a
+  # wallpaper linked into the user's backgrounds folder, or ~/.config
+  # linked to a dotfiles repo) is matched by where it points too, as the
+  # remembered background is below - otherwise it was never found, and
+  # every press went back to the same one instead of on to the next.
   INDEX=-1
   for i in "${!BACKGROUNDS[@]}"; do
-    if [[ "${BACKGROUNDS[$i]}" == "$CURRENT_BACKGROUND" ]]; then
+    if [[ "${BACKGROUNDS[$i]}" == "$CURRENT_BACKGROUND" ||
+      "$(readlink -f -- "${BACKGROUNDS[$i]}")" == "$CURRENT_BACKGROUND" ]]; then
       INDEX=$i
       break
     fi

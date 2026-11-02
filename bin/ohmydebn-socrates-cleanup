@@ -51,8 +51,14 @@ keep_date=$(awk -F'|' '{print $1}' <<< "$KEEP")
 default_full_id=$(podman image inspect --format '{{.Id}}' "$DEFAULT_IMAGE" 2>/dev/null || true)
 default_id=""
 REMOVE=()
+# podman lists an image once per tag, so the newest one, or an older one,
+# can come up more than once: each ID is considered once, and never the
+# kept one's (removing it by ID would fail, as it has several tags).
+declare -A SEEN=(["$keep_id"]=1)
 for entry in "${IMAGES[@]:1}"; do
   img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+  [[ -n "${SEEN[$img_id]:-}" ]] && continue
+  SEEN[$img_id]=1
   if [[ -n "$default_full_id" && "$default_full_id" == "$img_id"* ]]; then
     default_id="$img_id"
     continue

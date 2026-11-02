@@ -22,8 +22,21 @@ if ! dpkg -s "brave-browser" >/dev/null 2>&1; then
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
+  # A source that fails to refresh would fail every later apt update, so
+  # it's taken back out if this run added it - not when it was already
+  # there for the other Brave variant, or is the distro's own.
+  BRAVE_REPO_ADDED=false
+  /usr/share/ohmydebn/bin/ohmydebn-brave-repo is-configured || BRAVE_REPO_ADDED=true
   /usr/share/ohmydebn/bin/ohmydebn-brave-repo ensure
-  sudo /usr/bin/apt update
+  if ! sudo /usr/bin/apt update; then
+    if [ "$BRAVE_REPO_ADDED" = true ] && /usr/share/ohmydebn/bin/ohmydebn-brave-repo is-ours; then
+      /usr/share/ohmydebn/bin/ohmydebn-brave-repo remove || true
+      echo
+      echo "Couldn't refresh the package lists, so Brave's package source was removed again."
+    fi
+    echo "Check the apt output above, then try again."
+    exit 1
+  fi
   sudo /usr/bin/apt -y install brave-browser
 
   # Installed by hand, from the menu, onto a system that already has a

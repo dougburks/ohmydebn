@@ -9,13 +9,16 @@
 # once, with a note. Keyed on the theme name and the shipped themes, so it
 # needs no marker: it does nothing once the theme has changed, for an
 # Osaka Jade of the user's own in ~/.config/ohmydebn/themes, or before the
-# package that ships Jade Horse is installed. --no-intro: a full-screen
-# intro would cover this update's terminal.
+# package that ships Jade Horse is installed. Osaka Jade counts as gone
+# once its colors.toml is: its folder can outlive it, since this runs
+# before the update's package upgrades, and until those the old intros
+# package keeps Osaka Jade's clip in backgrounds/intros there.
+# --no-intro: a full-screen intro would cover this update's terminal.
 THEME_NAME_FILE=~/.config/ohmydebn/current/theme.name
 SHIPPED_THEMES=/usr/share/ohmydebn-themes
 if [ "$(cat "$THEME_NAME_FILE" 2>/dev/null)" = "osaka-jade" ] &&
   [ ! -d ~/.config/ohmydebn/themes/osaka-jade ] &&
-  [ ! -d "$SHIPPED_THEMES/osaka-jade" ] && [ -d "$SHIPPED_THEMES/jade-horse" ]; then
+  [ ! -f "$SHIPPED_THEMES/osaka-jade/colors.toml" ] && [ -f "$SHIPPED_THEMES/jade-horse/colors.toml" ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Switching from Osaka Jade to Jade Horse"
   echo "Omarchy replaced its Osaka Jade theme with Jade Horse, so your theme is now Jade Horse."
   echo "To choose another, open the OhMyDebn Menu and go to Appearance > Theme."

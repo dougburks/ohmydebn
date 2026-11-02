@@ -29,7 +29,14 @@ echo "${@: -1}" >"$HOME/.config/ohmydebn/current/theme.name"
 EOF
   STOCK="$MOCK_DIR/stock"
   local theme
-  for theme in $2; do mkdir -p "$STOCK/$theme"; done
+  for theme in $2; do
+    mkdir -p "$STOCK/$theme"
+    : >"$STOCK/$theme/colors.toml"
+  done
+  # What the old intros package (4.5.0~rc1) leaves of Osaka Jade until the
+  # update's package upgrades, which come after this step.
+  [[ -n "${OLD_INTROS:-}" ]] && mkdir -p "$STOCK/osaka-jade/backgrounds/intros" &&
+    : >"$STOCK/osaka-jade/backgrounds/intros/1-glowing-city.webm"
   sed -e "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" -e "s#/usr/share/ohmydebn-themes#$STOCK#g" "$STEP" >"$MOCK_DIR/step.sh"
   H="$MOCK_DIR/home"
   mkdir -p "$H/.config/ohmydebn/current" "$H/.config/ohmydebn/themes"
@@ -50,6 +57,13 @@ assert_contains "osaka-jade: says why" "$OUTPUT" "Omarchy replaced its Osaka Jad
 assert_contains "osaka-jade: says where to choose another" "$OUTPUT" "Appearance > Theme"
 assert_contains "osaka-jade: switches to Jade Horse, without an intro" "$CALLS" "theme-set --no-intro jade-horse"
 assert_eq "osaka-jade: the theme is now Jade Horse" "jade-horse" "$(cat "$NAME_FILE")"
+mock_cleanup
+
+# The old intros package, still installed when this step runs, keeps an
+# osaka-jade folder holding only Osaka Jade's clip: the theme is still gone.
+OLD_INTROS=1 run_step osaka-jade "$NEW_THEMES"
+assert_contains "osaka-jade, old intros still installed: switches to Jade Horse" "$(cat "$MOCK_CALLS")" "theme-set --no-intro jade-horse"
+assert_eq "osaka-jade, old intros still installed: the theme is now Jade Horse" "jade-horse" "$(cat "$NAME_FILE")"
 mock_cleanup
 
 # Run again after the switch: nothing more happens.

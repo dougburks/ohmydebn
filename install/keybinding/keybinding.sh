@@ -50,15 +50,14 @@ if [ ! -f $KEYBINDING_STATE ]; then
     eval "$GSETTINGS3" || echo "Warning: skipped custom keybinding $1 binding" >&2
   }
 
-  # To create new custom keybindings, first specify how many custom keybindings we're going to load
-  CUSTOM_KEYBINDING_TOTAL=$(cat $KEYBINDING_CUSTOM | wc -l)
-  # Not `let CUSTOM_KEYBINDING_TOTAL--` - `let`/`((...))` exit non-zero when
-  # the resulting expression value is 0, which would abort the whole install
-  # under the caller's `set -e` if the custom-keybindings count were ever 0.
-  # Plain arithmetic assignment doesn't have that pitfall.
-  CUSTOM_KEYBINDING_TOTAL=$((CUSTOM_KEYBINDING_TOTAL - 1))
+  # The stock slots, as keybinding-custom.txt numbers them. Read rather
+  # than counted: a removed stock hotkey leaves its number unused (34,
+  # Antigravity, since 4.15.0), and counting lines would then list a slot
+  # that isn't set and leave out the last one.
+  STOCK_SLOTS=$(awk '$1 == "keybinding-custom" {print $2}' $KEYBINDING_CUSTOM)
+  CUSTOM_KEYBINDING_MAX=$(sort -n <<<"$STOCK_SLOTS" | tail -1)
   CUSTOM_IDS=""
-  for i in $(seq 0 $CUSTOM_KEYBINDING_TOTAL); do
+  for i in $STOCK_SLOTS; do
     CUSTOM_IDS+="'custom-$i', "
   done
   # Keep whatever else is already in the list - shortcuts the user added in
@@ -66,11 +65,12 @@ if [ ! -f $KEYBINDING_STATE ]; then
   # naming) and the custom-1000+ slots ohmydebn-keybindings-apply manages -
   # instead of truncating the list to the stock slots, which used to make
   # every user-added shortcut vanish from Settings on each keybinding refresh.
-  # Cinnamon Settings' transient "__dummy__" entry is dropped.
+  # Cinnamon Settings' transient "__dummy__" entry is dropped, and so is a
+  # stock slot that's no longer in the file (custom-34).
   CUSTOM_EXISTING=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null | grep -oP "'[^']*'" | tr -d "'" || true)
   for existing in $CUSTOM_EXISTING; do
     [ "$existing" = "__dummy__" ] && continue
-    if [[ "$existing" =~ ^custom-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -le "$CUSTOM_KEYBINDING_TOTAL" ]; then
+    if [[ "$existing" =~ ^custom-([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -le "$CUSTOM_KEYBINDING_MAX" ]; then
       continue
     fi
     CUSTOM_IDS+="'$existing', "
@@ -173,6 +173,44 @@ add_stock_keybinding() {
   echo "${fields[4]}"
 }
 add_stock_keybinding 48
+
+# Stock keybindings removed since the marker above, for the same reason:
+# installs from before still have the slot in their list, running a
+# command that's gone. Each is taken out of the list once, and only while
+# it still runs what OhMyDebn put there, so a slot the user gave another
+# job keeps working. Its number is never reused. Its own marker
+# (keybinding-remove-<slot>) is set once it's out or was never there, and
+# not when gsettings prints no list, so the next update tries again.
+# Antigravity (Ctrl + Super + G) went in 4.15.0.
+# remove_stock_keybinding <slot> <part of its command>
+remove_stock_keybinding() {
+  local list marker="$STATE_DIR/keybinding-remove-$1"
+  local slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
+  [ -f "$marker" ] && return 0
+  list=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null) || return 0
+  [[ "$list" == "["*"]" || "$list" == "@as []" ]] || return 0
+  mkdir -p "$STATE_DIR"
+  if [[ "$list" != *"'custom-$1'"* ]] ||
+    [[ "$(gsettings get "$slot" command 2>/dev/null)" != *"$2"* ]]; then
+    touch "$marker"
+    return 0
+  fi
+  list="${list#@as }"
+  list="${list//"'custom-$1', "/}"
+  list="${list//", 'custom-$1'"/}"
+  list="${list//"'custom-$1'"/}"
+  # The same "__dummy__" toggle as above, so Cinnamon reloads its custom
+  # shortcuts.
+  if [[ "$list" == "[]" ]]; then
+    gsettings set org.cinnamon.desktop.keybindings custom-list "['__dummy__']" || return 0
+  else
+    gsettings set org.cinnamon.desktop.keybindings custom-list "${list%]}, '__dummy__']" || return 0
+  fi
+  gsettings set org.cinnamon.desktop.keybindings custom-list "$list" || return 0
+  gsettings reset-recursively "$slot" 2>/dev/null || true
+  touch "$marker"
+}
+remove_stock_keybinding 34 "ohmydebn-antigravity"
 
 # The user's own keybindings (~/.config/ohmydebn/keybindings.txt), layered on
 # top of the stock ones. Outside the state gate on purpose: it has to run when

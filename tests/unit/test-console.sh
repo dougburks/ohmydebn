@@ -19,7 +19,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-console-run ==="
 
 TERMINAL_AIS=(opencode claude-code codex grok crush omp pi)
-DESKTOP_AIS=(opencode-desktop claude-desktop chatgpt t3code vscode antigravity)
+DESKTOP_AIS=(opencode-desktop claude-desktop chatgpt t3code vscode)
 
 setup() {
   mock_init

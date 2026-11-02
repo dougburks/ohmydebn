@@ -331,7 +331,6 @@ fi
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-btop
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-gedit
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-starship
-/usr/share/ohmydebn/bin/ohmydebn-theme-set-antigravity
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-cava
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch

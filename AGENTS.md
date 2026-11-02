@@ -84,10 +84,17 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 
 ### Adding a stock hotkey
 
-1. Append a line to `install/keybinding/keybinding-custom.txt` with the next free slot number. New installs get it from the full pass in `install/keybinding/keybinding.sh`.
+1. Append a line to `install/keybinding/keybinding-custom.txt` with the next free slot number: one higher than the highest in the file, never a removed slot's number. New installs get it from the full pass in `install/keybinding/keybinding.sh`.
 2. Add `add_stock_keybinding <slot>` after the existing ones in `keybinding.sh`. It gives existing installs just that slot, once, and its own marker (`keybinding-add-<slot>`) keeps a user's later removal from being undone.
 3. Don't bump the `KEYBINDING_STATE` marker to add a hotkey. That reruns the whole stock pass, resetting every stock hotkey the user changed in Cinnamon's settings. Bump it only when existing stock hotkeys must all be rewritten. A smaller change to one existing hotkey gets a targeted fix like `rename_stock_keybinding`.
 4. A row in `ohmydebn-docs/docs/hotkeys.md`, and tests in `tests/unit/test-keybinding.sh`.
+
+### Removing a stock hotkey
+
+1. Delete its line from `keybinding-custom.txt`. The full pass reads slot numbers from the file, so the gap is fine; never reuse the number.
+2. Add `remove_stock_keybinding <slot> <part of its command>` after the existing ones in `keybinding.sh`. It takes the slot out of existing installs' list once (marker `keybinding-remove-<slot>`), and only while it still runs that command, so a slot the user gave another job is left alone.
+3. Don't bump `KEYBINDING_STATE` for this either.
+4. Remove its row from `ohmydebn-docs/docs/hotkeys.md`, and add tests in `tests/unit/test-keybinding.sh`.
 
 ### Supporting another distro
 
@@ -111,7 +118,7 @@ Add an `ohmydebn-theme-set-<app>` hook, call it from `bin/ohmydebn-theme-set`, a
 
 ## Release notes
 
-Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are Supported distros (only when the release adds one; it comes first, since it's what decides whether a reader can use the release at all), New, Improvements, Fixes and Updated components. An updated component is just its name and new version.
+Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are Supported distros (only when the release adds one; it comes first, since it's what decides whether a reader can use the release at all), New, Improvements, Fixes, Removed (only when the release takes something away; say why, and what users who have it should expect) and Updated components. An updated component is just its name and new version.
 
 ## Release checklist
 

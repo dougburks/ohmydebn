@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Unit tests for the signing-key checks in the Antigravity, Cloudflare
-# WARP, Helium, Tailscale and Google Chrome installers. Each used to hand
+# Unit tests for the signing-key checks in the Cloudflare WARP, Helium,
+# Tailscale and Google Chrome installers. Each used to hand
 # whatever key its vendor's URL served straight to apt, so a key swapped in
 # transit or on the vendor's server was trusted for every package from
 # that repo. Now the key is checked against the vendor's fingerprint first,
@@ -26,7 +26,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$REPO_ROOT/tests/lib/test-helpers.sh"
 
-echo "=== vendor signing keys: antigravity, cloudflare-warp, helium-bin, tailscale, google-chrome-stable, chatgpt installers ==="
+echo "=== vendor signing keys: cloudflare-warp, helium-bin, tailscale, google-chrome-stable, chatgpt installers ==="
 
 # One scratch root for every case (setup empties it), so the paths each
 # case checks can be worked out before its setup runs.
@@ -127,9 +127,6 @@ check_vendor() {
   mock_cleanup
 }
 
-check_vendor "Antigravity" ohmydebn-antigravity-install google-artifact-registry-signing-key.asc \
-  /etc/apt/keyrings/antigravity-repo-key.gpg /etc/apt/sources.list.d/antigravity.list \
-  /etc/apt/preferences.d/antigravity.pref antigravity
 check_vendor "Cloudflare WARP" ohmydebn-cloudflare-warp-install cloudflare-signing-key.asc \
   /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg /etc/apt/sources.list.d/cloudflare-client.list \
   /etc/apt/preferences.d/cloudflare-client.pref cloudflare-warp

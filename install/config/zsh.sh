@@ -140,7 +140,7 @@ if [ ! -f $AI_CLI_ALIAS_STATE ]; then
   cat <<EOF >>~/.zshrc
 
 # Default AI assistant, run in the current terminal (or opened on \$PWD for
-# GUI defaults like VS Code/Antigravity/ChatGPT)
+# GUI defaults like VS Code/ChatGPT)
 alias a='/usr/share/ohmydebn/bin/ohmydebn-ai-cli'
 EOF
   touch $AI_CLI_ALIAS_STATE

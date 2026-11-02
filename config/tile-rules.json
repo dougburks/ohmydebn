@@ -21,13 +21,11 @@
   { "wmClass": "OhMyDebn", "titleRegex": "^OpenCode Desktop$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^T3 Code$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^VSCode$", "grid": [2, 2, 1, 0, 1, 2] },
-  { "wmClass": "OhMyDebn", "titleRegex": "^Antigravity$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Brave Origin$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Brave Browser$", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "OhMyDebn", "titleRegex": "^Chromium$", "grid": [2, 2, 1, 0, 1, 2] },
 
   { "wmClass": "code", "grid": [2, 2, 1, 0, 1, 2] },
-  { "wmClass": "Antigravity", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "Chatgpt", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "com.anthropic.Claude", "grid": [2, 2, 1, 0, 1, 2] },
   { "wmClass": "com.t3tools.T3Code", "grid": [2, 2, 1, 0, 1, 2] },

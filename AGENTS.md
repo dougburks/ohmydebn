@@ -82,6 +82,13 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 6. The consistency lists (`AI_INSTALLER_TO_NAME`, `TITLE_OWNERS`), a `tests/unit/test-ohmydebn-<name>.sh`, and the name in the AI dispatch, zsh, doctor and removal tests.
 7. If T3 Code should find it, a link in the T3 Code package's `agent-bin`.
 
+### Adding a stock hotkey
+
+1. Append a line to `install/keybinding/keybinding-custom.txt` with the next free slot number. New installs get it from the full pass in `install/keybinding/keybinding.sh`.
+2. Add `add_stock_keybinding <slot>` after the existing ones in `keybinding.sh`. It gives existing installs just that slot, once, and its own marker (`keybinding-add-<slot>`) keeps a user's later removal from being undone.
+3. Don't bump the `KEYBINDING_STATE` marker to add a hotkey. That reruns the whole stock pass, resetting every stock hotkey the user changed in Cinnamon's settings. Bump it only when existing stock hotkeys must all be rewritten. A smaller change to one existing hotkey gets a targeted fix like `rename_stock_keybinding`.
+4. A row in `ohmydebn-docs/docs/hotkeys.md`, and tests in `tests/unit/test-keybinding.sh`.
+
 ### Supporting another distro
 
 1. Find out what it actually reports: `/etc/os-release`, `/etc/apt/sources.list.d/`, the login manager. Derivatives vary: MX Linux reports itself as Debian 13, while Ubuntu derivatives report their own `ID` with `ID_LIKE=ubuntu`.

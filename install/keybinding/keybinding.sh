@@ -132,20 +132,29 @@ rename_stock_keybinding 4 "Hotkeys" "Keybindings" "ohmydebn.org/hotkeys"
 rename_stock_keybinding 2 "GMail" "Gmail" "https://mail.google.com"
 rename_stock_keybinding 43 "Cloudflare Warp" "Cloudflare WARP" "ohmydebn-cloudflare-warp"
 
-# Stock keybindings added without a new marker above, for the same reason:
-# installs from before get just the new slot, as keybinding-custom.txt
-# has it, the first time an update finds it missing from custom-list. One
-# the user has since removed in Cinnamon's settings comes back once, on
-# the update that adds it. Console (Super + the key left of 1, 4.15.0).
+# Stock keybindings added since the marker above, for the same reason as
+# the renames: bumping it would rewrite every stock keybinding. Installs
+# from before get just the new slot, as keybinding-custom.txt has it, once:
+# its own marker (keybinding-add-<slot>) then keeps it from coming back
+# after the user removes it in Cinnamon's settings. A new install already
+# has the slot from the full pass above, and only gets the marker.
+# Console (Super + the key left of 1) came in 4.15.0.
 # add_stock_keybinding <slot>
 add_stock_keybinding() {
-  local list line slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
+  local list line marker="$STATE_DIR/keybinding-add-$1"
+  local slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
   local -a fields
+  [ -f "$marker" ] && return 0
   list=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null) || return 0
   # Only a list gsettings actually printed: anything else (no session bus,
-  # a schema that isn't there) leaves it alone rather than guessing.
+  # a schema that isn't there) leaves it alone, unmarked, for the next
+  # update to try again rather than guessing.
   [[ "$list" == "["*"]" || "$list" == "@as []" ]] || return 0
-  [[ "$list" == *"'custom-$1'"* ]] && return 0
+  mkdir -p "$STATE_DIR"
+  if [[ "$list" == *"'custom-$1'"* ]]; then
+    touch "$marker"
+    return 0
+  fi
   line=$(grep "^keybinding-custom $1 " /usr/share/ohmydebn/install/keybinding/keybinding-custom.txt) || return 0
   # The line's own quoting gives the fields: slot, name, command, binding
   # and the description printed below.
@@ -160,6 +169,7 @@ add_stock_keybinding() {
   [[ "$list" == "[" ]] || list+=", "
   gsettings set org.cinnamon.desktop.keybindings custom-list "${list}'custom-$1', '__dummy__']" || return 0
   gsettings set org.cinnamon.desktop.keybindings custom-list "${list}'custom-$1']" || return 0
+  touch "$marker"
   echo "${fields[4]}"
 }
 add_stock_keybinding 48

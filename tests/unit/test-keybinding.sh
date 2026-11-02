@@ -196,20 +196,27 @@ done <<'LIST'
 43|Cloudflare Warp|Cloudflare WARP|'/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp'
 LIST
 
-# --- Stock keybindings added without a new marker (Console, custom-48,
-# in 4.15.0): installs from before get just that slot, appended to
-# custom-list, the first time an update finds it missing - and nothing at
-# all once it's there, or when gsettings prints no list.
+# --- Stock keybindings added since the marker (Console, custom-48, in
+# 4.15.0): installs from before get just that slot, appended to
+# custom-list, once - its own marker then keeps a user's removal from being
+# undone by the next update. Nothing at all when it's already listed (only
+# the marker), or when gsettings prints no list (not even the marker).
 CONSOLE_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-48/"
+CONSOLE_MARKER="keybinding-add-48"
+# run_marked <custom-list> [yes: the Console marker is already there]
 run_marked() {
   mock_init
   setup_mocks
   SCRATCH_HOME=$(mktemp -d)
   mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
   touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  [[ "${2:-}" == yes ]] && touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$CONSOLE_MARKER"
   MOCK_CUSTOM_LIST="$1" MOCK_CINNAMON_RUNNING=true run_script
   CALLS=$(cat "$MOCK_CALLS")
   LIST_SETS=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
+}
+console_marked() {
+  [ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$CONSOLE_MARKER" ] && echo yes || echo no
 }
 
 run_marked "['custom-0', 'custom-47', 'custom5', 'custom-1000']"
@@ -220,21 +227,42 @@ assert_eq "Console missing: custom-list written twice" "2" "$(echo "$LIST_SETS" 
 assert_contains "Console missing: first list write carries __dummy__ so Cinnamon reloads" "$(echo "$LIST_SETS" | head -1)" "'custom-1000', 'custom-48', '__dummy__']"
 assert_contains "Console missing: final list keeps everything and adds custom-48" "$(echo "$LIST_SETS" | tail -1)" "['custom-0', 'custom-47', 'custom5', 'custom-1000', 'custom-48']"
 assert_eq "Console missing: no other stock slot rewritten" "3" "$(grep -c 'gsettings set .*custom-keybindings/custom-[0-9]*/' "$MOCK_CALLS")"
+assert_eq "Console missing: marked as added" "yes" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Added once: a user who removed it in Cinnamon's settings keeps it removed.
+run_marked "['custom-0', 'custom-47', 'custom-1000']" yes
+assert_not_contains "Console added before, since removed by the user: not added back" "$CALLS" "gsettings set"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
 run_marked "@as []"
 assert_contains "empty custom-list: becomes just custom-48" "$(echo "$LIST_SETS" | tail -1)" "custom-list ['custom-48']"
+assert_eq "empty custom-list: marked as added" "yes" "$(console_marked)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
 run_marked "['custom-0', 'custom-48', 'custom-1000']"
 assert_not_contains "Console already listed: nothing written" "$CALLS" "gsettings set"
+assert_eq "Console already listed: marked, so a later removal sticks" "yes" "$(console_marked)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
 run_marked ""
 assert_not_contains "no list from gsettings: nothing written" "$CALLS" "gsettings set"
+assert_eq "no list from gsettings: not marked, so the next update tries again" "no" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# A new install: the full pass lists every stock slot, Console included, so
+# the step after it only marks it.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+MOCK_CINNAMON_RUNNING=true run_script
+assert_eq "new install: custom-list written only by the full pass (twice)" "2" "$(grep -c 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")"
+assert_eq "new install: Console marked as added" "yes" "$(console_marked)"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

@@ -55,7 +55,7 @@ This directory contains OhMyDebn's source files managed by the ohmydebn deb pack
 
 **OhMyDebn Features:**
 - **Desktop Effects**: Enabled by default, disable via System Settings → Effects
-- **AI assistants**: optional installs from Apps > AI (OpenCode and OpenCode Desktop, Claude Code, Codex, Grok Build, Crush, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). Installed ones are kept current via `ohmydebn-update`
+- **AI assistants**: optional installs from Apps > AI (OpenCode and OpenCode Desktop, Claude Code, Codex, Grok Build, Crush, Pi, Oh My Pi, T3 Code and more). `Super + A` opens the default one, chosen in Setup > Defaults > Agent (OpenCode until changed). `Super` + the key left of `1` (`ohmydebn-console`) toggles a drop-down console running the default terminal assistant (or a shell), which keeps running while hidden. Installed ones are kept current via `ohmydebn-update`
 - **Apps Menu**: GTK app launcher (`ohmydebn-menu-picker --apps`), `Super + R` or OhMyDebn Menu → Apps → Other Apps
 
 ## System Architecture
@@ -447,6 +447,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Space`, or the grin icon on the panel next to the Cinnamon menu
 - "Launch AI assistant" -> `Super + A` (the default assistant, set in Setup > Defaults > Agent) or from Apps > AI
+- "Quick AI console" / "drop-down terminal" -> `Super` + the key left of `1` (press again to hide it)
 - "Update OpenCode to latest version" -> `ohmydebn-update` (updates OpenCode if it's installed)
 - "Open apps menu" -> `Super + R` (GTK app launcher)
 - "Show OhMyDebn logo" -> `Ctrl + Shift + O`

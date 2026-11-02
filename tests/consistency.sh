@@ -1366,8 +1366,11 @@ while IFS= read -r f; do
   fi
 # The underscored .py files are modules the windows import, not windows.
 # Indented imports count: ohmydebn-pdf-sign imports Gtk only inside its
-# app, so its commands run without a display.
-done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+# app, so its commands run without a display. ohmydebn-console opens no
+# window of its own: it imports Gtk only to drive Wnck, which moves the
+# console's Alacritty window.
+done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$' |
+  grep -v '/bin/ohmydebn-console$')
 echo "  checked $CHECKED notifications and GTK scripts"
 
 echo

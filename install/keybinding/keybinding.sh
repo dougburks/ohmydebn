@@ -132,6 +132,38 @@ rename_stock_keybinding 4 "Hotkeys" "Keybindings" "ohmydebn.org/hotkeys"
 rename_stock_keybinding 2 "GMail" "Gmail" "https://mail.google.com"
 rename_stock_keybinding 43 "Cloudflare Warp" "Cloudflare WARP" "ohmydebn-cloudflare-warp"
 
+# Stock keybindings added without a new marker above, for the same reason:
+# installs from before get just the new slot, as keybinding-custom.txt
+# has it, the first time an update finds it missing from custom-list. One
+# the user has since removed in Cinnamon's settings comes back once, on
+# the update that adds it. Console (Super + the key left of 1, 4.15.0).
+# add_stock_keybinding <slot>
+add_stock_keybinding() {
+  local list line slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
+  local -a fields
+  list=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null) || return 0
+  # Only a list gsettings actually printed: anything else (no session bus,
+  # a schema that isn't there) leaves it alone rather than guessing.
+  [[ "$list" == "["*"]" || "$list" == "@as []" ]] || return 0
+  [[ "$list" == *"'custom-$1'"* ]] && return 0
+  line=$(grep "^keybinding-custom $1 " /usr/share/ohmydebn/install/keybinding/keybinding-custom.txt) || return 0
+  # The line's own quoting gives the fields: slot, name, command, binding
+  # and the description printed below.
+  eval "fields=(${line#keybinding-custom })"
+  gsettings set "$slot" name "${fields[1]}" || return 0
+  gsettings set "$slot" command "${fields[2]}" || return 0
+  gsettings set "$slot" binding "${fields[3]}" || return 0
+  # Appended, with the same "__dummy__" toggle as above so Cinnamon
+  # reloads its custom shortcuts.
+  list="${list#@as }"
+  list="${list%]}"
+  [[ "$list" == "[" ]] || list+=", "
+  gsettings set org.cinnamon.desktop.keybindings custom-list "${list}'custom-$1', '__dummy__']" || return 0
+  gsettings set org.cinnamon.desktop.keybindings custom-list "${list}'custom-$1']" || return 0
+  echo "${fields[4]}"
+}
+add_stock_keybinding 48
+
 # The user's own keybindings (~/.config/ohmydebn/keybindings.txt), layered on
 # top of the stock ones. Outside the state gate on purpose: it has to run when
 # the user's file changed even though the stock keybindings didn't. It gates itself

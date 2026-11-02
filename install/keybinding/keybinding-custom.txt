@@ -46,3 +46,4 @@ keybinding-custom 44 "Claude Code" "/usr/share/ohmydebn/bin/ohmydebn-claude-code
 keybinding-custom 45 "File Manager" "/usr/share/ohmydebn/bin/ohmydebn-file-manager-tiled" "['<Super>F']" "Press Super + F to open file manager"
 keybinding-custom 46 "herdr" "/usr/share/ohmydebn/bin/ohmydebn-herdr" "['<Ctrl><Super>Return']" "Press Ctrl + Super + Return to launch herdr"
 keybinding-custom 47 "tmux" "/usr/share/ohmydebn/bin/ohmydebn-tmux" "['<Super><Alt>Return']" "Press Super + Alt + Return to launch a tmux terminal"
+keybinding-custom 48 "Console" "/usr/share/ohmydebn/bin/ohmydebn-console" "['<Super>Above_Tab']" "Press Super + the key left of 1 for the drop-down console (your default AI, or a shell)"

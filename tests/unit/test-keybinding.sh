@@ -39,12 +39,20 @@ setup_mocks() {
 mock_log "ohmydebn-headline $*"
 EOF
   # MOCK_CUSTOM_LIST, when set, is what `gsettings get ... custom-list`
-  # returns - the union scenario uses it.
+  # returns - the union scenario uses it - until the script writes the
+  # list, after which it reads back what it wrote, as it would for real.
   mock_bin gsettings <<'EOF'
 #!/bin/bash
 mock_log "gsettings $*"
+if [[ "$1 $2 $3" == "set org.cinnamon.desktop.keybindings custom-list" ]]; then
+  echo "$4" >"$MOCK_DIR/custom-list"
+fi
 if [[ "$1 $2 $3" == "get org.cinnamon.desktop.keybindings custom-list" ]]; then
-  echo "${MOCK_CUSTOM_LIST:-}"
+  if [[ -f "$MOCK_DIR/custom-list" ]]; then
+    cat "$MOCK_DIR/custom-list"
+  else
+    echo "${MOCK_CUSTOM_LIST:-}"
+  fi
 fi
 # MOCK_SLOT_NAME/COMMAND: what stock slot custom-$MOCK_SLOT holds now.
 if [[ "$1" == get && -n "${MOCK_SLOT:-}" && "$2" == *custom-keybindings/custom-$MOCK_SLOT/ ]]; then
@@ -187,5 +195,47 @@ done <<'LIST'
 2|GMail|Gmail|'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com'
 43|Cloudflare Warp|Cloudflare WARP|'/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp'
 LIST
+
+# --- Stock keybindings added without a new marker (Console, custom-48,
+# in 4.15.0): installs from before get just that slot, appended to
+# custom-list, the first time an update finds it missing - and nothing at
+# all once it's there, or when gsettings prints no list.
+CONSOLE_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-48/"
+run_marked() {
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  MOCK_CUSTOM_LIST="$1" MOCK_CINNAMON_RUNNING=true run_script
+  CALLS=$(cat "$MOCK_CALLS")
+  LIST_SETS=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
+}
+
+run_marked "['custom-0', 'custom-47', 'custom5', 'custom-1000']"
+assert_contains "Console missing: slot named Console" "$CALLS" "gsettings set $CONSOLE_SLOT name Console"
+assert_contains "Console missing: runs ohmydebn-console" "$CALLS" "gsettings set $CONSOLE_SLOT command /usr/share/ohmydebn/bin/ohmydebn-console"
+assert_contains "Console missing: bound to Super + the key left of 1, on any layout" "$CALLS" "gsettings set $CONSOLE_SLOT binding ['<Super>Above_Tab']"
+assert_eq "Console missing: custom-list written twice" "2" "$(echo "$LIST_SETS" | wc -l)"
+assert_contains "Console missing: first list write carries __dummy__ so Cinnamon reloads" "$(echo "$LIST_SETS" | head -1)" "'custom-1000', 'custom-48', '__dummy__']"
+assert_contains "Console missing: final list keeps everything and adds custom-48" "$(echo "$LIST_SETS" | tail -1)" "['custom-0', 'custom-47', 'custom5', 'custom-1000', 'custom-48']"
+assert_eq "Console missing: no other stock slot rewritten" "3" "$(grep -c 'gsettings set .*custom-keybindings/custom-[0-9]*/' "$MOCK_CALLS")"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked "@as []"
+assert_contains "empty custom-list: becomes just custom-48" "$(echo "$LIST_SETS" | tail -1)" "custom-list ['custom-48']"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked "['custom-0', 'custom-48', 'custom-1000']"
+assert_not_contains "Console already listed: nothing written" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked ""
+assert_not_contains "no list from gsettings: nothing written" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
 
 test_summary

@@ -87,7 +87,7 @@ ethereal | hackerman | ohmydebn | solarizedosaka | white)
   ICON_THEME="Mint-Y-Blue"
   ;;
 # green
-gruvbox | osaka-jade | solarized)
+gruvbox | jade-horse | solarized)
   ICON_THEME="Mint-Y"
   ;;
 # grey

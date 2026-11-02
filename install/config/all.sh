@@ -26,5 +26,6 @@ source $OHMYDEBN_INSTALL/config/ohmyzsh.sh
 source $OHMYDEBN_INSTALL/config/opencode.sh
 source $OHMYDEBN_INSTALL/config/sounds.sh
 source $OHMYDEBN_INSTALL/config/theme.sh
+source $OHMYDEBN_INSTALL/config/theme-replaced.sh
 source $OHMYDEBN_INSTALL/config/ufw.sh
 source $OHMYDEBN_INSTALL/config/zsh.sh

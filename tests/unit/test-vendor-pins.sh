@@ -75,6 +75,43 @@ assert_eq "no ChatGPT repo: no pin, nothing run" "no" "$([ -e "$APT/preferences.
 assert_eq "no ChatGPT repo: nothing run" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
+# Brave's repo from before 4.5.0, which OhMyDebn wrote without a pin.
+BRAVE_REPO_PIN=$(grep -o "printf 'Package: [^']*'[^|]*" "$REPO_ROOT/bin/ohmydebn-brave-repo" | head -1 |
+  sed 's/"\$BRAVE_REPO_HOST"/"brave-browser-apt-release.s3.brave.com"/g; s/ *$//')
+STEP_BRAVE_PIN=$(grep -o "printf 'Package: [^']*'[^|]*" "$STEP" | sed -n 2p | sed 's/ *$//')
+assert_eq "the step writes exactly the pin ohmydebn-brave-repo writes" "$BRAVE_REPO_PIN" "$STEP_BRAVE_PIN"
+assert_contains "ohmydebn-brave-repo's host is the one the step pins" \
+  "$(cat "$REPO_ROOT/bin/ohmydebn-brave-repo")" 'BRAVE_REPO_HOST="brave-browser-apt-release.s3.brave.com"'
+
+setup
+: >"$APT/sources.list.d/brave-browser-release.sources"
+MOCK_INSTALLED="brave-origin" run_step
+PIN=$(cat "$APT/preferences.d/brave-browser-release.pref" 2>/dev/null)
+assert_eq "Brave repo without a pin: exits 0" "0" "$STATUS"
+assert_contains "Brave repo without a pin: Brave's packages are allowed" "$PIN" 'Package: brave-browser brave-origin brave-keyring'
+assert_contains "Brave repo without a pin: everything else from Brave's origin is refused" "$PIN" 'Pin-Priority: -1'
+assert_contains "Brave repo without a pin: the pin names Brave's repo" "$PIN" 'Pin: origin "brave-browser-apt-release.s3.brave.com"'
+mock_cleanup
+
+setup
+: >"$APT/sources.list.d/brave-browser-release.sources"
+mkdir -p "$APT/preferences.d"; echo "the user's own" >"$APT/preferences.d/brave-browser-release.pref"
+MOCK_INSTALLED="brave-origin" run_step
+assert_eq "Brave pin already there: left exactly as it was" "the user's own" "$(cat "$APT/preferences.d/brave-browser-release.pref")"
+mock_cleanup
+
+# A distro's own source for Brave is the distro's: Zorin OS's
+# brave-browser-release.list (OhMyDebn's name, not its extension), LCOS's
+# brave.list.
+setup
+: >"$APT/sources.list.d/brave-browser-release.list"
+: >"$APT/sources.list.d/brave.list"
+MOCK_INSTALLED="brave-browser" run_step
+assert_eq "a distro's Brave source: no pin added" "no" "$([ -e "$APT/preferences.d/brave-browser-release.pref" ] && echo yes || echo no)"
+assert_eq "a distro's Brave source: left in place" "yes yes" \
+  "$([ -e "$APT/sources.list.d/brave-browser-release.list" ] && echo yes) $([ -e "$APT/sources.list.d/brave.list" ] && echo yes)"
+mock_cleanup
+
 # Leftovers of apps removed with apt: cleaned up on update
 setup
 mkdir -p "$APT/preferences.d"

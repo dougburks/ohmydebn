@@ -31,6 +31,19 @@ if ! dpkg -s "xrdp" >/dev/null 2>&1; then
 
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install xrdp xorgxrdp
+elif [ "$SKIP_PROMPT" = false ] && [ ! -f "$XSESSION_D/45ohmydebn-xrdp-session-guard" ]; then
+  # xrdp installed some other way (by hand, or before this entry existed):
+  # the steps below still change the system, so ask first here too.
+  echo
+  echo "Remote Desktop (XRDP) is installed, but not yet set up by OhMyDebn."
+  echo
+  echo "Continuing will let it use the system's TLS certificate, allow one"
+  echo "graphical session per user (a remote session is refused while you're"
+  echo "logged in locally, and the other way round), and restart the RDP service."
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+
+  read -r
 fi
 
 # TLS. Debian's xrdp package points the daemon at the system's self-signed

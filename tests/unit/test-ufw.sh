@@ -30,6 +30,9 @@ setup() {
 #!/bin/bash
 mock_log "sudo $*"
 case "$1" in mkdir | touch) "$@" ;; esac
+# `ufw enable` answered n over SSH: "Aborted", exit 0, firewall still off.
+[[ "$*" == "ufw status" ]] && { [[ -n "${MOCK_UFW_OFF:-}" ]] && echo "Status: inactive" || echo "Status: active"; }
+exit 0
 STUB
   mock_bin ohmydebn-headline <<'STUB'
 #!/bin/bash
@@ -40,7 +43,7 @@ STUB
 }
 
 run() {
-  HOME="$H" PATH="$(mock_path)" bash -e -c "source '$MOCK_DIR/ufw.sh'" </dev/null >/dev/null 2>&1
+  HOME="$H" PATH="$(mock_path)" bash -e -c "source '$MOCK_DIR/ufw.sh'" </dev/null >"$MOCK_DIR/out" 2>&1
   STATUS=$?
   CALLS=$(cat "$MOCK_CALLS")
 }
@@ -70,6 +73,16 @@ setup no yes
 run
 assert_eq "second user: exits 0" "0" "$STATUS"
 assert_eq "second user: nothing run" "" "$CALLS"
+mock_cleanup
+
+# Over SSH, `ufw enable` was answered with anything but y: it printed
+# "Aborted" and exited 0, but the firewall is off. Not recorded, so the next
+# update tries again, and the user is told.
+setup no no
+MOCK_UFW_OFF=1 run
+assert_eq "enable aborted: exits 0" "0" "$STATUS"
+assert_eq "enable aborted: not recorded, so the next update retries" "no" "$(machine_marked)"
+assert_contains "enable aborted: says so" "$(cat "$MOCK_DIR/out")" "The firewall wasn't turned on"
 mock_cleanup
 
 test_summary

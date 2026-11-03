@@ -29,7 +29,7 @@
 # it before the first one) - finalization/finale.sh, the last step, does the
 # one actual restart at the very end if anything asked for it.
 
-GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/null)
+GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/null || true)
 
 # Purely a diagnostic nudge, not a safety gate - an ohmydebn-gtile older
 # than GTILE_MIN_VERSION has no code path that reads tile-rules.json at

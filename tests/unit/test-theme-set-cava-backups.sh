@@ -55,6 +55,18 @@ assert_eq "more switches: still that one backup, nothing new" "config.backup-bef
 assert_eq "more switches: the backup is still the original" "$ORIGINAL" "$(cat "$CAVA/config.backup-before-ohmydebn")"
 mock_cleanup
 
+# A config that's a symlink (into a dotfiles repo): the colors go into the
+# file it points to, and the link stays a link.
+setup
+mkdir -p "$H/dotfiles"
+mv "$CAVA/config" "$H/dotfiles/cava-config"
+ln -s "$H/dotfiles/cava-config" "$CAVA/config"
+run
+assert_eq "symlinked config: exits 0" "0" "$STATUS"
+assert_eq "symlinked config: still a symlink" "yes" "$([ -L "$CAVA/config" ] && echo yes || echo no)"
+assert_contains "symlinked config: the colors went into the file it points to" "$(cat "$H/dotfiles/cava-config")" "gradient_color_1"
+mock_cleanup
+
 # A machine with per-switch backups from before: the oldest (the config
 # before OhMyDebn's first change) becomes the one backup, the rest go.
 setup

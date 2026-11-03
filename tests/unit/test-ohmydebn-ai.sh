@@ -18,7 +18,7 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 echo "=== bin/ohmydebn-ai / bin/ohmydebn-ai-set-default ==="
 
 setup_mocks() {
-  for cmd in ohmydebn-opencode ohmydebn-opencode-desktop ohmydebn-claude-code ohmydebn-claude-desktop ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-crush ohmydebn-omp ohmydebn-pi ohmydebn-t3code ohmydebn-code ohmydebn-antigravity; do
+  for cmd in ohmydebn-opencode ohmydebn-opencode-desktop ohmydebn-claude-code ohmydebn-claude-desktop ohmydebn-chatgpt ohmydebn-codex ohmydebn-grok ohmydebn-crush ohmydebn-omp ohmydebn-pi ohmydebn-t3code ohmydebn-code; do
     mock_bin "$cmd" <<EOF
 #!/bin/bash
 echo "$cmd \$*" >>"\$MOCK_CALLS"
@@ -60,7 +60,6 @@ declare -A EXPECTED=(
   [pi]="ohmydebn-pi"
   [t3code]="ohmydebn-t3code"
   [vscode]="ohmydebn-code"
-  [antigravity]="ohmydebn-antigravity"
 )
 for stored in "${!EXPECTED[@]}"; do
   fresh_scratch_home
@@ -69,6 +68,18 @@ for stored in "${!EXPECTED[@]}"; do
   run_ai
   assert_contains "stored '$stored' launches ${EXPECTED[$stored]}" "$(cat "$MOCK_CALLS")" "${EXPECTED[$stored]}"
 done
+
+# --- Antigravity, no longer offered (4.15.0), falls back like any unknown value ---
+fresh_scratch_home
+mkdir -p "$SCRATCH_HOME/.config/ohmydebn/current"
+echo "antigravity" >"$SCRATCH_HOME/.config/ohmydebn/current/default-ai"
+run_ai
+assert_eq "stored 'antigravity' (no longer offered) launches OpenCode" "ohmydebn-opencode " "$(cat "$MOCK_CALLS")"
+if HOME="$SCRATCH_HOME" bash "$SET_DEFAULT_SCRIPT" antigravity >/dev/null 2>&1; then
+  assert_eq "antigravity can no longer be chosen as the default" "rejected" "accepted"
+else
+  assert_eq "antigravity can no longer be chosen as the default" "rejected" "rejected"
+fi
 
 # --- A corrupted/unknown stored value falls back to opencode rather than erroring ---
 fresh_scratch_home
@@ -87,7 +98,7 @@ set_default() {
   HOME="$SCRATCH_HOME" bash "$SET_DEFAULT_SCRIPT" "$1" >/dev/null 2>&1
 }
 
-for name in opencode opencode-desktop claude-code claude-desktop chatgpt codex grok crush omp pi t3code vscode antigravity; do
+for name in opencode opencode-desktop claude-code claude-desktop chatgpt codex grok crush omp pi t3code vscode; do
   if ! set_default "$name"; then
     assert_eq "accepts valid name '$name'" "accepted" "rejected"
   else

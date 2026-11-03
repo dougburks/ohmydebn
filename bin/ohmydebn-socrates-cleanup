@@ -6,7 +6,7 @@ IMAGE_PREFIX="ghcr.io/dougburks/so-crates"
 # same value; tests/unit/test-socrates-cleanup.sh checks they match). It's
 # always kept as well as the newest: after a run of another tag it used to
 # be removed as "older", and the next normal launch downloaded it again.
-DEFAULT_IMAGE="$IMAGE_PREFIX@sha256:473001c3e66a95f4bb082cc063c190b4e72177a4cda1a11908ca8f2e6bb5ae81"
+DEFAULT_IMAGE="$IMAGE_PREFIX@sha256:9dcba4943fb4356138b1f10f3b114b23cb6c67541ff6b79e6e58a80cd7900263"
 FORCE=false
 
 usage() {
@@ -51,8 +51,14 @@ keep_date=$(awk -F'|' '{print $1}' <<< "$KEEP")
 default_full_id=$(podman image inspect --format '{{.Id}}' "$DEFAULT_IMAGE" 2>/dev/null || true)
 default_id=""
 REMOVE=()
+# podman lists an image once per tag, so the newest one, or an older one,
+# can come up more than once: each ID is considered once, and never the
+# kept one's (removing it by ID would fail, as it has several tags).
+declare -A SEEN=(["$keep_id"]=1)
 for entry in "${IMAGES[@]:1}"; do
   img_id=$(awk -F'|' '{print $2}' <<< "$entry")
+  [[ -n "${SEEN[$img_id]:-}" ]] && continue
+  SEEN[$img_id]=1
   if [[ -n "$default_full_id" && "$default_full_id" == "$img_id"* ]]; then
     default_id="$img_id"
     continue

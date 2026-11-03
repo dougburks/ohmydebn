@@ -29,7 +29,9 @@ source "$REPO_ROOT/tests/lib/test-helpers.sh"
 # time a keybinding changes, and a second hardcoded copy here would silently
 # fall out of sync.
 KEYBINDING_MARKER=$(grep -oP '(?<=KEYBINDING_STATE=\$STATE_DIR/)\S+' "$SCRIPT")
-STOCK_COUNT=$(grep -c '^keybinding-custom' "$REPO_ROOT/install/keybinding/keybinding-custom.txt")
+# The highest stock slot: slot numbers aren't contiguous once a stock
+# hotkey is removed (34, Antigravity, in 4.15.0).
+LAST_STOCK_SLOT=$(awk '$1 == "keybinding-custom" {print $2}' "$REPO_ROOT/install/keybinding/keybinding-custom.txt" | sort -n | tail -1)
 
 echo "=== install/keybinding/keybinding.sh ==="
 
@@ -39,12 +41,20 @@ setup_mocks() {
 mock_log "ohmydebn-headline $*"
 EOF
   # MOCK_CUSTOM_LIST, when set, is what `gsettings get ... custom-list`
-  # returns - the union scenario uses it.
+  # returns - the union scenario uses it - until the script writes the
+  # list, after which it reads back what it wrote, as it would for real.
   mock_bin gsettings <<'EOF'
 #!/bin/bash
 mock_log "gsettings $*"
+if [[ "$1 $2 $3" == "set org.cinnamon.desktop.keybindings custom-list" ]]; then
+  echo "$4" >"$MOCK_DIR/custom-list"
+fi
 if [[ "$1 $2 $3" == "get org.cinnamon.desktop.keybindings custom-list" ]]; then
-  echo "${MOCK_CUSTOM_LIST:-}"
+  if [[ -f "$MOCK_DIR/custom-list" ]]; then
+    cat "$MOCK_DIR/custom-list"
+  else
+    echo "${MOCK_CUSTOM_LIST:-}"
+  fi
 fi
 # MOCK_SLOT_NAME/COMMAND: what stock slot custom-$MOCK_SLOT holds now.
 if [[ "$1" == get && -n "${MOCK_SLOT:-}" && "$2" == *custom-keybindings/custom-$MOCK_SLOT/ ]]; then
@@ -102,10 +112,19 @@ LAST_SLOT_SET=$(grep -n 'gsettings set .*custom-keybindings/custom-' "$MOCK_CALL
 FIRST_LIST_SET=$(echo "$LIST_SETS" | head -1 | cut -d: -f1)
 assert_eq "first run: custom-list written exactly twice" "2" "$(echo "$LIST_SETS" | wc -l)"
 assert_eq "first run: custom-list written after the last slot" "yes" "$([ "$FIRST_LIST_SET" -gt "$LAST_SLOT_SET" ] && echo yes || echo no)"
-assert_contains "first run: first list write carries __dummy__ so Cinnamon sees a change" "$(echo "$LIST_SETS" | head -1)" "'custom-$((STOCK_COUNT - 1))', '__dummy__']"
+assert_contains "first run: first list write carries __dummy__ so Cinnamon sees a change" "$(echo "$LIST_SETS" | head -1)" "'custom-$LAST_STOCK_SLOT', '__dummy__']"
 FINAL_LIST=$(echo "$LIST_SETS" | tail -1)
 assert_not_contains "first run: final list has no __dummy__" "$FINAL_LIST" "__dummy__"
-assert_contains "first run: final list ends with the last stock slot" "$FINAL_LIST" "'custom-$((STOCK_COUNT - 1))']"
+assert_contains "first run: final list ends with the last stock slot" "$FINAL_LIST" "'custom-$LAST_STOCK_SLOT']"
+# A removed stock hotkey leaves a gap: the list follows the file's own
+# slot numbers, not a count of its lines (which listed custom-34, unset,
+# and left out custom-48).
+assert_contains "first run: the slots either side of removed slot 34 listed" "$FINAL_LIST" "'custom-33', 'custom-35'"
+assert_not_contains "first run: removed slot 34 not listed" "$FINAL_LIST" "'custom-34'"
+assert_not_contains "first run: removed slot 34 not written" "$(cat "$MOCK_CALLS")" "custom-keybindings/custom-34/"
+assert_eq "first run: every stock slot in the file listed" \
+  "$(awk '$1 == "keybinding-custom" {printf "'"'"'custom-%s'"'"', ", $2}' "$REPO_ROOT/install/keybinding/keybinding-custom.txt" | sed 's/, $//')" \
+  "$(grep -oP "(?<=custom-list \[).*(?=\])" <<<"$FINAL_LIST")"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -144,15 +163,16 @@ mock_cleanup
 mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
-MOCK_CUSTOM_LIST="['custom-0', 'custom-1', 'custom5', 'custom-1000', '__dummy__']" MOCK_CINNAMON_RUNNING=true run_script
+MOCK_CUSTOM_LIST="['custom-0', 'custom-1', 'custom-34', 'custom5', 'custom-1000', '__dummy__']" MOCK_CINNAMON_RUNNING=true run_script
 FINAL_LIST=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS" | tail -1)
 assert_contains "custom-list: stock slots present" "$FINAL_LIST" "'custom-0', 'custom-1', 'custom-2'"
-assert_contains "custom-list: last stock slot present" "$FINAL_LIST" "'custom-$((STOCK_COUNT - 1))'"
+assert_contains "custom-list: last stock slot present" "$FINAL_LIST" "'custom-$LAST_STOCK_SLOT'"
 assert_contains "custom-list: GUI-added shortcut kept" "$FINAL_LIST" "'custom5'"
 assert_contains "custom-list: user keybinding slot kept" "$FINAL_LIST" "'custom-1000'"
 assert_not_contains "custom-list: old __dummy__ dropped from the final list" "$FINAL_LIST" "__dummy__"
 assert_eq "custom-list: stock slot listed once, not duplicated from the old list" "1" "$(grep -o "'custom-1'" <<<"$FINAL_LIST" | wc -l)"
 assert_eq "custom-list: closes the array" "]" "${FINAL_LIST: -1}"
+assert_not_contains "custom-list: a removed stock slot in the old list is dropped" "$FINAL_LIST" "'custom-34'"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
@@ -187,5 +207,138 @@ done <<'LIST'
 2|GMail|Gmail|'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com'
 43|Cloudflare Warp|Cloudflare WARP|'/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp'
 LIST
+
+# --- Stock keybindings added since the marker (Console, custom-48, in
+# 4.15.0): installs from before get just that slot, appended to
+# custom-list, once - its own marker then keeps a user's removal from being
+# undone by the next update. Nothing at all when it's already listed (only
+# the marker), or when gsettings prints no list (not even the marker).
+CONSOLE_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-48/"
+CONSOLE_MARKER="keybinding-add-48"
+# run_marked <custom-list> [yes: the Console marker is already there]
+run_marked() {
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  [[ "${2:-}" == yes ]] && touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$CONSOLE_MARKER"
+  MOCK_CUSTOM_LIST="$1" MOCK_CINNAMON_RUNNING=true run_script
+  CALLS=$(cat "$MOCK_CALLS")
+  LIST_SETS=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
+}
+console_marked() {
+  [ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$CONSOLE_MARKER" ] && echo yes || echo no
+}
+
+run_marked "['custom-0', 'custom-47', 'custom5', 'custom-1000']"
+assert_contains "Console missing: slot named Console" "$CALLS" "gsettings set $CONSOLE_SLOT name Console"
+assert_contains "Console missing: runs ohmydebn-console" "$CALLS" "gsettings set $CONSOLE_SLOT command /usr/share/ohmydebn/bin/ohmydebn-console"
+assert_contains "Console missing: bound to Super + the key left of 1, on any layout" "$CALLS" "gsettings set $CONSOLE_SLOT binding ['<Super>Above_Tab']"
+assert_eq "Console missing: custom-list written twice" "2" "$(echo "$LIST_SETS" | wc -l)"
+assert_contains "Console missing: first list write carries __dummy__ so Cinnamon reloads" "$(echo "$LIST_SETS" | head -1)" "'custom-1000', 'custom-48', '__dummy__']"
+assert_contains "Console missing: final list keeps everything and adds custom-48" "$(echo "$LIST_SETS" | tail -1)" "['custom-0', 'custom-47', 'custom5', 'custom-1000', 'custom-48']"
+assert_eq "Console missing: no other stock slot rewritten" "3" "$(grep -c 'gsettings set .*custom-keybindings/custom-[0-9]*/' "$MOCK_CALLS")"
+assert_eq "Console missing: marked as added" "yes" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Added once: a user who removed it in Cinnamon's settings keeps it removed.
+run_marked "['custom-0', 'custom-47', 'custom-1000']" yes
+assert_not_contains "Console added before, since removed by the user: not added back" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked "@as []"
+assert_contains "empty custom-list: becomes just custom-48" "$(echo "$LIST_SETS" | tail -1)" "custom-list ['custom-48']"
+assert_eq "empty custom-list: marked as added" "yes" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked "['custom-0', 'custom-48', 'custom-1000']"
+assert_not_contains "Console already listed: nothing written" "$CALLS" "gsettings set"
+assert_eq "Console already listed: marked, so a later removal sticks" "yes" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_marked ""
+assert_not_contains "no list from gsettings: nothing written" "$CALLS" "gsettings set"
+assert_eq "no list from gsettings: not marked, so the next update tries again" "no" "$(console_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# --- Stock keybindings removed since the marker (Antigravity, custom-34,
+# in 4.15.0): installs from before have it listed, running a launcher
+# that's gone. Taken out of the list once, only while it still runs
+# ohmydebn-antigravity; a slot the user gave another job is left alone.
+# The Console step is marked done throughout, so it adds nothing here.
+ANTIGRAVITY_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-34/"
+REMOVE_MARKER="keybinding-remove-34"
+# run_removed <custom-list> <slot 34's command> [yes: already marked]
+run_removed() {
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$CONSOLE_MARKER"
+  [[ "${3:-}" == yes ]] && touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$REMOVE_MARKER"
+  MOCK_CUSTOM_LIST="$1" MOCK_SLOT=34 MOCK_SLOT_NAME="Antigravity" MOCK_SLOT_COMMAND="$2" MOCK_CINNAMON_RUNNING=true run_script
+  CALLS=$(cat "$MOCK_CALLS")
+  LIST_SETS=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
+}
+removal_marked() {
+  [ -f "$SCRATCH_HOME/.local/state/ohmydebn-config/$REMOVE_MARKER" ] && echo yes || echo no
+}
+
+run_removed "['custom-0', 'custom-33', 'custom-34', 'custom-35', 'custom-48', 'custom5', 'custom-1000']" "/usr/share/ohmydebn/bin/ohmydebn-antigravity"
+assert_eq "Antigravity listed: custom-list written twice" "2" "$(echo "$LIST_SETS" | wc -l)"
+assert_contains "Antigravity listed: first list write carries __dummy__ so Cinnamon reloads" "$(echo "$LIST_SETS" | head -1)" "'custom-1000', '__dummy__']"
+assert_contains "Antigravity listed: final list keeps everything else, without custom-34" "$(echo "$LIST_SETS" | tail -1)" \
+  "custom-list ['custom-0', 'custom-33', 'custom-35', 'custom-48', 'custom5', 'custom-1000']"
+assert_contains "Antigravity listed: its slot's settings cleared" "$CALLS" "gsettings reset-recursively $ANTIGRAVITY_SLOT"
+assert_eq "Antigravity listed: marked as removed" "yes" "$(removal_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_removed "['custom-34']" "/usr/share/ohmydebn/bin/ohmydebn-antigravity"
+assert_contains "Antigravity alone in the list: the list ends up empty" "$(echo "$LIST_SETS" | tail -1)" "custom-list []"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_removed "['custom-0', 'custom-34', 'custom-48']" "/usr/bin/my-own-thing"
+assert_not_contains "slot 34 given another job by the user: nothing written" "$CALLS" "gsettings set"
+assert_not_contains "slot 34 given another job by the user: its settings kept" "$CALLS" "reset-recursively"
+assert_eq "slot 34 given another job by the user: marked, so it's never touched" "yes" "$(removal_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_removed "['custom-0', 'custom-48']" "/usr/share/ohmydebn/bin/ohmydebn-antigravity"
+assert_not_contains "Antigravity not listed: nothing written" "$CALLS" "gsettings set"
+assert_eq "Antigravity not listed: marked" "yes" "$(removal_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_removed "['custom-0', 'custom-34', 'custom-48']" "/usr/share/ohmydebn/bin/ohmydebn-antigravity" yes
+assert_not_contains "already marked: slot 34 left as it is" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_removed "" "/usr/share/ohmydebn/bin/ohmydebn-antigravity"
+assert_eq "no list from gsettings: not marked, so the next update tries again" "no" "$(removal_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# A new install: the full pass lists every stock slot, Console included, so
+# the step after it only marks it.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+MOCK_CINNAMON_RUNNING=true run_script
+assert_eq "new install: custom-list written only by the full pass (twice)" "2" "$(grep -c 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")"
+assert_eq "new install: Console marked as added" "yes" "$(console_marked)"
+assert_eq "new install: Antigravity's removal marked" "yes" "$(removal_marked)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
 
 test_summary

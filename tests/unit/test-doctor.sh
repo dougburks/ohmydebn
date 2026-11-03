@@ -489,6 +489,12 @@ assert_contains "Zorin OS 18: a supported distro" "$OUTPUT" "ok - supported dist
 printf 'PRETTY_NAME="Zorin OS 17.3"\nID=zorin\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=jammy\nUBUNTU_CODENAME=jammy\n' >"$ROOT/etc/os-release"
 run_doctor
 assert_contains "Zorin OS 17: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
+printf 'PRETTY_NAME="Parrot Security 7.4 (echo)"\nID=parrot\nID_LIKE=debian\nVERSION_CODENAME=echo\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Parrot 7: a supported distro" "$OUTPUT" "ok - supported distro"
+printf 'PRETTY_NAME="Parrot Security 6.4"\nID=parrot\nID_LIKE=debian\nVERSION_CODENAME=lory\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Parrot 6: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
 mock_cleanup
 
 # --- Neovim, broken in each of the ways the doctor checks ---

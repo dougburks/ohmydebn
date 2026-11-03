@@ -689,7 +689,6 @@ declare -A AI_INSTALLER_TO_NAME=(
   [ohmydebn-pi-install]=pi
   [ohmydebn-t3code-install]=t3code
   [ohmydebn-code-install]=vscode
-  [ohmydebn-antigravity-install]=antigravity
 )
 CHECKED=0
 for installer in "${!AI_INSTALLER_TO_NAME[@]}"; do
@@ -943,8 +942,6 @@ MENU_HOTKEY_PAIRS=(
   "SO-CRATES:show_cybersecurity_menu:SO-CRATES"
   "Claude Code:show_ai_menu:Claude"
   "fastfetch:go_to_menu:about"
-  "Antigravity:show_ai_menu:Antigravity"
-  "Antigravity:show_editor_menu:Antigravity"
   "Visual Studio Code:show_ai_menu:VSCode"
   "Visual Studio Code:show_editor_menu:VSCode"
   "Cava:show_media_menu:Cava"
@@ -1067,7 +1064,6 @@ echo "-- apt pin filename agrees between each installer and its own remove scrip
 PIN_FILE_OWNERS=(
   "ohmydebn-claude-code-install:ohmydebn-claude-code-remove:claude-code.pref"
   "ohmydebn-claude-desktop-install:ohmydebn-claude-desktop-remove:claude-desktop.pref"
-  "ohmydebn-antigravity-install:ohmydebn-antigravity-remove:antigravity.pref"
   "ohmydebn-cloudflare-warp-install:ohmydebn-cloudflare-warp-remove:cloudflare-client.pref"
   "ohmydebn-helium-bin-install:ohmydebn-helium-bin-remove:helium.pref"
   "ohmydebn-tailscale-install:ohmydebn-tailscale-remove:tailscale.pref"
@@ -1282,7 +1278,6 @@ PRESENTATION_TITLE_OWNERS=(
   "ohmydebn-opencode-desktop:OpenCode Desktop"
   "ohmydebn-t3code:T3 Code"
   "ohmydebn-code:VSCode"
-  "ohmydebn-antigravity:Antigravity"
   "ohmydebn-brave-origin:Brave Origin"
   "ohmydebn-brave-browser:Brave Browser"
   "ohmydebn-chromium:Chromium"
@@ -1311,7 +1306,7 @@ echo "-- wmClass-only tile-rules.json entries exist (regression guard) --"
 # themselves came from a live wmctrl/Looking Glass check each time (see
 # the scripts' own commit history), not something re-derivable from
 # source, so this can only check presence, not correctness.
-WMCLASS_ONLY_ENTRIES=(code Antigravity Chatgpt com.anthropic.Claude com.t3tools.T3Code ai.opencode.desktop Brave-origin
+WMCLASS_ONLY_ENTRIES=(code Chatgpt com.anthropic.Claude com.t3tools.T3Code ai.opencode.desktop Brave-origin
   Brave-browser KeePassXC Gedit Aether
   ohmydebn-pdf-sign)
 for WMCLASS in "${WMCLASS_ONLY_ENTRIES[@]}"; do
@@ -1366,8 +1361,11 @@ while IFS= read -r f; do
   fi
 # The underscored .py files are modules the windows import, not windows.
 # Indented imports count: ohmydebn-pdf-sign imports Gtk only inside its
-# app, so its commands run without a display.
-done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$')
+# app, so its commands run without a display. ohmydebn-console opens no
+# window of its own: it imports Gtk only to drive Wnck, which moves the
+# console's Alacritty window.
+done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '_[a-z_]*\.py$' |
+  grep -v '/bin/ohmydebn-console$')
 echo "  checked $CHECKED notifications and GTK scripts"
 
 echo

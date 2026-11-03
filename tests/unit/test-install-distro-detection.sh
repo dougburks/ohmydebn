@@ -99,6 +99,14 @@ run_scenario "Debian trixie" "yes" \
 run_scenario "Kali rolling" "yes" \
   "ID=kali" "VERSION_CODENAME=kali-rolling"
 
+# Parrot 7's os-release, verbatim from its base-files package.
+PARROT_7=('PRETTY_NAME="Parrot Security 7.4 (echo)"' 'NAME="Parrot Security"' 'VERSION_ID="7.4"' \
+  'VERSION="7.4 (echo)"' "VERSION_CODENAME=echo" "DEBIAN_VERSION_FULL=13.6" "ID=parrot" "ID_LIKE=debian")
+run_scenario "Parrot 7 Echo (Debian 13-based, ID=parrot)" "yes" "${PARROT_7[@]}"
+
+run_scenario "Parrot 6 Lory (unsupported release)" "no" \
+  'PRETTY_NAME="Parrot Security 6.4"' "ID=parrot" "ID_LIKE=debian" "VERSION_CODENAME=lory"
+
 run_scenario "Devuan 6 Excalibur" "yes" \
   "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=excalibur"
 
@@ -152,7 +160,7 @@ run_scenario "Zorin OS 17 (unsupported release)" "no" \
 # writes Debian's repos. That's right for a Debian install left without
 # sources, but it used to happen on any distro that wasn't named in the
 # check, putting Debian packages on an Ubuntu derivative, or on an
-# unsupported distro like Parrot or Raspbian once the user went past the
+# unsupported distro like Raspbian once the user went past the
 # warning. sudo is mocked, so nothing is moved.
 # run_sources_scenario <description> <expect: kept|found|repaired> <os-release lines...>
 run_sources_scenario() {
@@ -204,14 +212,13 @@ run_sources_scenario "Kali (sources.list only)" "kept" \
 run_sources_scenario "Devuan 6 (sources.list at deb.devuan.org)" "kept" \
   "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=excalibur"
 
+run_sources_scenario "Parrot 7 (sources at deb.parrot.sh)" "kept" "${PARROT_7[@]}"
+
 run_sources_scenario "LMDE 7 without Mint's own list file" "kept" \
   "ID=linuxmint" "ID_LIKE=debian" "VERSION_CODENAME=gigi" "DEBIAN_CODENAME=trixie"
 
 # Unsupported distros that report ID_LIKE=debian: the user can go past
 # the warning (Enter here), and their own repos must survive it.
-run_sources_scenario "Parrot OS (ID=parrot, unsupported)" "kept" \
-  'PRETTY_NAME="Parrot Security 6.4"' "ID=parrot" "ID_LIKE=debian" "VERSION_CODENAME=lory"
-
 run_sources_scenario "old Raspbian (ID=raspbian, unsupported)" "kept" \
   "ID=raspbian" "ID_LIKE=debian" "VERSION_CODENAME=bookworm"
 

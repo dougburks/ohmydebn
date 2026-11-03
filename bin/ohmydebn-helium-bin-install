@@ -2,15 +2,22 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
-  echo
-  echo "Helium browser is not currently installed."
-  echo
-  echo "Continuing will install it from:"
-  echo "https://pkg.helium.computer"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Helium browser is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://pkg.helium.computer"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 
   # The key is checked against the fingerprint Helium publishes in its
   # README (github.com/imputnet/helium-linux, checked 2026-10-27) before apt
@@ -66,5 +73,7 @@ if ! dpkg -s "helium-bin" >/dev/null 2>&1; then
   # taking it over (defaults to no - see ohmydebn-browser-set-default). A
   # setting that couldn't be applied is reported there and mustn't abort
   # the install.
-  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask helium-bin || true
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask helium-bin || true
+  fi
 fi

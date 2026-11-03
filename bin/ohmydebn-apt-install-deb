@@ -7,10 +7,10 @@
 #   [sha256]  its checksum, when the vendor publishes one - checked before
 #             anything is installed
 #
-# For the installers whose vendor ships a .deb rather than an apt repo
-# (ChatGPT, VS Code, Google Chrome). They
-# used to run `curl ... && dpkg -i ... && rm`, which had three problems:
-# dpkg -i doesn't install a package's dependencies (a vendor adding a new
+# For an installer whose vendor ships a .deb rather than an apt repo (VS
+# Code, today; ChatGPT and Google Chrome have since moved to their vendors'
+# apt repos). Such installers used to run `curl ... && dpkg -i ... && rm`,
+# which had three problems: dpkg -i doesn't install a package's dependencies (a vendor adding a new
 # library left the package half-installed), a failed download inside the
 # && chain skipped the install but still let the installer exit 0 and
 # carry on (VS Code wrote its pin for a package that wasn't there), and

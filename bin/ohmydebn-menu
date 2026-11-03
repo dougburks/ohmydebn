@@ -653,7 +653,7 @@ show_ai_menu() {
   # Picking one just opens it. The default that ohmydebn-ai (Super+A)
   # launches is chosen when a tool is installed (its installer asks) or
   # later in Setup > Defaults > Agent (pick_default_agent).
-  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  OpenCode App (desktop GUI)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Crush (Charm, any model)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)\n  Antigravity (Google Agentic AI)"
+  menu "AI" "󱚤  OpenCode (supports free/$ models)\n󱚤  OpenCode App (desktop GUI)\n󱚤  Claude Code (Anthropic)\n󱚤  Claude Desktop (Anthropic GUI)\n󱚤  ChatGPT (OpenAI GUI)\n󱚤  Codex (OpenAI CLI)\n󱚤  Grok Build (xAI CLI)\n󱚤  Crush (Charm, any model)\n󱚤  Pi (earendil-works)\n󱚤  Oh My Pi (Stencil Labs)\n󱚤  T3 Code (agent GUI)\n  VSCode (GitHub Copilot AI)"
   case "$MENU_RESULT" in
   # Before *OpenCode*, which would match it too. (The menu tree and its
   # checks read one-word patterns, so not *OpenCode Desktop*.)
@@ -668,16 +668,14 @@ show_ai_menu() {
   *Stencil*) /usr/share/ohmydebn/bin/ohmydebn-omp ;;
   *Pi*) /usr/share/ohmydebn/bin/ohmydebn-pi ;;
   *T3*) /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *) show_apps_menu ;;
   esac
 }
 
 show_editor_menu() {
-  menu "Editors" "  VSCode\n  Antigravity\n  Emacs\n  GIMP"
+  menu "Editors" "  VSCode\n  Emacs\n  GIMP"
   case "$MENU_RESULT" in
-  *Antigravity*) /usr/share/ohmydebn/bin/ohmydebn-antigravity ;;
   *VSCode*) /usr/share/ohmydebn/bin/ohmydebn-code ;;
   *Emacs*) /usr/share/ohmydebn/bin/ohmydebn-emacs ;;
   *GIMP*) /usr/share/ohmydebn/bin/ohmydebn-gimp ;;

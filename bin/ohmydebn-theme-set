@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ohmydebn-theme-set: Set a theme, specified by its name.
-# Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>
+# Usage: ohmydebn-theme-set [--background <arg> | --keep-background] [--no-intro] <theme-name>
 #   <arg> can be "random" or a number (1-based index)
 #   --keep-background leaves the current background in place instead of
 #   picking one from the new theme (the `omarchy` shim uses this for
@@ -10,6 +10,9 @@ set -euo pipefail
 #   If the current image doesn't survive the switch (it lived inside the
 #   old theme's own copy), a background from the new theme is picked as
 #   usual.
+#   --no-intro switches without playing the new background's intro: for a
+#   switch made by an update (install/config/theme-replaced.sh), where a
+#   full-screen clip would cover the update's own terminal.
 
 # What a theme installed with `ohmydebn-theme-install <git-url>` may not ship,
 # because these run code rather than just carry color. Neovim loads a theme's
@@ -94,11 +97,12 @@ report_ignored_theme_files() {
 
 BG_ARG=""
 KEEP_BACKGROUND=false
+NO_INTRO=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --background)
     if [[ $# -lt 2 ]]; then
-      echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>" >&2
+      echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] [--no-intro] <theme-name>" >&2
       exit 1
     fi
     BG_ARG="$2"
@@ -108,12 +112,16 @@ while [[ $# -gt 0 ]]; do
     KEEP_BACKGROUND=true
     shift
     ;;
+  --no-intro)
+    NO_INTRO=true
+    shift
+    ;;
   *) break ;;
   esac
 done
 
 if [[ -z "${1:-}" ]]; then
-  echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] <theme-name>" >&2
+  echo "Usage: ohmydebn-theme-set [--background <arg> | --keep-background] [--no-intro] <theme-name>" >&2
   exit 1
 fi
 
@@ -256,7 +264,7 @@ elif [[ -n "$BG_ARG" ]]; then
 else
   NEW_BACKGROUND=$(/usr/share/ohmydebn/bin/ohmydebn-theme-bg-next --print)
 fi
-if [[ -n "$NEW_BACKGROUND" && -n "$OLD_THEME_NAME" && "$THEME_NAME" != "$OLD_THEME_NAME" ]]; then
+if [[ "$NO_INTRO" == false && -n "$NEW_BACKGROUND" && -n "$OLD_THEME_NAME" && "$THEME_NAME" != "$OLD_THEME_NAME" ]]; then
   /usr/share/ohmydebn/bin/ohmydebn-theme-intro --wait "$NEW_BACKGROUND" || true
 fi
 
@@ -331,7 +339,6 @@ fi
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-btop
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-gedit
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-starship
-/usr/share/ohmydebn/bin/ohmydebn-theme-set-antigravity
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-cava
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-eza
 /usr/share/ohmydebn/bin/ohmydebn-theme-set-fastfetch

@@ -1,0 +1,197 @@
+#!/usr/bin/python3
+#
+# ohmydebn-console: the drop-down console on Super + the key left of 1
+# (<Super>Above_Tab, the same key whatever the keyboard layout). A
+# centered Alacritty above the other windows, running
+# ohmydebn-console-run (your default terminal AI assistant, then a
+# shell). Each press toggles it:
+#
+# - no console yet: start one, centered on the monitor under the mouse
+# - the console is the active window: minimize it. Whatever runs inside
+#   keeps running, and Cinnamon gives focus back to the window before it.
+# - otherwise (minimized, behind another window, or on another
+#   workspace): bring it to this workspace and monitor, and focus it
+#
+# Closing it (exit the shell, or close the window) ends the session; the
+# next press starts a fresh one.
+#
+# Its window class, OhMyDebnConsole, is what keeps gTile from tiling it in
+# the traditional and scrollable modes (isAlwaysFloating in gTile's
+# tile-rules.js). Keep-above and leaving it out of the window list and
+# workspace switcher are set here through Wnck: Alacritty has no option
+# for them, and Debian's xdotool (3.20160805) predates `windowstate`.
+#
+# Placement is set again on every show, not just at launch: Cinnamon moves
+# a window as it restores it.
+
+import fcntl
+import os
+import subprocess
+import sys
+import time
+
+WM_CLASS = "OhMyDebnConsole"
+RUN = "/usr/share/ohmydebn/bin/ohmydebn-console-run"
+HIDE = "/usr/share/ohmydebn/bin/ohmydebn-gtile-hide"
+WIDTH_FRACTION = 0.7
+HEIGHT_FRACTION = 0.6
+# How long a new console gets to appear before we stop waiting for it.
+LAUNCH_TIMEOUT = 5.0
+# Placement passes for a new console, 0.1s apart (see launch()).
+PLACE_ATTEMPTS = 10
+
+
+def decide(console_exists, console_active):
+    """What a key press does: "launch", "hide" or "show"."""
+    if not console_exists:
+        return "launch"
+    if console_active:
+        return "hide"
+    return "show"
+
+
+def placement(workarea):
+    """The console's (x, y, width, height), centered in a monitor's work
+    area (x, y, width, height: the monitor without the panel)."""
+    area_x, area_y, area_width, area_height = workarea
+    width = int(area_width * WIDTH_FRACTION)
+    height = int(area_height * HEIGHT_FRACTION)
+    return (area_x + (area_width - width) // 2,
+            area_y + (area_height - height) // 2,
+            width, height)
+
+
+def lock_path():
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not runtime or not os.path.isdir(runtime):
+        runtime = os.path.expanduser("~/.cache")
+        os.makedirs(runtime, exist_ok=True)
+    return os.path.join(runtime, f"ohmydebn-console-{os.getuid()}.lock")
+
+
+def pointer_workarea(Gdk):
+    display = Gdk.Display.get_default()
+    _, x, y = display.get_default_seat().get_pointer().get_position()[0:3]
+    monitor = display.get_monitor_at_point(x, y)
+    area = monitor.get_workarea()
+    # Gdk works in application pixels; Wnck and the window manager in
+    # device pixels.
+    scale = monitor.get_scale_factor()
+    return (area.x * scale, area.y * scale, area.width * scale, area.height * scale)
+
+
+def find_console(Wnck, screen):
+    for window in screen.get_windows():
+        if window.get_class_group_name() == WM_CLASS or window.get_class_instance_name() == WM_CLASS:
+            return window
+    return None
+
+
+def settle(Gtk):
+    # Lets Wnck send its requests (and read replies) before the next step.
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+
+
+def x_time(Gdk, GdkX11):
+    # Window-manager requests carry an X server timestamp; a made-up one
+    # can get the request ignored as stale.
+    return GdkX11.x11_get_server_time(Gdk.get_default_root_window())
+
+
+def show(Wnck, Gdk, GdkX11, Gtk, screen, window):
+    workspace = screen.get_active_workspace()
+    if workspace is not None and not window.is_pinned():
+        window.move_to_workspace(workspace)
+    if window.is_minimized():
+        window.unminimize(x_time(Gdk, GdkX11))
+    window.make_above()
+    window.set_skip_tasklist(True)
+    window.set_skip_pager(True)
+    x, y, width, height = placement(pointer_workarea(Gdk))
+    # Cinnamon takes the size as the frame's, but puts the frame where the
+    # terminal inside it would go, a title bar lower than asked. Ask for a
+    # spot that much higher (and further left, for a side border): the
+    # offset is the window's own decoration, so asking again is harmless.
+    screen.force_update()
+    frame_x, frame_y, _, _ = window.get_geometry()
+    client_x, client_y, _, _ = window.get_client_window_geometry()
+    mask = (Wnck.WindowMoveResizeMask.X | Wnck.WindowMoveResizeMask.Y |
+            Wnck.WindowMoveResizeMask.WIDTH | Wnck.WindowMoveResizeMask.HEIGHT)
+    window.set_geometry(Wnck.WindowGravity.NORTHWEST, mask,
+                        x - (client_x - frame_x), y - (client_y - frame_y), width, height)
+    settle(Gtk)
+    window.activate(x_time(Gdk, GdkX11))
+    settle(Gtk)
+    return (x, y, width, height)
+
+
+def launch(Wnck, Gdk, GdkX11, Gtk, screen):
+    subprocess.Popen(
+        ["/usr/bin/alacritty", "--class", f"{WM_CLASS},{WM_CLASS}", "--title", "Console", "-e", RUN],
+        cwd=os.path.expanduser("~"), start_new_session=True,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.monotonic() + LAUNCH_TIMEOUT
+    while time.monotonic() < deadline:
+        settle(Gtk)
+        screen.force_update()
+        window = find_console(Wnck, screen)
+        if window is not None:
+            # Invisible until it's in place, so it doesn't appear at
+            # Alacritty's own spot first and then jump.
+            xid = str(window.get_xid())
+            subprocess.run([HIDE, xid], check=False)
+            # Cinnamon frames and places a new window itself once it maps,
+            # sometimes after a request has gone in (and the title-bar
+            # offset in show() is only known once it's framed), so place it
+            # until it's there and stays there (two checks in a row),
+            # still invisible.
+            settled = 0
+            for _ in range(PLACE_ATTEMPTS):
+                target = show(Wnck, Gdk, GdkX11, Gtk, screen, window)
+                time.sleep(0.1)
+                screen.force_update()
+                settled = settled + 1 if tuple(window.get_geometry()) == target else 0
+                if settled == 2:
+                    break
+            subprocess.run(["/usr/bin/xprop", "-id", xid, "-remove", "_NET_WM_WINDOW_OPACITY"],
+                           check=False, stderr=subprocess.DEVNULL)
+            return
+        time.sleep(0.02)
+
+
+def main():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("GdkX11", "3.0")
+    gi.require_version("Wnck", "3.0")
+    from gi.repository import Gdk, GdkX11, Gtk, Wnck
+
+    # A held-down key repeats: only one press at a time, or two consoles
+    # can start before either has a window to find.
+    lock = open(lock_path(), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return 0
+
+    Gtk.init([])
+    screen = Wnck.Screen.get_default()
+    screen.force_update()
+    window = find_console(Wnck, screen)
+    active = screen.get_active_window()
+    action = decide(window is not None,
+                    window is not None and active is not None and active.get_xid() == window.get_xid())
+    if action == "hide":
+        window.minimize()
+        settle(Gtk)
+    elif action == "show":
+        show(Wnck, Gdk, GdkX11, Gtk, screen, window)
+    else:
+        launch(Wnck, Gdk, GdkX11, Gtk, screen)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

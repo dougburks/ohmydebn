@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   ARCH=$(uname -m)
   if [ "$ARCH" != "x86_64" ]; then
@@ -10,14 +15,16 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
     exit 1
   fi
 
-  echo
-  echo "Google Chrome is not currently installed."
-  echo
-  echo "Continuing will install it from:"
-  echo "https://dl.google.com/linux/chrome-stable/deb/"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Google Chrome is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://dl.google.com/linux/chrome-stable/deb/"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 
   # Installed from Google's apt repository, so apt checks the package's
   # signature before installing it. Downloading the .deb directly, as this
@@ -71,5 +78,7 @@ if ! dpkg -s "google-chrome-stable" >/dev/null 2>&1; then
   # taking it over (defaults to no - see ohmydebn-browser-set-default). A
   # setting that couldn't be applied is reported there and mustn't abort
   # the install.
-  /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask google-chrome-stable || true
+  if [ "$SKIP_PROMPT" = false ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask google-chrome-stable || true
+  fi
 fi

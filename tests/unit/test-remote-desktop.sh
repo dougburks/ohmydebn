@@ -137,6 +137,15 @@ assert_eq "cancelled at the prompt: exits non-zero" "1" "$EXIT_CODE"
 assert_eq "cancelled at the prompt: nothing run" "" "$(cat "$MOCK_CALLS")"
 mock_cleanup
 
+# --- xrdp installed some other way, not set up by OhMyDebn: asks first ---
+setup
+OUT=$(MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install")
+EXIT_CODE=$?
+assert_contains "installed, not set up: says what will change" "$OUT" "not yet set up by OhMyDebn"
+assert_eq "installed, not set up, cancelled at the prompt: exits non-zero" "1" "$EXIT_CODE"
+assert_eq "installed, not set up, cancelled at the prompt: nothing run" "" "$(cat "$MOCK_CALLS")"
+mock_cleanup
+
 # --- menu launcher: not installed -> presentation with the installer; installed -> status window ---
 setup
 MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null

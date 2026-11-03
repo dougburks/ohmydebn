@@ -1,0 +1,40 @@
+#!/bin/bash
+#
+# ohmydebn-console-run: what runs inside the drop-down console
+# (ohmydebn-console, Super + the key left of 1). Your default AI assistant
+# when it's a terminal one that's installed, then a shell, so the console
+# stays open when the assistant exits. A desktop-app default (Claude
+# Desktop, ChatGPT, ...) or a terminal one that isn't installed gets a
+# one-line note and the shell instead: a hotkey shouldn't start an
+# installer, which each assistant's -cli wrapper would.
+
+set -euo pipefail
+
+name=$(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --current 2>/dev/null || echo opencode)
+label=""
+installed=false
+while IFS=$'\t' read -r installed_name installed_label; do
+  if [[ "$installed_name" == "$name" ]]; then
+    installed=true
+    label="$installed_label"
+  fi
+done < <(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --list-installed 2>/dev/null)
+
+case "$name" in
+opencode | claude-code | codex | grok | crush | omp | pi) terminal_ai=true ;;
+*) terminal_ai=false ;;
+esac
+
+if [[ "$terminal_ai" == true && "$installed" == true ]]; then
+  # However it exits, the shell below still opens.
+  "/usr/share/ohmydebn/bin/ohmydebn-$name-cli" || true
+elif [[ "$terminal_ai" == true ]]; then
+  echo "Your default AI assistant ($name) isn't installed. Install it from Apps > AI, or choose another in Setup > Defaults > Agent."
+  echo
+else
+  [[ -z "$label" ]] && label="$name"
+  echo "Your default AI assistant, $label, is a desktop app, so this console opens a shell. Choose a terminal one in Setup > Defaults > Agent."
+  echo
+fi
+
+exec "${SHELL:-/bin/bash}"

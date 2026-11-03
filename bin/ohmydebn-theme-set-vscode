@@ -4,7 +4,6 @@
 # which jq doesn’t support.
 
 # Parameters: [EDITOR_CMD] [SETTINGS_PATH], VS Code's by default
-# (ohmydebn-theme-set-antigravity passes Antigravity's)
 EDITOR_CMD="${1:-code}"
 SETTINGS_PATH="${2:-$HOME/.config/Code/User/settings.json}"
 VS_CODE_THEME="$HOME/.config/ohmydebn/current/theme/vscode.json"

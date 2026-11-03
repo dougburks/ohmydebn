@@ -32,7 +32,6 @@ keybinding-custom 30 "Editor" "/usr/share/ohmydebn/bin/ohmydebn-editor" "['<Ctrl
 keybinding-custom 31 "Calculator" "/usr/bin/galculator" "['<Ctrl><Super>C']" "Press Ctrl + Super + C to launch calculator (galculator)"
 keybinding-custom 32 "Cava" "/usr/share/ohmydebn/bin/ohmydebn-cava" "['<Ctrl><Super>A']" "Press Ctrl + Super + A to launch the audio visualizer (cava)"
 keybinding-custom 33 "Visual Studio Code" "/usr/share/ohmydebn/bin/ohmydebn-code" "['<Ctrl><Super>S']" "Press Ctrl + Super + S to launch Visual Studio Code"
-keybinding-custom 34 "Antigravity" "/usr/share/ohmydebn/bin/ohmydebn-antigravity" "['<Ctrl><Super>G']" "Press Ctrl + Super + G to launch Antigravity"
 keybinding-custom 35 "ohmydebn-update" "/usr/share/ohmydebn/bin/ohmydebn-update-gui" "['<Ctrl><Super>U']" "Press Ctrl + Super + U to update OhMyDebn to latest version"
 keybinding-custom 36 "Virtual Machine Manager" "/usr/share/ohmydebn/bin/ohmydebn-virtmanager" "['<Ctrl><Alt>V']" "Press Ctrl + Alt + V to launch Virtual Machine Manager"
 keybinding-custom 37 "Boxes Virtualization" "/usr/share/ohmydebn/bin/ohmydebn-boxes" "['<Ctrl><Alt>B']" "Press Ctrl + Alt + B to launch Boxes Virtualization"
@@ -46,3 +45,4 @@ keybinding-custom 44 "Claude Code" "/usr/share/ohmydebn/bin/ohmydebn-claude-code
 keybinding-custom 45 "File Manager" "/usr/share/ohmydebn/bin/ohmydebn-file-manager-tiled" "['<Super>F']" "Press Super + F to open file manager"
 keybinding-custom 46 "herdr" "/usr/share/ohmydebn/bin/ohmydebn-herdr" "['<Ctrl><Super>Return']" "Press Ctrl + Super + Return to launch herdr"
 keybinding-custom 47 "tmux" "/usr/share/ohmydebn/bin/ohmydebn-tmux" "['<Super><Alt>Return']" "Press Super + Alt + Return to launch a tmux terminal"
+keybinding-custom 48 "Console" "/usr/share/ohmydebn/bin/ohmydebn-console" "['<Super>Above_Tab']" "Press Super + the key left of 1 for the drop-down console (your default AI, or a shell)"

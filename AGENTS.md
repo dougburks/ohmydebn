@@ -39,6 +39,10 @@ Unit test rules:
 - New behavior gets a test. A bug fix gets a test that fails without the fix; check that it does.
 - Never run `install.sh`, `ohmydebn-update` or an installer on your own machine to try a change. Test real runs in a VM.
 
+## What OhMyDebn installs
+
+Every app OhMyDebn offers is a standard Debian package, installed system-wide with apt and updated by apt: from the vendor's own signed apt repository, as a `.deb` the vendor publishes, or built by `ohmydebn-package-build` and served from OhMyDebn's repository. Never a vendor's `curl | bash` install script, a per-user install into `~/.local/bin`, or a binary that updates itself. So before adding an app, check that the vendor has an apt repository or `.deb`, or that its license lets OhMyDebn repackage and redistribute it. If neither, leave the app out rather than download it onto the user's machine some other way. Antigravity's CLI and Task Manager OG were both left out for this.
+
 ## Script conventions
 
 - `#!/bin/bash` and `set -euo pipefail` for new scripts, two-space indentation.
@@ -74,6 +78,8 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 
 ### Adding an AI tool
 
+First check it can be installed the way [What OhMyDebn installs](#what-ohmydebn-installs) requires.
+
 1. If OhMyDebn packages it, a build script in `ohmydebn-package-build`. Turn off the app's self-updater: apt updates it.
 2. `bin/ohmydebn-<name>`, `-install`, `-remove`, and `-run`/`-cli` for terminal tools. The installer asks `ohmydebn-ai-set-default --ask <name> || true` unless `--skip-prompt`.
 3. Add the name to `ohmydebn-ai-set-default` (the name list, `display_name` and `package_of`), `ohmydebn-ai`, `ohmydebn-ai-cli`, and the doctor's valid-name list.
@@ -81,6 +87,20 @@ A launcher that opens a terminal window passes `--title`, and `config/tile-rules
 5. A zsh alias in `install/config/zsh.sh` (with its own state marker), a `tile-rules.json` rule for its window, and a line in `bin/ohmydebn-pkg-remove-all-optional`.
 6. The consistency lists (`AI_INSTALLER_TO_NAME`, `TITLE_OWNERS`), a `tests/unit/test-ohmydebn-<name>.sh`, and the name in the AI dispatch, zsh, doctor and removal tests.
 7. If T3 Code should find it, a link in the T3 Code package's `agent-bin`.
+
+### Adding a stock hotkey
+
+1. Append a line to `install/keybinding/keybinding-custom.txt` with the next free slot number: one higher than the highest in the file, never a removed slot's number. New installs get it from the full pass in `install/keybinding/keybinding.sh`.
+2. Add `add_stock_keybinding <slot>` after the existing ones in `keybinding.sh`. It gives existing installs just that slot, once, and its own marker (`keybinding-add-<slot>`) keeps a user's later removal from being undone.
+3. Don't bump the `KEYBINDING_STATE` marker to add a hotkey. That reruns the whole stock pass, resetting every stock hotkey the user changed in Cinnamon's settings. Bump it only when existing stock hotkeys must all be rewritten. A smaller change to one existing hotkey gets a targeted fix like `rename_stock_keybinding`.
+4. A row in `ohmydebn-docs/docs/hotkeys.md`, and tests in `tests/unit/test-keybinding.sh`.
+
+### Removing a stock hotkey
+
+1. Delete its line from `keybinding-custom.txt`. The full pass reads slot numbers from the file, so the gap is fine; never reuse the number.
+2. Add `remove_stock_keybinding <slot> <part of its command>` after the existing ones in `keybinding.sh`. It takes the slot out of existing installs' list once (marker `keybinding-remove-<slot>`), and only while it still runs that command, so a slot the user gave another job is left alone.
+3. Don't bump `KEYBINDING_STATE` for this either.
+4. Remove its row from `ohmydebn-docs/docs/hotkeys.md`, and add tests in `tests/unit/test-keybinding.sh`.
 
 ### Supporting another distro
 
@@ -98,13 +118,25 @@ Neovim comes from `ohmydebn-neovim` (upstream's release build) and each user's L
 2. New plugin versions: run `LAZY_UPDATE=1 build-package-ohmydebn-neovim-plugins.sh`, which writes the new lockfile here. A plugin set that differs from the one published under the script's `VERSION` is built as a candidate in `ohmydebn-packages-candidates`, not published. Install it on a VM with `sudo apt install --reinstall --allow-downgrades ./<deb>`, run `ohmydebn-update` there (which puts the new plugins into the user's Neovim), and test Neovim; then bump that script's `VERSION` (the test date), rebuild, and commit the lockfile.
 3. A new Neovim minor release (such as 0.13): do both, since the plugin package depends on the minor version it was built with.
 
+### Updating the Omarchy themes
+
+`ohmydebn-themes-omarchy` and `ohmydebn-themes-omarchy-intros` are built in `ohmydebn-package-build` from one Omarchy release, in the omarchy checkout next to it.
+
+1. Check out the release's tag there (`git fetch --tags`, then `git checkout <tag>`), set `OMARCHY_THEMES_TAG` in `common.sh`, and set `OMARCHY_TAG`, `OMARCHY_COMMIT` and `VERSION` in the intros script. A release candidate's version uses `~` (`4.5.0~rc3`) so the final release sorts above it; the themes script does this itself. Set both scripts' `REVISION` back to 1.
+2. See what changed: `git diff --stat <old tag> <new tag> -- themes`. Look at every new or changed background and intro clip. One showing the OMARCHY wordmark is left out: backgrounds named `*omarchy*` are left out by name; any other goes in `EXCLUDED_BACKGROUNDS` or `EXCLUDED_INTROS`, by its exact file name, extension included (4.5 moved every background to `.webp`).
+3. Read the commits that add themes or backgrounds for anything not covered by Omarchy's MIT license, and trace where images came from. Starship (SpaceX's photographs) is in `EXCLUDED_THEMES`, and Tokyo Night's Liftoff, a recolored SpaceX photograph, in `EXCLUDED_BACKGROUNDS`.
+4. A theme Omarchy removes or renames stays applied for users who have it (their copy is in `~/.config/ohmydebn/current`), but drops out of the pickers and fails the doctor's theme check. Switch them to its replacement once, as `install/config/theme-replaced.sh` does for Osaka Jade. Test for the old theme's `colors.toml`, not its folder: config steps run before the update's package upgrades, and the old intros package can keep the folder until then.
+5. Where this repo depends on the new themes (a switch like that), raise the `ohmydebn-themes-omarchy` version `build-package-ohmydebn.sh` requires. The intros package requires the themes from its own release by itself.
+6. Update theme names in `bin/ohmydebn-theme-set-icon`. In `ohmydebn-docs`: the theme sections and the list of themes with intros in `desktop-themes.md`, the swatches in `overrides/home.html`, screenshots taken with `tools/theme-screenshots`, and the release notes.
+7. Build the themes, then the intros, then `ohmydebn` if step 5 changed it. Check the themes package against the tag's `themes/` folder minus what's left out. It should have no `backgrounds/intros` folders: Omarchy keeps its original clips there, and only the intros package ships them, re-encoded.
+
 ### Theming another app
 
 Add an `ohmydebn-theme-set-<app>` hook, call it from `bin/ohmydebn-theme-set`, and add it to the stub list in `tests/unit/test-theme-set-staging.sh`. A hook does nothing when its app isn't installed, writes files atomically (temporary file, then rename), and never replaces a setting the user chose themselves.
 
 ## Release notes
 
-Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are Supported distros (only when the release adds one; it comes first, since it's what decides whether a reader can use the release at all), New, Improvements, Fixes and Updated components. An updated component is just its name and new version.
+Every user-visible change gets a line under the upcoming version in `ohmydebn-docs/docs/release-notes.md`, written for end users: what they see or gain, in plain language, with no script names, paths or internals. Sections are Supported distros (only when the release adds one; it comes first, since it's what decides whether a reader can use the release at all), New, Improvements, Fixes, Removed (only when the release takes something away; say why, and what users who have it should expect) and Updated components. An updated component is just its name and new version.
 
 ## Release checklist
 

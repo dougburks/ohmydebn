@@ -35,6 +35,8 @@ EOF2
   mock_bin sudo <<'EOF2'
 #!/bin/bash
 mock_log "sudo $*"
+# MOCK_APT_UPDATE_FAILS: the repository can't be refreshed.
+[[ "$*" == "/usr/bin/apt update" && -n "${MOCK_APT_UPDATE_FAILS:-}" ]] && exit 100
 [[ "$1" == /usr/bin/apt ]] && exit 0
 exec "$@"
 EOF2
@@ -136,6 +138,22 @@ OUT=$(MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt 2
 assert_eq "distro source, not installed: no second source" "no" "$([ -e "$OURS" ] && echo yes || echo no)"
 assert_contains "distro source, not installed: says the repo is already configured" "$OUT" "already configured"
 assert_contains "distro source, not installed: still installs the package" "$(cat "$MOCK_CALLS")" "apt -y install brave-origin"
+mock_cleanup
+
+# --- apt update fails: a source this run added is taken out again ---
+setup
+OUT=$(MOCK_APT_UPDATE_FAILS=1 MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt 2>&1); STATUS=$?
+assert_eq "apt update fails: the installer fails" "1" "$STATUS"
+assert_eq "apt update fails: the source it added is gone again" "no" "$([ -e "$OURS" ] && echo yes || echo no)"
+assert_not_contains "apt update fails: nothing installed" "$(cat "$MOCK_CALLS")" "apt -y install"
+assert_contains "apt update fails: says so" "$OUT" "Brave's package source was removed again"
+mock_cleanup
+
+# ...but one that was already there (for the other Brave variant) stays.
+setup
+MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-repo" ensure >/dev/null 2>&1
+MOCK_APT_UPDATE_FAILS=1 MOCK_INSTALLED="" run "$BIN/ohmydebn-brave-origin-install" --skip-prompt >/dev/null 2>&1
+assert_eq "apt update fails, source already there: it stays" "yes" "$([ -f "$OURS" ] && echo yes || echo no)"
 mock_cleanup
 
 # --- remove: distro-installed (no OhMyDebn source) -> refuse, purge nothing ---

@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 WARP_KEYRING=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
 WARP_LIST=/etc/apt/sources.list.d/cloudflare-client.list
 WARP_PREF=/etc/apt/preferences.d/cloudflare-client.pref
@@ -12,7 +17,8 @@ WARP_PREF=/etc/apt/preferences.d/cloudflare-client.pref
 # update then failed on every run - including every ohmydebn-update. Use
 # the Ubuntu base where there is one (Ubuntu, Mint, Pop - UBUNTU_CODENAME,
 # or VERSION_CODENAME on Ubuntu itself), and otherwise trixie, the one
-# Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Devuan, LCOS).
+# Debian release OhMyDebn supports (Debian, MX, LMDE, Kali, Parrot, Devuan,
+# LCOS).
 #
 # Cloudflare also publishes a new Ubuntu release's repo some time after the
 # release itself (26.10 "stonking" had none on release day), so an Ubuntu
@@ -44,14 +50,16 @@ warp_codename() {
 }
 
 if ! dpkg -s "cloudflare-warp" >/dev/null 2>&1; then
-  echo
-  echo "Cloudflare WARP is not currently installed."
-  echo
-  echo "Continuing will install it from:"
-  echo "https://pkg.cloudflareclient.com/"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Cloudflare WARP is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://pkg.cloudflareclient.com/"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 
   # The key is checked against its fingerprint before apt trusts it (see
   # ohmydebn-pgp-fingerprint), so a key swapped in transit or on the server

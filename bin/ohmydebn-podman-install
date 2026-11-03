@@ -23,11 +23,13 @@ else
     echo
     if dpkg -s "podman" >/dev/null 2>&1; then
       echo "Podman is installed but is missing packages rootless mode needs: ${MISSING[*]}"
+      echo
+      echo "Continuing will install them from your existing distro repo."
     else
       echo "Podman is not currently installed."
+      echo
+      echo "Continuing will install it from your existing distro repo."
     fi
-    echo
-    echo "Continuing will install it from your existing distro repo."
     echo
     echo "Press Enter to continue or Ctrl-C to cancel."
 

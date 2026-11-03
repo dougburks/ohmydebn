@@ -1,7 +1,7 @@
 #!/bin/bash
 
+source $OHMYDEBN_INSTALL/config/ai-default.sh
 source $OHMYDEBN_INSTALL/config/alacritty.sh
-source $OHMYDEBN_INSTALL/config/antigravity.sh
 source $OHMYDEBN_INSTALL/config/bat.sh
 source $OHMYDEBN_INSTALL/config/btop.sh
 source $OHMYDEBN_INSTALL/config/cava.sh
@@ -13,6 +13,7 @@ source $OHMYDEBN_INSTALL/config/crush.sh
 source $OHMYDEBN_INSTALL/config/cursor.sh
 source $OHMYDEBN_INSTALL/config/gedit.sh
 source $OHMYDEBN_INSTALL/config/git.sh
+source $OHMYDEBN_INSTALL/config/herdr.sh
 source $OHMYDEBN_INSTALL/config/keepassxc.sh
 source $OHMYDEBN_INSTALL/config/logo.sh
 source $OHMYDEBN_INSTALL/config/menu.sh
@@ -26,5 +27,6 @@ source $OHMYDEBN_INSTALL/config/ohmyzsh.sh
 source $OHMYDEBN_INSTALL/config/opencode.sh
 source $OHMYDEBN_INSTALL/config/sounds.sh
 source $OHMYDEBN_INSTALL/config/theme.sh
+source $OHMYDEBN_INSTALL/config/theme-replaced.sh
 source $OHMYDEBN_INSTALL/config/ufw.sh
 source $OHMYDEBN_INSTALL/config/zsh.sh

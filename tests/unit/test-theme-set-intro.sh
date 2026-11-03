@@ -5,7 +5,7 @@
 # before anything on screen changes, so the switch happens underneath the
 # clip; an intro is asked for only when the theme actually changes, not
 # when the same one is applied again (by an update, a config reset or
-# Aether); and a theme's intros/ folder is never copied into
+# Aether) or with --no-intro (an update's switch); and a theme's intros/ folder is never copied into
 # ~/.config/ohmydebn/current/theme, since intro clips run to megabytes and
 # are played from where they are.
 #
@@ -38,7 +38,7 @@ setup() {
     ohmydebn-theme-set-claude ohmydebn-theme-set-t3code ohmydebn-theme-set-omp ohmydebn-theme-set-crush \
     ohmydebn-theme-set-colors-delete ohmydebn-theme-set-icon ohmydebn-theme-set-terminal \
     ohmydebn-theme-set-btop ohmydebn-theme-set-gedit ohmydebn-theme-set-starship \
-    ohmydebn-theme-set-antigravity ohmydebn-theme-set-cava ohmydebn-theme-set-eza \
+    ohmydebn-theme-set-cava ohmydebn-theme-set-eza \
     ohmydebn-theme-set-fastfetch ohmydebn-theme-set-logo ohmydebn-theme-set-menu-icon \
     ohmydebn-theme-set-opencode ohmydebn-theme-set-vscode; do
     mock_bin "$cmd" <<'EOF'
@@ -134,6 +134,14 @@ set_theme --keep-background retro-82
 assert_contains "--keep-background: the kept image's intro is asked for" "$(calls)" "intro --wait $MOCK_DIR/kept.png"
 assert_contains "--keep-background: and it stays the background" "$(calls)" "bg-set $MOCK_DIR/kept.png"
 assert_not_contains "--keep-background: no other background chosen" "$(calls)" "bg-next"
+mock_cleanup
+
+# --- --no-intro (an update's switch): no intro over the update's terminal ---
+setup
+set_theme --no-intro retro-82
+assert_not_contains "--no-intro: no intro" "$(calls)" "intro"
+assert_contains "--no-intro: the background is still set" "$(calls)" "bg-set $(BG 1-in-the-groove.jpg)"
+assert_eq "--no-intro: the theme is switched" "retro-82" "$(cat "$H/.config/ohmydebn/current/theme.name")"
 mock_cleanup
 
 # --- a theme from a git repo: its intros aren't copied either ---

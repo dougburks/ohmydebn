@@ -2,15 +2,22 @@
 
 set -euo pipefail
 
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
 if ! dpkg -s "tailscale" >/dev/null 2>&1; then
-  echo
-  echo "Tailscale is not currently installed."
-  echo
-  echo "Continuing will install it from:"
-  echo "https://pkgs.tailscale.com/"
-  echo
-  echo "Press Enter to continue or Ctrl-C to cancel."
-  read -r
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "Tailscale is not currently installed."
+    echo
+    echo "Continuing will install it from:"
+    echo "https://pkgs.tailscale.com/"
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+    read -r
+  fi
 
   # The key is checked against its fingerprint before apt trusts it (see
   # ohmydebn-pgp-fingerprint), so a key swapped in transit or on the server

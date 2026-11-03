@@ -39,6 +39,9 @@ STUB
 #!/bin/bash
 mock_log "sudo $*"
 cat >/dev/null
+# MOCK_APT_UPDATE_FAILS: the new repository can't be refreshed.
+[[ "$*" == "/usr/bin/apt update" && -n "${MOCK_APT_UPDATE_FAILS:-}" ]] && exit 100
+exit 0
 STUB
   mock_bin ohmydebn-theme-set-claude <<STUB
 #!/bin/bash
@@ -80,6 +83,15 @@ MOCK_KEY=bad run
 assert_eq "wrong key: fails" "1" "$STATUS"
 assert_contains "wrong key: says why" "$OUT" "isn't the one Anthropic publishes, so it wasn't installed"
 assert_not_contains "wrong key: nothing privileged runs" "$CALLS" "sudo"
+mock_cleanup
+
+# apt update fails: the source, pin and key are taken out again.
+setup 0
+MOCK_APT_UPDATE_FAILS=1 run
+assert_eq "apt update fails: the installer fails" "1" "$STATUS"
+assert_contains "apt update fails: the repository is taken out again" "$CALLS" \
+  "sudo rm -f /etc/apt/sources.list.d/claude-code.list /etc/apt/preferences.d/claude-code.pref /usr/share/keyrings/claude-code.asc"
+assert_not_contains "apt update fails: nothing installed" "$CALLS" "apt -y install claude-code"
 mock_cleanup
 
 test_summary

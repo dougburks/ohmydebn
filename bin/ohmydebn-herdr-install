@@ -22,3 +22,6 @@ if ! dpkg -s "herdr" >/dev/null 2>&1; then
   sudo /usr/bin/apt update
   sudo /usr/bin/apt -y install herdr
 fi
+
+# herdr is updated through apt, so its own update check is turned off.
+/usr/share/ohmydebn/bin/ohmydebn-herdr-config || true

@@ -1,0 +1,40 @@
+#!/bin/bash
+#
+# Turns off herdr's own check for new versions, once per user: OhMyDebn
+# updates herdr through apt (ohmydebn-update), and herdr's update command
+# would replace the package's /usr/bin/herdr with a download. herdr has no
+# system-wide config, so this sets version_check = false in the user's
+# ~/.config/herdr/config.toml - unless the user has set version_check
+# themselves. Run by install/config/herdr.sh on installs and updates, and by
+# ohmydebn-herdr-install right after installing herdr. The marker keeps a
+# user who later turns the check back on (or deletes the line) from having
+# it turned off again.
+
+set -euo pipefail
+
+STATE=~/.local/state/ohmydebn-config/herdr-version-check-off
+
+dpkg -s herdr >/dev/null 2>&1 || exit 0
+[ -f "$STATE" ] && exit 0
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml"
+LINES='# Set by OhMyDebn: herdr is updated through apt (ohmydebn-update).
+version_check = false'
+
+if grep -qE '^[[:space:]]*version_check[[:space:]]*=' "$CONFIG" 2>/dev/null; then
+  : # The user's own setting.
+elif grep -qE '^[[:space:]]*\[update\][[:space:]]*(#.*)?$' "$CONFIG" 2>/dev/null; then
+  # Under the existing [update] table (TOML allows a table only once).
+  awk -v lines="$LINES" '!done && /^[[:space:]]*\[update\][[:space:]]*(#.*)?$/ { print; print lines; done = 1; next } { print }' \
+    "$CONFIG" >"$CONFIG.ohmydebn-tmp"
+  cat "$CONFIG.ohmydebn-tmp" >"$CONFIG"
+  rm -f "$CONFIG.ohmydebn-tmp"
+else
+  mkdir -p "$(dirname "$CONFIG")"
+  # A blank line first only when appending to a config that has something.
+  [ -s "$CONFIG" ] && echo >>"$CONFIG"
+  printf '[update]\n%s\n' "$LINES" >>"$CONFIG"
+fi
+
+mkdir -p "$(dirname "$STATE")"
+touch "$STATE"

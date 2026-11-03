@@ -13,6 +13,7 @@ source $OHMYDEBN_INSTALL/config/crush.sh
 source $OHMYDEBN_INSTALL/config/cursor.sh
 source $OHMYDEBN_INSTALL/config/gedit.sh
 source $OHMYDEBN_INSTALL/config/git.sh
+source $OHMYDEBN_INSTALL/config/herdr.sh
 source $OHMYDEBN_INSTALL/config/keepassxc.sh
 source $OHMYDEBN_INSTALL/config/logo.sh
 source $OHMYDEBN_INSTALL/config/menu.sh

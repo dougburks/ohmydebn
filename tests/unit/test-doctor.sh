@@ -312,7 +312,7 @@ xss_machine() {
   build_machine yes
   mkdir -p "$H/.config/autostart"
   : >"$H/.config/autostart/ohmydebn-xscreensaver.desktop"
-  printf 'mode:\t\tblank\nlock:\t\tTrue\ndpmsEnabled:\t\tFalse\n' >"$H/.xscreensaver"
+  printf 'mode:\t\tblank\nlock:\t\tTrue\ndpmsEnabled:\t\tFalse\nfade:\t\tFalse\n' >"$H/.xscreensaver"
   mock_bin xscreensaver-command <<'EOF2'
 #!/bin/bash
 [ -z "${MOCK_XSS_DOWN:-}" ]
@@ -325,6 +325,7 @@ assert_contains "xscreensaver: installed" "$OUTPUT" "ok - XScreenSaver lock scre
 assert_contains "xscreensaver: starts at login" "$OUTPUT" "ok - XScreenSaver lock screen: starts at login"
 assert_contains "xscreensaver: its settings" "$OUTPUT" "ok - XScreenSaver lock screen: ~/.xscreensaver locks and leaves power saving to Cinnamon"
 assert_contains "xscreensaver: running" "$OUTPUT" "ok - XScreenSaver lock screen: xscreensaver running"
+assert_contains "xscreensaver: no fade" "$OUTPUT" "ok - XScreenSaver lock screen: locks without fading out first"
 assert_not_contains "xscreensaver: no failures of its own" "$OUTPUT" "FAIL - XScreenSaver"
 mock_cleanup
 
@@ -336,6 +337,7 @@ assert_contains "xscreensaver problems: not installed" "$OUTPUT" "FAIL - XScreen
 assert_contains "xscreensaver problems: no autostart" "$OUTPUT" "FAIL - XScreenSaver lock screen: starts at login"
 assert_contains "xscreensaver problems: settings, and how to fix them" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver locks and leaves power saving to Cinnamon (choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen)"
 assert_contains "xscreensaver problems: not running" "$OUTPUT" "FAIL - XScreenSaver lock screen: xscreensaver running (the next lock starts it"
+assert_contains "xscreensaver problems: fades (no fade line means XScreenSaver's default)" "$OUTPUT" "FAIL - XScreenSaver lock screen: locks without fading out first (turn off Fade to Black in xscreensaver-settings"
 mock_cleanup
 
 xss_machine

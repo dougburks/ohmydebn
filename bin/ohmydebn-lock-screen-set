@@ -62,13 +62,18 @@ use_xscreensaver() {
 
   # Blank, lock at once, and leave idle timing and display power saving
   # to Cinnamon. The timeout is only a backstop: Cinnamon's idle lock runs
-  # long before it.
+  # long before it. No fade: XScreenSaver's takes 3 seconds by default,
+  # longer without a GPU (6.08 and 6.09 fade frame by frame), and it held
+  # up both the lock and suspend, which waits for ohmydebn-lock. Cinnamon's
+  # own lock screen doesn't fade either.
   set_pref mode blank
   set_pref lock True
   set_pref lockTimeout 0:00:00
   set_pref timeout 12:00:00
   set_pref dpmsEnabled False
   set_pref splash False
+  set_pref fade False
+  set_pref unfade False
 
   /usr/share/ohmydebn/bin/ohmydebn-theme-set-xscreensaver
 

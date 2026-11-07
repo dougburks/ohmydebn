@@ -78,7 +78,7 @@ mock_cleanup
 
 # --- switching to XScreenSaver ---
 setup
-printf 'mode:\t\trandom\nlock:\t\tFalse\nfade:\t\tTrue\n' >"$H/.xscreensaver"
+printf 'mode:\t\trandom\nlock:\t\tFalse\nfade:\t\tTrue\npasswdTimeout:\t0:00:30\n' >"$H/.xscreensaver"
 run_set -- xscreensaver --skip-prompt
 assert_eq "to XScreenSaver: exits 0" "0" "$EXIT_CODE"
 assert_contains "to XScreenSaver: installs it without asking again" "$CALLS" "ohmydebn-xscreensaver-install --skip-prompt"
@@ -92,7 +92,10 @@ assert_not_contains "prefs: the old lock line is replaced, not kept" "$PREFS" "l
 assert_contains "prefs: blank, no animations" "$PREFS" "mode:		blank"
 assert_contains "prefs: locks as soon as it blanks" "$PREFS" "lockTimeout:		0:00:00"
 assert_contains "prefs: display power saving left to Cinnamon" "$PREFS" "dpmsEnabled:		False"
-assert_contains "prefs: other settings kept" "$PREFS" "fade:		True"
+assert_contains "prefs: no fade before locking" "$PREFS" "fade:		False"
+assert_contains "prefs: no fade back in" "$PREFS" "unfade:		False"
+assert_not_contains "prefs: the old fade line is replaced" "$PREFS" "fade:		True"
+assert_contains "prefs: other settings kept" "$PREFS" "passwdTimeout:	0:00:30"
 assert_eq "prefs: one lock line" "1" "$(grep -c '^lock:' "$H/.xscreensaver")"
 assert_contains "autostart: starts at login in Cinnamon" "$(cat "$H/.config/autostart/ohmydebn-xscreensaver.desktop")" "Exec=/usr/share/ohmydebn/bin/ohmydebn-xscreensaver-start"
 assert_contains "to XScreenSaver: says so" "$OUTPUT" "The lock screen is now XScreenSaver"

@@ -240,6 +240,14 @@ xscreensaver)
   else
     fail "XScreenSaver lock screen: ~/.xscreensaver locks and leaves power saving to Cinnamon" "choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
   fi
+  # A fade holds up the lock, and suspend with it (ohmydebn-lock waits for
+  # the lock); OhMyDebn turns it off. Absent means XScreenSaver's default,
+  # which fades.
+  if grep -qE '^fade:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null; then
+    ok "XScreenSaver lock screen: locks without fading out first"
+  else
+    fail "XScreenSaver lock screen: locks without fading out first" "turn off Fade to Black in xscreensaver-settings, or choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
+  fi
   if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
     fail "XScreenSaver lock screen: an X11 session" "XScreenSaver can't lock Wayland - choose Cinnamon in Appearance > Lock Screen"
   elif [ "${XDG_CURRENT_DESKTOP:-}" = "X-Cinnamon" ]; then

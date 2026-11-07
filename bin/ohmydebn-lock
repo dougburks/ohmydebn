@@ -23,10 +23,14 @@ set -uo pipefail
 # good.
 #
 # The waits are variables so the unit test can shorten them -
-# tests/unit/test-lock.sh.
+# tests/unit/test-lock.sh. The lock wait is generous on purpose: the
+# fallback is for an XScreenSaver that can't lock, not a slow one, and
+# XScreenSaver can report the lock only after fading out, which
+# ohmydebn-lock-screen-set turns off but a user can turn back on
+# (3 seconds by default, more on a machine without a GPU).
 
 START_WAIT_TENTHS=50
-LOCK_WAIT_TENTHS=30
+LOCK_WAIT_TENTHS=100
 FALLBACK_WAIT_TENTHS=50
 
 running() { timeout 2 xscreensaver-command --version >/dev/null 2>&1; }

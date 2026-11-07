@@ -106,6 +106,35 @@ assert_contains "sleep lock: daemon started" "$CALLS" "start"
 assert_not_contains "sleep lock: the daemon didn't get the descriptor" "$CALLS" "sleep lock fd open"
 mock_cleanup
 
+# --- XScreenSaver reports the lock late (a fade), but within the wait:
+# no fallback. The mock reports it from its fourth --time on, about half a
+# second in, inside this test's shortened wait. ---
+setup
+: >"$MOCK_DIR/running"
+mock_bin xscreensaver-command <<'EOF2'
+#!/bin/bash
+case "$1" in
+--version) exit 0 ;;
+--lock) mock_log "xscreensaver-command --lock" ;;
+--time)
+  n=$(($(cat "$MOCK_DIR/time-calls" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$MOCK_DIR/time-calls"
+  if [ "$n" -ge 4 ]; then echo "XScreenSaver 6.09: screen locked since Sat Nov  7 10:00:00 2026"
+  else echo "XScreenSaver 6.09: screen blanked since Sat Nov  7 10:00:00 2026"; fi
+  ;;
+esac
+EOF2
+run_lock
+assert_eq "late lock: exits 0" "0" "$EXIT_CODE"
+assert_not_contains "late lock: no fallback" "$CALLS" "cinnamon-screensaver"
+assert_not_contains "late lock: no notification" "$CALLS" "notify-send"
+mock_cleanup
+
+# --- the real wait outlasts XScreenSaver's default 3-second fade, with
+# room to spare, so a fade a user turned back on isn't taken for a failure ---
+LOCK_WAIT=$(sed -n 's/^LOCK_WAIT_TENTHS=//p' "$SCRIPT")
+assert_eq "wait: at least 10 seconds" "yes" "$([ "${LOCK_WAIT:-0}" -ge 100 ] && echo yes || echo no)"
+
 # --- XScreenSaver never locks: Cinnamon's screensaver locks instead ---
 setup
 : >"$MOCK_DIR/running"

@@ -1,0 +1,87 @@
+#!/bin/bash
+set -uo pipefail
+
+# ohmydebn-lock: locks the screen with XScreenSaver. With the XScreenSaver
+# lock screen chosen (ohmydebn-lock-screen-set), Cinnamon's
+# custom-screensaver-command setting names this script, and Cinnamon runs
+# it for every lock request: cinnamon-screensaver-command --lock (the
+# lock keys, the menu and user applets, OhMyDebn's System > Lock), and
+# csd-power when the session goes idle and before suspend.
+#
+# xscreensaver-command --lock only asks a running XScreenSaver to lock,
+# and does nothing at all if none is running, so this starts one first
+# when needed and doesn't return until XScreenSaver itself reports the
+# screen locked. If it never does, the screen still gets locked:
+# Cinnamon's own screensaver is started for this one lock (see
+# fallback_lock), with a notification saying so. A lock request that
+# quietly leaves the screen open is the one outcome this must not have.
+#
+# Before suspend, csd-power passes XSS_SLEEP_LOCK_FD: an open file
+# descriptor that holds the suspend until it's closed. This script keeps
+# it until the screen is locked and exits, so suspend waits for the lock;
+# the daemons it starts close it first, or suspend would wait on them for
+# good.
+#
+# The waits are variables so the unit test can shorten them -
+# tests/unit/test-lock.sh.
+
+START_WAIT_TENTHS=50
+LOCK_WAIT_TENTHS=30
+FALLBACK_WAIT_TENTHS=50
+
+running() { timeout 2 xscreensaver-command --version >/dev/null 2>&1; }
+locked() { timeout 2 xscreensaver-command --time 2>/dev/null | grep -q "screen locked since"; }
+
+# wait_for <tenths of a second> <command...>: true once the command is.
+wait_for() {
+  local tenths=$1 i
+  shift
+  for ((i = 0; i < tenths; i++)); do
+    "$@" && return 0
+    sleep 0.1
+  done
+  "$@"
+}
+
+# Runs a command detached, in its own session, without the sleep lock.
+detach() {
+  (
+    if [[ "${XSS_SLEEP_LOCK_FD:-}" =~ ^[0-9]+$ ]]; then
+      eval "exec ${XSS_SLEEP_LOCK_FD}>&-"
+    fi
+    exec setsid "$@" </dev/null >/dev/null 2>&1
+  ) &
+}
+
+cinnamon_screensaver_up() {
+  gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+    --method org.freedesktop.DBus.NameHasOwner org.cinnamon.ScreenSaver 2>/dev/null | grep -q true
+}
+
+# Cinnamon's screensaver exits as soon as it starts while
+# custom-screensaver-command is set, so it's started with the in-memory
+# settings backend: its default settings, with no custom command and
+# locking on, for this process only. It's then asked to lock over D-Bus
+# directly; cinnamon-screensaver-command would just run this script again.
+fallback_lock() {
+  if ! cinnamon_screensaver_up; then
+    detach env GSETTINGS_BACKEND=memory cinnamon-screensaver
+    wait_for "$FALLBACK_WAIT_TENTHS" cinnamon_screensaver_up
+  fi
+  local status=0
+  timeout 5 gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver \
+    --method org.cinnamon.ScreenSaver.Lock "" >/dev/null 2>&1 || status=1
+  notify-send -i ohmydebn -u critical "Lock screen" \
+    "XScreenSaver didn't lock the screen, so Cinnamon's screensaver locked it instead. Run ohmydebn-doctor to see why." 2>/dev/null || true
+  return "$status"
+}
+
+if ! running; then
+  detach /usr/share/ohmydebn/bin/ohmydebn-xscreensaver-start
+  wait_for "$START_WAIT_TENTHS" running
+fi
+timeout 5 xscreensaver-command --lock >/dev/null 2>&1
+if wait_for "$LOCK_WAIT_TENTHS" locked; then
+  exit 0
+fi
+fallback_lock

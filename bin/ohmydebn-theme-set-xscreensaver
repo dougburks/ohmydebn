@@ -1,0 +1,79 @@
+#!/bin/bash
+#
+# ohmydebn-theme-set-xscreensaver: colors XScreenSaver's unlock dialog with
+# the current theme, for the XScreenSaver lock screen
+# (ohmydebn-lock-screen-set). Writes the dialog's X resources to
+# ~/.config/ohmydebn/current/xscreensaver.Xresources, which
+# ohmydebn-xscreensaver-start merges at login, and merges them now when
+# that lock screen is in use: the dialog reads the resource database each
+# time it opens, so the next unlock already has the new colors.
+#
+# The resources override XScreenSaver's "default" dialog theme. They're
+# bound to the XScreenSaver class rather than to any program (its own
+# built-in values start with "*"), so they win however the two are
+# merged.
+#
+# Does nothing when XScreenSaver isn't installed.
+# Usage: ohmydebn-theme-set-xscreensaver [colors-source]
+# Without a colors source (ohmydebn-lock-screen-set), it reads the
+# current theme's.
+
+set -e
+
+command -v xscreensaver >/dev/null 2>&1 || exit 0
+
+COLORS_SOURCE="${1:-}"
+RESOURCES=~/.config/ohmydebn/current/xscreensaver.Xresources
+TEMP_SOURCE=""
+
+if [[ -z "$COLORS_SOURCE" ]]; then
+  COLORS_SOURCE=$(/usr/share/ohmydebn/bin/ohmydebn-theme-set-colors ~/.config/ohmydebn/current/theme 2>/dev/null || true)
+  TEMP_SOURCE="$COLORS_SOURCE"
+fi
+if [[ -z "$COLORS_SOURCE" || ! -f "$COLORS_SOURCE" ]]; then
+  exit 0
+fi
+
+get_color() {
+  grep -E "^\s*$1\s*=" "$COLORS_SOURCE" | head -1 | sed -E 's/.*=\s*"([^"]+)".*/\1/'
+}
+BG=$(get_color background)
+FG=$(get_color foreground)
+ACCENT=$(get_color accent)
+ACCENT=${ACCENT:-$(get_color color4)}
+RED=$(get_color color1)
+RED=${RED:-#FF5555}
+
+if [[ -n "$TEMP_SOURCE" ]]; then
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-colors-delete "$TEMP_SOURCE"
+fi
+[[ -n "$BG" && -n "$FG" && -n "$ACCENT" ]] || exit 0
+
+mkdir -p ~/.config/ohmydebn/current
+# Written to a temporary file and renamed into place, as every theme hook
+# writes its files.
+TMP_RESOURCES=$(mktemp "$RESOURCES.XXXXXX")
+cat >"$TMP_RESOURCES" <<EOF
+XScreenSaver.dialogTheme: default
+XScreenSaver*default.Dialog.background: $BG
+XScreenSaver*default.Dialog.foreground: $FG
+XScreenSaver*default.Dialog.text.background: $BG
+XScreenSaver*default.Dialog.text.foreground: $FG
+XScreenSaver*default.Dialog.button.background: $BG
+XScreenSaver*default.Dialog.button.foreground: $FG
+XScreenSaver*default.Dialog.logo.background: $BG
+XScreenSaver*default.Dialog.error.foreground: $RED
+XScreenSaver*default.Dialog.thermometer.foreground: $ACCENT
+XScreenSaver*default.Dialog.thermometer.background: $BG
+XScreenSaver*default.Dialog.borderColor: $ACCENT
+XScreenSaver*default.Dialog.borderWidth: 2
+XScreenSaver*default.Dialog.topShadowColor: $ACCENT
+XScreenSaver*default.Dialog.bottomShadowColor: $ACCENT
+EOF
+chmod 644 "$TMP_RESOURCES"
+mv "$TMP_RESOURCES" "$RESOURCES"
+
+if [[ -n "${DISPLAY:-}" ]] && command -v xrdb >/dev/null 2>&1 &&
+  [[ "$(/usr/share/ohmydebn/bin/ohmydebn-lock-screen-set --current 2>/dev/null)" == xscreensaver ]]; then
+  xrdb -merge "$RESOURCES" || true
+fi

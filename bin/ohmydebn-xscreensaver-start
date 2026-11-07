@@ -1,0 +1,24 @@
+#!/bin/bash
+set -uo pipefail
+
+# ohmydebn-xscreensaver-start: starts the XScreenSaver daemon for the
+# XScreenSaver lock screen, at login (its ~/.config/autostart entry,
+# written by ohmydebn-lock-screen-set) and from ohmydebn-lock if it isn't
+# running.
+#
+# The unlock dialog reads its colors from the X resource database each
+# time it opens, so the current theme's colors
+# (ohmydebn-theme-set-xscreensaver) are merged in first. So is the New
+# Login button's command where LightDM provides dm-tool, as Debian's own
+# xscreensaver-wrapper.sh does: without it the button doesn't show.
+
+RESOURCES="$HOME/.config/ohmydebn/current/xscreensaver.Xresources"
+
+if command -v xrdb >/dev/null 2>&1; then
+  [[ -f "$RESOURCES" ]] && xrdb -merge "$RESOURCES"
+  if command -v dm-tool >/dev/null 2>&1; then
+    echo "XScreenSaver.newLoginCommand: dm-tool switch-to-greeter" | xrdb -merge
+  fi
+fi
+
+exec xscreensaver --no-splash

@@ -24,9 +24,11 @@ set -euo pipefail
 # custom-screensaver-command setting set, cinnamon-screensaver exits as
 # soon as it starts, and every lock request (the lock keys, the menus,
 # idle, before suspend) runs that command instead, here ohmydebn-lock.
-# Cinnamon still decides when to lock, from its own settings, and keeps
-# honoring apps that ask for the screen to stay on; XScreenSaver's own
-# idle timer and display power saving are set out of its way.
+# Cinnamon still decides when to lock, from its own settings (including
+# blanking without a lock, or locking after a grace period, when the
+# session goes idle), and keeps honoring apps that ask for the screen to
+# stay on; XScreenSaver's own idle timer, lock setting and display power
+# saving are set out of its way.
 
 SCHEMA=org.cinnamon.desktop.screensaver
 KEY=custom-screensaver-command
@@ -60,14 +62,16 @@ running() { timeout 2 xscreensaver-command --version >/dev/null 2>&1; }
 use_xscreensaver() {
   /usr/share/ohmydebn/bin/ohmydebn-xscreensaver-install --skip-prompt
 
-  # Blank, lock at once, and leave idle timing and display power saving
-  # to Cinnamon. The timeout is only a backstop: Cinnamon's idle lock runs
-  # long before it. No fade: XScreenSaver's takes 3 seconds by default,
-  # longer without a GPU (6.08 and 6.09 fade frame by frame), and it held
-  # up both the lock and suspend, which waits for ohmydebn-lock. Cinnamon's
-  # own lock screen doesn't fade either.
+  # Blank, and leave locking, idle timing and display power saving to
+  # Cinnamon: ohmydebn-lock decides whether each request locks
+  # (xscreensaver-command --lock locks whatever the lock setting says),
+  # so blanking alone doesn't lock. The timeout is only a backstop:
+  # Cinnamon's idle timeout runs long before it. No fade: XScreenSaver's
+  # takes 3 seconds by default, longer without a GPU (6.08 and 6.09 fade
+  # frame by frame), and it held up both the lock and suspend, which waits
+  # for ohmydebn-lock. Cinnamon's own lock screen doesn't fade either.
   set_pref mode blank
-  set_pref lock True
+  set_pref lock False
   set_pref lockTimeout 0:00:00
   set_pref timeout 12:00:00
   set_pref dpmsEnabled False

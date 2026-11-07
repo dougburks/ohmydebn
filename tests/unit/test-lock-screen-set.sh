@@ -78,7 +78,7 @@ mock_cleanup
 
 # --- switching to XScreenSaver ---
 setup
-printf 'mode:\t\trandom\nlock:\t\tFalse\nfade:\t\tTrue\npasswdTimeout:\t0:00:30\n' >"$H/.xscreensaver"
+printf 'mode:\t\trandom\nlock:\t\tTrue\nfade:\t\tTrue\npasswdTimeout:\t0:00:30\n' >"$H/.xscreensaver"
 run_set -- xscreensaver --skip-prompt
 assert_eq "to XScreenSaver: exits 0" "0" "$EXIT_CODE"
 assert_contains "to XScreenSaver: installs it without asking again" "$CALLS" "ohmydebn-xscreensaver-install --skip-prompt"
@@ -87,8 +87,8 @@ assert_contains "to XScreenSaver: points Cinnamon at ohmydebn-lock" "$CALLS" "gs
 assert_contains "to XScreenSaver: asks Cinnamon's screensaver to quit" "$CALLS" "gdbus org.cinnamon.ScreenSaver.Quit"
 assert_contains "to XScreenSaver: starts the daemon now" "$CALLS" "ohmydebn-xscreensaver-start"
 PREFS=$(cat "$H/.xscreensaver")
-assert_contains "prefs: lock on" "$PREFS" "lock:		True"
-assert_not_contains "prefs: the old lock line is replaced, not kept" "$PREFS" "lock:		False"
+assert_contains "prefs: locking left to ohmydebn-lock" "$PREFS" "lock:		False"
+assert_not_contains "prefs: the old lock line is replaced, not kept" "$PREFS" "lock:		True"
 assert_contains "prefs: blank, no animations" "$PREFS" "mode:		blank"
 assert_contains "prefs: locks as soon as it blanks" "$PREFS" "lockTimeout:		0:00:00"
 assert_contains "prefs: display power saving left to Cinnamon" "$PREFS" "dpmsEnabled:		False"

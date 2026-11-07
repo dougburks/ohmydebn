@@ -234,11 +234,14 @@ xscreensaver)
   echo "  lock screen: XScreenSaver"
   check "XScreenSaver lock screen: xscreensaver installed" dpkg -s xscreensaver
   check "XScreenSaver lock screen: starts at login" test -f "$HOME/.config/autostart/ohmydebn-xscreensaver.desktop"
-  if grep -qE '^lock:[[:space:]]*True' "$HOME/.xscreensaver" 2>/dev/null &&
+  # ohmydebn-lock decides which requests lock (--lock locks regardless), so
+  # XScreenSaver's own lock setting is off: on, an idle timeout set to
+  # blank without locking would lock.
+  if grep -qE '^lock:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null &&
     grep -qE '^dpmsEnabled:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null; then
-    ok "XScreenSaver lock screen: ~/.xscreensaver locks and leaves power saving to Cinnamon"
+    ok "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
   else
-    fail "XScreenSaver lock screen: ~/.xscreensaver locks and leaves power saving to Cinnamon" "choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
+    fail "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon" "choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
   fi
   # A fade holds up the lock, and suspend with it (ohmydebn-lock waits for
   # the lock); OhMyDebn turns it off. Absent means XScreenSaver's default,

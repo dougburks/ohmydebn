@@ -29,11 +29,32 @@ case "$1" in
   [ -e "$MOCK_DIR/running" ] && [ ! -e "$MOCK_DIR/lock-fails" ] && : >"$MOCK_DIR/locked"
   exit 0
   ;;
+--activate)
+  mock_log "xscreensaver-command --activate"
+  [ -e "$MOCK_DIR/running" ] && [ ! -e "$MOCK_DIR/activate-fails" ] && : >"$MOCK_DIR/blanked"
+  exit 0
+  ;;
 --time)
   if [ -e "$MOCK_DIR/locked" ]; then echo "XScreenSaver 6.09: screen locked since Sat Nov  7 10:00:00 2026"
+  elif [ -e "$MOCK_DIR/blanked" ]; then echo "XScreenSaver 6.09: screen blanked since Sat Nov  7 10:00:00 2026"
   else echo "XScreenSaver 6.09: screen non-blanked since Sat Nov  7 09:00:00 2026"; fi
   ;;
 esac
+EOF2
+  # Cinnamon's screensaver settings: lock-enabled and lock-delay, or no
+  # answer at all.
+  mock_bin gsettings <<'EOF2'
+#!/bin/bash
+[ -n "${MOCK_GSETTINGS_FAILS:-}" ] && exit 1
+case "$*" in
+*lock-enabled) echo "${MOCK_LOCK_ENABLED:-true}" ;;
+*lock-delay) echo "uint32 ${MOCK_LOCK_DELAY:-0}" ;;
+esac
+EOF2
+  # The grace period's lock runs ohmydebn-lock again; this stands in for it.
+  mock_bin ohmydebn-lock <<'EOF2'
+#!/bin/bash
+mock_log "ohmydebn-lock again LOCKED_BY_SESSION_IDLE=${LOCKED_BY_SESSION_IDLE:-unset}"
 EOF2
   # The daemon starter records whether the suspend lock descriptor reached
   # it, then "starts" XScreenSaver unless told not to.
@@ -154,6 +175,77 @@ run_lock
 assert_eq "won't start: exits 0" "0" "$EXIT_CODE"
 assert_not_contains "won't start: doesn't start a second Cinnamon screensaver" "$CALLS" "cinnamon-screensaver GSETTINGS"
 assert_contains "won't start: the running one locks" "$CALLS" "gdbus Lock"
+mock_cleanup
+
+# --- idle timeout, locking turned off in Cinnamon: blank, no lock ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=false
+assert_eq "idle, no lock: exits 0" "0" "$EXIT_CODE"
+assert_contains "idle, no lock: blanks" "$CALLS" "xscreensaver-command --activate"
+assert_not_contains "idle, no lock: doesn't lock" "$CALLS" "--lock"
+assert_not_contains "idle, no lock: no fallback" "$CALLS" "cinnamon-screensaver"
+mock_cleanup
+
+# --- idle timeout, locking on with no grace period: locks at once ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=true MOCK_LOCK_DELAY=0
+assert_contains "idle, lock: locks" "$CALLS" "xscreensaver-command --lock"
+assert_not_contains "idle, lock: doesn't just blank" "$CALLS" "--activate"
+mock_cleanup
+
+# --- idle timeout with a 1-second grace period: blanks, then locks if the
+# screen is still blank ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=true MOCK_LOCK_DELAY=1
+assert_eq "grace: exits 0 once blank, without waiting" "0" "$EXIT_CODE"
+assert_contains "grace: blanks first" "$CALLS" "xscreensaver-command --activate"
+assert_not_contains "grace: no lock yet" "$CALLS" "ohmydebn-lock again"
+sleep 1.6
+assert_contains "grace: locks after the grace period, as an ordinary lock" "$(cat "$MOCK_CALLS")" "ohmydebn-lock again LOCKED_BY_SESSION_IDLE=unset"
+mock_cleanup
+
+# --- grace period, but the user came back first: no lock ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=true MOCK_LOCK_DELAY=1
+rm -f "$MOCK_DIR/blanked"
+sleep 1.6
+assert_not_contains "grace, activity: no lock" "$(cat "$MOCK_CALLS")" "ohmydebn-lock again"
+mock_cleanup
+
+# --- idle timeout, settings unreadable: lock, the safe side ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_GSETTINGS_FAILS=1
+assert_contains "idle, no settings: locks" "$CALLS" "xscreensaver-command --lock"
+mock_cleanup
+
+# --- before suspend (false), even with idle locking off: locks ---
+setup
+: >"$MOCK_DIR/running"
+run_lock LOCKED_BY_SESSION_IDLE=false MOCK_LOCK_ENABLED=false
+assert_contains "suspend: locks whatever the idle setting" "$CALLS" "xscreensaver-command --lock"
+mock_cleanup
+
+# --- blank only, and blanking fails: fails quietly, no lock was asked for ---
+setup
+: >"$MOCK_DIR/running"
+: >"$MOCK_DIR/activate-fails"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=false
+assert_eq "blank fails: exits 1" "1" "$EXIT_CODE"
+assert_not_contains "blank fails: no fallback lock" "$CALLS" "cinnamon-screensaver"
+assert_not_contains "blank fails: no notification" "$CALLS" "notify-send"
+mock_cleanup
+
+# --- grace period due, and blanking fails: the lock still happens ---
+setup
+: >"$MOCK_DIR/running"
+: >"$MOCK_DIR/activate-fails"
+run_lock LOCKED_BY_SESSION_IDLE=true MOCK_LOCK_ENABLED=true MOCK_LOCK_DELAY=30
+assert_contains "grace, blank fails: falls back to locking" "$CALLS" "gdbus Lock"
 mock_cleanup
 
 # --- nothing can lock: fails, and still says so ---

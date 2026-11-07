@@ -8,6 +8,20 @@ set -uo pipefail
 # lock keys, the menu and user applets, OhMyDebn's System > Lock), and
 # csd-power when the session goes idle and before suspend.
 #
+# The idle timeout is the one request that isn't always a lock. Without a
+# custom command, csd-power activates Cinnamon's screensaver, which locks
+# only if the screensaver settings say to (lock-enabled), after their
+# grace period (lock-delay). With one, csd-power leaves that to the
+# command, and says which request it is in LOCKED_BY_SESSION_IDLE: "true"
+# for the idle timeout, "false" before suspend and for display-off
+# blanking, unset from cinnamon-screensaver-command
+# (csd-power-manager.c). So the idle timeout follows those settings here
+# too: blank only, blank and lock after the grace period if the screen is
+# still blank, or lock at once. Everything else locks, as does an idle
+# timeout whose settings can't be read. XScreenSaver's own lock setting is
+# off (ohmydebn-lock-screen-set), so blanking doesn't lock by itself, and
+# --lock locks regardless of it.
+#
 # xscreensaver-command --lock only asks a running XScreenSaver to lock,
 # and does nothing at all if none is running, so this starts one first
 # when needed and doesn't return until XScreenSaver itself reports the
@@ -35,6 +49,7 @@ FALLBACK_WAIT_TENTHS=50
 
 running() { timeout 2 xscreensaver-command --version >/dev/null 2>&1; }
 locked() { timeout 2 xscreensaver-command --time 2>/dev/null | grep -q "screen locked since"; }
+blanked() { timeout 2 xscreensaver-command --time 2>/dev/null | grep -q -E "screen (blanked|locked) since"; }
 
 # wait_for <tenths of a second> <command...>: true once the command is.
 wait_for() {
@@ -80,12 +95,50 @@ fallback_lock() {
   return "$status"
 }
 
+# lock, blank (no lock), or grace (blank, then lock after GRACE seconds).
+MODE=lock
+GRACE=0
+if [[ "${LOCKED_BY_SESSION_IDLE:-}" == true ]]; then
+  LOCK_ENABLED=$(gsettings get org.cinnamon.desktop.screensaver lock-enabled 2>/dev/null)
+  # Printed as "uint32 30".
+  GRACE=$(gsettings get org.cinnamon.desktop.screensaver lock-delay 2>/dev/null | grep -oE '[0-9]+$')
+  [[ "$GRACE" =~ ^[0-9]+$ ]] || GRACE=0
+  if [[ "$LOCK_ENABLED" == false ]]; then
+    MODE=blank
+  elif [[ "$LOCK_ENABLED" == true ]] && ((GRACE > 0)); then
+    MODE=grace
+  fi
+fi
+
 if ! running; then
   detach /usr/share/ohmydebn/bin/ohmydebn-xscreensaver-start
   wait_for "$START_WAIT_TENTHS" running
 fi
-timeout 5 xscreensaver-command --lock >/dev/null 2>&1
-if wait_for "$LOCK_WAIT_TENTHS" locked; then
+
+if [[ "$MODE" == lock ]]; then
+  timeout 5 xscreensaver-command --lock >/dev/null 2>&1
+  if wait_for "$LOCK_WAIT_TENTHS" locked; then
+    exit 0
+  fi
+  fallback_lock
+  exit
+fi
+
+timeout 5 xscreensaver-command --activate >/dev/null 2>&1
+if wait_for "$LOCK_WAIT_TENTHS" blanked; then
+  if [[ "$MODE" == grace ]]; then
+    # Locks after the grace period only if the screen is still blank: any
+    # activity before then unblanks it, as with Cinnamon's grace period.
+    # The lock is this script again, without LOCKED_BY_SESSION_IDLE, so it
+    # gets the same check and fallback as any other.
+    detach env -u LOCKED_BY_SESSION_IDLE -u XSS_SLEEP_LOCK_FD bash -c "sleep $GRACE; if timeout 2 xscreensaver-command --time 2>/dev/null | grep -q 'screen blanked since'; then /usr/share/ohmydebn/bin/ohmydebn-lock; fi"
+  fi
   exit 0
 fi
-fallback_lock
+# Blanking failed. Without a lock due that's all; with one due, it still
+# has to happen.
+if [[ "$MODE" == grace ]]; then
+  fallback_lock
+  exit
+fi
+exit 1

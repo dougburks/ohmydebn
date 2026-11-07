@@ -177,6 +177,9 @@ else
 fi
 
 echo "$MESSAGE"
+# The notification is a courtesy: the message is on screen already, and
+# right after login Cinnamon's notification service may not answer yet
+# (notify-send then prints a raw D-Bus error).
 if command -v notify-send >/dev/null 2>&1; then
-  notify-send -i ohmydebn "$MESSAGE" -t 2000 || true
+  notify-send -i ohmydebn "$MESSAGE" -t 2000 2>/dev/null || true
 fi

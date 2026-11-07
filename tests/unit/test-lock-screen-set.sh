@@ -144,6 +144,20 @@ assert_contains "already Cinnamon's: says so" "$OUTPUT" "already in use"
 assert_eq "already Cinnamon's: nothing changed" "" "$CALLS"
 mock_cleanup
 
+# --- the notification service not answering (right after login): the
+# switch still succeeds, without printing the D-Bus error ---
+setup
+mock_bin notify-send <<'EOF2'
+#!/bin/bash
+echo "GDBus.Error:org.freedesktop.DBus.Error.UnknownMethod: Object does not exist at path /org/freedesktop/Notifications" >&2
+exit 1
+EOF2
+run_set -- xscreensaver --skip-prompt
+assert_eq "no notifications: exits 0" "0" "$EXIT_CODE"
+assert_contains "no notifications: still says so" "$OUTPUT" "The lock screen is now XScreenSaver"
+assert_not_contains "no notifications: no D-Bus error printed" "$OUTPUT" "GDBus.Error"
+mock_cleanup
+
 # --- bad argument ---
 setup
 run_set -- bogus

@@ -72,7 +72,7 @@ OhMyDebn is built on:
 | **ohmydebn-menu-picker** | App launcher / menu search (GTK, not rofi) | `~/.config/ohmydebn/current/picker-colors` (theming only) |
 | **Alacritty** | Default terminal | `~/.config/alacritty/` |
 | **gTile** | Advanced window tiling | System Settings → Extensions |
-| **Cinnamon Screensaver** | Lock screen | `gsettings` (`org.cinnamon.desktop.screensaver`); trigger with `cinnamon-screensaver-command -l` |
+| **Cinnamon Screensaver or XScreenSaver** | Lock screen | Cinnamon's by default; XScreenSaver if chosen in OhMyDebn Menu → Appearance → Lock Screen (`ohmydebn-lock-screen-set cinnamon\|xscreensaver`, `--current` shows which). Lock and idle settings are `gsettings` (`org.cinnamon.desktop.screensaver`) either way; trigger with `cinnamon-screensaver-command -l`, which locks with whichever is chosen. With XScreenSaver, `~/.xscreensaver` keeps OhMyDebn's settings (no locking, fade or power saving of its own: Cinnamon decides) and its look comes from the theme (`~/.config/ohmydebn/current/xscreensaver.Xresources`) |
 | **Cinnamon Notification Daemon** | Notifications | System settings |
 
 ## Command Discovery
@@ -391,7 +391,7 @@ ohmydebn-version                 # Show OhMyDebn version
 System control (lock, shutdown, reboot) is handled through:
 - Cinnamon Menu (power options) or OhMyDebn Menu
 - Hotkeys: `Ctrl + Alt + L` (lock), `Ctrl + Alt + End` (shutdown), `Ctrl + Alt + Del` (logout)
-- Standard system commands: `loginctl lock-session`, `shutdown now`, `reboot`
+- Standard system commands: `cinnamon-screensaver-command -l` (lock, with either lock screen), `shutdown now`, `reboot`
 
 ## Troubleshooting
 

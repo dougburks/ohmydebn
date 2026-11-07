@@ -75,7 +75,7 @@ assert_contains "flat: no bevels" "$FILE" "XScreenSaver*default.Dialog.shadowWid
 assert_contains "flat: smaller logo" "$FILE" "XScreenSaver*default.Dialog.logo.width: 80"
 assert_contains "flat: thinner countdown bar" "$FILE" "XScreenSaver*default.Dialog.thermometer.width: 4"
 assert_contains "flat: more padding" "$FILE" "XScreenSaver*default.Dialog.internalPadding: 32"
-assert_contains "no username line" "$FILE" "XScreenSaver*passwd.uname: False"
+assert_contains "no hostname line (passwd.uname)" "$FILE" "XScreenSaver*passwd.uname: False"
 assert_contains "asterisks while typing" "$FILE" "XScreenSaver*passwd.asterisks: True"
 assert_contains "fonts: OhMyDebn's, then XScreenSaver's own" "$FILE" "XScreenSaver*Dialog.headingFont: CaskaydiaMono Nerd Font Bold 16, sans-serif bold 16"
 assert_contains "fonts: every part of the dialog" "$(grep -c "^XScreenSaver\*Dialog\.[a-z]*Font: CaskaydiaMono Nerd Font" "$RESOURCES")" "7"

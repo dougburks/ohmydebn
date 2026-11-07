@@ -72,8 +72,10 @@ mix() {
 # the buttons and the countdown bar's track a shade lighter than the
 # dialog (darker on a light theme) so they still read as surfaces; a
 # smaller logo (XScreenSaver's is 210 pixels), a thinner countdown bar
-# and more padding. No "Username:" line, which a one-user desktop doesn't
-# need; asterisks still show as the password is typed.
+# and more padding. No hostname line: despite its name, passwd.uname
+# turns off the line with the machine's name, not the "Username:" line,
+# which XScreenSaver always shows (driver/dialog.c). Asterisks still show
+# as the password is typed.
 SURFACE=$(mix "$BG" "$FG" 10)
 
 mkdir -p ~/.config/ohmydebn/current

@@ -68,6 +68,15 @@ assert_contains "colors: background" "$FILE" "XScreenSaver*default.Dialog.backgr
 assert_contains "colors: foreground" "$FILE" "XScreenSaver*default.Dialog.foreground: #eeeeee"
 assert_contains "colors: accent on the border" "$FILE" "XScreenSaver*default.Dialog.borderColor: #33cc99"
 assert_contains "colors: errors in the theme's red" "$FILE" "XScreenSaver*default.Dialog.error.foreground: #cc3333"
+# 10% of the way from #101010 to #eeeeee: 0x10 + (0xee - 0x10) / 10 = 0x26.
+assert_contains "flat: field a shade lighter than the dialog" "$FILE" "XScreenSaver*default.Dialog.text.background: #262626"
+assert_contains "flat: buttons the same shade" "$FILE" "XScreenSaver*default.Dialog.button.background: #262626"
+assert_contains "flat: no bevels" "$FILE" "XScreenSaver*default.Dialog.shadowWidth: 0"
+assert_contains "flat: smaller logo" "$FILE" "XScreenSaver*default.Dialog.logo.width: 80"
+assert_contains "flat: thinner countdown bar" "$FILE" "XScreenSaver*default.Dialog.thermometer.width: 4"
+assert_contains "flat: more padding" "$FILE" "XScreenSaver*default.Dialog.internalPadding: 32"
+assert_contains "no username line" "$FILE" "XScreenSaver*passwd.uname: False"
+assert_contains "asterisks while typing" "$FILE" "XScreenSaver*passwd.asterisks: True"
 assert_contains "fonts: OhMyDebn's, then XScreenSaver's own" "$FILE" "XScreenSaver*Dialog.headingFont: CaskaydiaMono Nerd Font Bold 16, sans-serif bold 16"
 assert_contains "fonts: every part of the dialog" "$(grep -c "^XScreenSaver\*Dialog\.[a-z]*Font: CaskaydiaMono Nerd Font" "$RESOURCES")" "7"
 assert_eq "colors: written with mode 644" "644" "$(stat -c %a "$RESOURCES")"
@@ -83,6 +92,26 @@ run_hook MOCK_LOCK_SCREEN=xscreensaver DISPLAY=:0
 assert_contains "in use: merged into the resource database" "$(cat "$MOCK_CALLS")" "xrdb -merge $H/.config/ohmydebn/current/xscreensaver.Xresources"
 run_hook MOCK_LOCK_SCREEN=xscreensaver
 assert_eq "in use, no display: merged once, from the run above only" "1" "$(grep -c "xrdb -merge" "$MOCK_CALLS")"
+mock_cleanup
+
+# --- a light theme: the shade is darker than the dialog ---
+setup
+installed
+printf 'background = "#FAFAFA"\nforeground = "#212121"\naccent = "#3264eb"\n' >"$MOCK_DIR/colors.toml"
+HOOK_ARGS=("$MOCK_DIR/colors.toml")
+run_hook
+# 0xfa - (0xfa - 0x21) / 10, rounded down: 0xe4.
+assert_contains "light theme: a darker shade" "$(cat "$RESOURCES" 2>/dev/null)" "XScreenSaver*default.Dialog.text.background: #e4e4e4"
+mock_cleanup
+
+# --- colors that aren't #rrggbb: the shade is the dialog's own color ---
+setup
+installed
+printf 'background = "#123"\nforeground = "#eeeeee"\naccent = "#33cc99"\n' >"$MOCK_DIR/colors.toml"
+HOOK_ARGS=("$MOCK_DIR/colors.toml")
+run_hook
+assert_eq "short colors: still exits 0" "0" "$EXIT_CODE"
+assert_contains "short colors: no shade, the background" "$(cat "$RESOURCES" 2>/dev/null)" "XScreenSaver*default.Dialog.text.background: #123"
 mock_cleanup
 
 # --- a theme without an accent: blue stands in ---

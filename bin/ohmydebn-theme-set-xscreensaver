@@ -55,6 +55,27 @@ if [[ -n "$TEMP_SOURCE" ]]; then
 fi
 [[ -n "$BG" && -n "$FG" && -n "$ACCENT" ]] || exit 0
 
+# mix <#rrggbb> <#rrggbb> <percent>: the first color moved that far toward
+# the second. Anything but two six-digit colors gives the first back.
+mix() {
+  local a=${1#\#} b=${2#\#} out="#" i
+  if ! [[ "$a" =~ ^[0-9A-Fa-f]{6}$ && "$b" =~ ^[0-9A-Fa-f]{6}$ ]]; then
+    echo "$1"
+    return
+  fi
+  for i in 0 2 4; do
+    out+=$(printf '%02x' $(((16#${a:i:2} * (100 - $3) + 16#${b:i:2} * $3) / 100)))
+  done
+  echo "$out"
+}
+# A flat dialog: no 3D bevels (shadowWidth 0), with the password field,
+# the buttons and the countdown bar's track a shade lighter than the
+# dialog (darker on a light theme) so they still read as surfaces; a
+# smaller logo (XScreenSaver's is 210 pixels), a thinner countdown bar
+# and more padding. No "Username:" line, which a one-user desktop doesn't
+# need; asterisks still show as the password is typed.
+SURFACE=$(mix "$BG" "$FG" 10)
+
 mkdir -p ~/.config/ohmydebn/current
 # Written to a temporary file and renamed into place, as every theme hook
 # writes its files.
@@ -63,16 +84,23 @@ cat >"$TMP_RESOURCES" <<EOF
 XScreenSaver.dialogTheme: default
 XScreenSaver*default.Dialog.background: $BG
 XScreenSaver*default.Dialog.foreground: $FG
-XScreenSaver*default.Dialog.text.background: $BG
+XScreenSaver*default.Dialog.text.background: $SURFACE
 XScreenSaver*default.Dialog.text.foreground: $FG
-XScreenSaver*default.Dialog.button.background: $BG
+XScreenSaver*default.Dialog.button.background: $SURFACE
 XScreenSaver*default.Dialog.button.foreground: $FG
 XScreenSaver*default.Dialog.logo.background: $BG
+XScreenSaver*default.Dialog.logo.width: 80
+XScreenSaver*default.Dialog.logo.height: 80
 XScreenSaver*default.Dialog.error.foreground: $RED
 XScreenSaver*default.Dialog.thermometer.foreground: $ACCENT
-XScreenSaver*default.Dialog.thermometer.background: $BG
+XScreenSaver*default.Dialog.thermometer.background: $SURFACE
+XScreenSaver*default.Dialog.thermometer.width: 4
 XScreenSaver*default.Dialog.borderColor: $ACCENT
 XScreenSaver*default.Dialog.borderWidth: 2
+XScreenSaver*default.Dialog.shadowWidth: 0
+XScreenSaver*default.Dialog.internalPadding: 32
+XScreenSaver*passwd.uname: False
+XScreenSaver*passwd.asterisks: True
 XScreenSaver*Dialog.headingFont: CaskaydiaMono Nerd Font Bold 16, sans-serif bold 16
 XScreenSaver*Dialog.bodyFont: CaskaydiaMono Nerd Font 14, sans-serif 14
 XScreenSaver*Dialog.errorFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 14
@@ -80,8 +108,8 @@ XScreenSaver*Dialog.labelFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 
 XScreenSaver*Dialog.unameFont: CaskaydiaMono Nerd Font 12, sans-serif 12
 XScreenSaver*Dialog.buttonFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 14
 XScreenSaver*Dialog.dateFont: CaskaydiaMono Nerd Font 9, sans-serif 9
-XScreenSaver*default.Dialog.topShadowColor: $ACCENT
-XScreenSaver*default.Dialog.bottomShadowColor: $ACCENT
+XScreenSaver*default.Dialog.topShadowColor: $SURFACE
+XScreenSaver*default.Dialog.bottomShadowColor: $SURFACE
 EOF
 chmod 644 "$TMP_RESOURCES"
 mv "$TMP_RESOURCES" "$RESOURCES"

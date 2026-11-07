@@ -68,6 +68,8 @@ assert_contains "colors: background" "$FILE" "XScreenSaver*default.Dialog.backgr
 assert_contains "colors: foreground" "$FILE" "XScreenSaver*default.Dialog.foreground: #eeeeee"
 assert_contains "colors: accent on the border" "$FILE" "XScreenSaver*default.Dialog.borderColor: #33cc99"
 assert_contains "colors: errors in the theme's red" "$FILE" "XScreenSaver*default.Dialog.error.foreground: #cc3333"
+assert_contains "fonts: OhMyDebn's, then XScreenSaver's own" "$FILE" "XScreenSaver*Dialog.headingFont: CaskaydiaMono Nerd Font Bold 16, sans-serif bold 16"
+assert_contains "fonts: every part of the dialog" "$(grep -c "^XScreenSaver\*Dialog\.[a-z]*Font: CaskaydiaMono Nerd Font" "$RESOURCES")" "7"
 assert_eq "colors: written with mode 644" "644" "$(stat -c %a "$RESOURCES")"
 assert_eq "colors: no temporary file left" "1" "$(ls "$H/.config/ohmydebn/current" | wc -l)"
 assert_eq "Cinnamon's lock screen in use: not merged" "" "$(cat "$MOCK_CALLS")"

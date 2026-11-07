@@ -13,6 +13,12 @@
 # built-in values start with "*"), so they win however the two are
 # merged.
 #
+# The dialog's fonts are OhMyDebn's, CaskaydiaMono Nerd Font, at
+# XScreenSaver's own sizes. Each font is a list XScreenSaver tries in
+# order ("Family [Bold] Size", utils/font-retry.c), so sans-serif, its
+# default, stands in if the font is missing. The date line's format
+# follows Cinnamon's clock and is set at login (ohmydebn-xscreensaver-start).
+#
 # Does nothing when XScreenSaver isn't installed.
 # Usage: ohmydebn-theme-set-xscreensaver [colors-source]
 # Without a colors source (ohmydebn-lock-screen-set), it reads the
@@ -67,6 +73,13 @@ XScreenSaver*default.Dialog.thermometer.foreground: $ACCENT
 XScreenSaver*default.Dialog.thermometer.background: $BG
 XScreenSaver*default.Dialog.borderColor: $ACCENT
 XScreenSaver*default.Dialog.borderWidth: 2
+XScreenSaver*Dialog.headingFont: CaskaydiaMono Nerd Font Bold 16, sans-serif bold 16
+XScreenSaver*Dialog.bodyFont: CaskaydiaMono Nerd Font 14, sans-serif 14
+XScreenSaver*Dialog.errorFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 14
+XScreenSaver*Dialog.labelFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 14
+XScreenSaver*Dialog.unameFont: CaskaydiaMono Nerd Font 12, sans-serif 12
+XScreenSaver*Dialog.buttonFont: CaskaydiaMono Nerd Font Bold 14, sans-serif bold 14
+XScreenSaver*Dialog.dateFont: CaskaydiaMono Nerd Font 9, sans-serif 9
 XScreenSaver*default.Dialog.topShadowColor: $ACCENT
 XScreenSaver*default.Dialog.bottomShadowColor: $ACCENT
 EOF

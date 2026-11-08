@@ -209,7 +209,7 @@ setup_mixed() {
 #!/bin/bash
 if [[ "$1" == "-l" ]]; then
   case "$2" in
-  "libreoffice*" | thunderbird | localsend | distrobox | docker.io | podman | rclone | virt-manager)
+  "libreoffice*" | thunderbird | localsend | distrobox | docker-cli | docker.io | podman | rclone | virt-manager)
     echo "ii  $2  1.0  amd64  desc"; exit 0 ;;
   esac
   exit 1
@@ -240,7 +240,7 @@ setup_mixed
 run_mixed --skip-prompt --distro-apps-only
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "distro apps only: the distro's LibreOffice and Thunderbird are purged" "$CALLS" "purge libreoffice* thunderbird"
-for app in localsend distrobox docker.io; do
+for app in localsend distrobox docker-cli docker.io; do
   assert_not_contains "distro apps only: $app (from the OhMyDebn menu) is kept" "$CALLS" "$app"
 done
 assert_not_contains "distro apps only: Claude Code (from the OhMyDebn menu) is kept" "$CALLS" "ohmydebn-claude-code-remove"
@@ -250,7 +250,7 @@ mock_cleanup
 setup_mixed
 run_mixed --skip-prompt
 CALLS=$(cat "$MOCK_CALLS")
-assert_contains "full removal (fresh install): OhMyDebn apps go too" "$CALLS" "purge libreoffice* thunderbird distrobox docker.io localsend"
+assert_contains "full removal (fresh install): OhMyDebn apps go too" "$CALLS" "purge libreoffice* thunderbird distrobox docker-cli docker.io localsend"
 assert_contains "full removal: Claude Code's own remove script runs" "$CALLS" "ohmydebn-claude-code-remove --skip-prompt"
 for app in podman rclone virt-manager; do
   assert_not_contains "never purged, the power-user profile reinstalls it: $app" "$CALLS" "$app"

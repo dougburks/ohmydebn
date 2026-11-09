@@ -312,7 +312,7 @@ xss_machine() {
   build_machine yes
   mkdir -p "$H/.config/autostart"
   : >"$H/.config/autostart/ohmydebn-xscreensaver.desktop"
-  printf 'mode:\t\tblank\nlock:\t\tFalse\ndpmsEnabled:\t\tFalse\nfade:\t\tFalse\n' >"$H/.xscreensaver"
+  printf 'mode:\t\tblank\nlock:\t\tFalse\ndpmsEnabled:\t\tTrue\ndpmsQuickOff:\t\tFalse\nfade:\t\tFalse\n' >"$H/.xscreensaver"
   mock_bin xscreensaver-command <<'EOF2'
 #!/bin/bash
 [ -z "${MOCK_XSS_DOWN:-}" ]
@@ -338,6 +338,21 @@ assert_contains "xscreensaver problems: no autostart" "$OUTPUT" "FAIL - XScreenS
 assert_contains "xscreensaver problems: settings, and how to fix them" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon (choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen)"
 assert_contains "xscreensaver problems: not running" "$OUTPUT" "FAIL - XScreenSaver lock screen: xscreensaver running (the next lock starts it"
 assert_contains "xscreensaver problems: fades (no fade line means XScreenSaver's default)" "$OUTPUT" "FAIL - XScreenSaver lock screen: locks without fading out first (turn off Fade to Black in xscreensaver-settings"
+mock_cleanup
+
+# DPMS off, as ohmydebn-lock-screen-set first set it: XScreenSaver then
+# turns the server's DPMS off while locked, and Cinnamon can't turn the
+# screen off.
+xss_machine
+sed -i 's/^dpmsEnabled:.*/dpmsEnabled:\t\tFalse/' "$H/.xscreensaver"
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver, DPMS off: fails" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
+mock_cleanup
+
+xss_machine
+sed -i 's/^dpmsQuickOff:.*/dpmsQuickOff:\t\tTrue/' "$H/.xscreensaver"
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver, quick off: fails" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
 mock_cleanup
 
 xss_machine

@@ -236,9 +236,12 @@ xscreensaver)
   check "XScreenSaver lock screen: starts at login" test -f "$HOME/.config/autostart/ohmydebn-xscreensaver.desktop"
   # ohmydebn-lock decides which requests lock (--lock locks regardless), so
   # XScreenSaver's own lock setting is off: on, an idle timeout set to
-  # blank without locking would lock.
+  # blank without locking would lock. Its DPMS is on: off, it turns the
+  # server's DPMS off while locked, and Cinnamon can't turn the screen off.
+  # Quick off would power it down the moment it locks.
   if grep -qE '^lock:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null &&
-    grep -qE '^dpmsEnabled:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null; then
+    grep -qE '^dpmsEnabled:[[:space:]]*True' "$HOME/.xscreensaver" 2>/dev/null &&
+    ! grep -qE '^dpmsQuickOff:[[:space:]]*True' "$HOME/.xscreensaver" 2>/dev/null; then
     ok "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
   else
     fail "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon" "choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"

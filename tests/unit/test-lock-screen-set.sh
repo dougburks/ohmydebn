@@ -78,7 +78,7 @@ mock_cleanup
 
 # --- switching to XScreenSaver ---
 setup
-printf 'mode:\t\trandom\nlock:\t\tTrue\nfade:\t\tTrue\npasswdTimeout:\t0:00:30\n' >"$H/.xscreensaver"
+printf 'mode:\t\trandom\nlock:\t\tTrue\nfade:\t\tTrue\ndpmsEnabled:\tFalse\ndpmsOff:\t0:00:00\npasswdTimeout:\t0:00:30\n' >"$H/.xscreensaver"
 run_set -- xscreensaver --skip-prompt
 assert_eq "to XScreenSaver: exits 0" "0" "$EXIT_CODE"
 assert_contains "to XScreenSaver: installs it without asking again" "$CALLS" "ohmydebn-xscreensaver-install --skip-prompt"
@@ -91,7 +91,16 @@ assert_contains "prefs: locking left to ohmydebn-lock" "$PREFS" "lock:		False"
 assert_not_contains "prefs: the old lock line is replaced, not kept" "$PREFS" "lock:		True"
 assert_contains "prefs: blank, no animations" "$PREFS" "mode:		blank"
 assert_contains "prefs: locks as soon as it blanks" "$PREFS" "lockTimeout:		0:00:00"
-assert_contains "prefs: display power saving left to Cinnamon" "$PREFS" "dpmsEnabled:		False"
+# DPMS stays on so Cinnamon can turn the screen off while it's locked:
+# with it off, XScreenSaver turns the server's off too, and so it does
+# with all three timeouts 0.
+assert_contains "prefs: DPMS on, for Cinnamon's screen-off" "$PREFS" "dpmsEnabled:		True"
+assert_eq "prefs: the old DPMS-off line is replaced" "1" "$(grep -c '^dpmsEnabled:' "$H/.xscreensaver")"
+assert_eq "prefs: the old zero DPMS off timeout is replaced" "1" "$(grep -c '^dpmsOff:' "$H/.xscreensaver")"
+assert_contains "prefs: DPMS standby no sooner than the blank timeout" "$PREFS" "dpmsStandby:		12:00:00"
+assert_contains "prefs: DPMS suspend no sooner than the blank timeout" "$PREFS" "dpmsSuspend:		12:00:00"
+assert_contains "prefs: DPMS off no sooner than the blank timeout" "$PREFS" "dpmsOff:		12:00:00"
+assert_contains "prefs: no powering off the moment it blanks" "$PREFS" "dpmsQuickOff:		False"
 assert_contains "prefs: no fade before locking" "$PREFS" "fade:		False"
 assert_contains "prefs: no fade back in" "$PREFS" "unfade:		False"
 assert_not_contains "prefs: the old fade line is replaced" "$PREFS" "fade:		True"

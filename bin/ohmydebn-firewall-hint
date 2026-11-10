@@ -20,7 +20,11 @@ fi
 PORT="$1"
 LABEL="$2"
 
-if ! command -v ufw >/dev/null 2>&1; then
+# ufw is in /usr/sbin, which a normal user's PATH leaves out on Debian
+# (Ubuntu's has it), so command -v alone never found it there and this
+# said nothing at all. Looked for on PATH first, then in these.
+SBIN_DIRS="/usr/sbin:/sbin"
+if ! PATH="$PATH:$SBIN_DIRS" command -v ufw >/dev/null 2>&1; then
   exit 0
 fi
 

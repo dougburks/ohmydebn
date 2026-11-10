@@ -13,10 +13,17 @@ else
     echo "Press Enter to continue or Ctrl-C to cancel."
     read -r
   fi
+  # Checked before the repo goes: once it's gone, apt can only purge what's
+  # installed, and the keyring may not be (an install from before it was
+  # named, on a distro with recommends off).
+  PACKAGES=(tailscale)
+  if dpkg -s "tailscale-archive-keyring" >/dev/null 2>&1; then
+    PACKAGES+=(tailscale-archive-keyring)
+  fi
   sudo rm -f /usr/share/keyrings/tailscale-archive-keyring.gpg
   sudo rm -f /etc/apt/sources.list.d/tailscale.list
   sudo rm -f /etc/apt/preferences.d/tailscale.pref
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y purge tailscale
+  sudo /usr/bin/apt -y purge "${PACKAGES[@]}"
   sudo /usr/bin/apt -y autoremove
 fi

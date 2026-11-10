@@ -48,6 +48,9 @@ setup
 run
 assert_eq "installs: exits 0" "0" "$STATUS"
 assert_contains "installs tailscale" "$CALLS" "sudo /usr/bin/apt -y install tailscale"
+# A Recommends, so MX Linux would leave it out, and the repo's next key
+# rotation would then break apt update.
+assert_contains "and its keyring package" "$CALLS" "sudo /usr/bin/apt -y install tailscale tailscale-archive-keyring"
 assert_contains "then makes the user its operator" "$CALLS" "sudo /usr/bin/tailscale set --operator=$USER"
 mock_cleanup
 

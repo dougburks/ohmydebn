@@ -20,8 +20,9 @@ fi
 # Server entry, show the address, the service's live status, and how to
 # let it through the firewall (which OhMyDebn never opens itself). The
 # status command is picked inside the spawned terminal: `systemctl` only
-# exists under systemd, `service` is the Devuan/LCOS equivalent (see
-# ohmydebn-ssh-server for the /run/systemd/system signal).
+# exists under systemd, `service` is the Devuan/LCOS equivalent, called by
+# its full path since /usr/sbin is off a normal user's PATH there (see
+# ohmydebn-ssh-server for both).
 IP=$(hostname -I | awk '{print $1}')
-STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
+STATUS_CMD="if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else /usr/sbin/service xrdp status; fi"
 /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal "Remote Desktop Server" "echo 'Connect to this machine with Remmina or any RDP client:'; echo '  $IP:3389'; echo; echo -n 'XRDP service status: '; $STATUS_CMD; echo; /usr/share/ohmydebn/bin/ohmydebn-firewall-hint 3389 'Remote Desktop Server'; echo; echo 'Press Enter to close this window.'; read -r"

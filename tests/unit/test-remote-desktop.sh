@@ -164,7 +164,7 @@ MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "launcher, installed and configured: no installer" "$CALLS" "with-presentation"
 assert_contains "launcher, installed: status window with the address" "$CALLS" "192.0.2.10:3389"
-assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
+assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else /usr/sbin/service xrdp status; fi"
 assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop Server'"
 mock_cleanup
 

@@ -6,7 +6,8 @@
 # and wrote pasta_options = ["-4"] into ~/.config/containers/containers.conf
 # (so "localhost" over ::1 wouldn't hang), which turned off IPv6 in every
 # rootless container the user runs. It must no longer write that file, and
-# must leave a line from an older release alone.
+# must leave a line from an older release alone. On a desktop it opens the
+# web interface by itself once SO-CRATES answers.
 
 set -uo pipefail
 
@@ -32,7 +33,27 @@ EOF
 echo "ohmydebn-podman-subids-ensure $*" >>"$MOCK_CALLS"
 exit 0
 EOF
+  # Nothing answers on the port unless a scenario says so: the real curl
+  # would ask whatever is on this computer's port 8000.
+  mock_bin curl <<'EOF'
+#!/bin/bash
+echo "curl $*" >>"$MOCK_CALLS"
+[[ -e "$MOCK_DIR/answering" ]]
+EOF
+  mock_bin xdg-open <<'EOF'
+#!/bin/bash
+echo "xdg-open $*" >>"$MOCK_CALLS"
+EOF
+  # The real setsid -f returns before xdg-open has run, racing the asserts.
+  mock_bin setsid <<'EOF'
+#!/bin/bash
+[[ "$1" == "-f" ]] && shift
+exec "$@"
+EOF
   sed -e "s#/usr/bin/podman#$MOCK_BIN/podman#" \
+    -e "s#/usr/bin/curl#$MOCK_BIN/curl#" \
+    -e "s#/usr/bin/xdg-open#$MOCK_BIN/xdg-open#" \
+    -e "s#sleep 2\$#sleep 0.1#" \
     -e "s#/usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup#$MOCK_BIN/ohmydebn-socrates-cleanup#" \
     -e "s#/usr/share/ohmydebn/bin/ohmydebn-podman-subids-ensure#$MOCK_BIN/ohmydebn-podman-subids-ensure#" \
     "$SCRIPT" >"$MOCK_DIR/socrates-run-patched.sh"
@@ -40,9 +61,24 @@ EOF
 
 # Runs the patched script end-to-end (real podman/cleanup calls stubbed
 # out, `read -r` at the end fed EOF via /dev/null so it returns instead of
-# hanging).
+# hanging), with no desktop unless DISPLAY is given as an argument.
 run_socrates() {
-  HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/socrates-run-patched.sh" </dev/null >/dev/null 2>&1
+  env -u DISPLAY -u WAYLAND_DISPLAY HOME="$SCRATCH_HOME" PATH="$(mock_path)" "$@" \
+    bash "$MOCK_DIR/socrates-run-patched.sh" </dev/null >/dev/null 2>&1
+}
+
+# A podman that brings SO-CRATES up a moment after it starts, then runs
+# until it's stopped a moment later.
+mock_podman_answers() {
+  mock_bin podman <<'EOF'
+#!/bin/bash
+echo "podman $*" >>"$MOCK_CALLS"
+sleep 0.3
+touch "$MOCK_DIR/answering"
+sleep 1
+rm -f "$MOCK_DIR/answering"
+exit 0
+EOF
 }
 
 CONF_REL=".config/containers/containers.conf"
@@ -123,6 +159,73 @@ run_socrates
 STATUS=$?
 assert_contains "podman stopped: cleanup still runs" "$(cat "$MOCK_CALLS")" "ohmydebn-socrates-cleanup"
 assert_eq "podman stopped: script ends normally" "0" "$STATUS"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 9: on a desktop, the browser opens on SO-CRATES once it answers,
+# and only once.
+mock_init
+setup_mocks
+mock_podman_answers
+SCRATCH_HOME=$(mktemp -d)
+run_socrates DISPLAY=:0
+assert_eq "desktop: browser opened once" "1" "$(grep -c '^xdg-open' "$MOCK_CALLS")"
+assert_contains "desktop: browser opened on SO-CRATES" "$(cat "$MOCK_CALLS")" "xdg-open http://127.0.0.1:8000/"
+assert_eq "desktop: opened after podman started" "podman" "$(grep -E '^(podman|xdg-open)' "$MOCK_CALLS" | head -n1 | cut -d' ' -f1)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 10: Wayland counts as a desktop too.
+mock_init
+setup_mocks
+mock_podman_answers
+SCRATCH_HOME=$(mktemp -d)
+run_socrates WAYLAND_DISPLAY=wayland-0
+assert_contains "Wayland: browser opened" "$(cat "$MOCK_CALLS")" "xdg-open http://127.0.0.1:8000/"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 11: no desktop (over SSH, say) -> no browser, nothing asked.
+mock_init
+setup_mocks
+mock_podman_answers
+SCRATCH_HOME=$(mktemp -d)
+run_socrates
+assert_not_contains "no desktop: no browser" "$(cat "$MOCK_CALLS")" "xdg-open"
+assert_not_contains "no desktop: port not probed" "$(cat "$MOCK_CALLS")" "curl"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 12: something already answers on the port -> podman can't
+# publish it, and the browser would show that instead: none opened.
+mock_init
+setup_mocks
+touch "$MOCK_DIR/answering"
+SCRATCH_HOME=$(mktemp -d)
+run_socrates DISPLAY=:0
+assert_not_contains "port already taken: no browser" "$(cat "$MOCK_CALLS")" "xdg-open"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario 13: SO-CRATES never answers (a failed pull) -> no browser, and
+# the wait stops with podman instead of probing on behind the window.
+mock_init
+setup_mocks
+mock_bin podman <<'EOF'
+#!/bin/bash
+echo "podman $*" >>"$MOCK_CALLS"
+sleep 0.5
+exit 125
+EOF
+SCRATCH_HOME=$(mktemp -d)
+START=$SECONDS
+# A wait that isn't stopped holds the script open: cut it off to fail.
+run_socrates DISPLAY=:0 timeout 10
+assert_eq "never answers: script ends with podman" "yes" "$([[ $((SECONDS - START)) -le 3 ]] && echo yes || echo no)"
+PROBES=$(grep -c '^curl' "$MOCK_CALLS")
+sleep 0.5
+assert_eq "never answers: probing stopped" "$PROBES" "$(grep -c '^curl' "$MOCK_CALLS")"
+assert_not_contains "never answers: no browser" "$(cat "$MOCK_CALLS")" "xdg-open"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

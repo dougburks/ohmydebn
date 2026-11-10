@@ -2,11 +2,18 @@
 
 set -euo pipefail
 
-if ! dpkg -s "docker.io" >/dev/null 2>&1; then
+# Installed means the docker command too: on Debian it's docker-cli, which
+# docker.io only recommends, so an install with recommends off (MX Linux)
+# had the daemon alone. The installer finishes one like that.
+docker_installed() {
+  dpkg -s "docker.io" >/dev/null 2>&1 && [ -x /usr/bin/docker ]
+}
+
+if ! docker_installed; then
   /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Docker" /usr/share/ohmydebn/bin/ohmydebn-docker-install
 fi
 
-if dpkg -s "docker.io" >/dev/null 2>&1; then
+if docker_installed; then
   # Docker has no GUI, so "launching" it means opening a terminal already
   # running --help - a starting point for whatever subcommand the user
   # actually needs - then dropping into an interactive shell in that same

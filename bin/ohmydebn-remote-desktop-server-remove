@@ -5,6 +5,8 @@ set -euo pipefail
 # Same paths as ohmydebn-remote-desktop-server-install, variables for the tests.
 SYSTEMD_DIR=/run/systemd/system
 XSESSION_D=/etc/X11/Xsession.d
+# Where ufw lives, off a normal user's PATH on Debian (see below).
+SBIN_DIRS="/usr/sbin:/sbin"
 
 if ! dpkg -s "xrdp" >/dev/null 2>&1; then
   echo
@@ -36,7 +38,8 @@ else
   sudo /usr/bin/apt -y autoremove
 
   # The xrdp user (and with it its ssl-cert membership) went with the purge.
-  if command -v ufw >/dev/null 2>&1; then
+  # ufw is in /usr/sbin, off a normal user's PATH on Debian.
+  if PATH="$PATH:$SBIN_DIRS" command -v ufw >/dev/null 2>&1; then
     echo
     echo "Any firewall rule you added for port 3389 is still in place - to remove it:"
     echo "  sudo ufw status numbered   (find the rule's number)"

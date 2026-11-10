@@ -772,13 +772,16 @@ show_update_password_menu() {
 }
 
 show_appearance_menu() {
-  menu "Appearance" "󰸉  Background\n  Effects\n  Fonts\n  Notifications\n󱂩  Panel\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
+  menu "Appearance" "󰸉  Background\n  Effects\n  Fonts\n  Lock Screen\n  Notifications\n󱂩  Panel\n󰷛  Screensaver\n  Theme\n󰕧  Theme Intros\n  Tiling\n  Windows\n󰕰  Workspaces"
   case "$MENU_RESULT" in
   # The carousel's Up/Down browse the theme's backgrounds, and Enter
   # applies the one shown, as Ctrl + Super + B does.
   *Background*) /usr/share/ohmydebn/bin/ohmydebn-theme-carousel ;;
   *Effects*) cinnamon-settings effects ;;
   *Fonts*) cinnamon-settings fonts ;;
+  # Switches between Cinnamon's lock screen and XScreenSaver, in a
+  # terminal: it explains the switch first, and may install XScreenSaver.
+  *Lock*) present_terminal "Lock Screen" "/usr/share/ohmydebn/bin/ohmydebn-lock-screen-set" ;;
   *Notifications*) cinnamon-settings notifications ;;
   *Panel*) cinnamon-settings panel ;;
   *Screensaver*) cinnamon-settings screensaver ;;

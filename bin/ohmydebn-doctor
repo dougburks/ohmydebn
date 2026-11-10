@@ -16,8 +16,9 @@ set -uo pipefail
 # and theme config files parse, dpkg state, disk space, the firewall, the
 # kernel-module blocks, the clock, the VM display agent, firmware-update
 # support and the Radeon 890M's TearFree and dcdebugmask settings, Neovim's
-# tested plugin set, the login session default, the systemd timer (or its
-# absence without systemd), the default browser and AI assistant, the AI
+# tested plugin set, the login session default, the XScreenSaver lock
+# screen when it's chosen, the systemd timer (or its absence without
+# systemd), the default browser and AI assistant, the AI
 # wrappers and skill links, the custom keybindings, the Aether/omarchy
 # compatibility layer, and the tools other scripts rely on (Oh My Zsh and
 # the menu launcher among them).
@@ -218,6 +219,52 @@ case "$DM" in
   fi
   ;;
 *) skip "display manager session default" "no SLiM/LightDM-specific check for $DM" ;;
+esac
+# The lock screen (Appearance > Lock Screen, ohmydebn-lock-screen-set).
+# With XScreenSaver chosen, Cinnamon runs ohmydebn-lock for every lock,
+# which starts XScreenSaver if it isn't running and falls back to
+# Cinnamon's own screensaver if it can't lock. A daemon that isn't running
+# isn't a failure, then, but it means the lock has to start it, so it's
+# reported.
+LOCK_SCREEN=$("$OHMYDEBN/bin/ohmydebn-lock-screen-set" --current 2>/dev/null || echo unknown)
+case "$LOCK_SCREEN" in
+cinnamon) echo "  lock screen: Cinnamon's" ;;
+custom) echo "  lock screen: a custom command set in Cinnamon's screensaver settings" ;;
+xscreensaver)
+  echo "  lock screen: XScreenSaver"
+  check "XScreenSaver lock screen: xscreensaver installed" dpkg -s xscreensaver
+  check "XScreenSaver lock screen: starts at login" test -f "$HOME/.config/autostart/ohmydebn-xscreensaver.desktop"
+  # ohmydebn-lock decides which requests lock (--lock locks regardless), so
+  # XScreenSaver's own lock setting is off: on, an idle timeout set to
+  # blank without locking would lock. Its DPMS is on: off, it turns the
+  # server's DPMS off while locked, and Cinnamon can't turn the screen off.
+  # Quick off would power it down the moment it locks.
+  if grep -qE '^lock:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null &&
+    grep -qE '^dpmsEnabled:[[:space:]]*True' "$HOME/.xscreensaver" 2>/dev/null &&
+    ! grep -qE '^dpmsQuickOff:[[:space:]]*True' "$HOME/.xscreensaver" 2>/dev/null; then
+    ok "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
+  else
+    fail "XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon" "choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
+  fi
+  # A fade holds up the lock, and suspend with it (ohmydebn-lock waits for
+  # the lock); OhMyDebn turns it off. Absent means XScreenSaver's default,
+  # which fades.
+  if grep -qE '^fade:[[:space:]]*False' "$HOME/.xscreensaver" 2>/dev/null; then
+    ok "XScreenSaver lock screen: locks without fading out first"
+  else
+    fail "XScreenSaver lock screen: locks without fading out first" "turn off Fade to Black in xscreensaver-settings, or choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen"
+  fi
+  if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
+    fail "XScreenSaver lock screen: an X11 session" "XScreenSaver can't lock Wayland - choose Cinnamon in Appearance > Lock Screen"
+  elif [ "${XDG_CURRENT_DESKTOP:-}" = "X-Cinnamon" ]; then
+    if timeout 2 xscreensaver-command --version >/dev/null 2>&1; then
+      ok "XScreenSaver lock screen: xscreensaver running"
+    else
+      fail "XScreenSaver lock screen: xscreensaver running" "the next lock starts it; to start it now, log out and back in"
+    fi
+  fi
+  ;;
+*) skip "lock screen" "couldn't read Cinnamon's screensaver settings" ;;
 esac
 
 # --------------------------------------------------------------- cinnamon

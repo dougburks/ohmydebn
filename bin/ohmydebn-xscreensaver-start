@@ -1,0 +1,33 @@
+#!/bin/bash
+set -uo pipefail
+
+# ohmydebn-xscreensaver-start: starts the XScreenSaver daemon for the
+# XScreenSaver lock screen, at login (its ~/.config/autostart entry,
+# written by ohmydebn-lock-screen-set) and from ohmydebn-lock if it isn't
+# running.
+#
+# The unlock dialog reads its colors and fonts from the X resource
+# database each time it opens, so the current theme's
+# (ohmydebn-theme-set-xscreensaver) are merged in first. So is the date
+# line's format, which follows Cinnamon's clock: 24-hour or not, with day
+# and month names in the session's language (XScreenSaver's own is
+# 2026-11-07 14:05:09). And the New Login button's command where LightDM
+# provides dm-tool, as Debian's own xscreensaver-wrapper.sh does: without
+# it the button doesn't show.
+
+RESOURCES="$HOME/.config/ohmydebn/current/xscreensaver.Xresources"
+
+if command -v xrdb >/dev/null 2>&1; then
+  [[ -f "$RESOURCES" ]] && xrdb -merge "$RESOURCES"
+  if [[ "$(gsettings get org.cinnamon.desktop.interface clock-use-24h 2>/dev/null)" == true ]]; then
+    DATE_FORMAT="%a %b %-d, %H:%M"
+  else
+    DATE_FORMAT="%a %b %-d, %-I:%M %p"
+  fi
+  echo "XScreenSaver*dateFormat: $DATE_FORMAT" | xrdb -merge
+  if command -v dm-tool >/dev/null 2>&1; then
+    echo "XScreenSaver.newLoginCommand: dm-tool switch-to-greeter" | xrdb -merge
+  fi
+fi
+
+exec xscreensaver --no-splash

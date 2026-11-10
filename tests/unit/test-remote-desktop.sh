@@ -65,7 +65,7 @@ echo "$name \$*" >>"\$MOCK_CALLS"
 EOF2
   done
   for script in ohmydebn-remote-desktop-server ohmydebn-remote-desktop-server-install ohmydebn-remote-desktop-server-remove ohmydebn-xrdp-session-guard ohmydebn-firewall-hint; do
-    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^GUARD=.*#GUARD=$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard#; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
+    sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#^GUARD=.*#GUARD=$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard#; s#^SYSTEMD_DIR=.*#SYSTEMD_DIR=$ROOT/run/systemd/system#; s#^XSESSION_D=.*#XSESSION_D=$ROOT/etc/X11/Xsession.d#; s#^SBIN_DIRS=.*#SBIN_DIRS=$ROOT/usr/sbin#; s#^GUARD_SRC=.*#GUARD_SRC=$REPO_ROOT/config/xrdp/45ohmydebn-xrdp-session-guard#" \
       "$REPO_ROOT/bin/$script" >"$MOCK_BIN/$script"
     chmod +x "$MOCK_BIN/$script"
   done
@@ -164,7 +164,7 @@ MOCK_INSTALLED="xrdp" run "$MOCK_BIN/ohmydebn-remote-desktop-server" >/dev/null
 CALLS=$(cat "$MOCK_CALLS")
 assert_not_contains "launcher, installed and configured: no installer" "$CALLS" "with-presentation"
 assert_contains "launcher, installed: status window with the address" "$CALLS" "192.0.2.10:3389"
-assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else service xrdp status; fi"
+assert_contains "launcher, installed: status command branches on systemd" "$CALLS" "if [ -d /run/systemd/system ]; then systemctl is-active xrdp; else /usr/sbin/service xrdp status; fi"
 assert_contains "launcher, installed: firewall hint included" "$CALLS" "ohmydebn-firewall-hint 3389 'Remote Desktop Server'"
 mock_cleanup
 

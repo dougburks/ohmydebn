@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Without Recommends: they're the OpenGL screensaver animations and the
+# tools some of them use, and the XScreenSaver lock screen only blanks.
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+fi
+
+if ! dpkg -s "xscreensaver" >/dev/null 2>&1; then
+  if [ "$SKIP_PROMPT" = false ]; then
+    echo
+    echo "XScreenSaver is not currently installed."
+    echo
+    echo "Continuing will install it from your existing distro repo."
+    echo
+    echo "Press Enter to continue or Ctrl-C to cancel."
+
+    read -r
+  fi
+
+  sudo /usr/bin/apt update
+  sudo /usr/bin/apt -y install --no-install-recommends xscreensaver
+fi

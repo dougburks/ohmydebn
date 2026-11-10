@@ -59,6 +59,9 @@ if ! dpkg -s "tailscale" >/dev/null 2>&1; then
   # On separate lines so a failed update stops here under set -e: as
   # `update && install`, a failure skipped the install and carried on.
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install tailscale
+  # tailscale-archive-keyring named explicitly: as a Recommends it's left
+  # out where recommends are off (MX Linux), and then the repo's next key
+  # rotation would break apt update.
+  sudo /usr/bin/apt -y install tailscale tailscale-archive-keyring
   sudo /usr/bin/tailscale set --operator="$USER"
 fi

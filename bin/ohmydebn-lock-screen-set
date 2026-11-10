@@ -1,0 +1,197 @@
+#!/bin/bash
+set -euo pipefail
+
+# ohmydebn-lock-screen-set: chooses the lock screen: Cinnamon's own (the
+# default) or XScreenSaver.
+#
+# Usage: ohmydebn-lock-screen-set [cinnamon|xscreensaver] [--skip-prompt]
+#        ohmydebn-lock-screen-set --current
+# With no choice it switches to the one not in use. It explains the switch
+# and asks first, unless --skip-prompt. --current prints cinnamon,
+# xscreensaver, or custom (a custom-screensaver-command OhMyDebn didn't
+# set).
+#
+# XScreenSaver keeps the keyboard grab in a small process that does
+# nothing else, and checks passwords and draws the dialog in separate
+# ones, so a bug in the dialog can't leave the screen open. Cinnamon's
+# lock screen is one larger Python program, which has had bypass bugs
+# (one let keys through to the desktop while a monitor was plugged in).
+# XScreenSaver gives up Cinnamon's lock screen extras: media controls,
+# notifications, the away message, the on-screen keyboard and the
+# keyboard layout switcher. It works only in X11 sessions.
+#
+# Cinnamon supports another locker itself: with its
+# custom-screensaver-command setting set, cinnamon-screensaver exits as
+# soon as it starts, and every lock request (the lock keys, the menus,
+# idle, before suspend) runs that command instead, here ohmydebn-lock.
+# Cinnamon still decides when to lock, from its own settings (including
+# blanking without a lock, or locking after a grace period, when the
+# session goes idle), and keeps honoring apps that ask for the screen to
+# stay on; XScreenSaver's own idle timer, lock setting and display power
+# saving are set out of its way.
+
+SCHEMA=org.cinnamon.desktop.screensaver
+KEY=custom-screensaver-command
+LOCK_COMMAND=/usr/share/ohmydebn/bin/ohmydebn-lock
+PREFS="$HOME/.xscreensaver"
+AUTOSTART="$HOME/.config/autostart/ohmydebn-xscreensaver.desktop"
+
+current() {
+  local cmd
+  cmd=$(gsettings get "$SCHEMA" "$KEY" 2>/dev/null || echo "''")
+  case "$cmd" in
+  "''" | '""') echo cinnamon ;;
+  "'$LOCK_COMMAND'") echo xscreensaver ;;
+  *) echo custom ;;
+  esac
+}
+
+# set_pref <name> <value>: one line of ~/.xscreensaver, keeping every
+# other line (xscreensaver-settings writes this file too).
+set_pref() {
+  touch "$PREFS"
+  if grep -q "^$1:" "$PREFS"; then
+    sed -i "s|^$1:.*|$1:\t\t$2|" "$PREFS"
+  else
+    printf '%s:\t\t%s\n' "$1" "$2" >>"$PREFS"
+  fi
+}
+
+running() { timeout 2 xscreensaver-command --version >/dev/null 2>&1; }
+
+use_xscreensaver() {
+  /usr/share/ohmydebn/bin/ohmydebn-xscreensaver-install --skip-prompt
+
+  # Blank, and leave locking, idle timing and display power saving to
+  # Cinnamon: ohmydebn-lock decides whether each request locks
+  # (xscreensaver-command --lock locks whatever the lock setting says),
+  # so blanking alone doesn't lock. The timeout is only a backstop:
+  # Cinnamon's idle timeout runs long before it. No fade: XScreenSaver's
+  # takes 3 seconds by default, longer without a GPU (6.08 and 6.09 fade
+  # frame by frame), and it held up both the lock and suspend, which waits
+  # for ohmydebn-lock. Cinnamon's own lock screen doesn't fade either.
+  #
+  # Display power saving is Cinnamon's too, but that needs DPMS on: while
+  # it's blanked, XScreenSaver turns the server's DPMS off when its own is
+  # (dpmsEnabled False, or all three timeouts 0), and then Cinnamon's
+  # "Turn off the screen" request (Muffin's DPMSForceLevel) fails, so a
+  # locked screen stayed black but powered on. So it's on, with
+  # XScreenSaver's own timeouts as long as its blank timeout, and no
+  # powering off the moment it blanks (dpmsQuickOff).
+  set_pref mode blank
+  set_pref lock False
+  set_pref lockTimeout 0:00:00
+  set_pref timeout 12:00:00
+  set_pref dpmsEnabled True
+  set_pref dpmsStandby 12:00:00
+  set_pref dpmsSuspend 12:00:00
+  set_pref dpmsOff 12:00:00
+  set_pref dpmsQuickOff False
+  set_pref splash False
+  set_pref fade False
+  set_pref unfade False
+
+  /usr/share/ohmydebn/bin/ohmydebn-theme-set-xscreensaver
+
+  mkdir -p "$(dirname "$AUTOSTART")"
+  cat >"$AUTOSTART" <<EOF
+[Desktop Entry]
+Type=Application
+Name=XScreenSaver (OhMyDebn lock screen)
+Exec=/usr/share/ohmydebn/bin/ohmydebn-xscreensaver-start
+OnlyShowIn=X-Cinnamon;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+
+  gsettings set "$SCHEMA" "$KEY" "$LOCK_COMMAND"
+
+  # Cinnamon's screensaver, if it's running, would still lock on its own
+  # when logind asks (loginctl lock-session), so it's asked to quit. Not
+  # with cinnamon-screensaver-command --exit: with the setting now set,
+  # that only answers "not supported". If it isn't running, the call
+  # starts it, and it exits at once because of the setting.
+  timeout 5 gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver \
+    --method org.cinnamon.ScreenSaver.Quit >/dev/null 2>&1 || true
+
+  if [[ -n "${DISPLAY:-}" ]] && ! running; then
+    setsid /usr/share/ohmydebn/bin/ohmydebn-xscreensaver-start </dev/null >/dev/null 2>&1 &
+  fi
+}
+
+use_cinnamon() {
+  gsettings reset "$SCHEMA" "$KEY"
+  rm -f "$AUTOSTART"
+  # --exit does nothing while the screen is locked, which it isn't while
+  # someone is running this.
+  if command -v xscreensaver-command >/dev/null 2>&1; then
+    timeout 5 xscreensaver-command --exit >/dev/null 2>&1 || true
+  fi
+  # Cinnamon's screensaver watches for idle itself, so it has to be
+  # running for idle locking, not only started by the next lock request.
+  if [[ -n "${DISPLAY:-}" ]] && command -v cinnamon-screensaver >/dev/null 2>&1; then
+    setsid cinnamon-screensaver </dev/null >/dev/null 2>&1 &
+  fi
+}
+
+WANT=""
+SKIP_PROMPT=false
+for arg in "$@"; do
+  case "$arg" in
+  --current) current; exit 0 ;;
+  --skip-prompt) SKIP_PROMPT=true ;;
+  cinnamon | xscreensaver) WANT="$arg" ;;
+  *)
+    echo "Usage: ohmydebn-lock-screen-set [cinnamon|xscreensaver] [--skip-prompt] | --current" >&2
+    exit 1
+    ;;
+  esac
+done
+
+NOW=$(current)
+if [[ -z "$WANT" ]]; then
+  if [[ "$NOW" == xscreensaver ]]; then WANT=cinnamon; else WANT=xscreensaver; fi
+fi
+if [[ "$WANT" == "$NOW" ]]; then
+  echo "The $WANT lock screen is already in use."
+  exit 0
+fi
+if [[ "$WANT" == xscreensaver && "${XDG_SESSION_TYPE:-}" == wayland ]]; then
+  echo "XScreenSaver can't lock a Wayland session, so the lock screen stays as it is." >&2
+  exit 1
+fi
+
+if [[ "$SKIP_PROMPT" == false ]]; then
+  echo
+  if [[ "$WANT" == xscreensaver ]]; then
+    echo "This switches your lock screen to XScreenSaver, a hardened screen locker."
+    echo
+    echo "Your lock and idle settings stay the same. The lock screen itself becomes"
+    echo "XScreenSaver's plainer password box, without Cinnamon's media controls,"
+    echo "notifications, away message, on-screen keyboard or keyboard layout switcher."
+    [[ "$NOW" == custom ]] && echo && echo "It replaces the custom lock command set in Cinnamon's screensaver settings."
+    echo
+    echo "XScreenSaver is installed first if it isn't already."
+  else
+    echo "This switches your lock screen back to Cinnamon's own."
+  fi
+  echo
+  echo "Press Enter to continue or Ctrl-C to cancel."
+  read -r
+fi
+
+if [[ "$WANT" == xscreensaver ]]; then
+  use_xscreensaver
+  MESSAGE="The lock screen is now XScreenSaver"
+else
+  use_cinnamon
+  MESSAGE="The lock screen is now Cinnamon's"
+fi
+
+echo "$MESSAGE"
+# The notification is a courtesy: the message is on screen already, and
+# right after login Cinnamon's notification service may not answer yet
+# (notify-send then prints a raw D-Bus error).
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send -i ohmydebn "$MESSAGE" -t 2000 2>/dev/null || true
+fi

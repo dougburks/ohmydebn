@@ -18,7 +18,7 @@ fi
 mkdir -p ~/socrates-data
 
 IMAGE_REPO="ghcr.io/dougburks/so-crates"
-DEFAULT_IMAGE="$IMAGE_REPO@sha256:9dcba4943fb4356138b1f10f3b114b23cb6c67541ff6b79e6e58a80cd7900263"
+DEFAULT_IMAGE="$IMAGE_REPO@sha256:5aaa7e9c2f74028e0492da649b3b71ec42e8c91dc676a3523fabe20c024e1d0f"
 
 if [[ -n "${1:-}" ]]; then
   IMAGE="$IMAGE_REPO:$1"
@@ -59,11 +59,52 @@ if [[ -d "$OHMYDEBN_CURRENT_DIR" ]]; then
   )
 fi
 
+SOCRATES_URL="http://127.0.0.1:8000/"
+
+# Any HTTP answer at all, not just an open port: pasta takes connections
+# on the published port as soon as the container starts, long before the
+# server inside listens, and resets them. curl fails on that reset.
+socrates_answers() {
+  /usr/bin/curl -s -o /dev/null --max-time 2 "$SOCRATES_URL"
+}
+
+# Opens the web interface once SO-CRATES answers, so there's no need to
+# click the link it prints. That's minutes away on the first run, which
+# pulls the image first, so this waits in the background (up to half an
+# hour) while podman holds the terminal. setsid keeps a browser it starts
+# from closing with this window; one already running just gets a tab.
+open_when_ready() {
+  local i
+  for ((i = 0; i < 900; i++)); do
+    if socrates_answers; then
+      setsid -f /usr/bin/xdg-open "$SOCRATES_URL" >/dev/null 2>&1 </dev/null || true
+      return 0
+    fi
+    sleep 2
+  done
+}
+
+# No browser to open without a desktop (run over SSH, say). And when
+# something already answers on the port, podman can't publish it and stops
+# with its own error: opening the browser would show whatever that is.
+OPENER_PID=""
+if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && ! socrates_answers; then
+  open_when_ready &
+  OPENER_PID=$!
+fi
+
 # Stopping SO-CRATES with Ctrl-C (or a failed pull) makes podman exit
 # non-zero; the cleanup and the pause below still run, so its output stays
 # readable.
 /usr/bin/podman "${PODMAN_ARGS[@]}" \
   "$IMAGE" || true
+
+# A pull that failed never answers: stop waiting for it. Background jobs
+# ignore the Ctrl-C that stopped podman, so this has to be explicit.
+if [[ -n "$OPENER_PID" ]]; then
+  kill "$OPENER_PID" 2>/dev/null || true
+  wait "$OPENER_PID" 2>/dev/null || true
+fi
 
 echo
 /usr/share/ohmydebn/bin/ohmydebn-socrates-cleanup || true

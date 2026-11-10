@@ -43,6 +43,12 @@ mock_log "sudo $*"
 case "$*" in *tee*) cat >/dev/null ;; esac
 exit 0
 STUB
+  # Docker asks whether the distro has docker-cli; read-only, but not the
+  # host's apt to ask.
+  mock_bin apt-cache <<'STUB'
+#!/bin/bash
+exit 100
+STUB
   mock_bin uname <<'STUB'
 #!/bin/bash
 echo x86_64

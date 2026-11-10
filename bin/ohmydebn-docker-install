@@ -7,13 +7,22 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-if dpkg -s "docker.io" >/dev/null 2>&1; then
+# Debian packages the docker command apart from the daemon, as docker-cli,
+# which docker.io only recommends: with recommends off (MX Linux) the
+# daemon came alone, with no command to use it. Ubuntu's docker.io has the
+# command itself, at the same path, and there's no docker-cli package. An
+# install missing the command isn't done, so this finishes it.
+if dpkg -s "docker.io" >/dev/null 2>&1 && [ -x /usr/bin/docker ]; then
   echo
   echo "Docker is already installed."
 else
   if [ "$SKIP_PROMPT" = false ]; then
     echo
-    echo "Docker is not currently installed."
+    if dpkg -s "docker.io" >/dev/null 2>&1; then
+      echo "Docker is installed, but without its docker command."
+    else
+      echo "Docker is not currently installed."
+    fi
     echo
     echo "Continuing will install it from your existing distro repo."
     echo
@@ -24,7 +33,11 @@ else
 
   # Install packages
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install docker.io
+  PACKAGES=(docker.io)
+  if apt-cache show docker-cli >/dev/null 2>&1; then
+    PACKAGES+=(docker-cli)
+  fi
+  sudo /usr/bin/apt -y install "${PACKAGES[@]}"
 
   # Output message to user
   cat <<EOF

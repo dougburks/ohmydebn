@@ -63,7 +63,7 @@ build_machine() {
   ln -s "$H/.config/ohmydebn/current/theme/config.jsonc" "$H/.config/fastfetch/config.jsonc"
   # The real -installed helpers, so the doctor checks the same lists the
   # installers use (they ask the mocked dpkg).
-  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$REPO_ROOT/bin/ohmydebn-apt-pins" "$OMD/bin/"
+  cp "$REPO_ROOT/bin/ohmydebn-uxplay-installed" "$REPO_ROOT/bin/ohmydebn-podman-installed" "$REPO_ROOT/bin/ohmydebn-apt-pins" "$REPO_ROOT/bin/ohmydebn-lock-screen-set" "$OMD/bin/"
 
   # System: a finished update, a third-party repo with its pin, the
   # firewall on, a VM with SPICE, UEFI with fwupd's signed binary, and the
@@ -180,6 +180,7 @@ EOF2
 case "$*" in
 "list-schemas") exit 0 ;;
 "get org.cinnamon enabled-extensions") echo "['gTile@OhMyDebn']" ;;
+"get org.cinnamon.desktop.screensaver custom-screensaver-command") echo "'${MOCK_LOCK_CMD:-}'" ;;
 "get org.cinnamon.desktop.interface scaling-factor") [ -n "${MOCK_SCALING_FACTOR:-}" ] && echo "uint32 $MOCK_SCALING_FACTOR" || echo "''" ;;
 "get org.cinnamon.desktop.keybindings custom-list") echo "['custom-0', 'custom-1'${MOCK_EXTRA_LIST:-}]" ;;
 *custom-0/\ command) echo "'/usr/share/ohmydebn/bin/ohmydebn-browser-tiled'" ;;
@@ -269,6 +270,8 @@ assert_contains "healthy: SPICE agent running" "$OUTPUT" "ok - VM display: spice
 assert_contains "healthy: fwupd signed binary" "$OUTPUT" "ok - firmware updates: fwupd's signed EFI binary installed"
 assert_not_contains "healthy: Debian machine skips the Ubuntu sources check" "$OUTPUT" "Ubuntu-based"
 assert_contains "healthy: no DCONF_PROFILE" "$OUTPUT" "ok - DCONF_PROFILE not set in the session"
+assert_contains "healthy: Cinnamon's lock screen named" "$OUTPUT" "lock screen: Cinnamon's"
+assert_not_contains "healthy: no XScreenSaver checks" "$OUTPUT" "XScreenSaver lock screen:"
 assert_contains "healthy: config files parse" "$OUTPUT" "ok - terminal config files parse"
 assert_contains "healthy: module blocks in place" "$OUTPUT" "ok - vulnerable kernel modules blocked"
 assert_contains "healthy: clock synchronized (chrony)" "$OUTPUT" "ok - clock synchronized"
@@ -299,6 +302,67 @@ assert_contains "system problems: firewall off" "$OUTPUT" "FAIL - firewall (ufw)
 assert_contains "system problems: SPICE agent not running" "$OUTPUT" "FAIL - VM display: spice-vdagentd running"
 assert_contains "system problems: fwupd-signed missing" "$OUTPUT" "FAIL - firmware updates: fwupd's signed EFI binary installed (run: sudo apt install fwupd-signed)"
 assert_contains "system problems: DCONF_PROFILE caught" "$OUTPUT" "FAIL - DCONF_PROFILE not set in the session (DCONF_PROFILE=cosmic)"
+mock_cleanup
+
+# --- the XScreenSaver lock screen (Appearance > Lock Screen) ---
+XSS_LOCK=/usr/share/ohmydebn/bin/ohmydebn-lock
+# xss_machine: XScreenSaver chosen and set up as ohmydebn-lock-screen-set
+# leaves it, with the daemon running.
+xss_machine() {
+  build_machine yes
+  mkdir -p "$H/.config/autostart"
+  : >"$H/.config/autostart/ohmydebn-xscreensaver.desktop"
+  printf 'mode:\t\tblank\nlock:\t\tFalse\ndpmsEnabled:\t\tTrue\ndpmsQuickOff:\t\tFalse\nfade:\t\tFalse\n' >"$H/.xscreensaver"
+  mock_bin xscreensaver-command <<'EOF2'
+#!/bin/bash
+[ -z "${MOCK_XSS_DOWN:-}" ]
+EOF2
+}
+xss_machine
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver: named" "$OUTPUT" "lock screen: XScreenSaver"
+assert_contains "xscreensaver: installed" "$OUTPUT" "ok - XScreenSaver lock screen: xscreensaver installed"
+assert_contains "xscreensaver: starts at login" "$OUTPUT" "ok - XScreenSaver lock screen: starts at login"
+assert_contains "xscreensaver: its settings" "$OUTPUT" "ok - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
+assert_contains "xscreensaver: running" "$OUTPUT" "ok - XScreenSaver lock screen: xscreensaver running"
+assert_contains "xscreensaver: no fade" "$OUTPUT" "ok - XScreenSaver lock screen: locks without fading out first"
+assert_not_contains "xscreensaver: no failures of its own" "$OUTPUT" "FAIL - XScreenSaver"
+mock_cleanup
+
+xss_machine
+rm "$H/.config/autostart/ohmydebn-xscreensaver.desktop"
+printf 'lock:\t\tTrue\n' >"$H/.xscreensaver"
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_XSS_DOWN=1 XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver problems: not installed" "$OUTPUT" "FAIL - XScreenSaver lock screen: xscreensaver installed"
+assert_contains "xscreensaver problems: no autostart" "$OUTPUT" "FAIL - XScreenSaver lock screen: starts at login"
+assert_contains "xscreensaver problems: settings, and how to fix them" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon (choose Cinnamon, then XScreenSaver again, in Appearance > Lock Screen)"
+assert_contains "xscreensaver problems: not running" "$OUTPUT" "FAIL - XScreenSaver lock screen: xscreensaver running (the next lock starts it"
+assert_contains "xscreensaver problems: fades (no fade line means XScreenSaver's default)" "$OUTPUT" "FAIL - XScreenSaver lock screen: locks without fading out first (turn off Fade to Black in xscreensaver-settings"
+mock_cleanup
+
+# DPMS off, as ohmydebn-lock-screen-set first set it: XScreenSaver then
+# turns the server's DPMS off while locked, and Cinnamon can't turn the
+# screen off.
+xss_machine
+sed -i 's/^dpmsEnabled:.*/dpmsEnabled:\t\tFalse/' "$H/.xscreensaver"
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver, DPMS off: fails" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
+mock_cleanup
+
+xss_machine
+sed -i 's/^dpmsQuickOff:.*/dpmsQuickOff:\t\tTrue/' "$H/.xscreensaver"
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=x11
+assert_contains "xscreensaver, quick off: fails" "$OUTPUT" "FAIL - XScreenSaver lock screen: ~/.xscreensaver leaves locking and power saving to Cinnamon"
+mock_cleanup
+
+xss_machine
+run_doctor MOCK_LOCK_CMD=$XSS_LOCK MOCK_EXTRA_PKGS=xscreensaver XDG_SESSION_TYPE=wayland
+assert_contains "xscreensaver on Wayland: fails, says what to do" "$OUTPUT" "FAIL - XScreenSaver lock screen: an X11 session (XScreenSaver can't lock Wayland - choose Cinnamon in Appearance > Lock Screen)"
+mock_cleanup
+
+build_machine yes
+run_doctor "MOCK_LOCK_CMD=light-locker-command -l"
+assert_contains "custom lock command: named, not checked" "$OUTPUT" "lock screen: a custom command set in Cinnamon's screensaver settings"
 mock_cleanup
 
 # --- Raspberry Pi OS: another board family's image isn't a pending reboot ---

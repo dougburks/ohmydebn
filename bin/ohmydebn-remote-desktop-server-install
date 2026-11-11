@@ -44,8 +44,12 @@ if ! dpkg -s "xrdp" >/dev/null 2>&1; then
     echo "which this system doesn't use (LCOS, for one, uses XLibre instead)."
     echo
     echo "What apt said:"
-    { grep -E 'Depends:|Conflicts:|Breaks:|^E: ' <<<"$SIMULATION" || grep -E '^Remv ' <<<"$SIMULATION"; } |
-      head -6 | sed 's/^ */  /'
+    # The reason itself: the dependency lines, else what it would remove.
+    # apt's E: lines only when it gives neither ("Unable to locate
+    # package"); otherwise they're its generic wrap-up, one ending "may
+    # provide additional context:" with the context cut off below.
+    { grep -E 'Depends:|Conflicts:|Breaks:' <<<"$SIMULATION" || grep -E '^Remv ' <<<"$SIMULATION" ||
+      grep -E '^E: ' <<<"$SIMULATION"; } | head -6 | sed 's/^ */  /'
     echo
     echo "Nothing was installed."
     exit 1

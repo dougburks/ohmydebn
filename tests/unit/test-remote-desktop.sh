@@ -58,8 +58,8 @@ exit 0
 EOF2
   # The installer's `apt-get -s install` (a simulation, run without sudo):
   # MOCK_APT_SIM picks apt's answer - ok, unmet (xorgxrdp can't be
-  # installed, as on LCOS) or removes (apt would make room by removing
-  # the X server).
+  # installed, as on LCOS), missing (the distro has no xorgxrdp) or
+  # removes (apt would make room by removing the X server).
   mock_bin apt-get <<'EOF2'
 #!/bin/bash
 mock_log "apt-get $*"
@@ -69,6 +69,10 @@ unmet)
   echo " xorgxrdp : Depends: xorg-input-abi-24"
   echo "            Depends: xserver-xorg-core (>= 2:21.1.4)"
   echo "E: Unable to correct problems, you have held broken packages."
+  echo "E: The following information from --solver 3.0 may provide additional context:"
+  exit 100 ;;
+missing)
+  echo "E: Unable to locate package xorgxrdp"
   exit 100 ;;
 removes)
   echo "Remv xserver-xlibre-core [2:25.1.11-1+lcos1]"
@@ -131,7 +135,7 @@ assert_contains "fresh: address shown" "$OUT" "192.0.2.10:3389"
 mock_cleanup
 
 # --- install where xorgxrdp can't be installed (LCOS's XLibre): stops first ---
-for sim in unmet removes; do
+for sim in unmet removes missing; do
   setup
   OUT=$(MOCK_APT_SIM=$sim MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
   STATUS=$?
@@ -148,6 +152,11 @@ done
 setup
 OUT=$(MOCK_APT_SIM=unmet MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
 assert_contains "unmet: apt's reason shown" "$OUT" "  xorgxrdp : Depends: xorg-input-abi-24"
+assert_not_contains "unmet: not apt's generic wrap-up, whose context would be cut off" "$OUT" "additional context"
+mock_cleanup
+setup
+OUT=$(MOCK_APT_SIM=missing MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
+assert_contains "missing: with no dependency lines, apt's error shown instead" "$OUT" "  E: Unable to locate package xorgxrdp"
 mock_cleanup
 setup
 OUT=$(MOCK_APT_SIM=removes MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)

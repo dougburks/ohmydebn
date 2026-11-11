@@ -27,28 +27,16 @@ Debian's `docker.io` Recommends `needrestart`, so installing Docker on Debian br
 
 Reproduce in a VM first (hold back a library upgrade, then update). If it stalls, run OhMyDebn's apt calls with `NEEDRESTART_MODE=l` (list only), next to `reboot-notice.sh`'s own notice.
 
-## Tailscale and Cloudflare WARP without systemd
+## Tailscale and Cloudflare WARP without systemd: make them work
 
-Neither works on Devuan, LCOS or sysvinit MX Linux. Tailscale hasn't since it was added in 4.2.0.
+Without systemd, neither service starts: Tailscale's package starts `tailscaled` only through a systemd unit, and `cloudflare-warp`'s postinst only enables `warp-svc` with `systemctl`. Since 4.17.0 their installers and launchers say so and install nothing (`bin/ohmydebn-require-systemd`), and the docs say so too. Making them actually work on Devuan, LCOS and sysvinit MX Linux would take an init script for each service, packaged properly (per AGENTS.md) and tested in a VM. Worth it only if users ask.
 
-- Tailscale: the package starts `tailscaled` only through a systemd unit, so it never starts. `bin/ohmydebn-tailscale-install`'s last step, `tailscale set --operator`, then fails ("Failed to connect to local Tailscale daemon ... tailscaled.sock") and the script exits with an error. Opening it from the menu runs `tailscale systray`, which can't connect either. Seen on the 4.16.0 sysvinit MX fresh install.
-- WARP: `cloudflare-warp`'s postinst calls `systemctl` ("systemctl: not found", "warp-svc.service is a disabled or a static unit, not starting it"), so `warp-svc` never starts. The Cloudflare One Client window then shows "Unable to connect" and "The application failed to initialized.", with no hint that systemd is the cause. Seen on the 4.16.0 LCOS fresh install.
+## Remote Desktop Server on LCOS: make it work
 
-The docs are wrong too: the Devuan section of `installation.md` says "Everything else in OhMyDebn works the same", and the MX sysvinit section points there.
+LCOS replaces Xorg with XLibre, and Debian's `xorgxrdp` needs Xorg's `xserver-xorg-core`, so apt can't install it there. Since 4.17.0 the installer asks apt first (a simulation) and explains instead (`bin/ohmydebn-remote-desktop-server-install`); `tests/distro-checks.py` lists it as known. To make it work:
 
-Fix both together: either start scripts for the services (packaged properly, per AGENTS.md), or installers that refuse without systemd and say why. Then fix the docs.
-
-## Remote Desktop Server on LCOS
-
-Remote Desktop Server can't be installed on LCOS, and hasn't since it was added in 4.10.0. LCOS 1.0.0 replaces Xorg with XLibre (`xserver-xlibre-core` 2:25.1.9-1+lcos1), and Debian's `xorgxrdp` depends on `xorg-input-abi-24`, which only Xorg's `xserver-xorg-core` provides. So `apt install xrdp xorgxrdp` fails with "Unsatisfied dependencies" (`bin/ohmydebn-remote-desktop-server-install`). Nothing is left behind, because apt is the first change.
-
-Options:
-
-- Detect at runtime whether `xorgxrdp` can be installed (rather than checking the distro name) and refuse with a clear message.
 - On XLibre, install `xrdp` alone with its Xvnc backend (`tigervnc-standalone-server`), which doesn't depend on the X server's ABI. That needs sesman configuration and a VM test.
-- Ask LCOS whether they package an `xorgxrdp` built for XLibre.
-
-Then update `utilities.md` and the LCOS section of `installation.md`.
+- Or ask LCOS whether they package an `xorgxrdp` built for XLibre.
 
 ## i386 notice on every apt update
 
@@ -56,15 +44,9 @@ On distros with i386 multiarch turned on (MX Linux and LMDE by default), every a
 
 Add an `Architectures: <dpkg --print-architecture>` line to `/etc/apt/sources.list.d/ohmydebn.sources`. `install.sh` writes that file only when it's missing, so existing installs need an idempotent step that adds the line when it's absent (`ohmydebn-channel` rewrites only the URIs line, so it keeps it). Check Raspberry Pi OS (arm64) too.
 
-## Menu items whose package a distro doesn't have
+## Firefox on Ubuntu, Mint and Pop!_OS
 
-`tests/distro-checks.py` found installers that run `apt install` for a package the distro doesn't ship, without checking first, so the menu item ends in apt's "Unable to locate package":
-
-- Firefox (`ohmydebn-firefox-esr-install`) on Mint, Ubuntu 24.04 and 26.04, and Pop!_OS: no `firefox-esr` there. Its own comment says Ubuntu and Mint "aren't handled here".
-- Deskflow (`ohmydebn-deskflow-install`) on Mint, Ubuntu 24.04 and Pop!_OS: `deskflow` arrived after Ubuntu 24.04.
-- AbiWord and rclone (`ohmydebn-abiword-install`, `ohmydebn-rclone-install`) on Kali.
-
-For each, decide between installing the distro's own equivalent (Mint has its own `firefox` deb), a clear "not available on this distro" message, or hiding the item. Then update `tests/distro-checks.py`'s expectations if any n/a should become a real install.
+The Firefox menu item installs Debian's `firefox-esr`, which Ubuntu, Linux Mint and Pop!_OS don't have. Since 4.17.0 it says so and points to Install > Package (`bin/ohmydebn-pkg-available`). Mint and Pop!_OS have a real Firefox deb named `firefox` (Ubuntu's `firefox` only installs the snap), and Power User mode removes `firefox*` there, so on those two the menu can't put back the Firefox it removed. Supporting `firefox` means a `firefox` entry in `bin/ohmydebn-browser-set-default` with the binary its package registers with update-alternatives and its desktop id (check both on a Mint VM, not by guessing), then the launcher and installer picking `firefox-esr` or `firefox` as Chromium's do with their two names, and tests.
 
 ## Proposed, not yet agreed: removed-but-not-purged apps
 

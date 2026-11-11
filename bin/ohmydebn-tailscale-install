@@ -3,9 +3,16 @@
 set -euo pipefail
 
 SKIP_PROMPT=false
+SKIP_FLAG=()
 if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
+  SKIP_FLAG=(--skip-prompt)
 fi
+
+# Its service starts only under systemd: without it, say so and change
+# nothing (see ohmydebn-require-systemd).
+/usr/share/ohmydebn/bin/ohmydebn-require-systemd "${SKIP_FLAG[@]}" "Tailscale" tailscale \
+  /usr/share/ohmydebn/bin/ohmydebn-tailscale-remove || exit 1
 
 if ! dpkg -s "tailscale" >/dev/null 2>&1; then
   if [ "$SKIP_PROMPT" = false ]; then

@@ -310,6 +310,7 @@ setup_installer() {
   for name in ohmydebn-headline ohmydebn-brave-repo; do
     ln -sf "$MOCK_BIN/$name" "$ROOT/usr/share/ohmydebn/bin/$name"
   done
+  stub_install_checks "$ROOT/usr/share/ohmydebn/bin"
   mock_bin gpg <<'EOF2'
 #!/bin/bash
 exit 0

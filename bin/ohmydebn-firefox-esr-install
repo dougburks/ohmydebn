@@ -9,10 +9,19 @@ fi
 
 # firefox-esr is Debian's (and Kali's) Firefox - the one the base ISO
 # ships and --power-user removes (bin/ohmydebn-pkg-remove-all-optional),
-# so this is mostly "put it back". Ubuntu (a snap) and Mint (their own
-# deb) package Firefox under other names and aren't handled here - same
-# as when the menu ran a bare `apt install firefox-esr` for this.
+# so this is mostly "put it back". Ubuntu (a snap), Mint and Pop!_OS
+# (their own debs) package Firefox as "firefox" instead, which this entry
+# doesn't handle yet (see TODO.md), so there it says so and points to
+# Install > Package rather than running apt into "Unable to locate
+# package".
 if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
+  if ! /usr/share/ohmydebn/bin/ohmydebn-pkg-available firefox-esr "Firefox"; then
+    echo
+    echo "To install your distribution's own Firefox instead, choose Install > Package"
+    echo "in the OhMyDebn menu and pick firefox."
+    exit 1
+  fi
+
   if [ "$SKIP_PROMPT" = false ]; then
     echo
     echo "Firefox is not currently installed."

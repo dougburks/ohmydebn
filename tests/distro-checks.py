@@ -116,7 +116,7 @@ DISTROS = {
 # Failures already known and written up, so a release run doesn't stop on
 # them. Each says where. Take an entry out when its fix lands.
 KNOWN = {
-    ("lcos", "remote-desktop-server"): "XLibre can't take xorgxrdp; see TODO.md",
+    ("lcos", "remote-desktop-server"): "XLibre can't take xorgxrdp; the installer explains (see TODO.md)",
 }
 
 # Installers whose apt line names its packages through a variable: what

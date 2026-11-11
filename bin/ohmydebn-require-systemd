@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# ohmydebn-require-systemd: for an app whose background service only systemd
+# starts (Tailscale's tailscaled, Cloudflare WARP's warp-svc). Their packages
+# ship a systemd unit and no other way to start the service, so on a system
+# with another init (Devuan, LCOS, MX Linux started with sysvinit) the
+# service never runs: Tailscale's installer then failed at its last step,
+# and WARP opened to "Unable to connect" with no hint why. Run first by the
+# app's installer and its launcher: exits 0 under systemd and does nothing;
+# otherwise says why the app can't run here and exits 1, having changed
+# nothing.
+#
+# An app already installed (before this check existed) can't run either, so
+# then it also offers to run the app's own remover, which takes its apt
+# source out too. The question defaults to no, and isn't asked under
+# --skip-prompt.
+#
+# Usage: ohmydebn-require-systemd [--skip-prompt] <app name> <package> <remover>
+
+set -uo pipefail
+
+SKIP_PROMPT=false
+if [ "${1:-}" = "--skip-prompt" ]; then
+  SKIP_PROMPT=true
+  shift
+fi
+if [ "$#" -ne 3 ]; then
+  echo "Usage: ohmydebn-require-systemd [--skip-prompt] <app name> <package> <remover>" >&2
+  exit 2
+fi
+NAME="$1"
+PACKAGE="$2"
+REMOVER="$3"
+
+# The documented systemd-as-init signal (sd_booted(3)).
+SYSTEMD_DIR="${OHMYDEBN_TEST_SYSTEMD_DIR:-/run/systemd/system}"
+[ -d "$SYSTEMD_DIR" ] && exit 0
+
+echo
+echo "$NAME can't run on this system. Its background service is started only by"
+echo "systemd, and this system starts its services another way (as Devuan, LCOS"
+echo "and MX Linux with sysvinit do)."
+
+if ! dpkg -s "$PACKAGE" >/dev/null 2>&1; then
+  echo
+  echo "Nothing was installed."
+  exit 1
+fi
+
+echo
+echo "$NAME is installed, but its service isn't running, so it can't connect."
+if [ "$SKIP_PROMPT" = false ]; then
+  echo
+  # printf + read rather than read -p: bash shows a -p prompt only when
+  # stdin is a terminal (as in ohmydebn-browser-set-default). read keeps
+  # an answer that ends without a newline, though it then fails.
+  answer=""
+  printf 'Remove %s? [y/N] ' "$NAME"
+  read -r answer || true
+  if [[ "$answer" =~ ^[Yy] ]]; then
+    "$REMOVER" --skip-prompt
+  fi
+fi
+exit 1

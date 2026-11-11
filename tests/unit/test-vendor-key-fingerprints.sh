@@ -41,6 +41,7 @@ setup() {
   mkdir -p "$ROOT/etc/apt/sources.list.d" "$ROOT/etc/apt/preferences.d" "$BIN" \
     "$ROOT/usr/share/ohmydebn/config/net.imput.helium" "$MOCK_DIR/home/.config"
   cp -r "$REPO_ROOT/config/apt-keys" "$ROOT/usr/share/ohmydebn/config/"
+  stub_install_checks "$BIN"
   mock_bin uname <<'EOF2'
 #!/bin/bash
 echo "${MOCK_UNAME:-x86_64}"

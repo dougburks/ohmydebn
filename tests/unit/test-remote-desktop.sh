@@ -50,6 +50,29 @@ EOF2
 #!/bin/bash
 echo "192.0.2.10 fd00::10"
 EOF2
+  # The installer's `apt-get -s install` (a simulation, run without sudo):
+  # MOCK_APT_SIM picks apt's answer - ok, unmet (xorgxrdp can't be
+  # installed, as on LCOS) or removes (apt would make room by removing
+  # the X server).
+  mock_bin apt-get <<'EOF2'
+#!/bin/bash
+mock_log "apt-get $*"
+case "${MOCK_APT_SIM:-ok}" in
+unmet)
+  echo "The following packages have unmet dependencies:"
+  echo " xorgxrdp : Depends: xorg-input-abi-24"
+  echo "            Depends: xserver-xorg-core (>= 2:21.1.4)"
+  echo "E: Unable to correct problems, you have held broken packages."
+  exit 100 ;;
+removes)
+  echo "Remv xserver-xlibre-core [2:25.1.11-1+lcos1]"
+  echo "Inst xserver-xorg-core (2:21.1.16-1.3)"
+  echo "Inst xorgxrdp (1:0.10.2-1)" ;;
+*)
+  echo "Inst xrdp (0.10.1-3.1)"
+  echo "Inst xorgxrdp (1:0.10.2-1)" ;;
+esac
+EOF2
   # `ufw status` output comes from MOCK_UFW_STATUS (the sudo mock execs
   # ufw); empty means the sudo prompt was declined (ufw fails).
   mock_bin ufw <<'EOF2'
@@ -71,7 +94,7 @@ EOF2
   done
   DROPIN="$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard"
 }
-run() { HOME="$H" PATH="$(mock_path)" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" MOCK_UFW_STATUS="${MOCK_UFW_STATUS:-}" bash "$@" </dev/null 2>&1; }
+run() { HOME="$H" PATH="$(mock_path)" MOCK_APT_SIM="${MOCK_APT_SIM:-ok}" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" MOCK_UFW_STATUS="${MOCK_UFW_STATUS:-}" bash "$@" </dev/null 2>&1; }
 UFW_OPEN='Status: active
 
 To                         Action      From
@@ -99,6 +122,30 @@ assert_contains "fresh: service enabled under systemd" "$CALLS" "sudo systemctl 
 assert_not_contains "fresh: no firewall rule added" "$CALLS" "ufw allow"
 assert_contains "fresh: firewall state read and guidance printed for 3389" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 3389 proto tcp comment 'OhMyDebn Remote Desktop Server'"
 assert_contains "fresh: address shown" "$OUT" "192.0.2.10:3389"
+mock_cleanup
+
+# --- install where xorgxrdp can't be installed (LCOS's XLibre): stops first ---
+for sim in unmet removes; do
+  setup
+  OUT=$(MOCK_APT_SIM=$sim MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
+  STATUS=$?
+  CALLS=$(cat "$MOCK_CALLS")
+  assert_eq "$sim: exits 1" "1" "$STATUS"
+  assert_contains "$sim: asked apt first" "$CALLS" "apt-get -s -q install xrdp xorgxrdp"
+  assert_not_contains "$sim: nothing installed" "$CALLS" "apt -y install"
+  assert_not_contains "$sim: no service started" "$CALLS" "systemctl"
+  assert_eq "$sim: no Xsession.d drop-in" "no" "$([ -e "$DROPIN" ] && echo yes || echo no)"
+  assert_contains "$sim: says why" "$OUT" "xorgxrdp only works with Xorg's X server"
+  assert_contains "$sim: and that nothing changed" "$OUT" "Nothing was installed."
+  mock_cleanup
+done
+setup
+OUT=$(MOCK_APT_SIM=unmet MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
+assert_contains "unmet: apt's reason shown" "$OUT" "  xorgxrdp : Depends: xorg-input-abi-24"
+mock_cleanup
+setup
+OUT=$(MOCK_APT_SIM=removes MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
+assert_contains "removes: what apt would remove shown" "$OUT" "  Remv xserver-xlibre-core"
 mock_cleanup
 
 # --- install again, everything already in place: idempotent ---

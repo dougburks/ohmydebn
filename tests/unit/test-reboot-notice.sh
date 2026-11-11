@@ -50,14 +50,14 @@ mock_cleanup
 setup "6.12.105+deb13-amd64" "6.12.105+deb13-amd64" "6.12.107+deb13-amd64"
 run_notice
 assert_eq "newer kernel: exits 0" "0" "$EXIT_CODE"
-assert_contains "newer kernel: headline shown" "$(cat "$MOCK_CALLS")" "ohmydebn-headline A reboot is needed to finish this update"
+assert_contains "newer kernel: headline shown" "$(cat "$MOCK_CALLS")" "ohmydebn-headline A reboot is needed to finish installing updates"
 assert_contains "newer kernel: names both versions" "$OUTPUT" "A newer kernel (6.12.107+deb13-amd64) is installed, but 6.12.105+deb13-amd64 is still running."
 assert_contains "newer kernel: says nothing is broken meanwhile, because of the kernel" "$OUTPUT" "Reboot when it's convenient - nothing is broken until then, the new kernel just isn't in use yet."
 assert_contains "newer kernel: desktop notification sent under a display" "$(cat "$MOCK_CALLS")" "notify-send -i ohmydebn OhMyDebn Update A reboot is needed"
 mock_cleanup
 
 # --- the same newer kernel, but after ohmydebn-reset-config: silent (a
-# reset installs nothing, and "to finish this update" would be wrong) ---
+# reset installs nothing, and "to finish installing updates" would be wrong) ---
 setup "6.12.105+deb13-amd64" "6.12.105+deb13-amd64" "6.12.107+deb13-amd64"
 OUTPUT=$(DISPLAY=:0 OHMYDEBN_RESET=1 PATH="$(mock_path)" bash -e "$MOCK_DIR/patched.sh" 2>&1)
 EXIT_CODE=$?

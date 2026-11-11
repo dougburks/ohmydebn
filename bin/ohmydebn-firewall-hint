@@ -9,7 +9,9 @@
 # (ufw status needs root, so this asks for sudo - a declined prompt falls
 # back to the commands alone), lists the rules for the port when there
 # are any, and otherwise prints the two allow commands, most restrictive
-# first.
+# first. The restrictive one's example range is this machine's own
+# network: a fixed 192.168.1.0/24, pasted as it was, made a rule that
+# didn't admit a host on any other network (a VM's on 192.168.199.0/24).
 #
 # Usage: ohmydebn-firewall-hint 3389 "Remote Desktop Server"
 
@@ -28,10 +30,28 @@ if ! PATH="$PATH:$SBIN_DIRS" command -v ufw >/dev/null 2>&1; then
   exit 0
 fi
 
+# The network on the default route's interface (its link-scope route,
+# such as 192.168.199.0/24: the network itself, no arithmetic needed), or
+# nothing. Link-local 169.254.0.0/16 isn't one to suggest.
+local_network() {
+  local dev
+  dev=$(PATH="$PATH:$SBIN_DIRS" ip -4 route show default 2>/dev/null |
+    awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit }}')
+  [ -n "$dev" ] || return 0
+  PATH="$PATH:$SBIN_DIRS" ip -4 route show dev "$dev" scope link 2>/dev/null |
+    awk '$1 ~ /\// && $1 !~ /^169\.254\./ {print $1; exit}'
+}
+
 allow_commands() {
+  local network
+  network=$(local_network)
+  if [ -n "$network" ]; then
+    echo "To allow it from one address or range (recommended), such as this machine's network:"
+  else
+    echo "To allow it from one address or range (recommended):"
+  fi
   cat <<MSG
-To allow it from one address or range (recommended):
-  sudo ufw allow from 192.168.1.0/24 to any port $PORT proto tcp comment 'OhMyDebn $LABEL'
+  sudo ufw allow from ${network:-192.168.1.0/24} to any port $PORT proto tcp comment 'OhMyDebn $LABEL'
 From anywhere:
   sudo ufw allow $PORT/tcp comment 'OhMyDebn $LABEL'
 MSG

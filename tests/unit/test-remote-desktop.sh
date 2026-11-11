@@ -50,6 +50,12 @@ EOF2
 #!/bin/bash
 echo "192.0.2.10 fd00::10"
 EOF2
+  # No routes, so the firewall hint's example stays the fixed
+  # 192.168.1.0/24 rather than this machine's network.
+  mock_bin ip <<'EOF2'
+#!/bin/bash
+exit 0
+EOF2
   # The installer's `apt-get -s install` (a simulation, run without sudo):
   # MOCK_APT_SIM picks apt's answer - ok, unmet (xorgxrdp can't be
   # installed, as on LCOS) or removes (apt would make room by removing

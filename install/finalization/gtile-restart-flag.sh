@@ -57,7 +57,8 @@ if [ -n "$GTILE_INSTALLED_VERSION" ] && gsettings get org.cinnamon enabled-exten
     # announced: finale.sh checks the same thing and wouldn't restart, so
     # telling the user Cinnamon "will restart" would be wrong.
     if pgrep -x cinnamon >/dev/null; then
-      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end of this update for gTile"
+      # "at the end", not "of this update": this runs on a first install too.
+      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end for gTile"
       export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
     fi
   fi

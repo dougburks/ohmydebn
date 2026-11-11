@@ -2,19 +2,6 @@
 
 Work deferred during 4.16.0 testing, for the next release. Each item says what's wrong, where, and the likely fix; check the code before relying on line numbers.
 
-## Firewall hint: suggest the machine's own subnet
-
-`bin/ohmydebn-firewall-hint` always uses 192.168.1.0/24 as its "allow from one range" example. Suggest the machine's own subnet instead (from the default route's interface), and fall back to the example when there isn't one. Found when the Debian 13 VM (192.168.199.20) got a rule that wouldn't admit its host.
-
-## Fresh installs say "this update"
-
-On a fresh install, two headlines still say "this update":
-
-- "Cinnamon will restart at the end of this update for gTile" (`install/finalization/gtile-restart-flag.sh`)
-- "A reboot is needed to finish this update" (`install/finalization/reboot-notice.sh`)
-
-The wording has been there since September. `bin/ohmydebn-update-gui` keeps its own copy of `REBOOT_HEADLINE` and keys its final status off that wording, so change both together.
-
 ## Super+K: a fast local hotkey list
 
 Super+K (slot 4 in `install/keybinding/keybinding-custom.txt`) opens https://ohmydebn.org/hotkeys/ in a browser web app. That's slow, needs the network, and shows the documented stock hotkeys rather than the user's own. Replace it with a fast local viewer like Omarchy's: read the live bindings (Cinnamon's custom list plus the stock ones) and show them in a searchable list, probably with `ohmydebn-menu-picker`.
@@ -37,12 +24,6 @@ LCOS replaces Xorg with XLibre, and Debian's `xorgxrdp` needs Xorg's `xserver-xo
 
 - On XLibre, install `xrdp` alone with its Xvnc backend (`tigervnc-standalone-server`), which doesn't depend on the X server's ABI. That needs sesman configuration and a VM test.
 - Or ask LCOS whether they package an `xorgxrdp` built for XLibre.
-
-## i386 notice on every apt update
-
-On distros with i386 multiarch turned on (MX Linux and LMDE by default), every apt update prints "Notice: Skipping acquire of configured file 'main/binary-i386/Packages' as repository 'https://packages.ohmydebn.org trixie InRelease' doesn't support architecture 'i386'". It's harmless but noisy.
-
-Add an `Architectures: <dpkg --print-architecture>` line to `/etc/apt/sources.list.d/ohmydebn.sources`. `install.sh` writes that file only when it's missing, so existing installs need an idempotent step that adds the line when it's absent (`ohmydebn-channel` rewrites only the URIs line, so it keeps it). Check Raspberry Pi OS (arm64) too.
 
 ## Firefox on Ubuntu, Mint and Pop!_OS
 

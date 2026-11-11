@@ -5,7 +5,8 @@
 # found it there and the SSH and Remote Desktop server windows never said
 # the firewall was blocking them. SBIN_DIRS points at a mock sbin folder,
 # and PATH is set explicitly, without sbin, so the machine running the
-# tests doesn't matter.
+# tests doesn't matter. ip answers from MOCK_DEFAULT and MOCK_LINK (the
+# default route, and the routes on its interface).
 
 set -uo pipefail
 
@@ -18,6 +19,13 @@ setup() {
   mock_init
   mkdir -p "$MOCK_DIR/sbin"
   sed "s#^SBIN_DIRS=.*#SBIN_DIRS=$MOCK_DIR/sbin#" "$REPO_ROOT/bin/ohmydebn-firewall-hint" >"$MOCK_DIR/hint"
+  mock_bin ip <<'STUB'
+#!/bin/bash
+case "$*" in
+"-4 route show default") printf '%s' "${MOCK_DEFAULT:-}" ;;
+"-4 route show dev enp1s0 scope link") printf '%s' "${MOCK_LINK:-}" ;;
+esac
+STUB
   # sudo ufw status prints MOCK_UFW_STATUS.
   mock_bin sudo <<'STUB'
 #!/bin/bash
@@ -31,7 +39,7 @@ ufw_in_sbin() {
   chmod +x "$MOCK_DIR/sbin/ufw"
 }
 run() {
-  OUT=$(PATH="$MOCK_BIN:/usr/bin:/bin" bash "$MOCK_DIR/hint" 22 "SSH Server" </dev/null 2>&1)
+  OUT=$(MOCK_DEFAULT="${MOCK_DEFAULT:-}" MOCK_LINK="${MOCK_LINK:-}" PATH="$MOCK_BIN:/usr/bin:/bin" bash "$MOCK_DIR/hint" 22 "SSH Server" </dev/null 2>&1)
   STATUS=$?
 }
 
@@ -47,6 +55,25 @@ setup
 ufw_in_sbin
 MOCK_UFW_STATUS="Status: inactive" run
 assert_contains "ufw only in sbin, inactive: says the port is reachable" "$OUT" "The firewall is inactive, so port 22 is reachable."
+mock_cleanup
+
+# The restrictive example: this machine's network, else the fixed one.
+NO_RULES=$'Status: active\n\nTo                         Action      From\n--                         ------      ----'
+setup
+ufw_in_sbin
+MOCK_DEFAULT=$'default via 192.168.199.1 dev enp1s0 proto dhcp src 192.168.199.20 metric 100\n' \
+  MOCK_LINK=$'169.254.0.0/16 scope link metric 1000\n192.168.199.0/24 proto kernel scope link src 192.168.199.20 metric 100\n' \
+  MOCK_UFW_STATUS="$NO_RULES" run
+assert_contains "own network: suggested, link-local skipped" "$OUT" \
+  "sudo ufw allow from 192.168.199.0/24 to any port 22 proto tcp comment 'OhMyDebn SSH Server'"
+assert_contains "own network: said to be this machine's" "$OUT" "such as this machine's network:"
+mock_cleanup
+
+setup
+ufw_in_sbin
+MOCK_UFW_STATUS="$NO_RULES" run
+assert_contains "no default route: the fixed example" "$OUT" "sudo ufw allow from 192.168.1.0/24 to any port 22"
+assert_not_contains "no default route: not called this machine's" "$OUT" "this machine's network"
 mock_cleanup
 
 setup

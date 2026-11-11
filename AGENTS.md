@@ -31,6 +31,7 @@ Run the whole suite with `tests/run.sh` (`--skip-apt-checks` skips the read-only
 - `tests/consistency.sh` - about 40 cross-file checks: menu case arms match their items, the menu search index matches the menu tree, no duplicate packages or keybindings, every third-party apt repo is pinned, every `-install` script runs `apt update` first, every AI installer asks the default question with its own name, tile rules match launcher titles, and more. Read the failing check's comment; it explains the bug it guards against.
 - `tests/unit/test-*.sh` - mocked unit tests built on `tests/lib/test-helpers.sh` (`mock_init`, `mock_bin`, `mock_log`, `assert_eq`, `assert_contains`...).
 - `tests/apt-checks.sh` - read-only checks that every package OhMyDebn names exists.
+- `tests/distro-checks.py` - asks each supported distro's own archives (with its pins, architecture and Recommends setting) whether the `ohmydebn` package, the optional packages and every installer's packages install on top of that distro's desktop. It simulates with a private apt root, so it touches nothing, but it downloads every distro's package lists, so it isn't part of `run.sh`: run it before a release. A distro or installer it can't account for fails; a failure already written up goes in its `KNOWN` list.
 
 Unit test rules:
 
@@ -151,7 +152,7 @@ Work through this before every release, in order. The sibling repositories are a
    - Security: unquoted variables, `sudo` calls broader than needed, downloads without verification, third-party apt repos without a pin, temporary files in predictable places, files written world-writable.
    - Usability: prompts and messages that are unclear or inconsistent, questions whose default isn't No, menu labels longer than about 40 characters.
    - Orphaned code: `bin/` scripts that no menu entry, keybinding, other script or doc refers to; functions nothing calls; comments that describe code that has since changed or been removed.
-7. **Run the full test suite:** `tests/run.sh` with the apt checks included. Everything must pass. Then run `mkdocs build --strict` in `../ohmydebn-docs`.
+7. **Run the full test suite:** `tests/run.sh` with the apt checks included, then `tests/distro-checks.py`. Everything must pass. Then run `mkdocs build --strict` in `../ohmydebn-docs`.
 8. **Check the package side.** In `../ohmydebn-package-build`, confirm every build script changed since the last release has been built into the testing repo. Compare the testing and stable repos (`reprepro -b <repo> list trixie` for each) and account for every difference: each one must be something this release intends to ship. `upload-to-repo-stable.sh` publishes everything in `../ohmydebn-packages-staging`, so nothing unintended may be sitting there.
 9. **List what needs testing in a VM.** For each change, which supported distros it affects and what to try. The maintainer runs these; an agent can't. Include a fresh install and an update from the previous release.
 10. **Clean up.** Remove stray temporary files and directories left in any of the three repos by agent sandboxes or test runs, and confirm `git status` in each shows only intended changes.

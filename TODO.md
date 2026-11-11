@@ -56,6 +56,16 @@ On distros with i386 multiarch turned on (MX Linux and LMDE by default), every a
 
 Add an `Architectures: <dpkg --print-architecture>` line to `/etc/apt/sources.list.d/ohmydebn.sources`. `install.sh` writes that file only when it's missing, so existing installs need an idempotent step that adds the line when it's absent (`ohmydebn-channel` rewrites only the URIs line, so it keeps it). Check Raspberry Pi OS (arm64) too.
 
+## Menu items whose package a distro doesn't have
+
+`tests/distro-checks.py` found installers that run `apt install` for a package the distro doesn't ship, without checking first, so the menu item ends in apt's "Unable to locate package":
+
+- Firefox (`ohmydebn-firefox-esr-install`) on Mint, Ubuntu 24.04 and 26.04, and Pop!_OS: no `firefox-esr` there. Its own comment says Ubuntu and Mint "aren't handled here".
+- Deskflow (`ohmydebn-deskflow-install`) on Mint, Ubuntu 24.04 and Pop!_OS: `deskflow` arrived after Ubuntu 24.04.
+- AbiWord and rclone (`ohmydebn-abiword-install`, `ohmydebn-rclone-install`) on Kali.
+
+For each, decide between installing the distro's own equivalent (Mint has its own `firefox` deb), a clear "not available on this distro" message, or hiding the item. Then update `tests/distro-checks.py`'s expectations if any n/a should become a real install.
+
 ## Proposed, not yet agreed: removed-but-not-purged apps
 
 `dpkg -s` returns 0 for a package that was removed but not purged (state `rc`), so an installer that checks it can think an app is still installed. A helper such as `ohmydebn-pkg-installed`, built on `dpkg-query -W -f '${db:Status-Status}'`, would let installers and launchers check for `installed` instead. The `-remove` scripts would keep `dpkg -s`.

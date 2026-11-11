@@ -2,10 +2,23 @@
 
 set -euo pipefail
 
-if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
-  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Firefox" /usr/share/ohmydebn/bin/ohmydebn-firefox-esr-install
-fi
+# Whichever Firefox is installed: Debian's firefox-esr, the distro's own
+# "firefox" deb (Linux Mint, Pop!_OS), or Ubuntu's snap (installed by its
+# "firefox" stub package, like Chromium's - see ohmydebn-chromium). With
+# none, the installer runs, which picks the one this distro has.
+launch_firefox() {
+  if dpkg -s "firefox-esr" >/dev/null 2>&1; then
+    /usr/bin/firefox-esr
+  elif snap list firefox >/dev/null 2>&1; then
+    /snap/bin/firefox
+  elif dpkg -s "firefox" >/dev/null 2>&1; then
+    /usr/bin/firefox
+  else
+    return 1
+  fi
+}
 
-if dpkg -s "firefox-esr" >/dev/null 2>&1; then
-  /usr/bin/firefox-esr
+if ! launch_firefox; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Firefox" /usr/share/ohmydebn/bin/ohmydebn-firefox-esr-install
+  launch_firefox || true
 fi

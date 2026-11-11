@@ -387,7 +387,8 @@ for spec in "brave-origin /usr/bin/brave-origin-stable brave-origin.desktop Brav
   "chromium /usr/bin/chromium chromium.desktop Chromium" \
   "google-chrome-stable /usr/bin/google-chrome-stable google-chrome.desktop Google Chrome" \
   "helium-bin /usr/bin/helium helium.desktop Helium" \
-  "firefox-esr /usr/bin/firefox-esr firefox-esr.desktop Firefox"; do
+  "firefox-esr /usr/bin/firefox-esr firefox-esr.desktop Firefox" \
+  "firefox /usr/bin/firefox firefox.desktop Firefox"; do
   read -r pkg bin desktop label <<<"$spec"
   setup
   set_default
@@ -637,6 +638,44 @@ MOCK_INSTALLED="firefox-esr" run "$MOCK_DIR/firefox.sh"
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "firefox launcher, installed: launched" "$CALLS" "firefox-esr "
 assert_not_contains "firefox launcher, installed: no installer" "$CALLS" "floating-terminal"
+mock_cleanup
+
+# The distro's own Firefox (Linux Mint, Pop!_OS), and Ubuntu's snap: each
+# launched from where it is, with no installer. /usr/bin/firefox and
+# /snap/bin/firefox are patched to stubs too.
+setup_own_firefox() {
+  setup_firefox
+  mock_bin firefox <<'EOF2'
+#!/bin/bash
+echo "firefox-deb $*" >>"$MOCK_CALLS"
+EOF2
+  mock_bin firefox-snap <<'EOF2'
+#!/bin/bash
+echo "firefox-snap $*" >>"$MOCK_CALLS"
+EOF2
+  sed -i "s#/usr/bin/firefox\$#$MOCK_BIN/firefox#; s#/snap/bin/firefox#$MOCK_BIN/firefox-snap#" "$MOCK_DIR/firefox.sh"
+}
+setup_own_firefox
+MOCK_INSTALLED="firefox" run "$MOCK_DIR/firefox.sh"
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "firefox launcher, Mint's own firefox deb: launched" "$CALLS" "firefox-deb"
+assert_not_contains "firefox launcher, Mint's own firefox deb: no installer" "$CALLS" "floating-terminal"
+mock_cleanup
+
+setup_own_firefox
+MOCK_INSTALLED="firefox" MOCK_SNAPS="firefox" run "$MOCK_DIR/firefox.sh"
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "firefox launcher, Ubuntu's snap: launched from the snap" "$CALLS" "firefox-snap"
+assert_not_contains "firefox launcher, Ubuntu's snap: not as a deb" "$CALLS" "firefox-deb"
+mock_cleanup
+
+# Ubuntu's firefox stub isn't offered as a default: its Firefox is a snap.
+setup
+set_default
+MOCK_INSTALLED="firefox" MOCK_SNAPS="firefox" run "$SET_DEFAULT" firefox
+assert_eq "firefox, Ubuntu's snap stub: not a default it sets" "1" "$?"
+MOCK_INSTALLED="firefox" MOCK_SNAPS="firefox" run "$SET_DEFAULT" --list-installed
+assert_not_contains "firefox, Ubuntu's snap stub: not listed" "$(cat "$MOCK_CALLS")$(MOCK_INSTALLED="firefox" MOCK_SNAPS="firefox" PATH="$(mock_path)" bash "$SET_DEFAULT" --list-installed 2>&1)" "firefox	Firefox"
 mock_cleanup
 
 test_summary

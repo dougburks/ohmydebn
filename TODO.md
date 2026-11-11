@@ -19,10 +19,6 @@ LCOS replaces Xorg with XLibre, and Debian's `xorgxrdp` needs Xorg's `xserver-xo
 - On XLibre, install `xrdp` alone with its Xvnc backend (`tigervnc-standalone-server`), which doesn't depend on the X server's ABI. That needs sesman configuration and a VM test.
 - Or ask LCOS whether they package an `xorgxrdp` built for XLibre.
 
-## Firefox on Ubuntu, Mint and Pop!_OS
-
-The Firefox menu item installs Debian's `firefox-esr`, which Ubuntu, Linux Mint and Pop!_OS don't have. Since 4.17.0 it says so and points to Install > Package (`bin/ohmydebn-pkg-available`). Mint and Pop!_OS have a real Firefox deb named `firefox` (Ubuntu's `firefox` only installs the snap), and Power User mode removes `firefox*` there, so on those two the menu can't put back the Firefox it removed. Supporting `firefox` means a `firefox` entry in `bin/ohmydebn-browser-set-default` with the binary its package registers with update-alternatives and its desktop id (check both on a Mint VM, not by guessing), then the launcher and installer picking `firefox-esr` or `firefox` as Chromium's do with their two names, and tests.
-
 ## Proposed, not yet agreed: removed-but-not-purged apps
 
 `dpkg -s` returns 0 for a package that was removed but not purged (state `rc`), so an installer that checks it can think an app is still installed. A helper such as `ohmydebn-pkg-installed`, built on `dpkg-query -W -f '${db:Status-Status}'`, would let installers and launchers check for `installed` instead. The `-remove` scripts would keep `dpkg -s`.

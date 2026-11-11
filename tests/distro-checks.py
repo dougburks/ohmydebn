@@ -125,6 +125,10 @@ KNOWN = {
 COMPUTED = {
     "chromium": ["chromium|chromium-browser"],
     "docker": ["docker.io", "docker-cli?"],
+    # firefox-esr, else the distro's own firefox deb (Linux Mint, Pop!_OS).
+    # On Ubuntu that's the snap stub, which the installer refuses but this
+    # can't tell from the package lists alone.
+    "firefox-esr": ["firefox-esr|firefox"],
     "virtmanager": ["qemu-system-x86|qemu-system-arm", "virt-manager", "virt-viewer", "libvirt-daemon-system",
                     "libvirt-clients", "bridge-utils", "ovmf?", "passt"],
 }

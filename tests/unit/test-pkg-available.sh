@@ -23,7 +23,10 @@ setup() {
 #!/bin/bash
 [ "$1" = policy ] || exit 1
 echo "$2:"
-if [[ " ${MOCK_CANDIDATE:-} " == *" $2 "* ]]; then
+if [[ " ${MOCK_SNAP_STUB:-} " == *" $2 "* ]]; then
+  echo "  Installed: (none)"
+  echo "  Candidate: 1:1snap1-0ubuntu5"
+elif [[ " ${MOCK_CANDIDATE:-} " == *" $2 "* ]]; then
   echo "  Installed: (none)"
   echo "  Candidate: 1.0-1"
 elif [[ " ${MOCK_NONE:-} " == *" $2 "* ]]; then
@@ -39,6 +42,10 @@ STUB
 #!/bin/bash
 mock_log "sudo $*"
 STUB
+  mock_bin snap <<'STUB'
+#!/bin/bash
+exit 1
+STUB
   mock_bin ohmydebn-browser-set-default <<'STUB'
 #!/bin/bash
 mock_log "ohmydebn-browser-set-default $*"
@@ -47,6 +54,7 @@ STUB
 }
 run() {
   OUT=$(OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" MOCK_CANDIDATE="${MOCK_CANDIDATE:-}" MOCK_NONE="${MOCK_NONE:-}" \
+    MOCK_SNAP_STUB="${MOCK_SNAP_STUB:-}" \
     PATH="$(mock_path)" bash "$@" </dev/null 2>&1)
   STATUS=$?
   CALLS=$(cat "$MOCK_CALLS")
@@ -91,10 +99,37 @@ for spec in "deskflow deskflow Deskflow" "abiword abiword AbiWord" "rclone rclon
   mock_cleanup
 done
 
+# Firefox: the distro's own firefox deb where there's no firefox-esr
+# (Linux Mint, Pop!_OS), but not Ubuntu's stub that installs the snap.
 setup
 sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-firefox-esr-install" >"$MOCK_DIR/install"
-run "$MOCK_DIR/install"
-assert_contains "firefox, no firefox-esr: points to the distro's own Firefox" "$OUT" "choose Install > Package"
+MOCK_CANDIDATE=firefox run "$MOCK_DIR/install" --skip-prompt
+assert_eq "firefox, Mint (no firefox-esr, a firefox deb): exits 0" "0" "$STATUS"
+assert_contains "firefox, Mint: installs the distro's own firefox" "$CALLS" "sudo /usr/bin/apt -y install firefox"
+assert_not_contains "firefox, Mint: not firefox-esr" "$CALLS" "install firefox-esr"
+mock_cleanup
+
+setup
+sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-firefox-esr-install" >"$MOCK_DIR/install"
+# Enter for "Press Enter", so the question after the install is reached.
+OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" MOCK_CANDIDATE=firefox PATH="$(mock_path)" \
+  bash "$MOCK_DIR/install" <<<"" >/dev/null 2>&1
+assert_contains "firefox, Mint: asks about the default browser for firefox" "$(cat "$MOCK_CALLS")" \
+  "ohmydebn-browser-set-default --ask firefox"
+mock_cleanup
+
+setup
+sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-firefox-esr-install" >"$MOCK_DIR/install"
+MOCK_CANDIDATE="firefox-esr firefox" run "$MOCK_DIR/install" --skip-prompt
+assert_contains "firefox, both available: firefox-esr" "$CALLS" "sudo /usr/bin/apt -y install firefox-esr"
+mock_cleanup
+
+setup
+sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-firefox-esr-install" >"$MOCK_DIR/install"
+MOCK_SNAP_STUB=firefox run "$MOCK_DIR/install"
+assert_eq "firefox, Ubuntu (only the snap stub): exits 1" "1" "$STATUS"
+assert_contains "firefox, Ubuntu: points to Install > Package" "$OUT" "choose Install > Package"
+assert_not_contains "firefox, Ubuntu: nothing run as root" "$CALLS" "sudo"
 mock_cleanup
 
 test_summary

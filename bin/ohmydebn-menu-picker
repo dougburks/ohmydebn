@@ -28,10 +28,12 @@
 #
 # Hotkeys mode (argv[1] == "--hotkeys") is Super + K's list of the hotkeys
 # that work on this desktop right now, gathered by ohmydebn_hotkeys.py: one
-# row per hotkey (keys, what it does, its group), filtered by every typed
-# word. Enter runs a custom hotkey's command, as pressing it would; Cinnamon's
-# and gTile's own hotkeys act on whatever window had focus before this
-# opened, so on those Enter just closes the list.
+# row per hotkey (keys, then what it does), in groups (OhMyDebn's, the
+# user's own, gTile's, Cinnamon's by category) and filtered by every typed
+# word, the group's name included. Enter runs a custom hotkey's command, as
+# pressing it would; Cinnamon's and gTile's own hotkeys act on whatever
+# window had focus before this opened, so on those Enter just closes the
+# list.
 #
 # Windows mode (argv[1] == "--windows") replicates rofi's `-show window`
 # hold-Ctrl+Alt-tap-Tab-to-cycle-release-to-select gesture for
@@ -976,8 +978,9 @@ class Picker(Gtk.Window):
             row = Gtk.ListBoxRow()
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             if self.mode == "hotkeys":
-                # Keys in a fixed-width column so the names line up, the
-                # group dimmed at the right edge.
+                # Keys in a fixed-width column so the names line up. The
+                # group isn't shown (nearly every row said "OhMyDebn"): the
+                # order keeps groups together, and search still matches it.
                 keys = Gtk.Label(label=display.keys, xalign=0)
                 keys.set_width_chars(self.keys_width)
                 keys.set_max_width_chars(self.keys_width)
@@ -986,9 +989,6 @@ class Picker(Gtk.Window):
                 name = Gtk.Label(label=display.name, xalign=0)
                 name.set_ellipsize(Pango.EllipsizeMode.END)
                 box.pack_start(name, True, True, 0)
-                group = Gtk.Label(label=display.group, xalign=1)
-                group.set_opacity(0.6)
-                box.pack_end(group, False, False, 0)
                 row.value = value
                 row.add(box)
                 self.listbox.add(row)

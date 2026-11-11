@@ -6,7 +6,7 @@ This file is for developing OhMyDebn. The skill in `config/ohmydebn-skill/` is d
 
 ## Repository layout
 
-- `bin/` - every command, named `ohmydebn-*`. Installed to `/usr/share/ohmydebn/bin`, and scripts call each other by that absolute path.
+- `bin/` - every command, named `ohmydebn-*`, plus the Python modules they import (`ohmydebn_*.py`) and the `omarchy` commands the Aether theme builder calls. Installed to `/usr/share/ohmydebn/bin`, and scripts call each other by that absolute path.
 - `install.sh` - the bootstrap: checks the distro, sets up apt sources and the OhMyDebn repo, installs the `ohmydebn` package, then runs `ohmydebn.sh`.
 - `ohmydebn.sh` - sources `install/{packaging,config,cleanup,finalization}/all.sh`. A new file under `install/` must be sourced from its directory's `all.sh` (`install/keybinding/` has none; it's sourced through `install/finalization/keybinding.sh`).
 - `config/` - default configs, `*.tpl` templates rendered per theme, `tile-rules.json`, and the user-facing agent skill.
@@ -93,7 +93,7 @@ First check it can be installed the way [What OhMyDebn installs](#what-ohmydebn-
 
 1. Append a line to `install/keybinding/keybinding-custom.txt` with the next free slot number: one higher than the highest in the file, never a removed slot's number. New installs get it from the full pass in `install/keybinding/keybinding.sh`.
 2. Add `add_stock_keybinding <slot>` after the existing ones in `keybinding.sh`. It gives existing installs just that slot, once, and its own marker (`keybinding-add-<slot>`) keeps a user's later removal from being undone.
-3. Don't bump the `KEYBINDING_STATE` marker to add a hotkey. That reruns the whole stock pass, resetting every stock hotkey the user changed in Cinnamon's settings. Bump it only when existing stock hotkeys must all be rewritten. A smaller change to one existing hotkey gets a targeted fix like `rename_stock_keybinding`.
+3. Don't bump the `KEYBINDING_STATE` marker to add a hotkey. That reruns the whole stock pass, resetting every stock hotkey the user changed in Cinnamon's settings. Bump it only when existing stock hotkeys must all be rewritten. A smaller change to one existing hotkey gets a targeted fix: `rename_stock_keybinding` for its name, `retarget_stock_keybinding` for its command.
 4. A row in `ohmydebn-docs/docs/hotkeys.md`, and tests in `tests/unit/test-keybinding.sh`.
 
 ### Removing a stock hotkey

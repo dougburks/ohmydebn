@@ -115,6 +115,8 @@ def load(enabled_extensions=("gTile@OhMyDebn",), menu_key="Super_L::Super_R"):
         f.write('keybinding-custom 0 "Browser" "x" "[\'<Super>B\']" "..."\n')
         f.write('keybinding-custom 4 "Keybindings" "x" "[\'<Super>K\']" "..."\n')
         f.write('keybinding-custom 20 "OhMyDebn menu" "x" "[\'<Super>space\']" "..."\n')
+        f.write('keybinding-custom 21 "Tile with gaps 1 bottom left corner" "x" "[]" "..."\n')
+        f.write('keybinding-custom 30 "Window switcher" "x" "[]" "..."\n')
     spices = os.path.join(tmp, "spices")
     os.makedirs(os.path.join(spices, "gTile@OhMyDebn"))
     os.makedirs(os.path.join(spices, "menu@cinnamon.org"))
@@ -126,12 +128,34 @@ def load(enabled_extensions=("gTile@OhMyDebn",), menu_key="Super_L::Super_R"):
         }, f)
     with open(os.path.join(spices, "menu@cinnamon.org", "0.json"), "w") as f:
         json.dump({"overlay-key": {"type": "keybinding", "value": menu_key}}, f)
+    # Panel applets: two enabled, one not, and one with no metadata (its
+    # name falls back to its uuid's first part).
+    applets = {
+        "calendar@cinnamon.org": ("Calendar", {"keyOpen": "<Shift><Super>c"}, "Show calendar"),
+        "network@cinnamon.org": ("Network Manager", {"keyOpen": "<Shift><Super>n"}, "Show menu"),
+        "sound@cinnamon.org": ("Sound", {"keyOpen": "<Shift><Super>s"}, "Show menu"),
+        "weather@someone": (None, {"keyOpen": "<Super>F9"}, "Show forecast"),
+    }
+    for uuid, (name, keys, description) in applets.items():
+        os.makedirs(os.path.join(spices, uuid))
+        with open(os.path.join(spices, uuid, "13.json"), "w") as f:
+            json.dump({k: {"type": "keybinding", "value": v, "description": description} for k, v in keys.items()}, f)
+        if name:
+            os.makedirs(os.path.join(tmp, "applets", uuid))
+            with open(os.path.join(tmp, "applets", uuid, "metadata.json"), "w") as f:
+                json.dump({"name": name}, f)
     hk.SPICES = spices
+    hk.SPICE_DIRS = [tmp]
     reader = FakeReader(
         {
             ("org.cinnamon.desktop.keybindings", "custom-list"):
-                ["custom-20", "custom-0", "custom-1000", "custom0", "__dummy__", "custom-4", "custom-7"],
+                ["custom-20", "custom-0", "custom-1000", "custom0", "__dummy__", "custom-4", "custom-7",
+                 "custom-21", "custom-30"],
             ("org.cinnamon", "enabled-extensions"): list(enabled_extensions),
+            # sound@cinnamon.org isn't enabled; the menu is, and is listed once.
+            ("org.cinnamon", "enabled-applets"): [
+                "panel1:left:0:menu@cinnamon.org:0", "panel1:right:13:calendar@cinnamon.org:13",
+                "panel1:right:17:network@cinnamon.org:17", "panel1:right:20:weather@someone:20"],
             (WM, "show-desktop"): ["<Super>d"],
             (WM, "close"): ["<Alt>F4", "<Super>w"],
             (WM, "move-to-monitor-left"): ["<Super><Shift>Left"],
@@ -143,6 +167,10 @@ def load(enabled_extensions=("gTile@OhMyDebn",), menu_key="Super_L::Super_R"):
             "custom-0": ("Browser", "/usr/share/ohmydebn/bin/ohmydebn-browser-tiled", ["<Super>B"]),
             "custom-4": ("Keybindings", "/usr/share/ohmydebn/bin/ohmydebn-hotkeys", ["<Super>K"]),
             "custom-20": ("OhMyDebn menu", "/usr/share/ohmydebn/bin/ohmydebn-menu", ["<Super>space"]),
+            "custom-21": ("Tile with gaps 1 bottom left corner",
+                          "/usr/bin/gdbus call --session --dest org.gTile.Control --object-path /org/gTile/Control "
+                          "--method org.gTile.Control.TileFocusedWindow 2 2 0 1 1 1", ["<Ctrl><Shift>KP_End"]),
+            "custom-30": ("Window switcher", "/usr/share/ohmydebn/bin/ohmydebn-window-switcher", ["<Ctrl><Alt>Tab"]),
             "custom-1000": ("Slack", "slack", ["<Super>S"]),
             "custom0": ("Notes", "xed", ["<Ctrl><Super>n"]),
             # A stock slot the user unbound (keybinding-unbind): nothing to press.
@@ -155,10 +183,17 @@ def load(enabled_extensions=("gTile@OhMyDebn",), menu_key="Super_L::Super_R"):
 hotkeys = load()
 names = [h.name for h in hotkeys]
 check_eq("order: the menu key, OhMyDebn's in slot order, the user's own, gTile, then Cinnamon's",
-         names[:9], ["Cinnamon menu", "Browser", "Keybindings", "OhMyDebn menu", "Slack", "Notes",
-                     "Global Hotkey for gTile", "Show desktop", "Close window"])
-check_eq("groups", [h.group for h in hotkeys[:7]],
-         ["OhMyDebn", "OhMyDebn", "OhMyDebn", "OhMyDebn", "Your own", "Your own", "Tiling (gTile)"])
+         names[:9] + names[12:14], ["Cinnamon menu", "Browser", "Keybindings", "OhMyDebn menu",
+                                    "Tile with gaps 1 bottom left corner", "Window switcher", "Slack", "Notes",
+                                    "Global Hotkey for gTile", "Show desktop", "Close window"])
+check_eq("panel applets: after gTile, before Cinnamon's own",
+         names[9:12], ["Show calendar", "Show menu (Network Manager)", "Show forecast (weather)"])
+check("panel applets: their group", all(by_name_ := {h.name: h for h in hotkeys}) and
+      by_name_["Show calendar"].group == "Panel")
+check("panel applets: one that isn't enabled isn't listed", "Show menu (Sound)" not in names)
+check_eq("panel applets: the menu applet listed once", names.count("Cinnamon menu"), 1)
+check_eq("groups", [h.group for h in hotkeys[:9]],
+         ["OhMyDebn"] * 6 + ["Your own", "Your own", "Tiling (gTile)"])
 check("an unbound stock hotkey isn't listed", "btop" not in names)
 check("Cinnamon's transient __dummy__ entry isn't listed", all("dummy" not in n for n in names))
 check("an unbound Cinnamon hotkey isn't listed", "Unbound" not in names)
@@ -169,6 +204,10 @@ by_name = {h.name: h for h in hotkeys}
 check_eq("Cinnamon's subcategory: listed under its top group", by_name["Move window to left monitor"].group, "Windows")
 check_eq("several keys for one hotkey", by_name["Close window"].keys, "Alt + F4 or Super + W")
 check_eq("custom hotkeys run their command", by_name["Slack"].command, "slack")
+check("gTile's tiling slots run nothing from the list (they'd act on the list)",
+      by_name["Tile with gaps 1 bottom left corner"].command is None)
+check("the window switcher runs nothing from the list (it waits for held keys)",
+      by_name["Window switcher"].command is None)
 check("Cinnamon's own hotkeys run nothing (they act on the previous window)", by_name["Close window"].command is None)
 check("gTile's run nothing either", by_name["Global Hotkey for gTile"].command is None)
 check_eq("the last row opens the docs' page", (hotkeys[-1].keys, hotkeys[-1].command),

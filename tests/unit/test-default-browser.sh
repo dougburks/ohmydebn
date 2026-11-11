@@ -198,7 +198,12 @@ setup_chromium() {
   if [[ "$has_chromium" == "yes" ]]; then
     mock_bin apt-cache <<'EOF2'
 #!/bin/bash
-printf 'chromium:\n  Installed: (none)\n  Candidate: 1.0-1\n'
+# German unless asked with LC_ALL=C, as on a German desktop.
+if [ "${LC_ALL:-}" = C ]; then
+  printf 'chromium:\n  Installed: (none)\n  Candidate: 1.0-1\n'
+else
+  printf 'chromium:\n  Installiert: (keine)\n  Installationskandidat: 1.0-1\n'
+fi
 EOF2
   else
     mock_bin apt-cache <<'EOF2'
@@ -638,6 +643,16 @@ MOCK_INSTALLED="firefox-esr" run "$MOCK_DIR/firefox.sh"
 CALLS=$(cat "$MOCK_CALLS")
 assert_contains "firefox launcher, installed: launched" "$CALLS" "firefox-esr "
 assert_not_contains "firefox launcher, installed: no installer" "$CALLS" "floating-terminal"
+mock_cleanup
+
+# Firefox that exits with an error (a crash, say) is still installed: no
+# installer window, no second Firefox.
+setup_firefox
+printf '#!/bin/bash\necho "firefox-esr $*" >>"$MOCK_CALLS"\nexit 1\n' >"$MOCK_BIN/firefox-esr"
+MOCK_INSTALLED="firefox-esr" run "$MOCK_DIR/firefox.sh"
+CALLS=$(cat "$MOCK_CALLS")
+assert_not_contains "firefox launcher, Firefox exits with an error: no installer" "$CALLS" "floating-terminal"
+assert_eq "firefox launcher, Firefox exits with an error: started once" "1" "$(grep -c '^firefox-esr' "$MOCK_CALLS")"
 mock_cleanup
 
 # The distro's own Firefox (Linux Mint, Pop!_OS), and Ubuntu's snap: each

@@ -58,21 +58,31 @@ exit 0
 EOF2
   # The installer's `apt-get -s install` (a simulation, run without sudo):
   # MOCK_APT_SIM picks apt's answer - ok, unmet (xorgxrdp can't be
-  # installed, as on LCOS), missing (the distro has no xorgxrdp) or
-  # removes (apt would make room by removing the X server).
+  # installed, as on LCOS), missing (the distro has no xorgxrdp), silent
+  # (apt fails saying nothing) or removes (apt would make room by removing
+  # the X server).
   mock_bin apt-get <<'EOF2'
 #!/bin/bash
 mock_log "apt-get $*"
 case "${MOCK_APT_SIM:-ok}" in
 unmet)
-  echo "The following packages have unmet dependencies:"
-  echo " xorgxrdp : Depends: xorg-input-abi-24"
-  echo "            Depends: xserver-xorg-core (>= 2:21.1.4)"
+  # apt translates these lines; only LC_ALL=C gets the English ones the
+  # installer picks out.
+  if [ "${LC_ALL:-}" = C ]; then
+    echo "The following packages have unmet dependencies:"
+    echo " xorgxrdp : Depends: xorg-input-abi-24"
+    echo "            Depends: xserver-xorg-core (>= 2:21.1.4)"
+  else
+    echo "Die folgenden Pakete haben unerfüllte Abhängigkeiten:"
+    echo " xorgxrdp : Hängt ab von: xorg-input-abi-24"
+  fi
   echo "E: Unable to correct problems, you have held broken packages."
   echo "E: The following information from --solver 3.0 may provide additional context:"
   exit 100 ;;
 missing)
   echo "E: Unable to locate package xorgxrdp"
+  exit 100 ;;
+silent)
   exit 100 ;;
 removes)
   echo "Remv xserver-xlibre-core [2:25.1.11-1+lcos1]"
@@ -104,7 +114,7 @@ EOF2
   done
   DROPIN="$ROOT/etc/X11/Xsession.d/45ohmydebn-xrdp-session-guard"
 }
-run() { HOME="$H" PATH="$(mock_path)" MOCK_APT_SIM="${MOCK_APT_SIM:-ok}" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" MOCK_UFW_STATUS="${MOCK_UFW_STATUS:-}" bash "$@" </dev/null 2>&1; }
+run() { HOME="$H" LANG=de_DE.UTF-8 LC_ALL='' PATH="$(mock_path)" MOCK_APT_SIM="${MOCK_APT_SIM:-ok}" MOCK_INSTALLED="${MOCK_INSTALLED:-}" MOCK_XRDP_GROUPS="${MOCK_XRDP_GROUPS:-xrdp}" MOCK_UFW_STATUS="${MOCK_UFW_STATUS:-}" bash "$@" </dev/null 2>&1; }
 UFW_OPEN='Status: active
 
 To                         Action      From
@@ -135,7 +145,7 @@ assert_contains "fresh: address shown" "$OUT" "192.0.2.10:3389"
 mock_cleanup
 
 # --- install where xorgxrdp can't be installed (LCOS's XLibre): stops first ---
-for sim in unmet removes missing; do
+for sim in unmet removes missing silent; do
   setup
   OUT=$(MOCK_APT_SIM=$sim MOCK_INSTALLED="" run "$MOCK_BIN/ohmydebn-remote-desktop-server-install" --skip-prompt)
   STATUS=$?

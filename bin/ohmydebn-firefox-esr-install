@@ -25,16 +25,23 @@ firefox_installed() {
 
 if ! firefox_installed; then
   # A here-string, not a pipe: see ohmydebn-pkg-available.
-  FIREFOX_CANDIDATE=$(grep -E '^[[:space:]]*Candidate:' <<<"$(apt-cache policy firefox 2>/dev/null)" || true)
+  FIREFOX_CANDIDATE=$(grep -E '^[[:space:]]*Candidate:' <<<"$(LC_ALL=C apt-cache policy firefox 2>/dev/null)" || true)
   if /usr/share/ohmydebn/bin/ohmydebn-pkg-available firefox-esr; then
     FIREFOX_PACKAGE=firefox-esr
   elif [[ "$FIREFOX_CANDIDATE" =~ Candidate:\ [^\(] && "$FIREFOX_CANDIDATE" != *snap* ]]; then
     FIREFOX_PACKAGE=firefox
+  elif [[ "$FIREFOX_CANDIDATE" == *snap* ]]; then
+    echo
+    echo "Firefox can't be installed here: this distribution's repositories have no"
+    echo "firefox-esr package, and its firefox package only installs the Firefox snap."
+    echo
+    echo "To install the snap, choose Install > Package in the OhMyDebn menu and pick"
+    echo "firefox."
+    echo
+    echo "Nothing was installed."
+    exit 1
   else
     /usr/share/ohmydebn/bin/ohmydebn-pkg-available firefox-esr "Firefox" || true
-    echo
-    echo "To install your distribution's own Firefox instead, choose Install > Package"
-    echo "in the OhMyDebn menu and pick firefox."
     exit 1
   fi
 

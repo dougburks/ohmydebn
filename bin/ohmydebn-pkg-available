@@ -29,8 +29,10 @@ NAME="${2:-}"
 # A here-string, not a pipe: under pipefail, grep -q stopping at its match
 # can kill apt-cache with SIGPIPE, and the pipeline then reads as "no
 # candidate" (as in ohmydebn-chromium-install). "(none)" is a package apt
-# knows of only as a name something else mentions.
-if grep -qE '^[[:space:]]*Candidate: [^(]' <<<"$(apt-cache policy "$PACKAGE" 2>/dev/null)"; then
+# knows of only as a name something else mentions. LC_ALL=C because apt
+# translates "Candidate:" ("Installationskandidat:" in German, "Candidat :"
+# in French), and every package then read as missing.
+if grep -qE '^[[:space:]]*Candidate: [^(]' <<<"$(LC_ALL=C apt-cache policy "$PACKAGE" 2>/dev/null)"; then
   exit 0
 fi
 

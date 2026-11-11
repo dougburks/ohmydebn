@@ -6,8 +6,9 @@
 # didn't (no deskflow before Ubuntu 25.04, no abiword or rclone on Kali, no
 # firefox-esr on Ubuntu, Mint or Pop!_OS) the menu item ended in apt's
 # "Unable to locate package". apt-cache answers from MOCK_CANDIDATE (the
-# packages with a candidate) and MOCK_NONE (known only as a name); sudo and
-# the other OhMyDebn helpers only log.
+# packages with a candidate) and MOCK_NONE (known only as a name), in German
+# unless asked with LC_ALL=C, as on a German desktop; sudo and the other
+# OhMyDebn helpers only log.
 
 set -uo pipefail
 
@@ -22,16 +23,20 @@ setup() {
   mock_bin apt-cache <<'STUB'
 #!/bin/bash
 [ "$1" = policy ] || exit 1
+# apt translates its labels: in German "Candidate:" is
+# "Installationskandidat:". Only LC_ALL=C gets the English one.
+label="Installationskandidat:"
+[ "${LC_ALL:-}" = C ] && label="Candidate:"
 echo "$2:"
 if [[ " ${MOCK_SNAP_STUB:-} " == *" $2 "* ]]; then
   echo "  Installed: (none)"
-  echo "  Candidate: 1:1snap1-0ubuntu5"
+  echo "  $label 1:1snap1-0ubuntu5"
 elif [[ " ${MOCK_CANDIDATE:-} " == *" $2 "* ]]; then
   echo "  Installed: (none)"
-  echo "  Candidate: 1.0-1"
+  echo "  $label 1.0-1"
 elif [[ " ${MOCK_NONE:-} " == *" $2 "* ]]; then
   echo "  Installed: (none)"
-  echo "  Candidate: (none)"
+  echo "  $label (none)"
 fi
 STUB
   mock_bin dpkg <<'STUB'
@@ -53,7 +58,7 @@ STUB
   cp "$REPO_ROOT/bin/ohmydebn-pkg-available" "$MOCK_BIN/"
 }
 run() {
-  OUT=$(OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" MOCK_CANDIDATE="${MOCK_CANDIDATE:-}" MOCK_NONE="${MOCK_NONE:-}" \
+  OUT=$(LANG=de_DE.UTF-8 LC_ALL='' OHMYDEBN_TEST_OS_RELEASE="$MOCK_DIR/os-release" MOCK_CANDIDATE="${MOCK_CANDIDATE:-}" MOCK_NONE="${MOCK_NONE:-}" \
     MOCK_SNAP_STUB="${MOCK_SNAP_STUB:-}" \
     PATH="$(mock_path)" bash "$@" </dev/null 2>&1)
   STATUS=$?

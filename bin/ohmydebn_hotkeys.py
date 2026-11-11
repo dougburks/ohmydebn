@@ -9,6 +9,8 @@ hotkeys rather than this user's own. This reads them live instead:
     Cinnamon's keyboard settings (custom0, custom1...)
   - the Cinnamon menu's key, from the menu applet's settings
   - gTile's hotkeys, from its settings, when the extension is enabled
+  - the hotkeys of the other enabled panel applets and extensions (the
+    calendar, notifications, network and sound menus...), from theirs
   - Cinnamon's own hotkeys (window management, workspaces, system...),
     labeled and grouped the way Cinnamon's keyboard settings show them
 
@@ -40,6 +42,8 @@ Hotkey = namedtuple("Hotkey", "keys name group command")
 STOCK_FILE = "/usr/share/ohmydebn/install/keybinding/keybinding-custom.txt"
 CS_KEYBOARD = "/usr/share/cinnamon/cinnamon-settings/modules/cs_keyboard.py"
 SPICES = os.path.expanduser("~/.config/cinnamon/spices")
+# Where an applet or extension's metadata.json (with its display name) is.
+SPICE_DIRS = [os.path.expanduser("~/.local/share/cinnamon"), "/usr/share/cinnamon"]
 DOCS_URL = "https://ohmydebn.org/hotkeys/"
 WEBAPP = "/usr/share/ohmydebn/bin/ohmydebn-launch-webapp"
 
@@ -50,6 +54,12 @@ CUSTOM_PATH = "/org/cinnamon/desktop/keybindings/custom-keybindings/{}/"
 GROUP_OHMYDEBN = "OhMyDebn"
 GROUP_YOURS = "Your own"
 GROUP_GTILE = "Tiling (gTile)"
+# Custom hotkeys that only make sense pressed, not run from the list: gTile's
+# tiling slots act on the focused window (which, from the list, is the list),
+# and the window switcher waits for Ctrl and Alt, held, to be let go. Like
+# Cinnamon's own window hotkeys, Enter on these just closes the list.
+NOT_FROM_THE_LIST = ("org.gTile.Control", "ohmydebn-window-switcher")
+GROUP_PANEL = "Panel"
 
 _MODIFIERS = {
     "primary": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl",
@@ -202,6 +212,20 @@ def spice_keybindings(uuid):
     return {}
 
 
+def spice_name(uuid, kind):
+    """An applet's or extension's display name ("Network Manager"), from its
+    metadata, or its uuid's first part if it has none."""
+    for base in SPICE_DIRS:
+        try:
+            with open(os.path.join(base, kind, uuid, "metadata.json")) as f:
+                name = json.load(f).get("name")
+            if name:
+                return name
+        except (OSError, ValueError):
+            continue
+    return uuid.split("@")[0]
+
+
 class GioReader:
     """gsettings, read in this process: one Gio call per key rather than a
     gsettings process per key, so the list opens as fast as the menu does.
@@ -260,6 +284,8 @@ def load_hotkeys(reader=None, cs_keyboard=CS_KEYBOARD, stock_file=STOCK_FILE):
         if not custom:
             continue
         name, command, accels = custom
+        if any(part in command for part in NOT_FROM_THE_LIST):
+            command = None
         keys = format_accels(accels)
         if not keys:
             continue
@@ -279,6 +305,29 @@ def load_hotkeys(reader=None, cs_keyboard=CS_KEYBOARD, stock_file=STOCK_FILE):
             keys = format_accels(value.split("::"))
             if keys:
                 hotkeys.append(Hotkey(keys, description, GROUP_GTILE, None))
+
+    # The other enabled applets and extensions: each hotkey under its own
+    # description, with the applet's name added where that doesn't already
+    # say which one it is ("Show menu" is the network applet's and the
+    # sound applet's both). An enabled-applets entry is
+    # "panel:location:order:uuid:instance". The menu and gTile are above.
+    applets = [entry.split(":")[3] for entry in reader.strv("org.cinnamon", "enabled-applets") or []
+               if entry.count(":") >= 4]
+    extensions = reader.strv("org.cinnamon", "enabled-extensions") or []
+    seen = {"menu@cinnamon.org", "gTile@OhMyDebn"}
+    for kind, uuids in (("applets", applets), ("extensions", extensions)):
+        for uuid in uuids:
+            if uuid in seen:
+                continue
+            seen.add(uuid)
+            name = None
+            for value, description in spice_keybindings(uuid).values():
+                keys = format_accels(value.split("::"))
+                if not keys:
+                    continue
+                name = name or spice_name(uuid, kind)
+                label = description if name.lower() in description.lower() else f"{description} ({name})"
+                hotkeys.append(Hotkey(keys, label, GROUP_PANEL, None))
 
     try:
         with open(cs_keyboard) as f:

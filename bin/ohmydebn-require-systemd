@@ -36,10 +36,12 @@ REMOVER="$3"
 SYSTEMD_DIR="${OHMYDEBN_TEST_SYSTEMD_DIR:-/run/systemd/system}"
 [ -d "$SYSTEMD_DIR" ] && exit 0
 
+# The name on a line of its own, so the rest stays within 80 columns
+# however long it is ("Cloudflare WARP" ran its first line to 84).
 echo
-echo "$NAME can't run on this system. Its background service is started only by"
-echo "systemd, and this system starts its services another way (as Devuan, LCOS"
-echo "and MX Linux with sysvinit do)."
+echo "$NAME can't run on this system."
+echo "Its background service is started only by systemd, and this system starts"
+echo "its services another way (as Devuan, LCOS and MX Linux with sysvinit do)."
 
 if ! dpkg -s "$PACKAGE" >/dev/null 2>&1; then
   echo

@@ -69,7 +69,10 @@ mock_cleanup
 MOCK_SYSTEMD=false setup
 run "" "$MOCK_BIN/ohmydebn-require-systemd" Tailscale tailscale "$MOCK_BIN/ohmydebn-tailscale-remove"
 assert_eq "no systemd: exits 1" "1" "$STATUS"
-assert_contains "no systemd: says why" "$OUT" "Tailscale can't run on this system. Its background service is started only by"
+assert_contains "no systemd: says why" "$OUT" "Tailscale can't run on this system."
+assert_contains "no systemd: and why" "$OUT" "Its background service is started only by systemd"
+assert_eq "no systemd: every line within 80 columns, even for WARP" "0" \
+  "$(OHMYDEBN_TEST_SYSTEMD_DIR=/nonexistent bash "$MOCK_BIN/ohmydebn-require-systemd" "Cloudflare WARP" cloudflare-warp /bin/false </dev/null 2>&1 | awk 'length > 80' | wc -l)"
 assert_contains "no systemd, not installed: nothing installed" "$OUT" "Nothing was installed."
 assert_not_contains "no systemd, not installed: no question" "$OUT" "[y/N]"
 mock_cleanup

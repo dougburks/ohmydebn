@@ -256,8 +256,10 @@ ohmydebn-theme-install <url>     # Install from git repo
 
 ### Keybindings
 
-Terminology: a *hotkey* is the key combination you press (the docs page at
-ohmydebn.org/hotkeys lists them); a *keybinding* is the configuration that ties
+Terminology: a *hotkey* is the key combination you press (`Super + K`, or
+`ohmydebn-hotkeys`, lists the ones that work right now, read live from
+Cinnamon and gTile; the docs page at ohmydebn.org/hotkeys has the stock ones
+and the shortcuts inside apps); a *keybinding* is the configuration that ties
 a key to an action. Menus, commands and files say keybinding.
 
 **Preferred: the user's own keybindings file.** `~/.config/ohmydebn/keybindings.txt`
@@ -284,7 +286,7 @@ edit the file and run `ohmydebn-keybindings-apply`. A key used by a `keybinding`
 line is freed from whichever stock keybinding had it. Deleting a line reverts
 that keybinding to stock on the next apply. Changes take effect immediately, no
 Cinnamon restart. `ohmydebn-doctor` reports a file that was edited but not
-applied. The Super + K page lists the stock keybindings only.
+applied. Super + K lists every hotkey that works right now, these included.
 
 **Do NOT write custom keybindings with raw `gsettings`** - `ohmydebn-update`
 rewrites the stock slots and a stray slot number will collide with a future

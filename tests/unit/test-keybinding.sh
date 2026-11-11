@@ -195,7 +195,7 @@ while IFS='|' read -r slot old new cmd; do
     CALLS=$(cat "$MOCK_CALLS")
     if [[ "$expect" == renamed ]]; then
       assert_contains "custom-$slot named $name, as OhMyDebn set it: renamed to $new" "$CALLS" "gsettings set $slot_path name $new"
-      assert_eq "...and nothing else rewritten" "1" "$(grep -c 'gsettings set' "$MOCK_CALLS")"
+      assert_eq "...and no other name rewritten" "1" "$(grep -c 'gsettings set .* name ' "$MOCK_CALLS")"
     else
       assert_not_contains "custom-$slot named $name running $command: left as it is" "$CALLS" "gsettings set"
     fi
@@ -207,6 +207,53 @@ done <<'LIST'
 2|GMail|Gmail|'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://mail.google.com'
 43|Cloudflare Warp|Cloudflare WARP|'/usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp'
 LIST
+
+# --- Stock keybindings whose command changed since the marker: Super + K
+# (custom-4) opened the docs' page in a browser, and lists the hotkeys
+# itself (ohmydebn-hotkeys) since 4.17.0. Switched only while the slot still
+# opens that page, and custom-list toggled through "__dummy__" so Cinnamon
+# picks the new command up without a restart.
+HOTKEYS_SLOT="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-4/"
+# The list has Console (custom-48), so its own add-once step writes nothing.
+# The script's /usr/share/ohmydebn/bin is the mock bin here (see
+# setup_mocks), so the new command reads as "$MOCK_BIN/ohmydebn-hotkeys".
+# run_retarget <slot 4's command now> [custom-list]
+run_retarget() {
+  mock_init
+  setup_mocks
+  SCRATCH_HOME=$(mktemp -d)
+  mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+  touch "$SCRATCH_HOME/.local/state/ohmydebn-config/$KEYBINDING_MARKER"
+  MOCK_SLOT=4 MOCK_SLOT_NAME="'Keybindings'" MOCK_SLOT_COMMAND="$1" MOCK_CUSTOM_LIST="${2-['custom-0', 'custom-4', 'custom-48', 'custom-1000']}" \
+    MOCK_CINNAMON_RUNNING=true run_script
+  CALLS=$(cat "$MOCK_CALLS")
+  LIST_SETS=$(grep 'gsettings set org.cinnamon.desktop.keybindings custom-list' "$MOCK_CALLS")
+}
+
+run_retarget "'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/'"
+assert_contains "Super + K opening the docs' page: now opens the hotkey list" "$CALLS" \
+  "gsettings set $HOTKEYS_SLOT command $MOCK_BIN/ohmydebn-hotkeys"
+assert_contains "...and custom-list toggled through __dummy__ so Cinnamon reloads" "$(echo "$LIST_SETS" | head -1)" \
+  "['custom-0', 'custom-4', 'custom-48', 'custom-1000', '__dummy__']"
+assert_contains "...and put back as it was" "$(echo "$LIST_SETS" | tail -1)" "custom-list ['custom-0', 'custom-4', 'custom-48', 'custom-1000']"
+assert_eq "...and no other slot touched" "1" "$(grep -c 'gsettings set .*custom-keybindings/' "$MOCK_CALLS")"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_retarget "'/usr/share/ohmydebn/bin/ohmydebn-hotkeys'"
+assert_not_contains "already switched: nothing written" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_retarget "'my-own-script'"
+assert_not_contains "slot 4 given another job by the user: left as it is" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+run_retarget "'/usr/share/ohmydebn/bin/ohmydebn-launch-webapp https://ohmydebn.org/hotkeys/'" ""
+assert_not_contains "no custom-list from gsettings (no session): nothing written, so the next update tries again" "$CALLS" "gsettings set"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
 
 # --- Stock keybindings added since the marker (Console, custom-48, in
 # 4.15.0): installs from before get just that slot, appended to

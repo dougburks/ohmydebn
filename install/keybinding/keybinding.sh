@@ -132,6 +132,24 @@ rename_stock_keybinding 4 "Hotkeys" "Keybindings" "ohmydebn.org/hotkeys"
 rename_stock_keybinding 2 "GMail" "Gmail" "https://mail.google.com"
 rename_stock_keybinding 43 "Cloudflare Warp" "Cloudflare WARP" "ohmydebn-cloudflare-warp"
 
+# Stock keybindings whose command changed, for the same reason: Super + K
+# lists the hotkeys itself (ohmydebn-hotkeys) since 4.17.0, where it opened
+# the docs' page in a browser. Only while the slot still runs the old
+# command, so one a user gave another job keeps it; after that, nothing to
+# do, so no marker. Cinnamon picks up a changed command only when
+# custom-list itself changes, hence the same "__dummy__" toggle as above.
+# retarget_stock_keybinding <slot> <part of its old command> <new command>
+retarget_stock_keybinding() {
+  local list slot="org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom-$1/"
+  [[ "$(gsettings get "$slot" command 2>/dev/null)" == *"$2"* ]] || return 0
+  list=$(gsettings get org.cinnamon.desktop.keybindings custom-list 2>/dev/null) || return 0
+  [[ "$list" == "["*"]" ]] || return 0
+  gsettings set "$slot" command "$3" || return 0
+  gsettings set org.cinnamon.desktop.keybindings custom-list "${list%]}, '__dummy__']" || return 0
+  gsettings set org.cinnamon.desktop.keybindings custom-list "$list" || return 0
+}
+retarget_stock_keybinding 4 "ohmydebn.org/hotkeys" "/usr/share/ohmydebn/bin/ohmydebn-hotkeys"
+
 # Stock keybindings added since the marker above, for the same reason as
 # the renames: bumping it would rewrite every stock keybinding. Installs
 # from before get just the new slot, as keybinding-custom.txt has it, once:

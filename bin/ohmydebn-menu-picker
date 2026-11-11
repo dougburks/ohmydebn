@@ -26,6 +26,13 @@
 # never prints to stdout, matching rofi's own drun behavior of doing the
 # launch itself rather than handing a result back to its caller.
 #
+# Hotkeys mode (argv[1] == "--hotkeys") is Super + K's list of the hotkeys
+# that work on this desktop right now, gathered by ohmydebn_hotkeys.py: one
+# row per hotkey (keys, what it does, its group), filtered by every typed
+# word. Enter runs a custom hotkey's command, as pressing it would; Cinnamon's
+# and gTile's own hotkeys act on whatever window had focus before this
+# opened, so on those Enter just closes the list.
+#
 # Windows mode (argv[1] == "--windows") replicates rofi's `-show window`
 # hold-Ctrl+Alt-tap-Tab-to-cycle-release-to-select gesture for
 # ohmydebn-window-switcher, rather than the type-to-search pattern the
@@ -66,6 +73,7 @@ import tempfile
 # The shared palette reader sits next to this script (as ohmydebn-update-gui
 # finds it), wherever this is run from.
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import ohmydebn_hotkeys as hotkeys_lib  # noqa: E402
 import ohmydebn_theme_colors as theme_colors  # noqa: E402
 from ohmydebn_theme_colors import css_rgba  # noqa: E402
 
@@ -619,6 +627,8 @@ class Picker(Gtk.Window):
         self.set_name("picker-window")
         if mode == "menu":
             self.set_title(breadcrumb_prefix or "OhMyDebn Menu")
+        elif mode == "hotkeys":
+            self.set_title("Hotkeys")
 
         self.mode = mode
         # None (the default) is today's one-shot behavior, entirely
@@ -645,6 +655,14 @@ class Picker(Gtk.Window):
             self._load_apps_rows()
         elif mode == "windows":
             self.categories = self.leaves = load_windows()
+        elif mode == "hotkeys":
+            # Each row's display and value are the same Hotkey: populate()
+            # lays out its fields, finish() runs its command.
+            self.categories = self.leaves = [(h, h, None) for h in hotkeys_lib.load_hotkeys()]
+            # The keys column as wide as its longest entry (gTile's tiling
+            # hotkeys have two keys each), up to a limit, fixed for the
+            # whole session so it doesn't shift while searching.
+            self.keys_width = min(48, max((len(h.keys) for h, _v, _i in self.leaves), default=10))
         else:
             self.categories = _with_icons(load_categories(go_items))
             self.leaves = _with_icons(load_leaves(breadcrumb_prefix))
@@ -686,7 +704,7 @@ class Picker(Gtk.Window):
 
         self.entry = Gtk.SearchEntry()
         self.entry.set_name("picker-entry")
-        placeholder = {"apps": "Launch…", "windows": "Switch to…"}.get(mode, "Search")
+        placeholder = {"apps": "Launch…", "windows": "Switch to…", "hotkeys": "Search hotkeys…"}.get(mode, "Search")
         self.entry.set_placeholder_text(placeholder)
         self.entry.connect("search-changed", self.on_search_changed)
         outer.pack_start(self.entry, False, False, 0)
@@ -768,7 +786,7 @@ class Picker(Gtk.Window):
         # doesn't get GTK's automatic handling - doubling up like that
         # would have quadrupled the window's on-screen area on a 2x
         # display.
-        width_by_mode = {"apps": 500, "windows": 800}
+        width_by_mode = {"apps": 500, "windows": 800, "hotkeys": 960}
         self.set_default_size(width_by_mode.get(mode, 480), -1)
         # Positioned here, before this window is ever shown, not from the
         # "show" signal as before - confirmed live that get_size() already
@@ -957,6 +975,24 @@ class Picker(Gtk.Window):
         for display, value, icon in rows:
             row = Gtk.ListBoxRow()
             box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            if self.mode == "hotkeys":
+                # Keys in a fixed-width column so the names line up, the
+                # group dimmed at the right edge.
+                keys = Gtk.Label(label=display.keys, xalign=0)
+                keys.set_width_chars(self.keys_width)
+                keys.set_max_width_chars(self.keys_width)
+                keys.set_ellipsize(Pango.EllipsizeMode.END)
+                box.pack_start(keys, False, False, 0)
+                name = Gtk.Label(label=display.name, xalign=0)
+                name.set_ellipsize(Pango.EllipsizeMode.END)
+                box.pack_start(name, True, True, 0)
+                group = Gtk.Label(label=display.group, xalign=1)
+                group.set_opacity(0.6)
+                box.pack_end(group, False, False, 0)
+                row.value = value
+                row.add(box)
+                self.listbox.add(row)
+                continue
             if icon is not None:
                 box.pack_start(Gtk.Image.new_from_pixbuf(icon), False, False, 0)
             row_label = Gtk.Label(label=display, xalign=0)
@@ -1035,7 +1071,9 @@ class Picker(Gtk.Window):
         # Apps/windows modes have no separate breadcrumb string to match
         # against - the display name (an app's Name=, a window's title) is
         # the only searchable text, unlike menu mode's value/breadcrumb.
-        if self.mode in ("apps", "windows"):
+        if self.mode == "hotkeys":
+            matches = [(d, v, i) for d, v, i in self.leaves if hotkeys_lib.matches(d, text)]
+        elif self.mode in ("apps", "windows"):
             matches = [(d, v, i) for d, v, i in self.leaves if needle in d.lower()]
         else:
             matches = [(d, v, i) for d, v, i in self.leaves if needle in v.lower()]
@@ -1313,6 +1351,17 @@ class Picker(Gtk.Window):
         self._closing = True
         if self.mode == "windows":
             Gdk.Display.get_default().get_default_seat().ungrab()
+        if self.mode == "hotkeys":
+            # Before the tuple check below: a Hotkey is a namedtuple, which
+            # that would take for an app to launch. Run the way Cinnamon
+            # runs a custom hotkey's command (a command line, no shell).
+            if value and value.command:
+                try:
+                    GLib.spawn_command_line_async(value.command)
+                except GLib.Error:
+                    pass
+            Gtk.main_quit()
+            return
         if value:
             if isinstance(value, tuple):
                 # An app value - either real apps mode (standalone or
@@ -1474,6 +1523,8 @@ if __name__ == "__main__":
         win = Picker(mode="apps")
     elif len(sys.argv) > 1 and sys.argv[1] == "--windows":
         win = Picker(mode="windows")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--hotkeys":
+        win = Picker(mode="hotkeys")
     elif len(sys.argv) > 1 and sys.argv[1] == "--serve":
         run_serve_mode(sys.argv[2], sys.argv[3])
         sys.exit(0)

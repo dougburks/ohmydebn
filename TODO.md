@@ -2,12 +2,6 @@
 
 Work deferred during 4.16.0 testing, for the next release. Each item says what's wrong, where, and the likely fix; check the code before relying on line numbers.
 
-## Super+K: a fast local hotkey list
-
-Super+K (slot 4 in `install/keybinding/keybinding-custom.txt`) opens https://ohmydebn.org/hotkeys/ in a browser web app. That's slow, needs the network, and shows the documented stock hotkeys rather than the user's own. Replace it with a fast local viewer like Omarchy's: read the live bindings (Cinnamon's custom list plus the stock ones) and show them in a searchable list, probably with `ohmydebn-menu-picker`.
-
-Changing slot 4's command on existing installs needs a targeted fix like `rename_stock_keybinding`, not a `KEYBINDING_STATE` bump (see AGENTS.md). Update `hotkeys.md` and the release notes in `ohmydebn-docs`.
-
 ## needrestart could stall updates (unconfirmed)
 
 Debian's `docker.io` Recommends `needrestart`, so installing Docker on Debian brings it in. By default it's interactive: after an apt run that upgrades a library a running service uses, it opens a full-screen dialog. OhMyDebn sets neither `NEEDRESTART_MODE` nor `DEBIAN_FRONTEND`, so an update could stop there, and in the update GUI, with its terminal collapsed, it would look hung. `sudo needrestart` on the Debian 13 VM found nothing outdated, so the dialog couldn't be shown on demand.

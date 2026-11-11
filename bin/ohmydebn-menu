@@ -437,7 +437,7 @@ present_terminal() {
 show_learn_menu() {
   menu "Learn" "  Keybindings\n  OhMyDebn\n  Cinnamon\n  Debian\n  Neovim\n󱆃  Bash"
   case "$MENU_RESULT" in
-  *Keybindings*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://ohmydebn.org/hotkeys/" ;;
+  *Keybindings*) /usr/share/ohmydebn/bin/ohmydebn-hotkeys ;;
   *OhMyDebn*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://ohmydebn.org" ;;
   *Cinnamon*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://github.com/linuxmint/cinnamon" ;;
   *Debian*) /usr/share/ohmydebn/bin/ohmydebn-launch-webapp "https://wiki.debian.org/" ;;

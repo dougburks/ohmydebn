@@ -1692,21 +1692,6 @@ finally:
     tc.subprocess.run = original_subprocess_run
     shutil.rmtree(fixture4)
 
-print("=== launch_env (real function) ===")
-# The one piece of launch_and_close() that's pure logic rather than a
-# live GTK/window call - see the function's own docstring for why it's
-# split out. os.environ itself isn't mutated by launch_env(), just read.
-_env_no_exclude = tc.launch_env(None)
-check("launch_env(None): no exclude var injected", "OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN" not in _env_no_exclude)
-check("launch_env(None): still carries the real environment through", _env_no_exclude.get("PATH") == os.environ.get("PATH"))
-
-_env_excluded = tc.launch_env("94371842")
-check_eq("launch_env('94371842'): sets OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN",
-          _env_excluded.get("OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN"), "94371842")
-
-check("launch_env(''): empty string treated as no window id, same as None",
-      "OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN" not in tc.launch_env(""))
-
 print("=== remove_legacy_aether_desktop_files (real function) ===")
 # Same list of names as install/cleanup/local-share.sh's own cleanup loop
 # (kept in sync by hand - see LEGACY_AETHER_DESKTOP_FILES's own comment);

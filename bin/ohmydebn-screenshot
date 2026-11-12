@@ -1,0 +1,72 @@
+#!/bin/bash
+#
+# ohmydebn-screenshot region|window|display: the OhMyDebn menu's
+# Screenshot entries, taken the way Cinnamon's own Print keys take them.
+#
+# On X11 this presses those keys (Shift+Print, Alt+Print, Print) with
+# xdotool. In Cinnamon's Wayland session a key xdotool presses only
+# reaches X11 windows, never Cinnamon, so the entries did nothing (Linux
+# Mint 27). There, Region and Display ask Cinnamon's settings daemon for
+# the same action its Print keys trigger. Its window screenshot
+# (Alt+Print) does nothing on Wayland, so Window asks Cinnamon's
+# screenshot service instead: you click the window you want, and it's
+# saved to your Pictures folder.
+
+set -euo pipefail
+
+KIND="${1:-}"
+
+wayland_session() {
+  [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]
+}
+
+# The settings daemon's media-key actions (MediaKeyType in
+# cinnamon-settings-daemon's csd-media-keys).
+SCREENSHOT=18
+AREA_SCREENSHOT=23
+
+media_key() {
+  /usr/bin/gdbus call --session --dest org.cinnamon.SettingsDaemon.KeybindingHandler \
+    --object-path /org/cinnamon/SettingsDaemon/KeybindingHandler \
+    --method org.cinnamon.SettingsDaemon.KeybindingHandler.HandleKeybinding "$1" >/dev/null
+}
+
+screenshot_service() {
+  /usr/bin/gdbus call --session --dest org.cinnamon.Screenshot \
+    --object-path /org/cinnamon/Screenshot --method "org.cinnamon.Screenshot.$1" "${@:2}"
+}
+
+window_screenshot() {
+  local reply id dir file
+  # Waits for a click on a window; Escape cancels it, with an error.
+  reply=$(screenshot_service SelectWindow 2>/dev/null) || exit 0
+  id=$(grep -oP '\d+(?=,\))' <<<"$reply") || exit 0
+  dir=$(/usr/bin/xdg-user-dir PICTURES 2>/dev/null) || dir=""
+  [ -n "$dir" ] && [ -d "$dir" ] || dir="$HOME"
+  file="$dir/Screenshot from $(date '+%Y-%m-%d %H-%M-%S').png"
+  # The window's frame (title bar) included, no mouse pointer, no
+  # clipboard copy.
+  screenshot_service ScreenshotWindowById "$id" true false "$file" false >/dev/null
+}
+
+case "$KIND" in
+  region | window | display) ;;
+  *)
+    echo "Usage: $0 region|window|display" >&2
+    exit 1
+    ;;
+esac
+
+if ! wayland_session; then
+  case "$KIND" in
+    region) exec /usr/bin/xdotool key Shift+Print ;;
+    window) exec /usr/bin/xdotool key Alt+Print ;;
+    display) exec /usr/bin/xdotool key Print ;;
+  esac
+fi
+
+case "$KIND" in
+  region) media_key "$AREA_SCREENSHOT" ;;
+  display) media_key "$SCREENSHOT" ;;
+  window) window_screenshot ;;
+esac

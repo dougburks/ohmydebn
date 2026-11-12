@@ -23,6 +23,14 @@
 #
 # Placement is set again on every show, not just at launch: Cinnamon moves
 # a window as it restores it.
+#
+# Wnck only works with X11 windows. In Cinnamon's Wayland session it found
+# no screen at all and this crashed, so the console never appeared. The
+# console's Alacritty runs under XWayland there (see ohmydebn-alacritty),
+# so this talks to XWayland too, where Wnck sees it. One difference
+# there: the mouse position X11 reports is only kept up to date over X11
+# windows, so the console can open on the monitor the mouse last crossed
+# an X11 window on.
 
 import fcntl
 import os
@@ -59,6 +67,15 @@ def placement(workarea):
     return (area_x + (area_width - width) // 2,
             area_y + (area_height - height) // 2,
             width, height)
+
+
+def x11_backend(environ=None):
+    """Whether Gdk must be told to use X11 (XWayland): in a Wayland session
+    it would otherwise pick Wayland, where Wnck finds no screen. False
+    without XWayland (no DISPLAY): then there's nothing to fall back to."""
+    env = os.environ if environ is None else environ
+    wayland = bool(env.get("WAYLAND_DISPLAY")) or env.get("XDG_SESSION_TYPE") == "wayland"
+    return wayland and bool(env.get("DISPLAY"))
 
 
 def lock_path():
@@ -166,7 +183,11 @@ def main():
     gi.require_version("Gdk", "3.0")
     gi.require_version("GdkX11", "3.0")
     gi.require_version("Wnck", "3.0")
-    from gi.repository import Gdk, GdkX11, Gtk, Wnck
+    from gi.repository import Gdk
+    # Before Gtk is imported: importing it opens the display.
+    if x11_backend():
+        Gdk.set_allowed_backends("x11")
+    from gi.repository import GdkX11, Gtk, Wnck
 
     # A held-down key repeats: only one press at a time, or two consoles
     # can start before either has a window to find.

@@ -96,6 +96,11 @@ PACKAGES=(
   imagemagick
   gcolor3
   ristretto
+  # Ristretto's thumbnail service. Only a Recommends of ristretto, which
+  # the batched install below leaves out: without it Ristretto pops up
+  # "The thumbnailer-service can not be reached" over every image it
+  # opens (Linux Mint 27).
+  tumbler
   xournalpp
   galculator
 

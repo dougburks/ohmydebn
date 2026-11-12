@@ -1,45 +1,19 @@
 #!/bin/bash
 #
-# Launches an arbitrary command in the background, then tiles whatever
-# window ends up active/focused afterward via ohmydebn-gtile-apply.
-# Generalizes the approach ohmydebn-browser-tiled first used (necessary
-# because a browser launch can't be tracked by a fresh PID:
-# even now that ohmydebn-browser execs the browser binary directly
-# instead of going through gtk-launch, most browsers are single-instance -
-# "launching" one that's already running just hands off to the existing
-# process and raises its window rather than keeping a new process alive)
-# to any command with the same problem. Most of OhMyDebn's own app
-# launchers go through at least one extra layer of indirection (a
-# dpkg-installed check, a floating-terminal helper, an app's own
-# single-instance re-activation) before the real
-# window-owning process exists, so a PID
-# captured at the top level - the way ohmydebn-terminal-tiled tracks
-# alacritty directly, safe there because it execs alacritty itself with
-# no indirection - would rarely match the actual window here. Always
-# tiles whatever ends up focused, rather than trying to tell a fresh
-# window from a raised one.
+# Launches a command with its new window tiled to a grid cell, through
+# gTile's TileNextWindow (see ohmydebn-gtile-tile-next): gTile takes the
+# next new window, keeps it hidden until it's in place, and only then
+# shows it. For launchers whose app can't be told apart by the process
+# they start: most go through a check or helper first, and a browser
+# that's already running hands the launch to its existing process.
+#
+# This used to tile whatever window took focus after the launch, found
+# through xdotool, which only sees X11 windows: in Cinnamon's Wayland
+# session Brave, Nemo and other Wayland apps opened untiled in the middle
+# of the screen. Now only a new window is tiled. An app that just raises
+# a window it already has open leaves that window where it is.
 #
 # Usage: ohmydebn-launch-tiled <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan> -- <command> [args...]
-#
-# OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (optional): a window ID the poll below
-# must never accept as the launched app's window, even once it becomes
-# active - for callers that are themselves a closing GUI window (a picker,
-# a carousel) rather than a plain hotkey with nothing of their own on
-# screen. PREV_WIN below is captured while that caller window is still
-# active (Gtk.main_quit()/a picker's deferred close don't make a window
-# disappear immediately), so PREV_WIN already IS the caller - excluding
-# the caller a second time here would be redundant. What actually needs
-# excluding is whatever briefly regains focus WHEN the caller closes -
-# for ohmydebn-menu, that's the window that was active before the picker
-# ever appeared (e.g. a terminal you had focused); for the theme
-# carousel, whatever was active before it launched. That transient
-# refocus differs from PREV_WIN(caller), so without this it reads as
-# "the change" this loop is waiting for, and the real app - which
-# usually hasn't opened yet - never gets tiled. Set by ohmydebn-menu
-# (captured once at startup, before its picker ever appears) and
-# ohmydebn-theme-carousel (captured in __main__, before the carousel
-# window exists) to the same "whatever was active before I existed"
-# value, for exactly this reason.
 
 set -uo pipefail
 
@@ -52,61 +26,17 @@ shift 7
 
 # gTile-OhMyDebn's "tiling-mode" setting (System Settings > Extensions >
 # gTile > Configure) promises "Off: nothing is tiled automatically - only
-# the manual 'Tile with gaps N' hotkeys apply" - a promise this script
-# used to ignore outright, always tiling regardless of that setting
-# (unlike tile-rules.json's own window-created handler, which already only
-# fires in "rules" mode). Reading the live value here restores that
-# promise for every caller of this script. Doesn't apply the same gate to
-# "traditional"/"traditional-full"/"scrollable" either: those modes have
-# gTile's own auto-placement running instead, which this
-# script's own forced grid would just fight with. Only in "rules" mode
-# does forcing this specific grid make sense - the whole reason this
-# script exists is for windows tile-rules.json's own title/wmClass
-# matching can't reliably catch (a raised, already-open single-instance
-# window never fires window-created at all, and an app-mode browser
-# window's title changes with whatever page is loaded) - so it's really a
-# manually-applied "rule" for cases the declarative one can't handle,
-# not a competing system.
-#
+# the manual 'Tile with gaps N' hotkeys apply", so this only tiles in
+# "rules" mode. In "traditional", "traditional-full" and "scrollable",
+# gTile places new windows itself, and a forced grid would fight it. In
+# "rules" mode this is a rule given at launch, for windows
+# tile-rules.json's title and class matching can't catch (an app-mode
+# browser window's title changes with whatever page is loaded).
 TILING_MODE=$(/usr/share/ohmydebn/bin/ohmydebn-gtile-tiling-mode)
-if [ "$TILING_MODE" != "rules" ]; then
-  # Backgrounded and returns immediately, same as the tiling path below -
-  # callers rely on this script never blocking on the launched app's own
-  # lifetime (e.g. waiting here for a browser to be closed entirely would
-  # be very wrong for a hotkey/menu action).
-  "$@" &
-  exit 0
+if [ "$TILING_MODE" = "rules" ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-gtile-tile-next "${GRID[@]}" || true
 fi
 
-PREV_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
-EXCLUDE_WIN="${OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN:-}"
-
+# Backgrounded, and this returns at once: callers (hotkeys, the menu)
+# must never wait on the launched app's lifetime.
 "$@" &
-
-# Polling for the active window to change adapts to any launch speed (a
-# fixed sleep needed manual re-tuning per machine when this was still
-# inline in ohmydebn-browser-tiled), with a 5s timeout as a backstop for
-# the raise-existing-window case where focus might never move (e.g. the
-# app was already the focused window). CUR_WIN is also checked against
-# EXCLUDE_WIN on every iteration, not just once, so a caller window that
-# keeps flickering active/inactive during its own close can't be picked
-# up on a later poll either. 0.02s between checks (was 0.1s) so the gap
-# between "window has focus" and "window is hidden" below stays as small
-# as possible - the window is already visible at its pre-tile position
-# once it has focus, so every extra poll interval here is extra time the
-# user sees it there before it disappears. 250 iterations keeps the same
-# ~5s overall timeout as before.
-WIN_ID="$PREV_WIN"
-for _ in $(seq 1 250); do
-  CUR_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
-  if [ -n "${CUR_WIN:-}" ] && [ "$CUR_WIN" != "${PREV_WIN:-}" ] && [ "$CUR_WIN" != "${EXCLUDE_WIN:-}" ]; then
-    WIN_ID="$CUR_WIN"
-    /usr/share/ohmydebn/bin/ohmydebn-gtile-hide "$WIN_ID"
-    break
-  fi
-  /usr/bin/sleep 0.02
-done
-
-if [ -n "${WIN_ID:-}" ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-gtile-apply "$WIN_ID" "${GRID[@]}"
-fi

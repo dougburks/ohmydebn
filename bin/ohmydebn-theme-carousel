@@ -189,25 +189,6 @@ CREATE_THEME_ACTION = "action:create-theme"
 SEARCH_THEMES_ACTION = "action:search-themes"
 
 
-def launch_env(pre_win):
-    """The environment for launch_and_close()'s subprocess.Popen() call -
-    pulled out as a pure function (no GTK/window calls, just os.environ +
-    a dict) so it can be tested directly: launch_and_close() itself
-    touches self.hide()/Gtk.main_iteration()/Gtk.main_quit(), none of
-    which work without a real display, which this test environment
-    doesn't have (why _FakeCarousel exists and skips real GTK init
-    entirely). See ohmydebn-launch-tiled's own comment on
-    OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN for what pre_win is and why."""
-    env = dict(os.environ)
-    if pre_win:
-        env["OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN"] = pre_win
-    else:
-        # The OhMyDebn menu exports it for its own launches, so a carousel
-        # opened from there inherits one meant for another window.
-        env.pop("OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN", None)
-    return env
-
-
 def remove_legacy_aether_desktop_files():
     apps_dir = os.path.expanduser("~/.local/share/applications")
     for name in LEGACY_AETHER_DESKTOP_FILES:
@@ -2397,26 +2378,14 @@ class Carousel(Gtk.Window):
         if self._closing:
             return
         self._closing = True
-        # pre_carousel_win (set in __main__, before this window ever
-        # existed) is the window that will transiently regain focus the
-        # instant this one closes - not this window's own ID, which is
-        # already excluded for free since it's what the ohmydebn-launch-
-        # tiled call inside argv sees as its own PREV_WIN moments later,
-        # while this window is still up (Gtk.main_quit() alone doesn't
-        # make it disappear immediately). Without passing
-        # pre_carousel_win through as OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN,
-        # that transient refocus reads as "the launched app appeared" and
-        # gets tiled instead of it - see ohmydebn-launch-tiled's own
-        # comment on that variable.
         self.hide()
         while Gtk.events_pending():
             Gtk.main_iteration()
-        env = launch_env(getattr(self, "pre_carousel_win", None))
         try:
             subprocess.Popen(
                 argv,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True, env=env,
+                start_new_session=True,
             )
         except OSError:
             pass
@@ -2488,27 +2457,7 @@ if __name__ == "__main__":
         print(f"cached {total} images in {time.monotonic() - started:.1f}s")
         sys.exit(0)
 
-    # Captured before the carousel window exists - this is the window
-    # that will transiently regain focus the moment the carousel closes
-    # (Gtk.main_quit() alone doesn't make it disappear immediately - see
-    # launch_and_close()'s own comment on OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN),
-    # before whatever launch_and_close() launches has opened its own
-    # window. NOT the carousel's own window - that's already excluded
-    # for free, since it's what ohmydebn-launch-tiled's own PREV_WIN
-    # capture sees moments later while the carousel is still up.
-    pre_carousel_win = None
-    try:
-        _result = subprocess.run(
-            ["/usr/bin/xdotool", "getactivewindow"],
-            capture_output=True, text=True, timeout=1, check=False,
-        )
-        if _result.returncode == 0:
-            pre_carousel_win = _result.stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
     win = Carousel()
-    win.pre_carousel_win = pre_carousel_win
     # fullscreen() fills whichever monitor the window is on when it's
     # issued, and Cinnamon maps a new window on the primary monitor - not
     # the one the pointer is on, which is what get_monitor_geometry() sized

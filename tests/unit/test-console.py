@@ -35,6 +35,14 @@ check_eq("the console is the active window: hide it", console.decide(True, True)
 check_eq("the console exists but isn't active (minimized, behind, elsewhere): show it",
          console.decide(True, False), "show")
 
+# Wnck only sees X11 windows: in Cinnamon's Wayland session the console
+# talks to XWayland, where its Alacritty runs (Linux Mint 27).
+check_eq("Wayland with XWayland: X11", console.x11_backend({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}), True)
+check_eq("Wayland by session type: X11", console.x11_backend({"XDG_SESSION_TYPE": "wayland", "DISPLAY": ":1"}), True)
+check_eq("Wayland without XWayland: nothing to switch to", console.x11_backend({"WAYLAND_DISPLAY": "wayland-0"}), False)
+check_eq("an X11 session: left as it is", console.x11_backend({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}), False)
+check_eq("an empty WAYLAND_DISPLAY isn't Wayland", console.x11_backend({"WAYLAND_DISPLAY": "", "DISPLAY": ":0"}), False)
+
 # 70% by 60%, centered in the work area (the monitor without the panel).
 check_eq("centered in a work area below a 40px top panel",
          console.placement((0, 40, 2540, 1274)), (381, 295, 1778, 764))

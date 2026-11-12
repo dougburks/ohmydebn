@@ -823,8 +823,8 @@ echo "  checked floating-terminal helper call sites in bin/ and install/"
 
 echo
 echo "-- pre-tiled launchers' gTile grids match their intended \"Tile with gaps N ...\" keybindings --"
-# Each of these launches a window and immediately tiles it via
-# ohmydebn-gtile-apply - ohmydebn-terminal-tiled directly; every
+# Each of these launches a window tiled as it opens via
+# ohmydebn-gtile-tile-next - ohmydebn-terminal-tiled directly; every
 # OHMYDEBN_TILE_GRID-override launcher indirectly through
 # ohmydebn-terminal-tiled; every ohmydebn-launch-tiled-based launcher
 # indirectly through ohmydebn-launch-tiled - claiming (in its own
@@ -854,8 +854,7 @@ check_tile_grid "Tile with gaps 5 full" "$TERMINAL_TILED_DEFAULT_GRID" "ohmydebn
 # Every ohmydebn-launch-tiled-based launcher, same "script:keybinding
 # label" shape as above - these call ohmydebn-launch-tiled directly with
 # the grid as its own leading args, rather than going through
-# ohmydebn-terminal-tiled, because their target app can't be reliably
-# tracked by a fresh PID (see ohmydebn-launch-tiled's own comment).
+# ohmydebn-terminal-tiled, which only starts Alacritty.
 LAUNCH_TILED_LAUNCHERS=(
   "ohmydebn-browser-tiled:Tile with gaps 5 full"
   "ohmydebn-file-manager-tiled:Tile with gaps 6 right half"
@@ -869,7 +868,7 @@ for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
 done
 
 echo
-echo "-- ohmydebn-terminal-tiled and ohmydebn-launch-tiled both delegate to ohmydebn-gtile-apply (regression guard) --"
+echo "-- ohmydebn-terminal-tiled and ohmydebn-launch-tiled both delegate to ohmydebn-gtile-tile-next (regression guard) --"
 # Guards against either script's tiling call getting inlined back into a
 # second copy instead of going through the shared helper above - that's
 # exactly the duplication this helper was extracted to avoid.
@@ -878,18 +877,18 @@ for TILED_SCRIPT in ohmydebn-terminal-tiled ohmydebn-launch-tiled; do
   # only whitespace) rather than a bare substring match, so a comment
   # mentioning the helper's name can't make a since-removed real call
   # look like it's still there.
-  if ! grep -qE '^\s*/usr/share/ohmydebn/bin/ohmydebn-gtile-apply\b' "$REPO_ROOT/bin/$TILED_SCRIPT"; then
-    echo "  FAIL - $TILED_SCRIPT doesn't call ohmydebn-gtile-apply"
+  if ! grep -qE '^\s*/usr/share/ohmydebn/bin/ohmydebn-gtile-tile-next\b' "$REPO_ROOT/bin/$TILED_SCRIPT"; then
+    echo "  FAIL - $TILED_SCRIPT doesn't call ohmydebn-gtile-tile-next"
     FAIL=$((FAIL + 1))
   else
-    echo "  $TILED_SCRIPT calls ohmydebn-gtile-apply"
+    echo "  $TILED_SCRIPT calls ohmydebn-gtile-tile-next"
   fi
 done
 
 echo
 echo "-- ohmydebn-launch-tiled-based launchers delegate to ohmydebn-launch-tiled (regression guard) --"
-# Guards against the launch-then-poll-for-focus-change logic getting
-# duplicated instead of reused - exactly why ohmydebn-launch-tiled exists.
+# Guards against the tile-the-launched-window logic getting duplicated
+# instead of reused - exactly why ohmydebn-launch-tiled exists.
 for ENTRY in "${LAUNCH_TILED_LAUNCHERS[@]}"; do
   LAUNCH_TILED_LAUNCHER="${ENTRY%%:*}"
   if ! grep -qE '^\s*(exec )?/usr/share/ohmydebn/bin/ohmydebn-launch-tiled\b' "$REPO_ROOT/bin/$LAUNCH_TILED_LAUNCHER"; then
@@ -984,34 +983,6 @@ for ENTRY in "${MENU_HOTKEY_PAIRS[@]}"; do
     echo "  \"$KB_LABEL\" hotkey and $MENU_FUNC's *${MENU_KEYWORD}* menu entry agree: $KB_COMMAND"
   fi
 done
-
-echo
-echo "-- ohmydebn-menu captures OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN before the picker exists (regression guard) --"
-# Must run before start_persistent_picker's own invocation (not its
-# function definition further up the file), not from inside menu() - see
-# the assignment's own comment for why: capturing "the active window"
-# from inside menu() would grab the picker itself, which is already
-# redundant with ohmydebn-launch-tiled's own PREV_WIN capture (see that
-# script's comment) rather than the window that actually needs excluding
-# (whatever was active before the picker ever appeared). Confirmed live:
-# capturing inside menu() was exactly the first, wrong attempt at this.
-EXCLUDE_ASSIGN_LINE=$(grep -n '^OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN=' "$MENU_FILE" | head -1 | cut -d: -f1)
-PICKER_START_CALL_LINE=$(grep -n '^start_persistent_picker ||' "$MENU_FILE" | head -1 | cut -d: -f1)
-MENU_FUNC_START_LINE=$(grep -n '^menu() {' "$MENU_FILE" | head -1 | cut -d: -f1)
-MENU_FUNC_END_REL=$(tail -n "+$MENU_FUNC_START_LINE" "$MENU_FILE" | grep -n '^}' | head -1 | cut -d: -f1)
-MENU_FUNC_END_LINE=$((MENU_FUNC_START_LINE + MENU_FUNC_END_REL - 1))
-if [[ -z "$EXCLUDE_ASSIGN_LINE" || -z "$PICKER_START_CALL_LINE" ]]; then
-  echo "  FAIL - couldn't find both the OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN assignment and the start_persistent_picker call"
-  FAIL=$((FAIL + 1))
-elif [[ "$EXCLUDE_ASSIGN_LINE" -ge "$PICKER_START_CALL_LINE" ]]; then
-  echo "  FAIL - OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (line $EXCLUDE_ASSIGN_LINE) isn't captured before start_persistent_picker (line $PICKER_START_CALL_LINE)"
-  FAIL=$((FAIL + 1))
-elif [[ "$EXCLUDE_ASSIGN_LINE" -ge "$MENU_FUNC_START_LINE" && "$EXCLUDE_ASSIGN_LINE" -le "$MENU_FUNC_END_LINE" ]]; then
-  echo "  FAIL - OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN (line $EXCLUDE_ASSIGN_LINE) is captured from inside menu() ($MENU_FUNC_START_LINE-$MENU_FUNC_END_LINE) - that grabs the picker, not the pre-picker window"
-  FAIL=$((FAIL + 1))
-else
-  echo "  captured at line $EXCLUDE_ASSIGN_LINE, before start_persistent_picker (line $PICKER_START_CALL_LINE) and outside menu() (line $MENU_FUNC_START_LINE-$MENU_FUNC_END_LINE)"
-fi
 
 echo
 echo "-- every third-party apt repo is pinned to its own package(s) (regression guard) --"

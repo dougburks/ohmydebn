@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# Asks gTile to tile the next new window to a grid cell (cols rows
+# colIndex rowIndex colSpan rowSpan: the same six values
+# keybinding-custom.txt's "Tile with gaps N ..." entries pass to
+# TileFocusedWindow). Call it just before starting the app: gTile keeps
+# the app's window hidden until it's in place, so it never shows at its
+# untiled position. Shared by every OhMyDebn launcher that opens a window
+# pre-tiled (ohmydebn-launch-tiled, ohmydebn-terminal-tiled).
+#
+# These launchers used to start the app, wait for its window to take
+# focus, then tile the focused window, finding it with xdotool. xdotool
+# only sees X11 windows, so in Cinnamon's Wayland session a Wayland app
+# (Brave, Nemo...) never got tiled and opened in the middle of the screen
+# instead. gTile runs inside Cinnamon and sees every window.
+#
+# A request no window takes within TIMEOUT_MS lapses: an app that only
+# raised a window it already had open doesn't leave its grid waiting for
+# whatever opens next. Fails quietly when gTile can't be asked (an older
+# gTile, or gTile disabled): the app then just opens untiled.
+
+set -uo pipefail
+
+# Long enough for a browser's cold start on a slow machine.
+TIMEOUT_MS=5000
+
+if [ "$#" -ne 6 ]; then
+  echo "Usage: $0 <cols> <rows> <colIndex> <rowIndex> <colSpan> <rowSpan>" >&2
+  exit 1
+fi
+
+/usr/bin/gdbus call --session --dest org.gTile.Control \
+  --object-path /org/gTile/Control \
+  --method org.gTile.Control.TileNextWindow "$@" "$TIMEOUT_MS" >/dev/null 2>&1

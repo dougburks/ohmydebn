@@ -138,22 +138,6 @@ stop_persistent_picker() {
   PICKER_PID=""
 }
 
-# Captured once, here, before the picker (persistent or any later one-shot
-# fallback) ever appears - this is the window that will transiently
-# regain focus the moment the picker closes (its own close is deferred,
-# see ohmydebn-menu-picker's CLOSE_DELAY_MS comment), before whatever a
-# leaf pick actually launches has opened its own window. If a case arm
-# below launches one of the *-tiled scripts, that script's own
-# ohmydebn-launch-tiled call needs to know this ID so it doesn't mistake
-# the picker closing and this window transiently regaining focus for the
-# launched app appearing - see ohmydebn-launch-tiled's own comment on
-# OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN. Note this is NOT the picker's own
-# window - that's already excluded for free, since it's what
-# ohmydebn-launch-tiled's own PREV_WIN capture sees moments later while
-# the picker is still up.
-export OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN
-OHMYDEBN_LAUNCH_TILED_EXCLUDE_WIN=$(/usr/bin/xdotool getactivewindow 2>/dev/null) || true
-
 start_persistent_picker || true # non-fatal: get_picker_result below falls back to a one-shot spawn for the whole session if this didn't work
 
 trap 'rm -f "$MENU_JUMP_QUEUE_FILE"; stop_persistent_picker' EXIT
@@ -479,9 +463,9 @@ show_capture_menu() {
 show_screenshot_menu() {
   menu "Screenshot" "  Region\n  Window\n  Display"
   case "$MENU_RESULT" in
-  *Region*) /usr/bin/xdotool key Shift+Print ;;
-  *Window*) /usr/bin/xdotool key Alt+Print ;;
-  *Display*) /usr/bin/xdotool key Print ;;
+  *Region*) /usr/share/ohmydebn/bin/ohmydebn-screenshot region ;;
+  *Window*) /usr/share/ohmydebn/bin/ohmydebn-screenshot window ;;
+  *Display*) /usr/share/ohmydebn/bin/ohmydebn-screenshot display ;;
   *) show_capture_menu ;;
   esac
 }

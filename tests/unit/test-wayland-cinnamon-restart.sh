@@ -5,8 +5,11 @@
 # switching to an Aether theme (to refresh window borders). That's an X11
 # window manager's handover; in Cinnamon's Wayland session Cinnamon is the
 # display server itself, and can't be replaced without ending the session.
-# There each now says what to do instead. cinnamon and notify-send are
-# stand-ins that only log, so no real Cinnamon is ever touched.
+# Relaunch there says to log out and back in. Aether needs no restart at
+# all now: each palette's generated theme has a name of its own, so
+# Cinnamon reloads it live, as for a theme from the theme picker.
+# cinnamon and notify-send are stand-ins that only log, so no real
+# Cinnamon is ever touched.
 
 set -uo pipefail
 
@@ -58,42 +61,65 @@ assert_contains "Relaunch, Wayland: says to log out and back in" "$CALLS" "Log o
 mock_cleanup
 
 # --- an Aether theme ---
-# aether <session type> [theme name]: ohmydebn-theme-set-cinnamon applying
-# that theme (aether by default)
+# aether <session type> [theme name] [colors file]: ohmydebn-theme-set-cinnamon
+# applying that theme (aether by default) with those colors, in a fresh
+# HOME unless KEEP_HOME is set
 aether() {
-  mock_init
-  stubs
-  local h="$MOCK_DIR/home" templates="$MOCK_DIR/templates" wayland=""
-  mkdir -p "$templates/Gruvbox-Yellow-Dark/gtk-3.0" "$h/.themes" "$h/.config/ohmydebn/current"
+  [ -z "${KEEP_HOME:-}" ] && { mock_init; stubs; }
+  : >"$MOCK_CALLS"
+  H="$MOCK_DIR/home"
+  local templates="$MOCK_DIR/templates" wayland=""
+  mkdir -p "$templates/Gruvbox-Yellow-Dark/gtk-3.0" "$H/.themes" "$H/.config/ohmydebn/current"
   printf '[Desktop Entry]\nName=Gruvbox-Yellow-Dark\n[X-GNOME-Metatheme]\nGtkTheme=Gruvbox-Yellow-Dark\n' \
     >"$templates/Gruvbox-Yellow-Dark/index.theme"
   echo "* { color: #d8a657; }" >"$templates/Gruvbox-Yellow-Dark/gtk-3.0/gtk.css"
-  echo "${2:-aether}" >"$h/.config/ohmydebn/current/theme.name"
+  echo "${2:-aether}" >"$H/.config/ohmydebn/current/theme.name"
   sed "s#/usr/share/ohmydebn-templates#$templates#g; s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g" \
     "$REPO_ROOT/bin/ohmydebn-theme-set-cinnamon" >"$MOCK_DIR/hook"
   [ "$1" = wayland ] && wayland="wayland-0"
-  HOME="$h" PATH="$(mock_path)" XDG_SESSION_TYPE="$1" WAYLAND_DISPLAY="$wayland" \
-    bash "$MOCK_DIR/hook" "${2:-aether}" "$REPO_ROOT/themes/ohmydebn/colors.toml" false </dev/null >/dev/null 2>&1
+  HOME="$H" PATH="$(mock_path)" XDG_SESSION_TYPE="$1" WAYLAND_DISPLAY="$wayland" \
+    bash "$MOCK_DIR/hook" "${2:-aether}" "${3:-$REPO_ROOT/themes/ohmydebn/colors.toml}" false </dev/null >/dev/null 2>&1
   STATUS=$?
   settle
   CALLS=$(cat "$MOCK_CALLS")
+  THEME=$(grep -oP 'gsettings set org.cinnamon.desktop.interface gtk-theme \K\S+' <<<"$CALLS" | tail -1)
 }
 
-aether x11
-assert_eq "Aether, X11: applies" "0" "$STATUS"
-assert_contains "Aether, X11: Cinnamon restarts for the window borders" "$CALLS" "cinnamon --replace"
-mock_cleanup
+# Two Aether palettes, as Aether writes them one after the other.
+PALETTES=$(mktemp -d)
+cp "$REPO_ROOT/themes/ohmydebn/colors.toml" "$PALETTES/first.toml"
+sed 's/^accent = .*/accent = "#e06c75"/' "$REPO_ROOT/themes/ohmydebn/colors.toml" >"$PALETTES/second.toml"
 
-aether wayland
-assert_eq "Aether, Wayland: applies" "0" "$STATUS"
-assert_contains "Aether, Wayland: the theme is still switched" "$CALLS" "gsettings set org.cinnamon.theme name ohmydebn-aether"
-assert_not_contains "Aether, Wayland: Cinnamon isn't replaced" "$CALLS" "cinnamon --replace"
-assert_contains "Aether, Wayland: says the borders change at the next login" "$CALLS" "the next time you log in"
-mock_cleanup
+for session in x11 wayland; do
+  aether "$session" aether "$PALETTES/first.toml"
+  FIRST="$THEME"
+  assert_eq "Aether, $session: applies" "0" "$STATUS"
+  assert_eq "Aether, $session: the theme is named after its palette" "yes" \
+    "$([[ "$FIRST" =~ ^ohmydebn-aether-[0-9a-f]{8}$ ]] && echo yes || echo no)"
+  assert_contains "Aether, $session: Cinnamon's theme switched to the same name" "$CALLS" "gsettings set org.cinnamon.theme name $FIRST"
+  assert_not_contains "Aether, $session: no Cinnamon restart" "$CALLS" "cinnamon --replace"
+  assert_not_contains "Aether, $session: no notice" "$CALLS" "notify-send"
+  assert_not_contains "Aether, $session: no switch to another GTK theme first" "$CALLS" "Mint-Y"
 
+  KEEP_HOME=1 aether "$session" aether "$PALETTES/second.toml"
+  assert_eq "Aether, $session: a second palette is a new theme name, so Cinnamon reloads" "yes" \
+    "$([ -n "$THEME" ] && [ "$THEME" != "$FIRST" ] && echo yes || echo no)"
+  assert_eq "Aether, $session: the first palette's folder is removed" "no" \
+    "$([ -e "$H/.themes/$FIRST" ] && echo yes || echo no)"
+  assert_eq "Aether, $session: the second palette's folder is there" "yes" \
+    "$([ -f "$H/.themes/$THEME/index.theme" ] && echo yes || echo no)"
+  SECOND="$THEME"
+
+  KEEP_HOME=1 aether "$session" aether "$PALETTES/second.toml"
+  assert_eq "Aether, $session: the same palette again keeps its name" "$SECOND" "$THEME"
+  mock_cleanup
+done
+
+# A theme from the theme picker keeps its plain name.
 aether wayland nord
-assert_not_contains "another theme, Wayland: no notice" "$CALLS" "notify-send"
-assert_not_contains "another theme, Wayland: no restart" "$CALLS" "cinnamon --replace"
+assert_eq "another theme: named after the theme, as before" "ohmydebn-nord" "$THEME"
+assert_not_contains "another theme: no restart" "$CALLS" "cinnamon --replace"
 mock_cleanup
+rm -rf "$PALETTES"
 
 test_summary

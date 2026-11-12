@@ -68,6 +68,20 @@ else
 fi
 
 GENERATED_THEME_NAME="ohmydebn-${THEME_NAME}"
+# Aether's palettes all arrive as the one theme "aether", so each would be
+# generated under the same name. Cinnamon draws window title bars from the
+# GTK theme it's told by name, and being told the name it already has, it
+# reloaded nothing: Alacritty kept the previous palette's title bar (other
+# apps too). On X11 that took a Cinnamon restart, which in a Wayland session
+# can't be done at all. Named after its colors instead, each palette is a
+# new theme to Cinnamon, as picking a theme from the theme picker always
+# was, and everything reloads live in either session. The same palette
+# applied again gets the same name, and the cleanup below removes the
+# previous palettes' folders.
+if [[ "$THEME_NAME" == "aether" ]]; then
+  PALETTE_ID=$({ cat "$COLORS_TOML"; echo "$IS_LIGHT_MODE"; } | sha256sum | cut -c1-8)
+  GENERATED_THEME_NAME="ohmydebn-aether-$PALETTE_ID"
+fi
 TEMPLATE_DIR="/usr/share/ohmydebn-templates/$TEMPLATE_NAME"
 OUTPUT_DIR="$HOME/.themes/$GENERATED_THEME_NAME"
 
@@ -326,11 +340,6 @@ if [[ -d "$OUTPUT_DIR" && -n "$ACTUAL_USER" && "$ACTUAL_USER" != "root" ]]; then
   chown -R "$ACTUAL_USER:$ACTUAL_USER" "$OUTPUT_DIR" 2>/dev/null || true
 fi
 
-# In case we are changing from one aether theme to another aether theme, switch to non-aether GTK theme temporarily
-if [[ "$THEME_NAME" == "aether" ]]; then
-  gsettings set org.cinnamon.desktop.interface gtk-theme "Mint-Y-Dark"
-fi
-
 # Apply GTK and Cinnamon themes using gsettings
 gsettings set org.cinnamon.desktop.interface gtk-theme "$GENERATED_THEME_NAME"
 gsettings set org.cinnamon.theme name "$GENERATED_THEME_NAME"
@@ -347,19 +356,3 @@ for GENERATED in "$HOME"/.themes/ohmydebn-*; do
     rm -rf "$GENERATED"
   fi
 done
-
-# If using aether to change theme then restart cinnamon to force window
-# decoration update. Not in a Wayland session: Cinnamon is the display
-# server there, and cinnamon --replace (an X11 window manager's handover)
-# can't restart it without ending the session; the window borders take the
-# new colors at the next login instead, and a notification says so.
-THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name")
-if [[ "$THEME_NAME" == "aether" ]]; then
-  if [[ "${XDG_SESSION_TYPE:-}" == wayland || -n "${WAYLAND_DISPLAY:-}" ]]; then
-    if command -v notify-send >/dev/null 2>&1; then
-      notify-send -i ohmydebn "OhMyDebn" "Window borders take the new Aether colors the next time you log in." -t 5000 || true
-    fi
-  else
-    setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
-  fi
-fi

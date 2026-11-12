@@ -54,5 +54,63 @@ check_eq("odd sizes round down and stay inside the area",
 check_eq("its window class is the one gTile leaves floating", console.WM_CLASS, "OhMyDebnConsole")
 check_eq("it runs ohmydebn-console-run", console.RUN, "/usr/share/ohmydebn/bin/ohmydebn-console-run")
 
+# The backend must be chosen before Gdk is imported: PyGObject's Gdk
+# overrides open the display on import, so choosing it afterwards (as the
+# first fix did, with Gdk.set_allowed_backends) changed nothing and Wnck
+# still found no screen. A stand-in gi records GDK_BACKEND as Gdk is
+# imported, then stops main() at Gtk.init.
+import tempfile  # noqa: E402
+import types  # noqa: E402
+
+
+class _Stop(Exception):
+    pass
+
+
+def backend_at_gdk_import(environ):
+    seen = {}
+
+    class Repository(types.ModuleType):
+        def __getattr__(self, name):
+            if name == "Gdk":
+                seen["backend"] = os.environ.get("GDK_BACKEND")
+            if name == "Gtk":
+                def init(_argv):
+                    seen["after"] = os.environ.get("GDK_BACKEND")
+                    raise _Stop()
+                return types.SimpleNamespace(init=init)
+            return types.SimpleNamespace()
+
+    fake_gi = types.ModuleType("gi")
+    fake_gi.require_version = lambda *a: None
+    fake_gi.repository = Repository("gi.repository")
+    saved_modules = {k: sys.modules.get(k) for k in ("gi", "gi.repository")}
+    saved_env = dict(os.environ)
+    sys.modules["gi"], sys.modules["gi.repository"] = fake_gi, fake_gi.repository
+    os.environ.clear()
+    os.environ.update(environ, XDG_RUNTIME_DIR=tempfile.mkdtemp())
+    try:
+        console.main()
+    except _Stop:
+        pass
+    finally:
+        os.environ.clear()
+        os.environ.update(saved_env)
+        for k, v in saved_modules.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    return seen
+
+
+seen = backend_at_gdk_import({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"})
+check_eq("Wayland: Gdk opens XWayland (GDK_BACKEND=x11 as it's imported)", seen.get("backend"), "x11")
+check_eq("Wayland: GDK_BACKEND is gone again before anything is launched", seen.get("after"), None)
+seen = backend_at_gdk_import({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0", "GDK_BACKEND": "wayland,x11"})
+check_eq("Wayland: a GDK_BACKEND of the user's own is put back", seen.get("after"), "wayland,x11")
+seen = backend_at_gdk_import({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
+check_eq("X11: Gdk's backend is left alone", seen.get("backend"), None)
+
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(1 if TESTS_FAILED else 0)

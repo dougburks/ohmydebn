@@ -183,11 +183,19 @@ def main():
     gi.require_version("Gdk", "3.0")
     gi.require_version("GdkX11", "3.0")
     gi.require_version("Wnck", "3.0")
-    from gi.repository import Gdk
-    # Before Gtk is imported: importing it opens the display.
-    if x11_backend():
-        Gdk.set_allowed_backends("x11")
-    from gi.repository import GdkX11, Gtk, Wnck
+    # Importing Gdk opens the display (PyGObject's overrides initialize it),
+    # so the backend is chosen before that, through the environment. Only
+    # for this process: Alacritty, and what runs in it, mustn't inherit it.
+    use_x11 = x11_backend()
+    saved_backend = os.environ.get("GDK_BACKEND")
+    if use_x11:
+        os.environ["GDK_BACKEND"] = "x11"
+    from gi.repository import Gdk, GdkX11, Gtk, Wnck
+    if use_x11:
+        if saved_backend is None:
+            os.environ.pop("GDK_BACKEND", None)
+        else:
+            os.environ["GDK_BACKEND"] = saved_backend
 
     # A held-down key repeats: only one press at a time, or two consoles
     # can start before either has a window to find.

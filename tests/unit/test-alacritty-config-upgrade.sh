@@ -9,7 +9,8 @@
 # that import and shell were deprecated. Each step is sourced under set -e,
 # as install.sh does, with dpkg-query answering MOCK_ALACRITTY_VERSION and
 # version comparisons left to the real dpkg. The same step also makes
-# Cinnamon's default terminal ohmydebn-alacritty, tested at the end.
+# Cinnamon's default terminal and Alacritty's own menu entry start
+# ohmydebn-alacritty, tested at the end.
 
 set -uo pipefail
 
@@ -27,7 +28,7 @@ setup() {
   touch "$SCRATCH_HOME/.local/state/ohmydebn" # an update, not a first install
   mock_bin dpkg <<'EOF2'
 #!/bin/bash
-[ "$1" = "-s" ] && exit 0
+if [ "$1" = "-s" ]; then [ -z "${MOCK_NO_ALACRITTY:-}" ]; exit; fi
 [ "$1" = "--compare-versions" ] && exec /usr/bin/dpkg "$@"
 exit 1
 EOF2
@@ -46,7 +47,29 @@ case "$1 $2 $3" in
 "set org.cinnamon.desktop.default-applications.terminal exec") echo "$4" >"$MOCK_DIR/terminal-exec" ;;
 esac
 EOF2
-  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/share/ohmydebn/config#$REPO_ROOT/config#g" \
+  # Alacritty's own desktop file, as the alacritty package installs it.
+  cat >"$MOCK_DIR/Alacritty.desktop" <<'EOF2'
+[Desktop Entry]
+Type=Application
+TryExec=alacritty
+Exec=alacritty
+Icon=Alacritty
+Terminal=false
+Categories=System;TerminalEmulator;
+
+Name=Alacritty
+GenericName=Terminal
+Comment=A fast, cross-platform, OpenGL terminal emulator
+StartupNotify=true
+StartupWMClass=Alacritty
+Actions=New;
+
+[Desktop Action New]
+Name=New Terminal
+Exec=alacritty
+EOF2
+  sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/share/ohmydebn/config#$REPO_ROOT/config#g
+       s#/usr/share/applications/Alacritty.desktop#$MOCK_DIR/Alacritty.desktop#" \
     "$REPO_ROOT/install/config/alacritty.sh" >"$MOCK_DIR/step.sh"
 }
 
@@ -212,6 +235,57 @@ echo "'kitty'" >"$MOCK_DIR/terminal-exec"
 run_step 0.16.1-1
 assert_eq "update, the user's own terminal: left alone" "'kitty'" "$(terminal_exec)"
 assert_eq "update, the user's own terminal: marker written" "yes" "$([ -f "$SCRATCH_HOME/$WRAPPER_MARKER" ] && echo yes || echo no)"
+teardown
+
+# --- Alacritty's own menu entry: through ohmydebn-alacritty too ---
+# A file of the same name in ~/.local/share/applications takes the place
+# of the package's one in Cinnamon's menu and the App Launcher.
+DESKTOP_REL=.local/share/applications/Alacritty.desktop
+desktop() { cat "$SCRATCH_HOME/$DESKTOP_REL"; }
+has_desktop() { [ -e "$SCRATCH_HOME/$DESKTOP_REL" ] && echo yes || echo no; }
+
+setup
+run_step 0.16.1-1
+assert_eq "menu entry: written" "yes" "$(has_desktop)"
+assert_eq "menu entry: both Exec lines start the wrapper" \
+  "Exec=$MOCK_BIN/ohmydebn-alacritty
+Exec=$MOCK_BIN/ohmydebn-alacritty" "$(grep '^Exec' "$SCRATCH_HOME/$DESKTOP_REL")"
+assert_eq "menu entry: marked as OhMyDebn's, in its main section" "X-OhMyDebn=true" "$(sed -n 2p "$SCRATCH_HOME/$DESKTOP_REL")"
+assert_eq "menu entry: everything else as the package has it" \
+  "$(grep -v '^Exec' "$MOCK_DIR/Alacritty.desktop")" "$(grep -v -e '^Exec' -e '^X-OhMyDebn' "$SCRATCH_HOME/$DESKTOP_REL")"
+assert_eq "menu entry: readable, not executable" "644" "$(stat -c %a "$SCRATCH_HOME/$DESKTOP_REL")"
+if command -v desktop-file-validate >/dev/null; then
+  assert_eq "menu entry: a valid desktop file" "" "$(desktop-file-validate "$SCRATCH_HOME/$DESKTOP_REL" 2>&1 | grep -v 'hint:')"
+fi
+INODE=$(stat -c %i "$SCRATCH_HOME/$DESKTOP_REL")
+run_step 0.16.1-1
+assert_eq "menu entry, next update: not rewritten" "$INODE" "$(stat -c %i "$SCRATCH_HOME/$DESKTOP_REL")"
+assert_eq "menu entry, next update: no temporary files left" "1" "$(find "$SCRATCH_HOME/.local/share/applications" -type f | wc -l)"
+# A newer Alacritty's entry comes through.
+sed -i 's/^Name=Alacritty$/Name=Alacritty\nName[de]=Alacritty-Terminal/' "$MOCK_DIR/Alacritty.desktop"
+run_step 0.16.1-1
+assert_contains "menu entry, Alacritty's entry changed: follows it" "$(desktop)" "Name[de]=Alacritty-Terminal"
+# Alacritty removed: OhMyDebn's copy goes with it.
+MOCK_NO_ALACRITTY=1 run_step 0.16.1-1
+assert_eq "menu entry, alacritty not installed: removed" "no" "$(has_desktop)"
+teardown
+
+setup
+mkdir -p "$SCRATCH_HOME/.local/share/applications"
+printf '[Desktop Entry]\nType=Application\nName=My Alacritty\nExec=alacritty --option font.size=14\n' >"$SCRATCH_HOME/$DESKTOP_REL"
+MINE=$(desktop)
+run_step 0.16.1-1
+assert_eq "the user's own Alacritty.desktop: left alone" "$MINE" "$(desktop)"
+MOCK_NO_ALACRITTY=1 run_step 0.16.1-1
+assert_eq "the user's own Alacritty.desktop, alacritty removed: still left alone" "$MINE" "$(desktop)"
+teardown
+
+# An Exec this doesn't recognize: no copy hiding the real entry.
+setup
+sed -i 's/^Exec=alacritty$/Exec=env FOO=1 alacritty/' "$MOCK_DIR/Alacritty.desktop"
+run_step 0.16.1-1
+assert_eq "unrecognized Exec: no copy" "no" "$(has_desktop)"
+assert_eq "unrecognized Exec: no temporary files left" "0" "$(find "$SCRATCH_HOME/.local/share/applications" -type f 2>/dev/null | wc -l)"
 teardown
 
 test_summary

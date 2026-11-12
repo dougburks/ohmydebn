@@ -1,6 +1,17 @@
 #!/bin/bash
 
+# Alacritty's own menu entry, as OhMyDebn writes it for this user (see the
+# end of this file); marked so a user's own Alacritty.desktop there is
+# never touched.
+ALACRITTY_DESKTOP_SRC=/usr/share/applications/Alacritty.desktop
+ALACRITTY_DESKTOP=~/.local/share/applications/Alacritty.desktop
+ALACRITTY_DESKTOP_MARK=X-OhMyDebn=true
+
 if ! dpkg -s "alacritty" >/dev/null 2>&1; then
+  # Without alacritty, OhMyDebn's copy of its entry would be a broken one.
+  if grep -qx "$ALACRITTY_DESKTOP_MARK" "$ALACRITTY_DESKTOP" 2>/dev/null; then
+    rm -f "$ALACRITTY_DESKTOP"
+  fi
   return 0
 fi
 
@@ -105,4 +116,34 @@ if [ ! -f "$ALACRITTY_WRAPPER_STATE" ]; then
   fi
   mkdir -p ~/.local/state/ohmydebn-config
   touch "$ALACRITTY_WRAPPER_STATE"
+fi
+
+# Alacritty's own menu entry (Cinnamon's menu, and the App Launcher) runs
+# plain alacritty, which in a Wayland session gets a grey title bar that
+# ignores the theme (see ohmydebn-alacritty). The alacritty package owns
+# /usr/share/applications/Alacritty.desktop, so OhMyDebn can't change it;
+# a file of the same name in ~/.local/share/applications takes its place
+# instead (the XDG rule both menus follow), so the menu still shows one
+# Alacritty. It's made from the installed file on every update, with each
+# Exec line pointed at the wrapper, so a newer Alacritty's translations,
+# icon and actions come through, and rewritten only when it changes. A
+# user's own Alacritty.desktop there (no mark) is left alone.
+if [ -f "$ALACRITTY_DESKTOP_SRC" ] &&
+  { [ ! -e "$ALACRITTY_DESKTOP" ] || grep -qx "$ALACRITTY_DESKTOP_MARK" "$ALACRITTY_DESKTOP"; }; then
+  mkdir -p ~/.local/share/applications
+  ALACRITTY_DESKTOP_TMP=$(mktemp "$ALACRITTY_DESKTOP.XXXXXX")
+  sed -E \
+    -e "s#^(Exec(\[[^]]*\])?=)(/usr/bin/)?alacritty( |\$)#\1$ALACRITTY_WRAPPER\4#" \
+    -e "/^\[Desktop Entry\]\$/a $ALACRITTY_DESKTOP_MARK" \
+    "$ALACRITTY_DESKTOP_SRC" >"$ALACRITTY_DESKTOP_TMP"
+  if ! grep -q "^Exec=$ALACRITTY_WRAPPER" "$ALACRITTY_DESKTOP_TMP"; then
+    # An entry whose Exec this doesn't recognize: no copy, rather than
+    # one that hides the real entry and changes nothing.
+    rm -f "$ALACRITTY_DESKTOP_TMP" "$ALACRITTY_DESKTOP"
+  elif cmp -s "$ALACRITTY_DESKTOP_TMP" "$ALACRITTY_DESKTOP"; then
+    rm -f "$ALACRITTY_DESKTOP_TMP"
+  else
+    chmod 644 "$ALACRITTY_DESKTOP_TMP"
+    mv "$ALACRITTY_DESKTOP_TMP" "$ALACRITTY_DESKTOP"
+  fi
 fi

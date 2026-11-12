@@ -2,8 +2,10 @@
 #
 # Starts Alacritty, as an X11 window when the session is Wayland. Every
 # OhMyDebn terminal starts through here (ohmydebn-terminal and -tiled, the
-# drop-down console, and Cinnamon's default terminal, so Ctrl+Alt+T and
-# Nemo's Open in Terminal too); arguments pass straight through.
+# drop-down console, Cinnamon's default terminal, so Ctrl+Alt+T and
+# Nemo's Open in Terminal too, and Alacritty's own menu entry, through the
+# copy install/config/alacritty.sh keeps in ~/.local/share/applications);
+# arguments pass straight through.
 #
 # Why X11 under Wayland: as a native Wayland window, Alacritty asks the
 # compositor to draw its title bar (xdg-decoration), which Cinnamon's

@@ -122,6 +122,7 @@ case "$*" in
 "-s chrony") [ -n "${MOCK_CHRONY_INSTALLED:-}" ] && exit 0 ;;
 -s\ *) [[ " ${MOCK_EXTRA_PKGS:-} " == *" $2 "* ]] && exit 0 ;;
 "--print-architecture") echo amd64; exit 0 ;;
+--compare-versions\ *) exec /usr/bin/dpkg "$@" ;;
 "--audit") [ -n "${MOCK_DPKG_AUDIT:-}" ] && echo "$MOCK_DPKG_AUDIT"; exit 0 ;;
 esac
 exit 1
@@ -130,6 +131,7 @@ EOF2
 #!/bin/bash
 case "$*" in
 *ohmydebn-neovim) echo "0.12.5-1" ;;
+*" alacritty") echo "${MOCK_ALACRITTY_VERSION:-0.15.1-1}" ;;
 *) echo "4.8.0" ;;
 esac
 EOF2
@@ -260,6 +262,7 @@ assert_contains "healthy: blink.cmp's matcher is this machine's" "$OUTPUT" "ok -
 assert_contains "healthy: the lua parser is this machine's" "$OUTPUT" "ok - ~/.local/share/nvim/site/parser/lua.so is built for this machine"
 assert_contains "healthy: latest update completed" "$OUTPUT" "ok - the latest update completed"
 assert_contains "healthy: third-party repo pinned" "$OUTPUT" "ok - third-party apt repos pinned to their own packages (1)"
+assert_contains "healthy: alacritty config in 0.14+ form" "$OUTPUT" "ok - alacritty config has no keys deprecated in 0.14"
 assert_contains "healthy: dpkg clean" "$OUTPUT" "ok - no half-installed packages (dpkg --audit)"
 assert_contains "healthy: disk space" "$OUTPUT" "ok - at least 2 GB free on / (47 GB)"
 assert_contains "healthy: home disk space" "$OUTPUT" "ok - at least 2 GB free on home directory"
@@ -472,6 +475,17 @@ printf '\n[network]\npasta_options = ["-4"]\n' >"$H/.config/containers/container
 run_doctor "MOCK_EXTRA_PKGS=podman uidmap passt"
 assert_contains "old SO-CRATES IPv6 line: a note" "$OUTPUT" "IPv6 is off in all your Podman containers"
 assert_not_contains "old SO-CRATES IPv6 line: not a failure" "$OUTPUT" "FAIL - Podman"
+# A config written for alacritty 0.13 (Linux Mint 22), now that alacritty
+# is newer (Mint 27): it parses, but every window warns about its keys.
+printf 'import = ["~/.config/ohmydebn/current/theme/alacritty.toml"]\n\n[shell]\nprogram = "/usr/bin/zsh"\n' >"$H/.config/alacritty/alacritty.toml"
+run_doctor MOCK_ALACRITTY_VERSION=0.16.1-1
+assert_contains "pre-0.14 alacritty config on 0.16: still parses" "$OUTPUT" "ok - terminal config files parse"
+assert_contains "pre-0.14 alacritty config on 0.16: caught" "$OUTPUT" "FAIL - alacritty config has no keys deprecated in 0.14 (run: ohmydebn-update)"
+run_doctor MOCK_ALACRITTY_VERSION=0.13.2-1
+assert_not_contains "pre-0.14 alacritty config on 0.13: the right form there" "$OUTPUT" "keys deprecated in 0.14"
+printf '[general]\nimport = ["a.toml"]\n\n[shell]\nprogram = "/usr/bin/zsh"\n' >"$H/.config/alacritty/alacritty.toml"
+run_doctor MOCK_ALACRITTY_VERSION=0.16.1-1
+assert_contains "only [shell] left over: caught" "$OUTPUT" "FAIL - alacritty config has no keys deprecated in 0.14"
 mock_cleanup
 
 # --- defaults, config, shell and security problems: each caught and explained ---
@@ -559,6 +573,12 @@ assert_contains "Parrot 7: a supported distro" "$OUTPUT" "ok - supported distro"
 printf 'PRETTY_NAME="Parrot Security 6.4"\nID=parrot\nID_LIKE=debian\nVERSION_CODENAME=lory\n' >"$ROOT/etc/os-release"
 run_doctor
 assert_contains "Parrot 6: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
+printf 'PRETTY_NAME="Linux Mint 27"\nID=linuxmint\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=adrien\nUBUNTU_CODENAME=resolute\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Linux Mint 27 (Ubuntu 26.04 resolute): a supported distro" "$OUTPUT" "ok - supported distro"
+printf 'PRETTY_NAME="Linux Mint 21.3"\nID=linuxmint\nID_LIKE="ubuntu debian"\nVERSION_CODENAME=virginia\nUBUNTU_CODENAME=jammy\n' >"$ROOT/etc/os-release"
+run_doctor
+assert_contains "Linux Mint 21: not supported" "$OUTPUT" "FAIL - supported distro (install.sh would warn: unsupported)"
 mock_cleanup
 
 # --- Neovim, broken in each of the ways the doctor checks ---

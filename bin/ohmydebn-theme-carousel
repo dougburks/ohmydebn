@@ -1691,7 +1691,14 @@ class Carousel(Gtk.Window):
         constraint already confirmed for ohmydebn-menu-picker's own
         map-event keyboard grab (see its on_map_grab_keyboard comment): the
         X server hasn't necessarily finished mapping the window yet at
-        "show" time."""
+        "show" time.
+
+        Runs once: on GTK3's Wayland backend (Cinnamon's Wayland session,
+        seen on Linux Mint 27), present() on a mapped window emits
+        "map-event" again, so a handler left connected calls itself
+        without end - thousands of times a second, at full CPU, and the
+        window never appears. On X11 the event fires once anyway."""
+        self.disconnect_by_func(self.on_map_present)
         self.present()
         return False
 

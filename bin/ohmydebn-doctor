@@ -98,7 +98,7 @@ if [ -f "$OS_RELEASE" ]; then
   case "${ID:-}" in
   debian) [ "${VERSION_CODENAME:-}" = trixie ] && DISTRO_OK=true ;;
   devuan | lcos) [ "${VERSION_CODENAME:-}" = excalibur ] && DISTRO_OK=true ;;
-  linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ]; } && DISTRO_OK=true ;;
+  linuxmint) { [ "${DEBIAN_CODENAME:-}" = trixie ] || [ "${UBUNTU_CODENAME:-}" = noble ] || [ "${UBUNTU_CODENAME:-}" = resolute ]; } && DISTRO_OK=true ;;
   kali) [ "${VERSION_CODENAME:-}" = kali-rolling ] && DISTRO_OK=true ;;
   parrot) [ "${VERSION_CODENAME:-}" = echo ] && DISTRO_OK=true ;;
   ubuntu) case "${VERSION_CODENAME:-}" in noble | resolute) DISTRO_OK=true ;; esac ;;
@@ -308,6 +308,23 @@ for f in "$HOME/.config/alacritty/alacritty.toml" "$CONFIG/current/theme/alacrit
   python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$f" >/dev/null 2>&1 || BROKEN_TOML+=("${f/#"$HOME"/\~}")
 done
 if [ ${#BROKEN_TOML[@]} -eq 0 ]; then ok "terminal config files parse"; else fail "terminal config files parse" "broken: ${BROKEN_TOML[*]}"; fi
+# A config written for alacritty older than 0.14 (top-level import, a
+# [shell] table) still parses, but once alacritty is 0.14 or newer - after
+# Linux Mint 22 became Mint 27, say - every window warns about both keys.
+# install/config/alacritty.sh converts it on the next update, and tells
+# the old form apart the same way.
+ALACRITTY_TOML="$HOME/.config/alacritty/alacritty.toml"
+if [ -f "$ALACRITTY_TOML" ] && dpkg -s alacritty >/dev/null 2>&1; then
+  ALACRITTY_VERSION=$(dpkg-query -W -f='${Version}' alacritty 2>/dev/null || true)
+  if [ -n "$ALACRITTY_VERSION" ] && dpkg --compare-versions "$ALACRITTY_VERSION" ge 0.14.0; then
+    if { grep -qE '^import[[:space:]]*=' "$ALACRITTY_TOML" && ! grep -qE '^\[general\][[:space:]]*$' "$ALACRITTY_TOML"; } ||
+      grep -qE '^\[shell\][[:space:]]*$' "$ALACRITTY_TOML"; then
+      fail "alacritty config has no keys deprecated in 0.14" "run: ohmydebn-update"
+    else
+      ok "alacritty config has no keys deprecated in 0.14"
+    fi
+  fi
+fi
 BG_LINK="$CONFIG/current/background"
 if [ -L "$BG_LINK" ] && [ -f "$(readlink -f "$BG_LINK")" ]; then ok "current background symlink resolves to a file"; else fail "current background symlink resolves to a file" "$BG_LINK"; fi
 # ohmydebn-theme-set-fastfetch links fastfetch's config to the current

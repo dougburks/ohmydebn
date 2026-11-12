@@ -38,6 +38,9 @@ gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from ohmydebn_glib import unix_signal_add  # noqa: E402
+
 # GStreamer is imported only for a clip (ClipIntro): the light intro needs
 # nothing beyond GTK and cairo, which Cinnamon itself depends on.
 Gst = None
@@ -526,7 +529,7 @@ def main():
         remove_pid_file()
         return 1
     for signum in (signal.SIGTERM, signal.SIGINT):
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: intro.quit(0) or False)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signum, lambda: intro.quit(0) or False)
     intro.start()
     Gtk.main()
     remove_pid_file()

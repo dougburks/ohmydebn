@@ -44,6 +44,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import ohmydebn_speedtest_common as common
+from ohmydebn_glib import unix_signal_add
 
 WORKER = "/usr/share/ohmydebn/bin/ohmydebn-network-speedtest-worker"
 
@@ -149,15 +150,15 @@ class SpeedTestWindow(Gtk.Window):
         # process (closing it from a task manager, Ctrl+C from a terminal
         # that launched it directly) would otherwise orphan them, left
         # hammering the network in a `while true` loop with nothing left
-        # to ever stop them. GLib.unix_signal_add, not Python's own
+        # to ever stop them. GLib's unix signal source, not Python's own
         # signal.signal(), because a raw Python handler only runs between
         # bytecode instructions and can sit unfired while GLib's own C
         # main loop blocks in poll() - this integrates with that loop
         # directly instead. Routes to self.destroy() so both paths (a
         # normal window close and a killed process) share the exact same
         # cleanup in _on_destroy() below.
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
 
     def _on_terminate_signal(self):
         self.destroy()

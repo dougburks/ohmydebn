@@ -90,6 +90,14 @@ run_scenario "LMDE (DEBIAN_CODENAME=trixie)" "yes" \
 run_scenario "regular Mint 22.3 Zena (UBUNTU_CODENAME=noble, no DEBIAN_CODENAME)" "yes" \
   "ID=linuxmint" "VERSION_CODENAME=zena" "UBUNTU_CODENAME=noble"
 
+# Mint 27 tracks Ubuntu 26.04 "resolute", reported from a machine upgraded
+# from Mint 22.
+run_scenario "regular Mint 27 Adrien (UBUNTU_CODENAME=resolute)" "yes" \
+  "ID=linuxmint" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=adrien" "UBUNTU_CODENAME=resolute"
+
+run_scenario "Mint 21.3 Virginia (UBUNTU_CODENAME=jammy, too old)" "no" \
+  "ID=linuxmint" "VERSION_CODENAME=virginia" "UBUNTU_CODENAME=jammy"
+
 run_scenario "linuxmint with neither codename set" "no" \
   "ID=linuxmint"
 
@@ -213,6 +221,9 @@ run_sources_scenario "Devuan 6 (sources.list at deb.devuan.org)" "kept" \
   "ID=devuan" "ID_LIKE=debian" "VERSION_CODENAME=excalibur"
 
 run_sources_scenario "Parrot 7 (sources at deb.parrot.sh)" "kept" "${PARROT_7[@]}"
+
+run_sources_scenario "Linux Mint 27 (ID=linuxmint, ID_LIKE=ubuntu)" "kept" \
+  'NAME="Linux Mint"' "ID=linuxmint" 'ID_LIKE="ubuntu debian"' "VERSION_CODENAME=adrien" "UBUNTU_CODENAME=resolute"
 
 run_sources_scenario "LMDE 7 without Mint's own list file" "kept" \
   "ID=linuxmint" "ID_LIKE=debian" "VERSION_CODENAME=gigi" "DEBIAN_CODENAME=trixie"

@@ -65,11 +65,15 @@ if [ -f "$OS_RELEASE" ]; then
     # LMDE (Debian-based) sets DEBIAN_CODENAME; regular Mint (Ubuntu-based)
     # sets UBUNTU_CODENAME instead - both report ID=linuxmint, so both need
     # checking here. Regular Mint 22.x tracks Ubuntu 24.04 "noble" as its
-    # base (VERSION_CODENAME is Mint's own release name, e.g. "zena" - not
-    # useful for distro-family detection).
-    if [ "$DEBIAN_CODENAME" = "trixie" ] || [ "$UBUNTU_CODENAME" = "noble" ]; then
+    # base, and Mint 27 Ubuntu 26.04 "resolute" (VERSION_CODENAME is Mint's
+    # own release name, e.g. "zena" - not useful for distro-family
+    # detection).
+    if [ "$DEBIAN_CODENAME" = "trixie" ]; then
       DISTRO_OK=true
     fi
+    case "$UBUNTU_CODENAME" in
+    noble | resolute) DISTRO_OK=true ;;
+    esac
     ;;
   kali)
     [ "$VERSION_CODENAME" = "kali-rolling" ] && DISTRO_OK=true
@@ -111,7 +115,7 @@ elif [ "$DISTRO_OK" = false ] && [ "$ASSUME_YES" = false ]; then
   cat <<EOF
 WARNING!
 
-OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Parrot OS 7, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
+OhMyDebn is designed for Debian 13, Devuan 6, LCOS, Linux Mint 22/27, Linux Mint Debian Edition 7, Kali Linux (Rolling), MX Linux 25, Parrot OS 7, Pop!_OS 24.04, Raspberry Pi OS, Ubuntu 24.04/26.04, and Zorin OS 18.
 
 Trying to install OhMyDebn on anything else is untested and unsupported.
 

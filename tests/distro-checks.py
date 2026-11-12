@@ -98,6 +98,9 @@ DISTROS = {
                  pins=MINT_PIN, base=["xorg", "mint-meta-cinnamon"]),
     "mint": dict(sources=ubuntu("noble") + ["deb http://packages.linuxmint.com zena main upstream import backport"],
                  pins=MINT_PIN, base=["mint-meta-cinnamon"]),
+    # Mint 27 is Ubuntu 26.04 "resolute" underneath, as Mint 22 is 24.04.
+    "mint27": dict(sources=ubuntu("resolute") + ["deb http://packages.linuxmint.com adrien main upstream import backport"],
+                   pins=MINT_PIN, base=["mint-meta-cinnamon"]),
     "ubuntu-noble": dict(sources=ubuntu("noble"), base=["ubuntu-desktop-minimal"]),
     "ubuntu-resolute": dict(sources=ubuntu("resolute"), base=["ubuntu-desktop-minimal"]),
     "pop": dict(sources=ubuntu("noble", "http://apt.pop-os.org/ubuntu", "http://apt.pop-os.org/ubuntu")

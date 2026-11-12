@@ -106,6 +106,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 # The palette loader started life in this script and moved to the shared
 # module when the speed-test GUIs adopted the same theming.
 from ohmydebn_theme_colors import contrast_ratio, css_rgba, load_theme_colors  # noqa: E402
+from ohmydebn_glib import unix_signal_add  # noqa: E402
 
 RELEASE_NOTES_URL = "https://github.com/dougburks/ohmydebn/releases"
 # Same endpoint ohmydebn-update-check polls for its notification.
@@ -825,12 +826,12 @@ class UpdateWindow(Gtk.Window):
         # the speed tests, though, dying here mid-run should take the
         # child down too (killing the GUI is the "close the terminal"
         # gesture) - _on_destroy handles that.
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
         # A second launch of this script found our instance lock held and
         # sent SIGUSR1 (see present_existing_instance): bring this window
         # forward instead of letting a second update start.
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_present_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_present_signal)
 
     # ---------- UI construction ----------
 

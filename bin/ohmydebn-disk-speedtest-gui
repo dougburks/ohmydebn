@@ -36,6 +36,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import ohmydebn_speedtest_common as common
+from ohmydebn_glib import unix_signal_add
 
 WORKER = "/usr/share/ohmydebn/bin/ohmydebn-disk-speedtest-worker"
 
@@ -147,8 +148,8 @@ class SpeedTestWindow(Gtk.Window):
         # SIGTERM/SIGINT to this process needs the same GLib-integrated
         # handler to still clean them (and this test's own scratch files)
         # up, not just a normal window close.
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
-        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self._on_terminate_signal)
+        unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self._on_terminate_signal)
 
     def _on_terminate_signal(self):
         self.destroy()

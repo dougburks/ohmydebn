@@ -128,7 +128,7 @@ def show(Wnck, Gdk, GdkX11, Gtk, screen, window):
 
 def launch(Wnck, Gdk, GdkX11, Gtk, screen):
     subprocess.Popen(
-        ["/usr/bin/alacritty", "--class", f"{WM_CLASS},{WM_CLASS}", "--title", "Console", "-e", RUN],
+        ["/usr/share/ohmydebn/bin/ohmydebn-alacritty", "--class", f"{WM_CLASS},{WM_CLASS}", "--title", "Console", "-e", RUN],
         cwd=os.path.expanduser("~"), start_new_session=True,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.monotonic() + LAUNCH_TIMEOUT

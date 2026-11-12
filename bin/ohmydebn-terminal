@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-/usr/bin/alacritty "$@" &
+/usr/share/ohmydebn/bin/ohmydebn-alacritty "$@" &
 PID=$!
 
 # Sleeping for 0.2s works on some systems but other systems need 0.4s

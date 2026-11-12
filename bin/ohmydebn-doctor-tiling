@@ -165,7 +165,7 @@ win_visible() {
 
 open_window() {
   local n=$1 title=${2:-$TITLE_PREFIX-$1} i
-  alacritty --title "$title" -e sleep 900 >/dev/null 2>&1 &
+  /usr/share/ohmydebn/bin/ohmydebn-alacritty --title "$title" -e sleep 900 >/dev/null 2>&1 &
   PIDS[$n]=$!
   for i in $(seq 1 50); do [ -n "$(xdotool search --name "^$title\$" 2>/dev/null | head -1)" ] && break; sleep 0.1; done
   sleep "$SETTLE"

@@ -24,7 +24,7 @@ set -euo pipefail
 
 GRID="${OHMYDEBN_TILE_GRID:-2 2 0 0 2 2}"
 
-/usr/bin/alacritty "$@" &
+/usr/share/ohmydebn/bin/ohmydebn-alacritty "$@" &
 PID=$!
 
 # A fixed sleep (this used to be a flat 0.4s, tuned up from 0.2s for

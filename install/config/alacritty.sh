@@ -85,8 +85,24 @@ if [ -f "$ALACRITTY_CONFIG" ] && dpkg --compare-versions "$ALACRITTY_VERSION" ge
   fi
 fi
 
-# If this is the initial installation, then set alacritty as default terminal emulator
+# If this is the initial installation, then set alacritty as default
+# terminal emulator - through ohmydebn-alacritty, which starts it as an X11
+# window in a Wayland session so Cinnamon gives it a themed title bar (see
+# that script). Cinnamon's Ctrl+Alt+T and Nemo's Open in Terminal use this.
+ALACRITTY_WRAPPER=/usr/share/ohmydebn/bin/ohmydebn-alacritty
 if [ ! -f ~/.local/state/ohmydebn ]; then
   /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring alacritty as default terminal emulator"
-  gsettings set org.cinnamon.desktop.default-applications.terminal exec "'alacritty'"
+  gsettings set org.cinnamon.desktop.default-applications.terminal exec "'$ALACRITTY_WRAPPER'"
+fi
+
+# Existing installs got plain alacritty as the default terminal: switch it
+# to the wrapper once, only while it's still that default, so a terminal
+# the user chose themselves stays theirs.
+ALACRITTY_WRAPPER_STATE=~/.local/state/ohmydebn-config/alacritty-default-terminal-wrapper-20261112
+if [ ! -f "$ALACRITTY_WRAPPER_STATE" ]; then
+  if [ "$(gsettings get org.cinnamon.desktop.default-applications.terminal exec 2>/dev/null || true)" = "'alacritty'" ]; then
+    gsettings set org.cinnamon.desktop.default-applications.terminal exec "'$ALACRITTY_WRAPPER'"
+  fi
+  mkdir -p ~/.local/state/ohmydebn-config
+  touch "$ALACRITTY_WRAPPER_STATE"
 fi

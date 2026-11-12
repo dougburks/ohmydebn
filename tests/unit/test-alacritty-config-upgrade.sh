@@ -8,7 +8,8 @@
 # past 0.14 (Mint 22 to Mint 27's 0.16), so every Alacritty window warned
 # that import and shell were deprecated. Each step is sourced under set -e,
 # as install.sh does, with dpkg-query answering MOCK_ALACRITTY_VERSION and
-# version comparisons left to the real dpkg.
+# version comparisons left to the real dpkg. The same step also makes
+# Cinnamon's default terminal ohmydebn-alacritty, tested at the end.
 
 set -uo pipefail
 
@@ -34,9 +35,17 @@ EOF2
 #!/bin/bash
 echo "$MOCK_ALACRITTY_VERSION"
 EOF2
-  for cmd in ohmydebn-headline gsettings; do
-    printf '#!/bin/bash\nmock_log "%s $*"\n' "$cmd" | mock_bin "$cmd"
-  done
+  printf '#!/bin/bash\nmock_log "ohmydebn-headline $*"\n' | mock_bin ohmydebn-headline
+  # Cinnamon's default terminal, kept in a file: get prints it, set writes it.
+  echo "'alacritty'" >"$MOCK_DIR/terminal-exec"
+  mock_bin gsettings <<'EOF2'
+#!/bin/bash
+mock_log "gsettings $*"
+case "$1 $2 $3" in
+"get org.cinnamon.desktop.default-applications.terminal exec") cat "$MOCK_DIR/terminal-exec" ;;
+"set org.cinnamon.desktop.default-applications.terminal exec") echo "$4" >"$MOCK_DIR/terminal-exec" ;;
+esac
+EOF2
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/share/ohmydebn/config#$REPO_ROOT/config#g" \
     "$REPO_ROOT/install/config/alacritty.sh" >"$MOCK_DIR/step.sh"
 }
@@ -172,6 +181,37 @@ ln -s "$SCRATCH_HOME/dotfiles/alacritty.toml" "$SCRATCH_HOME/$CONFIG_REL"
 run_step 0.16.1-1
 assert_eq "linked config: still a link" "yes" "$([ -L "$SCRATCH_HOME/$CONFIG_REL" ] && echo yes || echo no)"
 assert_eq "linked config: its target converted" "/usr/bin/zsh" "$(toml_get terminal.shell)"
+teardown
+
+# --- Cinnamon's default terminal: through ohmydebn-alacritty ---
+# It starts Alacritty as an X11 window in a Wayland session, so Cinnamon
+# draws its title bar in the theme (Ctrl+Alt+T and Nemo's Open in Terminal
+# use this setting).
+terminal_exec() { cat "$MOCK_DIR/terminal-exec"; }
+WRAPPER_MARKER=.local/state/ohmydebn-config/alacritty-default-terminal-wrapper-20261112
+
+setup
+rm "$SCRATCH_HOME/.local/state/ohmydebn" # a first install
+echo "'gnome-terminal'" >"$MOCK_DIR/terminal-exec"
+run_step 0.16.1-1
+assert_eq "first install: default terminal is the wrapper" "'$MOCK_BIN/ohmydebn-alacritty'" "$(terminal_exec)"
+teardown
+
+setup
+run_step 0.16.1-1
+assert_eq "update, still plain alacritty: switched to the wrapper" "'$MOCK_BIN/ohmydebn-alacritty'" "$(terminal_exec)"
+assert_eq "update: marker written" "yes" "$([ -f "$SCRATCH_HOME/$WRAPPER_MARKER" ] && echo yes || echo no)"
+# The user later picks plain alacritty again: theirs to keep.
+echo "'alacritty'" >"$MOCK_DIR/terminal-exec"
+run_step 0.16.1-1
+assert_eq "next update: a choice made after the switch stays" "'alacritty'" "$(terminal_exec)"
+teardown
+
+setup
+echo "'kitty'" >"$MOCK_DIR/terminal-exec"
+run_step 0.16.1-1
+assert_eq "update, the user's own terminal: left alone" "'kitty'" "$(terminal_exec)"
+assert_eq "update, the user's own terminal: marker written" "yes" "$([ -f "$SCRATCH_HOME/$WRAPPER_MARKER" ] && echo yes || echo no)"
 teardown
 
 test_summary

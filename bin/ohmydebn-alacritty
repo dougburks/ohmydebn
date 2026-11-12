@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# Starts Alacritty, as an X11 window when the session is Wayland. Every
+# OhMyDebn terminal starts through here (ohmydebn-terminal and -tiled, the
+# drop-down console, and Cinnamon's default terminal, so Ctrl+Alt+T and
+# Nemo's Open in Terminal too); arguments pass straight through.
+#
+# Why X11 under Wayland: as a native Wayland window, Alacritty asks the
+# compositor to draw its title bar (xdg-decoration), which Cinnamon's
+# Wayland session doesn't offer, so it draws a plain grey frame of its own
+# that ignores the OhMyDebn theme, while GTK apps (Nemo, Brave) draw theirs
+# in it. Through XWayland, Cinnamon draws the title bar as on X11, themed.
+# It also keeps Alacritty visible to xdotool, which ohmydebn-terminal and
+# the tiling scripts use to find and focus the new window.
+#
+# Only Alacritty itself goes to X11: WAYLAND_DISPLAY comes back for
+# everything started inside it, through Alacritty's own env setting, so
+# apps run from the terminal are still native Wayland apps. On X11, or
+# without XWayland (no DISPLAY), nothing changes. exec keeps this
+# process's PID for Alacritty's, which callers look its window up by.
+#
+# Usage: ohmydebn-alacritty [alacritty arguments...]
+
+set -euo pipefail
+
+ALACRITTY=/usr/bin/alacritty
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${DISPLAY:-}" ]; then
+  exec env -u WAYLAND_DISPLAY "$ALACRITTY" -o "env.WAYLAND_DISPLAY=\"$WAYLAND_DISPLAY\"" "$@"
+fi
+exec "$ALACRITTY" "$@"

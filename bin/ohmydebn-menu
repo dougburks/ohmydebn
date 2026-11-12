@@ -795,22 +795,28 @@ show_appearance_menu() {
   esac
 }
 
+# System > Relaunch. Its own function, not inline in show_system_menu's
+# case: ohmydebn-menu-tree reads each arm as one "*Label*) command ;;" line,
+# and a multi-line arm dropped Relaunch (and the arms after it) from the
+# menu search. cinnamon --replace hands an X11 window manager's job to a
+# fresh Cinnamon; in a Wayland session Cinnamon is the display server
+# itself, and can't be replaced without ending the session and every app
+# in it.
+relaunch_cinnamon() {
+  if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    command -v notify-send >/dev/null 2>&1 &&
+      notify-send -i ohmydebn "OhMyDebn" "Cinnamon can't be relaunched in a Wayland session. Log out and back in instead." -t 5000
+  else
+    /usr/bin/cinnamon --replace &
+  fi
+}
+
 show_system_menu() {
   menu "System" "  Lock\n󰤄  Suspend\n  Relaunch\n󰜉  Restart\n󰐥  Shutdown"
   case "$MENU_RESULT" in
   *Lock*) cinnamon-screensaver-command -l ;;
   *Suspend*) /usr/share/ohmydebn/bin/ohmydebn-power suspend ;;
-  *Relaunch*)
-    # cinnamon --replace hands an X11 window manager's job to a fresh
-    # Cinnamon. In a Wayland session Cinnamon is the display server itself,
-    # and can't be replaced without ending the session and every app in it.
-    if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
-      command -v notify-send >/dev/null 2>&1 &&
-        notify-send -i ohmydebn "OhMyDebn" "Cinnamon can't be relaunched in a Wayland session. Log out and back in instead." -t 5000
-    else
-      /usr/bin/cinnamon --replace &
-    fi
-    ;;
+  *Relaunch*) relaunch_cinnamon ;;
   *Restart*) /usr/share/ohmydebn/bin/ohmydebn-power reboot ;;
   *Shutdown*) /usr/share/ohmydebn/bin/ohmydebn-power poweroff ;;
   *) show_main_menu ;;

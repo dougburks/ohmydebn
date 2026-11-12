@@ -288,11 +288,24 @@ echo "  checked ${#ALL_BINDINGS[@]} key-combo assignments"
 
 echo
 echo "-- flattened menu-picker search list stays in sync with the real menu tree --"
-mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>/dev/null)
+FLAT_WARNINGS=$(mktemp)
+mapfile -t FLAT < <(menu_tree_flatten "$MENU_FILE" 2>"$FLAT_WARNINGS")
 if [[ ${#FLAT[@]} -eq 0 ]]; then
   echo "  FAIL - menu_tree_flatten produced zero leaves"
   FAIL=$((FAIL + 1))
 fi
+# The walk's own warnings, which this check used to discard: an item no
+# case arm matches is missing from the search (a multi-line arm, which the
+# walk can't read, dropped System > Relaunch, Restart and Shutdown, and only
+# the package build's output showed it). Other Apps is the one expected
+# warning: its list is built at runtime, so it has no literal block to read
+# (the package build filters the same one).
+while IFS= read -r warning; do
+  [[ "$warning" == "WARN: no block for show_other_apps_menu" ]] && continue
+  echo "  FAIL - menu_tree_flatten: $warning"
+  FAIL=$((FAIL + 1))
+done <"$FLAT_WARNINGS"
+rm -f "$FLAT_WARNINGS"
 
 mapfile -t FLAT_DUPES < <(printf '%s\n' "${FLAT[@]}" | cut -f1 | sort | uniq -d)
 for dupe in "${FLAT_DUPES[@]}"; do

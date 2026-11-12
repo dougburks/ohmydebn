@@ -43,7 +43,9 @@ window_screenshot() {
   id=$(grep -oP '\d+(?=,\))' <<<"$reply") || exit 0
   dir=$(/usr/bin/xdg-user-dir PICTURES 2>/dev/null) || dir=""
   [ -n "$dir" ] && [ -d "$dir" ] || dir="$HOME"
-  file="$dir/Screenshot from $(date '+%Y-%m-%d %H-%M-%S').png"
+  # Named the way Cinnamon names its own screenshots (Print), so they
+  # sort together: "Screenshot 2026-11-12 18-21-49.268.png".
+  file="$dir/Screenshot $(date '+%Y-%m-%d %H-%M-%S.%3N').png"
   # The window's frame (title bar) included, no mouse pointer, no
   # clipboard copy.
   screenshot_service ScreenshotWindowById "$id" true false "$file" false >/dev/null

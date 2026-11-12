@@ -75,7 +75,9 @@ shot wayland window
 assert_eq "Wayland, window: succeeds" "0" "$STATUS"
 assert_contains "Wayland, window: asks which window" "$CALLS" "org.cinnamon.Screenshot.SelectWindow"
 assert_contains "Wayland, window: captures that one, with its frame, into Pictures" "$CALLS" \
-  "org.cinnamon.Screenshot.ScreenshotWindowById 1429488226 true false $MOCK_DIR/home/Pictures/Screenshot from "
+  "org.cinnamon.Screenshot.ScreenshotWindowById 1429488226 true false $MOCK_DIR/home/Pictures/Screenshot "
+assert_eq "Wayland, window: named like Cinnamon's own (Screenshot 2026-11-12 18-21-49.268.png)" "yes" \
+  "$(grep -qP 'Pictures/Screenshot \d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.\d{3}\.png false' <<<"$CALLS" && echo yes || echo no)"
 assert_not_contains "Wayland, window: no xdotool" "$CALLS" "xdotool"
 mock_cleanup
 

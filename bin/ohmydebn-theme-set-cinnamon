@@ -348,8 +348,18 @@ for GENERATED in "$HOME"/.themes/ohmydebn-*; do
   fi
 done
 
-# If using aether to change theme then restart cinnamon to force window decoration update
+# If using aether to change theme then restart cinnamon to force window
+# decoration update. Not in a Wayland session: Cinnamon is the display
+# server there, and cinnamon --replace (an X11 window manager's handover)
+# can't restart it without ending the session; the window borders take the
+# new colors at the next login instead, and a notification says so.
 THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name")
 if [[ "$THEME_NAME" == "aether" ]]; then
-  setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+  if [[ "${XDG_SESSION_TYPE:-}" == wayland || -n "${WAYLAND_DISPLAY:-}" ]]; then
+    if command -v notify-send >/dev/null 2>&1; then
+      notify-send -i ohmydebn "OhMyDebn" "Window borders take the new Aether colors the next time you log in." -t 5000 || true
+    fi
+  else
+    setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+  fi
 fi

@@ -800,7 +800,17 @@ show_system_menu() {
   case "$MENU_RESULT" in
   *Lock*) cinnamon-screensaver-command -l ;;
   *Suspend*) /usr/share/ohmydebn/bin/ohmydebn-power suspend ;;
-  *Relaunch*) /usr/bin/cinnamon --replace & ;;
+  *Relaunch*)
+    # cinnamon --replace hands an X11 window manager's job to a fresh
+    # Cinnamon. In a Wayland session Cinnamon is the display server itself,
+    # and can't be replaced without ending the session and every app in it.
+    if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+      command -v notify-send >/dev/null 2>&1 &&
+        notify-send -i ohmydebn "OhMyDebn" "Cinnamon can't be relaunched in a Wayland session. Log out and back in instead." -t 5000
+    else
+      /usr/bin/cinnamon --replace &
+    fi
+    ;;
   *Restart*) /usr/share/ohmydebn/bin/ohmydebn-power reboot ;;
   *Shutdown*) /usr/share/ohmydebn/bin/ohmydebn-power poweroff ;;
   *) show_main_menu ;;

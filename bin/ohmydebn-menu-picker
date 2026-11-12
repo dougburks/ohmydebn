@@ -1369,6 +1369,15 @@ class Picker(Gtk.Window):
         # firing on every tap instead of this window ever seeing them -
         # each tap looked like a fresh, independent launch (always
         # resetting to the same default selection) rather than a cycle.
+        #
+        # Not in a Wayland session: a client can't take the keyboard from
+        # the compositor there, so the grab wouldn't keep those taps from
+        # Cinnamon anyway (run_window_switcher hands them to this window
+        # instead), and trying it took this window's focus away the moment
+        # it appeared - on_focus_out then closed it before it was seen
+        # (confirmed on Linux Mint 27's Cinnamon Wayland session).
+        if windows_lib.is_wayland_session():
+            return False
         seat = Gdk.Display.get_default().get_default_seat()
         seat.grab(self.get_window(), Gdk.SeatCapabilities.KEYBOARD, False, None, None, None, None)
         return False

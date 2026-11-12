@@ -241,6 +241,51 @@ check("unavailable: a notification says why, and points to Alt+Tab",
       len(notified) == 1 and notified[0][0] == "notify-send" and "Alt+Tab" in notified[0][-1])
 check_eq("unavailable: the lock is free for the next try", wl.claim_switcher(lock)[0], True)
 
+# The keyboard grab: on X11 it keeps further Tab taps from Cinnamon. On
+# Wayland it can't, and trying took the window's focus away as it
+# appeared, so on_focus_out closed the switcher before it was seen (Linux
+# Mint 27).
+grabs = []
+
+
+class GrabSeat:
+    def grab(self, *args):
+        grabs.append(args)
+
+
+class GrabDisplay:
+    @staticmethod
+    def get_default():
+        return GrabDisplay()
+
+    def get_default_seat(self):
+        return GrabSeat()
+
+
+class GrabGdk:
+    Display = GrabDisplay
+
+    class SeatCapabilities:
+        KEYBOARD = "keyboard"
+
+
+class GrabSelf:
+    def get_window(self):
+        return "switcher-window"
+
+
+real_gdk = mp.Gdk
+mp.Gdk = GrabGdk
+try:
+    mp.windows_lib.is_wayland_session = lambda: True
+    mp.Picker.on_map_grab_keyboard(GrabSelf(), None, None)
+    check_eq("Wayland: no keyboard grab (it closed the switcher)", grabs, [])
+    mp.windows_lib.is_wayland_session = lambda: False
+    mp.Picker.on_map_grab_keyboard(GrabSelf(), None, None)
+    check_eq("X11: the keyboard is grabbed, as before", [g[:2] for g in grabs], [("switcher-window", "keyboard")])
+finally:
+    mp.Gdk = real_gdk
+
 mp.windows_lib.list_windows, mp.windows_lib.is_wayland_session, mp.windows_lib.activate_window = saved
 
 print(f"\n{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

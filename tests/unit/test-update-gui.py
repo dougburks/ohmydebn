@@ -11,6 +11,7 @@
 # regardless - VTE_AVAILABLE just reads False there.
 
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -556,6 +557,11 @@ check_eq("success_message: a reboot-notice stage asks for a reboot",
          "Update complete - reboot when convenient to finish it.")
 check_eq("success_message: no stages at all still reads as up to date", gui.success_message([]),
          "Update complete - you're up to date.")
+# The GUI's copy of the headline has to be the one reboot-notice.sh prints:
+# if they drift apart, a due reboot reads as "you're up to date".
+with open(os.path.join(REPO_ROOT, "install", "finalization", "reboot-notice.sh")) as f:
+    shell_headline = re.search(r'^REBOOT_HEADLINE="([^"]*)"', f.read(), re.M).group(1)
+check_eq("REBOOT_HEADLINE: the same as reboot-notice.sh's", gui.REBOOT_HEADLINE, shell_headline)
 
 
 # --- the real ohmydebn-headline output parses as exactly one stage, titled by

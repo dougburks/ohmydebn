@@ -26,6 +26,7 @@ STUB
 cp "$MOCK_DIR/key.gpg" "${!#}"
 STUB
   cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$MOCK_BIN/"
+  stub_install_checks
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$REPO_ROOT/bin/ohmydebn-tailscale-install" >"$MOCK_DIR/install"
   # Logs every privileged call; MOCK_UPDATE_FAILS makes apt update fail.
   mock_bin sudo <<'STUB'

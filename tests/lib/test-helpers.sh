@@ -52,6 +52,20 @@ mock_bin() {
   chmod +x "$MOCK_BIN/$name"
 }
 
+# Stand-ins for the checks installers run before anything else
+# (ohmydebn-require-systemd, ohmydebn-pkg-available), into the directory
+# the script under test calls them from (default: the mock bin). Each
+# passes: a test of something else shouldn't depend on this machine's
+# init system or apt lists. The checks have their own tests.
+# Usage: stub_install_checks [dir]
+stub_install_checks() {
+  local dir="${1:-$MOCK_BIN}" name
+  for name in ohmydebn-require-systemd ohmydebn-pkg-available; do
+    printf '#!/bin/bash\nexit 0\n' >"$dir/$name"
+    chmod +x "$dir/$name"
+  done
+}
+
 # Call from inside a stub script to record its invocation.
 mock_log() {
   echo "$*" >>"$MOCK_CALLS"

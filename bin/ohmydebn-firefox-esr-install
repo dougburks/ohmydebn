@@ -7,12 +7,44 @@ if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
 fi
 
-# firefox-esr is Debian's (and Kali's) Firefox - the one the base ISO
-# ships and --power-user removes (bin/ohmydebn-pkg-remove-all-optional),
-# so this is mostly "put it back". Ubuntu (a snap) and Mint (their own
-# deb) package Firefox under other names and aren't handled here - same
-# as when the menu ran a bare `apt install firefox-esr` for this.
-if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
+# Which Firefox: Debian's (and Kali's) firefox-esr where the distro has it -
+# the one the base ISO ships and --power-user removes
+# (bin/ohmydebn-pkg-remove-all-optional), so this is mostly "put it back" -
+# and otherwise the distro's own "firefox" deb, as on Linux Mint and
+# Pop!_OS, which --power-user removes there too. Ubuntu's "firefox" is only
+# a stub that installs the snap (its version says so: "1:1snap1-..."), so
+# there this says so and points to Install > Package instead. Asked of apt,
+# not decided by distro name (see ohmydebn-pkg-available).
+#
+# Installed means firefox-esr, or the distro's own firefox deb - not
+# Ubuntu's stub, whose Firefox is a snap.
+firefox_installed() {
+  dpkg -s firefox-esr >/dev/null 2>&1 && return 0
+  dpkg -s firefox >/dev/null 2>&1 && ! snap list firefox >/dev/null 2>&1
+}
+
+if ! firefox_installed; then
+  # A here-string, not a pipe: see ohmydebn-pkg-available.
+  FIREFOX_CANDIDATE=$(grep -E '^[[:space:]]*Candidate:' <<<"$(LC_ALL=C apt-cache policy firefox 2>/dev/null)" || true)
+  if /usr/share/ohmydebn/bin/ohmydebn-pkg-available firefox-esr; then
+    FIREFOX_PACKAGE=firefox-esr
+  elif [[ "$FIREFOX_CANDIDATE" =~ Candidate:\ [^\(] && "$FIREFOX_CANDIDATE" != *snap* ]]; then
+    FIREFOX_PACKAGE=firefox
+  elif [[ "$FIREFOX_CANDIDATE" == *snap* ]]; then
+    echo
+    echo "Firefox can't be installed here: this distribution's repositories have no"
+    echo "firefox-esr package, and its firefox package only installs the Firefox snap."
+    echo
+    echo "To install the snap, choose Install > Package in the OhMyDebn menu and pick"
+    echo "firefox."
+    echo
+    echo "Nothing was installed."
+    exit 1
+  else
+    /usr/share/ohmydebn/bin/ohmydebn-pkg-available firefox-esr "Firefox" || true
+    exit 1
+  fi
+
   if [ "$SKIP_PROMPT" = false ]; then
     echo
     echo "Firefox is not currently installed."
@@ -23,13 +55,13 @@ if ! dpkg -s "firefox-esr" >/dev/null 2>&1; then
     read -r
   fi
   sudo /usr/bin/apt update
-  sudo /usr/bin/apt -y install firefox-esr
+  sudo /usr/bin/apt -y install "$FIREFOX_PACKAGE"
 
   # Installed onto a system that already has a default browser: ask before
   # taking it over (defaults to no - see ohmydebn-browser-set-default). A
   # setting that couldn't be applied is reported there and mustn't abort
   # the install.
   if [ "$SKIP_PROMPT" = false ]; then
-    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask firefox-esr || true
+    /usr/share/ohmydebn/bin/ohmydebn-browser-set-default --ask "$FIREFOX_PACKAGE" || true
   fi
 fi

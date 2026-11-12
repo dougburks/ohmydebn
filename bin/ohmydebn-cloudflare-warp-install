@@ -3,9 +3,16 @@
 set -euo pipefail
 
 SKIP_PROMPT=false
+SKIP_FLAG=()
 if [ "${1:-}" = "--skip-prompt" ]; then
   SKIP_PROMPT=true
+  SKIP_FLAG=(--skip-prompt)
 fi
+
+# Its service starts only under systemd: without it, say so and change
+# nothing (see ohmydebn-require-systemd).
+/usr/share/ohmydebn/bin/ohmydebn-require-systemd "${SKIP_FLAG[@]}" "Cloudflare WARP" cloudflare-warp \
+  /usr/share/ohmydebn/bin/ohmydebn-cloudflare-warp-remove || exit 1
 
 WARP_KEYRING=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
 WARP_LIST=/etc/apt/sources.list.d/cloudflare-client.list

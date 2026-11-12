@@ -84,6 +84,7 @@ mock_log "$name \$*"
 echo "Make it the default? [y/N]"
 STUB
   done
+  stub_install_checks
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$SRC_DIR/ohmydebn-$1-install" >"$MOCK_DIR/install"
 }
 

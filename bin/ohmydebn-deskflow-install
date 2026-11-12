@@ -8,6 +8,9 @@ if [ "${1:-}" = "--skip-prompt" ]; then
 fi
 
 if ! dpkg -s "deskflow" >/dev/null 2>&1; then
+  # Not every supported distro has it (see ohmydebn-pkg-available).
+  /usr/share/ohmydebn/bin/ohmydebn-pkg-available deskflow "Deskflow" || exit 1
+
   if [ "$SKIP_PROMPT" = false ]; then
     echo
     echo "Deskflow is not currently installed."

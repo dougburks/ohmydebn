@@ -1,0 +1,52 @@
+#!/bin/bash
+#
+# ohmydebn-pkg-available: whether apt can install a package here - whether
+# the distro's repositories have it at all. Apps > ... entries install from
+# the distro's own repositories, and not every supported distro has every
+# app (no deskflow before Ubuntu 25.04, no abiword or rclone on Kali, no
+# firefox-esr on Ubuntu and its derivatives), so an installer ran apt
+# straight into "Unable to locate package". Run by an installer before its
+# question, so nothing is asked that can't be done: with the app's name, it
+# says why, and the installer stops.
+#
+# Read from the package lists already on the system, not refreshed first:
+# that needs sudo before the user has agreed to anything, and a package a
+# distro lacks is missing from old lists and new ones alike.
+#
+# Usage: ohmydebn-pkg-available <package> [<app name>]
+#   exits 0 if apt has a candidate for <package>, 1 if not (saying why when
+#   <app name> is given)
+
+set -uo pipefail
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "Usage: ohmydebn-pkg-available <package> [<app name>]" >&2
+  exit 2
+fi
+PACKAGE="$1"
+NAME="${2:-}"
+
+# A here-string, not a pipe: under pipefail, grep -q stopping at its match
+# can kill apt-cache with SIGPIPE, and the pipeline then reads as "no
+# candidate" (as in ohmydebn-chromium-install). "(none)" is a package apt
+# knows of only as a name something else mentions. LC_ALL=C because apt
+# translates "Candidate:" ("Installationskandidat:" in German, "Candidat :"
+# in French), and every package then read as missing.
+if grep -qE '^[[:space:]]*Candidate: [^(]' <<<"$(LC_ALL=C apt-cache policy "$PACKAGE" 2>/dev/null)"; then
+  exit 0
+fi
+
+if [ -n "$NAME" ]; then
+  DISTRO=$(
+    PRETTY_NAME=""
+    # shellcheck disable=SC1090
+    . "${OHMYDEBN_TEST_OS_RELEASE:-/etc/os-release}" 2>/dev/null
+    echo "${PRETTY_NAME:-this distribution}"
+  )
+  echo
+  echo "$NAME can't be installed here: $DISTRO's repositories have no"
+  echo "$PACKAGE package."
+  echo
+  echo "Nothing was installed."
+fi
+exit 1

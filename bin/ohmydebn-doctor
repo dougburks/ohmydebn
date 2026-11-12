@@ -132,7 +132,8 @@ OHMYDEBN_CHANNEL="stable"
 grep -q 'packages-testing\.ohmydebn\.org' "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources" 2>/dev/null && OHMYDEBN_CHANNEL="testing"
 check "OhMyDebn apt source present ($OHMYDEBN_CHANNEL channel)" test -f "$SYSROOT/etc/apt/sources.list.d/ohmydebn.sources"
 check "ohmydebn repo keyring present" test -s "$SYSROOT/usr/share/keyrings/ohmydebn-keyring.gpg"
-CANDIDATE=$(apt-cache policy ohmydebn 2>/dev/null | sed -n 's/^ *Candidate: *//p' | head -1)
+# LC_ALL=C: apt translates "Candidate:" ("Installationskandidat:" in German).
+CANDIDATE=$(LC_ALL=C apt-cache policy ohmydebn 2>/dev/null | sed -n 's/^ *Candidate: *//p' | head -1)
 if [ -n "$CANDIDATE" ] && [ "$CANDIDATE" != "(none)" ]; then ok "apt knows a candidate ohmydebn ($CANDIDATE)"; else fail "apt knows a candidate ohmydebn" "run: sudo apt update"; fi
 
 DEPS_FILE="$OHMYDEBN/install/packaging/dependencies.sh"

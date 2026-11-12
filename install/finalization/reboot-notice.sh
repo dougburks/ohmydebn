@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Tell the user when this update needs a reboot to finish - otherwise a
+# Tell the user when this run needs a reboot to finish - otherwise a
 # kernel installed by finalization/updates.sh's full-upgrade sits unused
 # until some unrelated reboot, with nothing ever saying why. Two signals:
 #
@@ -23,12 +23,15 @@
 # the headline into its final status - see success_message in
 # bin/ohmydebn-update-gui, which keys off REBOOT_HEADLINE's wording).
 #
+# The headline says "installing updates", not "this update": a first
+# install runs the same full-upgrade, and said "this update" too.
+#
 # The three inputs are variables (not inlined calls) so the unit test
 # can point them at scratch values - tests/unit/test-reboot-notice.sh.
 RUNNING_KERNEL=$(uname -r)
 BOOT_DIR=/boot
 REBOOT_REQUIRED_FILE=/run/reboot-required
-REBOOT_HEADLINE="A reboot is needed to finish this update"
+REBOOT_HEADLINE="A reboot is needed to finish installing updates"
 
 reboot_reason() {
   local newest
@@ -48,7 +51,7 @@ reboot_reason() {
 
 # Not after ohmydebn-reset-config (OHMYDEBN_RESET): a reset installs
 # nothing, so any reboot owed is an earlier update's, which said so then -
-# and "to finish this update" would be wrong here.
+# and "to finish installing updates" would be wrong here.
 REBOOT_REASON=""
 if [ "${OHMYDEBN_RESET:-}" != "1" ]; then
   REBOOT_REASON=$(reboot_reason)

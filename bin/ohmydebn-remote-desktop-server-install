@@ -30,6 +30,35 @@ if ! dpkg -s "xrdp" >/dev/null 2>&1; then
   fi
 
   sudo /usr/bin/apt update
+
+  # xorgxrdp is built against Xorg's X server, and a system with another one
+  # can't take it: LCOS replaces Xorg with XLibre, and apt either refused
+  # there or offered to remove XLibre (and the desktop with it) to make
+  # room. Asked of apt itself rather than by distro name, before anything
+  # is installed: a simulation (no sudo needed) that fails or removes
+  # anything stops here, with apt's reasons - in English (LC_ALL=C), since
+  # the lines shown are picked out by their English wording. The reason
+  # is usually that X server, but apt can fail for others too (held or
+  # broken packages), hence "probably".
+  if ! SIMULATION=$(LC_ALL=C apt-get -s -q install xrdp xorgxrdp 2>&1) || grep -q '^Remv ' <<<"$SIMULATION"; then
+    echo
+    echo "Remote Desktop Server can't be installed here. It needs xorgxrdp, which"
+    echo "lets xrdp show your desktop, and xorgxrdp only works with Xorg's X server:"
+    echo "probably this system doesn't use it (LCOS, for one, uses XLibre instead)."
+    echo
+    echo "What apt said:"
+    # The reason itself: the dependency lines, else what it would remove.
+    # apt's E: lines only when it gives neither ("Unable to locate
+    # package"); otherwise they're its generic wrap-up, one ending "may
+    # provide additional context:" with the context cut off below. "|| true"
+    # so that output matching none of them still ends with the line below
+    # rather than stopping the script under set -e.
+    { grep -E 'Depends:|Conflicts:|Breaks:' <<<"$SIMULATION" || grep -E '^Remv ' <<<"$SIMULATION" ||
+      grep -E '^E: ' <<<"$SIMULATION" || true; } | head -6 | sed 's/^ */  /'
+    echo
+    echo "Nothing was installed."
+    exit 1
+  fi
   sudo /usr/bin/apt -y install xrdp xorgxrdp
 elif [ "$SKIP_PROMPT" = false ] && [ ! -f "$XSESSION_D/45ohmydebn-xrdp-session-guard" ]; then
   # xrdp installed some other way (by hand, or before this entry existed):

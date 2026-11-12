@@ -24,8 +24,10 @@
 # Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <package>
 #        ohmydebn-browser-set-default --current | --list-installed | --repair
 #   <package>   the apt package name: brave-origin, brave-browser, chromium,
-#               google-chrome-stable, helium-bin or firefox-esr. "chromium"
-#               covers Ubuntu's snap too (see bin/ohmydebn-chromium-install).
+#               google-chrome-stable, helium-bin, firefox-esr or firefox.
+#               "chromium" covers Ubuntu's snap too (see
+#               bin/ohmydebn-chromium-install); "firefox" is the distro's own
+#               Firefox deb (Linux Mint, Pop!_OS), not Ubuntu's snap stub.
 #   --ask       ask first, defaulting to no. This runs right after an
 #               installer's own "Press Enter to continue", so a reflexive
 #               second Enter must not silently take over the default. A
@@ -48,7 +50,7 @@
 
 set -uo pipefail
 
-ALL_PACKAGES=(brave-origin brave-browser chromium firefox-esr google-chrome-stable helium-bin)
+ALL_PACKAGES=(brave-origin brave-browser chromium firefox-esr firefox google-chrome-stable helium-bin)
 
 MODE=full
 case "${1:-}" in
@@ -62,7 +64,7 @@ PACKAGE="${1:-}"
 
 # The binary given to update-alternatives has to be the exact path the
 # package's own postinst registered (Brave's, Chrome's and Debian's Firefox
-# all register one; Helium's doesn't) - /usr/bin/brave-origin and friends
+# all register one; Helium's and Linux Mint's Firefox don't) - /usr/bin/brave-origin and friends
 # are themselves alternatives symlinks on top of it and would register as
 # a second, separate entry. Desktop ids are the primary .desktop each
 # package ships; Brave and Chrome also ship a reverse-DNS duplicate
@@ -90,11 +92,21 @@ lookup() {
     NAME="Helium"; BIN=/usr/bin/helium; DESKTOP=helium.desktop ;;
   firefox-esr)
     NAME="Firefox"; BIN=/usr/bin/firefox-esr; DESKTOP=firefox-esr.desktop ;;
+  firefox)
+    # Linux Mint's (checked on Mint 22.3): /usr/bin/firefox and
+    # firefox.desktop, and no alternative of its own.
+    NAME="Firefox"; BIN=/usr/bin/firefox; DESKTOP=firefox.desktop ;;
   *) return 1 ;;
   esac
 }
 
 installed() {
+  # Ubuntu's "firefox" package is only a stub that installs the snap, whose
+  # binary and desktop id differ; it isn't offered as a default here.
+  if [ "$1" = firefox ]; then
+    dpkg -s firefox >/dev/null 2>&1 && ! snap list firefox >/dev/null 2>&1
+    return
+  fi
   dpkg -s "$1" >/dev/null 2>&1 && return 0
   [ "$1" = chromium ] && snap list chromium >/dev/null 2>&1
 }
@@ -191,7 +203,7 @@ if [ "$MODE" = repair ]; then
 fi
 
 if ! lookup "$PACKAGE"; then
-  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr> | --current | --list-installed | --repair" >&2
+  echo "Usage: ohmydebn-browser-set-default [--ask|--pdf-only] <brave-origin|brave-browser|chromium|google-chrome-stable|helium-bin|firefox-esr|firefox> | --current | --list-installed | --repair" >&2
   exit 1
 fi
 

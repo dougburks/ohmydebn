@@ -22,7 +22,7 @@
 # for example "Browser", "Neovim", "X", "Visual Studio Code".
 # Lines pasted from that file work here too (the number is ignored).
 #
-# Note: the Super + K page lists the stock keybindings only.
+# Super + K lists every hotkey that works right now, these included.
 
 # ---------------------------------------------------------------------------
 # keybinding NAME COMMAND BINDING

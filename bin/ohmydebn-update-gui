@@ -391,8 +391,9 @@ class StreamWatcher:
 
 # finalization/reboot-notice.sh's headline, which the stage parser turns
 # into an ordinary stage; the success status keys off it so a GUI user -
-# whose terminal is collapsed - still learns a reboot is due.
-REBOOT_HEADLINE = "A reboot is needed to finish this update"
+# whose terminal is collapsed - still learns a reboot is due. Must match
+# that script's REBOOT_HEADLINE (tests/unit/test-update-gui.py checks).
+REBOOT_HEADLINE = "A reboot is needed to finish installing updates"
 
 
 def success_message(stages):

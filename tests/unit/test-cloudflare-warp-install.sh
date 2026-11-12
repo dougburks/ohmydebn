@@ -26,6 +26,7 @@ setup() {
   ROOT="$MOCK_DIR/root"
   mkdir -p "$ROOT/etc/apt/sources.list.d" "$ROOT/etc/apt/preferences.d" "$ROOT/usr/share/ohmydebn/bin"
   cp "$REPO_ROOT/bin/ohmydebn-pgp-fingerprint" "$ROOT/usr/share/ohmydebn/bin/"
+  stub_install_checks "$ROOT/usr/share/ohmydebn/bin"
   cp "$REPO_ROOT/tests/lib/cloudflare-signing-key.asc" "$MOCK_DIR/key.asc"
   mock_bin sudo <<'EOF2'
 #!/bin/bash

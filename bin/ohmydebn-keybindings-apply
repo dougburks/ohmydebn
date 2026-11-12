@@ -415,6 +415,6 @@ if [ -f "$USER_FILE" ]; then
   echo
   echo "File: $USER_FILE"
   echo "Edit with: ohmydebn-keybindings-edit"
-  echo "The Super + K page lists the stock keybindings only."
+  echo "Super + K lists every hotkey that works right now, these included."
 fi
 exit 0

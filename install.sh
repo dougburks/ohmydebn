@@ -228,14 +228,39 @@ EOF
 
 fi
 
-if [ ! -f /etc/apt/sources.list.d/ohmydebn.sources ]; then
-  sudo tee /etc/apt/sources.list.d/ohmydebn.sources <<EOF
+# Architectures: only this machine's own. Without it apt asks the repo for
+# every architecture dpkg has turned on, and on a distro with i386 on as
+# well (MX Linux and LMDE by default) every apt update printed "Notice:
+# Skipping acquire of configured file 'main/binary-i386/Packages' as
+# repository ... doesn't support architecture 'i386'". Packages for "all"
+# architectures are listed in each architecture's index, so they still come.
+# OHMYDEBN_TEST_OHMYDEBN_SOURCES and OHMYDEBN_TEST_SYSTEM_STATE_DIR let
+# tests/unit/test-install-sources-arch.sh use scratch paths.
+OHMYDEBN_SOURCES="${OHMYDEBN_TEST_OHMYDEBN_SOURCES:-/etc/apt/sources.list.d/ohmydebn.sources}"
+if [ ! -f "$OHMYDEBN_SOURCES" ]; then
+  sudo tee "$OHMYDEBN_SOURCES" <<EOF
 Types: deb
 URIs: https://packages.ohmydebn.org/
+Architectures: $(dpkg --print-architecture)
 Suites: trixie
 Components: main
 Signed-By: /usr/share/keyrings/ohmydebn-keyring.gpg
 EOF
+fi
+
+# Installs from before the line was written get it once, before this run's
+# apt update, so the notice stops with this update. A machine-wide marker
+# (the file is the system's, not one user's) keeps a line the user later
+# takes out from coming back. Inserted after the URIs line, which
+# ohmydebn-channel keeps, rather than appended: after a trailing blank
+# line, an appended field would start a second, broken stanza.
+SOURCES_ARCH_STATE="${OHMYDEBN_TEST_SYSTEM_STATE_DIR:-/var/lib/ohmydebn}/ohmydebn-sources-architectures"
+if [ ! -f "$SOURCES_ARCH_STATE" ]; then
+  if ! grep -q '^Architectures:' "$OHMYDEBN_SOURCES" 2>/dev/null; then
+    sudo sed -i "/^URIs:/a Architectures: $(dpkg --print-architecture)" "$OHMYDEBN_SOURCES"
+  fi
+  sudo mkdir -p "${SOURCES_ARCH_STATE%/*}"
+  sudo touch "$SOURCES_ARCH_STATE"
 fi
 
 # Fetched and dearmored in a private temp directory, and only put in place

@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# Lists the hotkeys that work on this desktop right now, in a searchable
+# picker (ohmydebn-menu-picker --hotkeys; see bin/ohmydebn_hotkeys.py for
+# what it reads). Referenced by the Super+K keybinding and by the OhMyDebn
+# menu's Learn > Keybindings, which both used to open the docs' hotkey page
+# in a browser window instead: slower, and showing OhMyDebn's stock hotkeys
+# rather than the user's own. That page is still the list's last row, for
+# the shortcuts inside apps that can't be read from the system.
+exec /usr/share/ohmydebn/bin/ohmydebn-menu-picker --hotkeys

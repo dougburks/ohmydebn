@@ -1,0 +1,247 @@
+#!/usr/bin/python3
+#
+# Tests for the window switcher (Ctrl+Alt+Tab): bin/ohmydebn_windows.py and
+# the parts of ohmydebn-menu-picker --windows that use it. The switcher
+# listed windows through libwnck, which only sees X11 windows: in
+# Cinnamon's Wayland session it found no screen, crashed, and showed
+# nothing. It now asks gTile@OhMyDebn (ListWindows, ActivateWindow), which
+# runs inside Cinnamon and sees every window. D-Bus calls go through a
+# stand-in, and nothing here needs a display.
+
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from importlib.machinery import SourceFileLoader
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BIN = os.path.join(REPO_ROOT, "bin")
+sys.path.insert(0, BIN)
+
+import ohmydebn_windows as wl  # noqa: E402
+from gi.repository import GLib  # noqa: E402
+
+TESTS_RUN = 0
+TESTS_FAILED = 0
+
+
+def check(desc, condition):
+    global TESTS_RUN, TESTS_FAILED
+    TESTS_RUN += 1
+    if condition:
+        print(f"  ok - {desc}")
+    else:
+        print(f"  FAIL - {desc}")
+        TESTS_FAILED += 1
+
+
+def check_eq(desc, actual, expected):
+    check(desc, actual == expected)
+    if actual != expected:
+        print(f"      expected: {expected!r}\n      actual:   {actual!r}")
+
+
+print("=== bin/ohmydebn_windows.py ===")
+
+calls = []
+
+
+def fake_call(reply):
+    def call(method, params, reply_type):
+        calls.append((method, params, reply_type))
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+    return call
+
+
+# A Wayland session as gTile lists it: Nemo and Brave (Wayland) and
+# Alacritty (XWayland) alike, most recently used first.
+calls.clear()
+windows = wl.list_windows(fake_call(([
+    (7, "Home", "Nemo", "nemo.desktop", "org.gnome.Nautilus"),
+    (3, "OhMyDebn - Brave", "brave-browser", "brave-browser.desktop", "brave-browser"),
+    (9, "doug@vm: ~", "Alacritty", "Alacritty.desktop", "Alacritty"),
+],)))
+check_eq("list: asks gTile's ListWindows for a(tssss) rows", calls, [("ListWindows", None, "(a(tssss))")])
+check_eq("list: every window, in gTile's order", [w.id for w in windows], [7, 3, 9])
+check_eq("list: rows become SwitcherWindows", windows[0],
+         wl.SwitcherWindow(7, "Home", "Nemo", "nemo.desktop", "org.gnome.Nautilus"))
+check_eq("list: no windows is an empty list, not a failure", wl.list_windows(fake_call(([],))), [])
+check_eq("list: gTile not answering (old gTile, disabled, absent) is None",
+         wl.list_windows(fake_call(GLib.Error("org.freedesktop.DBus.Error.UnknownMethod"))), None)
+check_eq("list: a reply of the wrong shape is None", wl.list_windows(fake_call(())), None)
+check_eq("list: a malformed row is skipped",
+         [w.id for w in wl.list_windows(fake_call(([(1, "a", "b", "c", "d"), (2, "short")],)))], [1])
+
+calls.clear()
+check_eq("activate: True when gTile did it", wl.activate_window(7, fake_call(())), True)
+check_eq("activate: asks ActivateWindow with the id as a uint64",
+         [(m, p.unpack() if p is not None else None, r) for m, p, r in calls], [("ActivateWindow", (7,), None)])
+check_eq("activate: the type is (t)", calls[0][1].get_type_string(), "(t)")
+check_eq("activate: False when gTile couldn't (window gone)",
+         wl.activate_window(7, fake_call(GLib.Error("No such window"))), False)
+
+check_eq("Wayland: WAYLAND_DISPLAY set", wl.is_wayland_session({"WAYLAND_DISPLAY": "wayland-0"}), True)
+check_eq("Wayland: XDG_SESSION_TYPE=wayland", wl.is_wayland_session({"XDG_SESSION_TYPE": "wayland"}), True)
+check_eq("X11: neither", wl.is_wayland_session({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}), False)
+check_eq("X11: an empty WAYLAND_DISPLAY", wl.is_wayland_session({"WAYLAND_DISPLAY": ""}), False)
+
+check_eq("icons: the app's icon first, then names from WM_CLASS and the .desktop file",
+         wl.icon_candidates(wl.SwitcherWindow(1, "t", "Brave-browser", "brave-browser.desktop", "brave")),
+         ["brave", "brave-browser", "Brave-browser"])
+check_eq("icons: no app matched - names from the window only, no repeats",
+         wl.icon_candidates(wl.SwitcherWindow(1, "t", "xterm", "", "")), ["xterm"])
+check_eq("icons: an icon file path is kept as is",
+         wl.icon_candidates(wl.SwitcherWindow(1, "t", "", "", "/opt/app/icon.png")), ["/opt/app/icon.png"])
+
+check_eq("lock: in the runtime directory",
+         wl.switcher_lock_path({"XDG_RUNTIME_DIR": "/run/user/1000"}), "/run/user/1000/ohmydebn-window-switcher.lock")
+check(
+    "lock: else in the user's cache directory",
+    wl.switcher_lock_path({}).endswith("/.cache/ohmydebn-window-switcher.lock"))
+
+# One switcher at a time: a second one finds the first.
+scratch = tempfile.mkdtemp()
+lock = os.path.join(scratch, "switcher.lock")
+HOLDER = f"""
+import os, signal, sys, time
+sys.path.insert(0, {BIN!r})
+import ohmydebn_windows as wl
+claimed, fd = wl.claim_switcher({lock!r})
+got = []
+signal.signal(signal.SIGUSR1, lambda *a: got.append(1))
+print("claimed" if claimed else "not claimed", flush=True)
+deadline = time.time() + 10
+while not got and time.time() < deadline:
+    time.sleep(0.02)
+print("next row" if got else "no signal", flush=True)
+"""
+
+
+def start_holder():
+    holder = subprocess.Popen([sys.executable, "-c", HOLDER], stdout=subprocess.PIPE, text=True)
+    first = holder.stdout.readline().strip()
+    return holder, first
+
+
+holder, first = start_holder()
+check_eq("lock: the first switcher claims it", first, "claimed")
+claimed, pid = wl.claim_switcher(lock)
+check_eq("lock: a second one doesn't", claimed, False)
+check_eq("lock: the second learns the first's PID", pid, holder.pid)
+os.kill(holder.pid, signal.SIGUSR1)
+check_eq("lock: the first hears from it", holder.stdout.readline().strip(), "next row")
+holder.wait()
+claimed, fd = wl.claim_switcher(lock)
+check_eq("lock: free again once the first has ended", claimed, True)
+os.close(fd)
+
+print("=== ohmydebn-menu-picker --windows ===")
+mp = SourceFileLoader("ohmydebn_menu_picker_windows", os.path.join(BIN, "ohmydebn-menu-picker")).load_module()
+
+saved = (mp.windows_lib.list_windows, mp.windows_lib.is_wayland_session, mp.windows_lib.activate_window)
+mp.windows_lib.list_windows = lambda: []
+check_eq("list: gTile's list is used when it answers", mp.load_windows(), [])
+
+mp.windows_lib.list_windows = lambda: None
+mp.windows_lib.is_wayland_session = lambda: True
+try:
+    mp.load_windows()
+    raised = False
+except mp.SwitcherUnavailable:
+    raised = True
+check("Wayland without gTile: SwitcherUnavailable, not libwnck's crash", raised)
+
+activated = []
+mp.windows_lib.activate_window = lambda wid: activated.append(wid) or True
+mp.activate_window(wl.SwitcherWindow(42, "t", "c", "", ""))
+check_eq("activate: a gTile-listed window goes back to gTile by id", activated, [42])
+
+
+# finish(): a SwitcherWindow is a namedtuple, and the app branch takes any
+# tuple for an app to launch - windows mode must win.
+class FakeSeat:
+    def ungrab(self):
+        pass
+
+
+class FakeDisplay:
+    @staticmethod
+    def get_default():
+        return FakeDisplay()
+
+    def get_default_seat(self):
+        return FakeSeat()
+
+
+class FakeGdk:
+    Display = FakeDisplay
+
+
+class FakeGtk:
+    @staticmethod
+    def main_quit():
+        pass
+
+
+class FakeSelf:
+    mode = "windows"
+    _closing = False
+    on_result = None
+
+
+launched = []
+real = (mp.Gdk, mp.Gtk, mp.launch_app)
+mp.Gdk, mp.Gtk, mp.launch_app = FakeGdk, FakeGtk, lambda tokens: launched.append(tokens)
+activated.clear()
+try:
+    mp.Picker.finish(FakeSelf(), wl.SwitcherWindow(5, "t", "c", "app.desktop", ""))
+finally:
+    mp.Gdk, mp.Gtk, mp.launch_app = real
+check_eq("pick: the chosen window is activated", activated, [5])
+check_eq("pick: nothing is launched as an app", launched, [])
+
+# A second Ctrl+Alt+Tab while a switcher is open (Wayland: Cinnamon gets
+# every tap): it hands the tap to the first and opens no window.
+mp.windows_lib.switcher_lock_path = lambda: lock
+holder, first = start_holder()
+built = []
+real_picker = mp.Picker
+mp.Picker = lambda **kw: built.append(kw)
+try:
+    status = mp.run_window_switcher()
+finally:
+    mp.Picker = real_picker
+check_eq("second tap: exits cleanly", status, 0)
+check_eq("second tap: opens no second window", built, [])
+check_eq("second tap: the open switcher moves to the next row", holder.stdout.readline().strip(), "next row")
+holder.wait()
+
+# No way to list windows: said in a notification, not a silent failure.
+notified = []
+real_run = mp.subprocess.run
+
+
+def unavailable(**kw):
+    raise mp.SwitcherUnavailable()
+
+
+mp.Picker = unavailable
+mp.subprocess.run = lambda args, **kw: notified.append(args)
+try:
+    status = mp.run_window_switcher()
+finally:
+    mp.Picker = real_picker
+    mp.subprocess.run = real_run
+check_eq("unavailable: exits 1", status, 1)
+check("unavailable: a notification says why, and points to Alt+Tab",
+      len(notified) == 1 and notified[0][0] == "notify-send" and "Alt+Tab" in notified[0][-1])
+check_eq("unavailable: the lock is free for the next try", wl.claim_switcher(lock)[0], True)
+
+mp.windows_lib.list_windows, mp.windows_lib.is_wayland_session, mp.windows_lib.activate_window = saved
+
+print(f"\n{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
+sys.exit(1 if TESTS_FAILED else 0)

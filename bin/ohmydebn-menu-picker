@@ -68,6 +68,7 @@ import re
 import concurrent.futures
 import hashlib
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -76,6 +77,8 @@ import tempfile
 # finds it), wherever this is run from.
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import ohmydebn_hotkeys as hotkeys_lib  # noqa: E402
+import ohmydebn_windows as windows_lib  # noqa: E402
+from ohmydebn_glib import unix_signal_add  # noqa: E402
 import ohmydebn_theme_colors as theme_colors  # noqa: E402
 from ohmydebn_theme_colors import css_rgba  # noqa: E402
 
@@ -533,21 +536,52 @@ def launch_app(exec_tokens):
 _SWITCHABLE_WINDOW_TYPES = (Wnck.WindowType.NORMAL, Wnck.WindowType.DIALOG, Wnck.WindowType.UTILITY)
 
 
-def load_windows():
-    """Enumerates open windows the way rofi's `-show window` did for
-    ohmydebn-window-switcher - Wnck (gir1.2-wnck-3.0, installed by
-    install/packaging/dependencies.sh; Cinnamon only depends on the
-    libwnck library, not this typelib) gives window listing/activation/
-    icons directly, no wmctrl/xdotool parsing needed.
+class SwitcherUnavailable(Exception):
+    """No way to list this session's windows: gTile isn't answering, and
+    libwnck can't stand in (a Wayland session, or no X screen)."""
 
+
+def window_icon(window, size=32):
+    """A gTile-listed window's row icon: the first of its candidate names
+    (see ohmydebn_windows.icon_candidates) the icon theme has, else the
+    generic one resolve_icon_path() falls back to."""
+    theme = Gtk.IconTheme.get_default()
+    for name in windows_lib.icon_candidates(window):
+        if os.path.isabs(name) or theme.has_icon(name):
+            path = resolve_icon_path(name, size)
+            if path:
+                return decode_icon_pixbuf(path, size)
+    path = resolve_icon_path("application-x-executable", size)
+    return decode_icon_pixbuf(path, size) if path else None
+
+
+def load_windows():
+    """Enumerates open windows for ohmydebn-window-switcher, as
+    (title, window, icon) rows with the focused window first.
+
+    From gTile@OhMyDebn's ListWindows when it answers: it runs inside
+    Cinnamon, which sees every window in an X11 or a Wayland session alike,
+    and lists them most recently used first, as Cinnamon's own Alt+Tab
+    orders them. Each row's value is then an ohmydebn_windows.SwitcherWindow.
+
+    Otherwise, on X11 only, from libwnck (gir1.2-wnck-3.0, installed by
+    install/packaging/dependencies.sh; Cinnamon only depends on the libwnck
+    library, not this typelib), as before gTile offered the list: rows'
+    values are Wnck.Window objects. libwnck works with X11 windows only - in
+    a Wayland session it has no screen at all (Wnck.Screen.get_default()
+    is None), and the switcher used to crash there and show nothing.
     get_windows_stacked() is bottom-to-top; reversing it approximates a
-    most-recently-used order for free (raising a window moves it to the
-    top of the stack) without any persistent state - this script is a
-    fresh process on every Ctrl+Alt+Tab press, so there's no daemon around
-    to track real focus history across invocations. is_skip_tasklist()
-    also excludes this picker's own window itself, since
-    Picker.__init__ sets that hint before the window is ever mapped."""
-    screen = Wnck.Screen.get_default()
+    most-recently-used order, since raising a window moves it to the top.
+    is_skip_tasklist() also excludes this picker's own window itself, since
+    Picker.__init__ sets that hint before the window is ever mapped.
+
+    Raises SwitcherUnavailable when neither can list windows."""
+    windows = windows_lib.list_windows()
+    if windows is not None:
+        return [(win.title, win, window_icon(win)) for win in windows]
+    screen = None if windows_lib.is_wayland_session() else Wnck.Screen.get_default()
+    if screen is None:
+        raise SwitcherUnavailable()
     screen.force_update()
     rows = []
     for win in reversed(screen.get_windows_stacked()):
@@ -561,6 +595,9 @@ def load_windows():
 
 
 def activate_window(win):
+    if isinstance(win, windows_lib.SwitcherWindow):
+        windows_lib.activate_window(win.id)
+        return
     try:
         win.activate(Gtk.get_current_event_time())
     except GLib.Error:
@@ -756,8 +793,7 @@ class Picker(Gtk.Window):
         if mode == "windows" and len(self.categories) > 1:
             # Classic alt-tab convention: a single tap-and-release should
             # land on the *previous* window, not the one already focused
-            # (which sorts first via the reversed-stacking approximation in
-            # load_windows()).
+            # (which load_windows() lists first).
             second_row = self.listbox.get_row_at_index(1)
             if second_row:
                 self.listbox.select_row(second_row)
@@ -1363,7 +1399,11 @@ class Picker(Gtk.Window):
             Gtk.main_quit()
             return
         if value:
-            if isinstance(value, tuple):
+            if self.mode == "windows":
+                # First: a SwitcherWindow is a namedtuple, which the
+                # tuple check below would take for an app to launch.
+                activate_window(value)
+            elif isinstance(value, tuple):
                 # An app value - either real apps mode (standalone or
                 # "Other Apps" embedded in --serve) or a row picked
                 # straight out of a top-level menu-mode search merge (see
@@ -1371,8 +1411,9 @@ class Picker(Gtk.Window):
                 # the value's own shape rather than self.mode, since the
                 # latter is "menu" in that last case. Ordinary menu-mode
                 # values are always plain breadcrumb strings and
-                # windows-mode values are Wnck.Window objects, so neither
-                # can ever hit this branch by mistake.
+                # windows-mode values are SwitcherWindow namedtuples or
+                # Wnck.Window objects, and windows mode is checked first
+                # below, so neither can ever hit this branch by mistake.
                 exec_tokens, desktop_id = value
                 launch_app(exec_tokens)
                 record_app_usage(desktop_id)
@@ -1391,8 +1432,6 @@ class Picker(Gtk.Window):
                     self._schedule_close()
                     self.on_result(desktop_id)
                     return
-            elif self.mode == "windows":
-                activate_window(value)
             elif self.on_result is not None:
                 # Doesn't quit outright here, in case reload() brings this
                 # window back for whatever screen comes next - but if
@@ -1518,11 +1557,56 @@ def run_serve_mode(request_fifo_path, response_fifo_path):
     request_fifo.close()
 
 
+def run_window_switcher():
+    """Ctrl+Alt+Tab. One switcher at a time: on Wayland its keyboard grab
+    can't keep further Ctrl+Alt+Tab taps from Cinnamon, which starts this
+    again for each one, so a second start passes its tap to the running
+    switcher (SIGUSR1: next row) and exits - see
+    ohmydebn_windows.claim_switcher. On X11 the grab keeps them, and that
+    never happens."""
+    claimed, held = windows_lib.claim_switcher(windows_lib.switcher_lock_path())
+    if not claimed:
+        if held:
+            try:
+                os.kill(held, signal.SIGUSR1)
+            except OSError:
+                pass
+        return 0
+
+    # Before the window is built, not after: a SIGUSR1 from a quick second
+    # tap would otherwise end this process (the signal's default action)
+    # while it's still listing windows. GLib holds it until the main loop
+    # runs, by which time the window exists.
+    switcher = []
+
+    def next_row():
+        if switcher:
+            switcher[0].move_selection(Gdk.KEY_Down)
+        return GLib.SOURCE_CONTINUE
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, next_row)
+    try:
+        win = Picker(mode="windows")
+    except SwitcherUnavailable:
+        os.close(held)  # the lock: free for the next Ctrl+Alt+Tab
+        # Said, not just failed: a hotkey that does nothing looks broken.
+        subprocess.run(
+            ["notify-send", "--app-name=OhMyDebn", "Window switcher",
+             "Can't list your windows: the gTile (OhMyDebn) extension isn't running. "
+             "Cinnamon's own Alt+Tab still works."],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 1
+    switcher.append(win)
+    win.show_all()
+    Gtk.main()
+    return 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--apps":
         win = Picker(mode="apps")
     elif len(sys.argv) > 1 and sys.argv[1] == "--windows":
-        win = Picker(mode="windows")
+        sys.exit(run_window_switcher())
     elif len(sys.argv) > 1 and sys.argv[1] == "--hotkeys":
         win = Picker(mode="hotkeys")
     elif len(sys.argv) > 1 and sys.argv[1] == "--serve":

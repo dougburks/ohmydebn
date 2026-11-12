@@ -57,9 +57,18 @@ if [ -n "$GTILE_INSTALLED_VERSION" ] && gsettings get org.cinnamon enabled-exten
     # announced: finale.sh checks the same thing and wouldn't restart, so
     # telling the user Cinnamon "will restart" would be wrong.
     if pgrep -x cinnamon >/dev/null; then
-      # "at the end", not "of this update": this runs on a first install too.
-      /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end for gTile"
-      export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
+      # In a Wayland session Cinnamon is the display server itself, and
+      # restarting it (cinnamon --replace, an X11 window manager's
+      # handover) isn't possible there; Cinnamon reloads just the
+      # extension instead (ReloadXlet), which finale.sh asks for.
+      if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        /usr/share/ohmydebn/bin/ohmydebn-headline "gTile will reload at the end"
+        export OHMYDEBN_GTILE_RELOAD_NEEDED=1
+      else
+        # "at the end", not "of this update": this runs on a first install too.
+        /usr/share/ohmydebn/bin/ohmydebn-headline "Cinnamon will restart at the end for gTile"
+        export OHMYDEBN_CINNAMON_RESTART_NEEDED=1
+      fi
     fi
   fi
 fi

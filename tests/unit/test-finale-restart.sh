@@ -45,13 +45,21 @@ if [[ "${MOCK_CINNAMON_RUNNING:-true}" == "true" ]]; then
 fi
 exit 1
 EOF
+  mock_bin gdbus <<'GDBUS'
+#!/bin/bash
+mock_log "gdbus $*"
+exit "${MOCK_GDBUS_EXIT:-0}"
+GDBUS
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g; s#/usr/bin/cinnamon#$MOCK_BIN/cinnamon#g; s#/etc/lightdm/lightdm.conf#$MOCK_DIR/lightdm.conf#g" "$SCRIPT" >"$MOCK_DIR/finale-patched.sh"
 }
 
 run_script() {
-  HOME="$SCRATCH_HOME" PATH="$(mock_path)" XDG_CURRENT_DESKTOP="X-Cinnamon" \
-    OHMYDEBN_CINNAMON_RESTART_NEEDED="${RESTART_NEEDED:-}" \
-    bash -e "$MOCK_DIR/finale-patched.sh" >/dev/null 2>&1
+  # An X11 session unless MOCK_SESSION_TYPE says otherwise, whatever
+  # session the tests themselves run in.
+  OUT=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" XDG_CURRENT_DESKTOP="X-Cinnamon" \
+    WAYLAND_DISPLAY='' XDG_SESSION_TYPE="${MOCK_SESSION_TYPE:-x11}" \
+    OHMYDEBN_CINNAMON_RESTART_NEEDED="${RESTART_NEEDED:-}" OHMYDEBN_GTILE_RELOAD_NEEDED="${RELOAD_NEEDED:-}" \
+    bash -e "$MOCK_DIR/finale-patched.sh" 2>&1)
 }
 
 # setsid ... & backgrounds the restart - poll briefly for the mock to have
@@ -216,5 +224,52 @@ for CONF in '[Seat:*]\nautologin-user=someone\nautologin-session=cinnamon\n' \
   rm -rf "$SCRATCH_HOME"
   mock_cleanup
 done
+
+# Cinnamon's Wayland session: Cinnamon is the display server there, and
+# cinnamon --replace can't restart it.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+MOCK_SESSION_TYPE=wayland RESTART_NEEDED=1 MOCK_CINNAMON_RUNNING=true run_script
+sleep 0.3
+CALLS=$(cat "$MOCK_CALLS")
+assert_not_contains "Wayland, restart asked for: Cinnamon isn't replaced" "$CALLS" "cinnamon --replace"
+assert_contains "Wayland, restart asked for: says to log out and back in" "$CALLS" "Log out and back in to apply changes"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# A new gTile on Wayland: Cinnamon reloads just the extension.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+MOCK_SESSION_TYPE=wayland RELOAD_NEEDED=1 MOCK_CINNAMON_RUNNING=true run_script
+CALLS=$(cat "$MOCK_CALLS")
+assert_contains "gTile reload: asks Cinnamon to reload the extension" "$CALLS" \
+  "gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ReloadXlet gTile@OhMyDebn EXTENSION"
+assert_contains "gTile reload: says so" "$CALLS" "Reloading gTile"
+assert_not_contains "gTile reload: no Cinnamon restart" "$CALLS" "cinnamon --replace"
+assert_not_contains "gTile reload: no log-out note when it worked" "$OUT" "log out and back in"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+MOCK_GDBUS_EXIT=1 MOCK_SESSION_TYPE=wayland RELOAD_NEEDED=1 MOCK_CINNAMON_RUNNING=true run_script
+assert_contains "gTile reload refused: says to log out and back in" "$OUT" "log out and back in to use the updated gTile"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state" && touch "$SCRATCH_HOME/.local/state/ohmydebn"
+MOCK_SESSION_TYPE=wayland RELOAD_NEEDED=1 MOCK_CINNAMON_RUNNING=false run_script
+assert_not_contains "gTile reload, no Cinnamon running: nothing asked of it" "$(cat "$MOCK_CALLS")" "ReloadXlet"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
 
 test_summary

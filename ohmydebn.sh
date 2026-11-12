@@ -30,7 +30,7 @@ unset DCONF_PROFILE
 # at the end. Cleared here, before any step runs, so a value left in the
 # environment never causes a restart nothing asked for, while a request
 # from a config step still reaches finale.sh.
-unset OHMYDEBN_CINNAMON_RESTART_NEEDED
+unset OHMYDEBN_CINNAMON_RESTART_NEEDED OHMYDEBN_GTILE_RELOAD_NEEDED
 
 # Packaging
 source $OHMYDEBN_INSTALL/packaging/all.sh

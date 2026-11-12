@@ -86,13 +86,18 @@ EOF
 # scenario that expects none.
 run_script() {
   local output
+  # An X11 session unless MOCK_SESSION_TYPE says otherwise, whatever
+  # session the tests themselves run in.
   output=$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" OHMYDEBN_CINNAMON_RESTART_NEEDED='' \
+    OHMYDEBN_GTILE_RELOAD_NEEDED='' WAYLAND_DISPLAY='' XDG_SESSION_TYPE="${MOCK_SESSION_TYPE:-x11}" \
     MOCK_CINNAMON_RUNNING="${MOCK_CINNAMON_RUNNING:-true}" bash -c "
     source '$MOCK_DIR/gtile-restart-patched.sh'
     echo \"GTILE_TEST_FLAG_MARKER:\${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}\"
+    echo \"GTILE_TEST_RELOAD_MARKER:\${OHMYDEBN_GTILE_RELOAD_NEEDED:-}\"
   " 2>/dev/null)
   RESTART_FLAG=$(echo "$output" | sed -n 's/^GTILE_TEST_FLAG_MARKER://p')
-  SCRIPT_STDOUT=$(echo "$output" | grep -v '^GTILE_TEST_FLAG_MARKER:')
+  RELOAD_FLAG=$(echo "$output" | sed -n 's/^GTILE_TEST_RELOAD_MARKER://p')
+  SCRIPT_STDOUT=$(echo "$output" | grep -v '^GTILE_TEST_\(FLAG\|RELOAD\)_MARKER:')
 }
 
 # Scenario 1: first run ever, gTile installed and enabled -> flags a
@@ -201,6 +206,35 @@ assert_eq "no Cinnamon session: no restart flag" "" "$RESTART_FLAG"
 assert_not_contains "no Cinnamon session: no 'will restart' headline" "$CALLS" "Cinnamon will restart"
 assert_eq "no Cinnamon session: restart-version state file still written" "2.9.0-20260901" \
   "$(cat "$SCRATCH_HOME/.local/state/ohmydebn-config/gtile-cinnamon-restart-version" 2>/dev/null)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# Scenario: a new gTile in Cinnamon's Wayland session. Cinnamon is the
+# display server there, and cinnamon --replace can't restart it; Cinnamon
+# reloads just the extension instead, which finale.sh asks for.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+mkdir -p "$SCRATCH_HOME/.local/state/ohmydebn-config"
+echo -n "3.0.1-20261102" >"$SCRATCH_HOME/.local/state/ohmydebn-config/gtile-cinnamon-restart-version"
+MOCK_SESSION_TYPE=wayland DPKG_GTILE_VERSION="3.0.1-20261112" run_script
+CALLS=$(cat "$MOCK_CALLS")
+assert_eq "Wayland, version bumped: no Cinnamon restart flagged" "" "$RESTART_FLAG"
+assert_eq "Wayland, version bumped: a gTile reload flagged" "1" "$RELOAD_FLAG"
+assert_contains "Wayland: says gTile will reload" "$CALLS" "gTile will reload at the end"
+assert_not_contains "Wayland: doesn't say Cinnamon will restart" "$CALLS" "Cinnamon will restart"
+assert_eq "Wayland: the version is recorded as handled" "3.0.1-20261112" \
+  "$(cat "$SCRATCH_HOME/.local/state/ohmydebn-config/gtile-cinnamon-restart-version" 2>/dev/null)"
+rm -rf "$SCRATCH_HOME"
+mock_cleanup
+
+# The same bump on X11 still restarts Cinnamon, as before.
+mock_init
+setup_mocks
+SCRATCH_HOME=$(mktemp -d)
+DPKG_GTILE_VERSION="3.0.1-20261112" run_script
+assert_eq "X11, version bumped: Cinnamon restart flagged" "1" "$RESTART_FLAG"
+assert_eq "X11, version bumped: no reload flag" "" "$RELOAD_FLAG"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 

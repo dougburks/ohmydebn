@@ -11,9 +11,31 @@
 # last thing printed.
 # pgrep -x cinnamon here (not at flag-set time) is the up-to-date check of
 # whether there's actually a live Cinnamon session to restart.
+#
+# In a Wayland session Cinnamon is the display server itself: cinnamon
+# --replace is an X11 window manager's handover and can't restart it there,
+# so a restart is left to the next login, and said so. An upgraded gTile
+# needs no restart there: Cinnamon reloads just that extension
+# (finalization/gtile-restart-flag.sh asks for it with
+# OHMYDEBN_GTILE_RELOAD_NEEDED).
+FINALE_WAYLAND=false
+if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  FINALE_WAYLAND=true
+fi
 if [ "${OHMYDEBN_CINNAMON_RESTART_NEEDED:-}" = "1" ] && pgrep -x cinnamon >/dev/null; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "Restarting Cinnamon to apply changes"
-  setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+  if [ "$FINALE_WAYLAND" = true ]; then
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Log out and back in to apply changes"
+  else
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Restarting Cinnamon to apply changes"
+    setsid /usr/bin/cinnamon --replace >/dev/null 2>&1 &
+  fi
+fi
+if [ "${OHMYDEBN_GTILE_RELOAD_NEEDED:-}" = "1" ] && pgrep -x cinnamon >/dev/null; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Reloading gTile"
+  if ! gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon \
+    --method org.Cinnamon.ReloadXlet gTile@OhMyDebn EXTENSION >/dev/null 2>&1; then
+    echo "Cinnamon didn't reload it: log out and back in to use the updated gTile."
+  fi
 fi
 
 # ohmydebn-reset-config (OHMYDEBN_RESET) prints its own "complete" once

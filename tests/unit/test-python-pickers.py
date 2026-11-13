@@ -710,6 +710,10 @@ try:
     check_eq("compute_layout: a large monitor gets the design sizes unscaled",
              (big.card_w, big.card_h, big.ring_dims[0], big.bg_thumb_w, big.bg_thumb_h),
              (tc.CARD_W, tc.CARD_H, (tc.RING_SPECS[0][0], tc.RING_SPECS[0][1]), tc.BG_THUMB_W, tc.BG_THUMB_H))
+    full_hd = tc.compute_layout(_Geo(1920, 1080))
+    check("compute_layout: on a 1920x1080 monitor the panel leaves the desktop showing around it",
+          full_hd.card_h * tc.DESIGN_ROW_H / tc.CARD_H + tc.DESIGN_CAPTION_H + tc.STACK_SPACING + tc.CAROUSEL_V_MARGIN <= 1080 * tc.PANEL_SHARE + 1
+          and tc.PANEL_SHARE < 1)
     small = tc.compute_layout(_Geo(1024, 600))
     check("compute_layout: a small monitor shrinks every size, never below the 0.35 floor",
           small.card_w < big.card_w and small.card_w >= round(tc.CARD_W * 0.35) and len(small.ring_dims) == len(tc.RING_SPECS))
@@ -730,21 +734,27 @@ try:
     alpha_bg = os.path.join(user_dir, "alpha", "backgrounds", "only.png")
     expected = [(zeta_preview, w, h) for w, h in layout.ring_dims]
     for path in zeta_bgs:
-        expected += [(path, 1920, 1080), (path, layout.card_w, layout.card_h), (path, layout.bg_thumb_w, layout.bg_thumb_h)]
-    check_eq("warm_targets: zeta - ring sizes of its preview first, then each background at backdrop/card/thumb, in list order",
+        expected += [(path, layout.card_w, layout.card_h), (path, layout.bg_thumb_w, layout.bg_thumb_h)]
+    check_eq("warm_targets: zeta - ring sizes of its preview first, then each background at card/thumb, in list order",
              targets[:len(expected)], expected)
     check("warm_targets: alpha (one background) gets no background-thumbnail size",
-          (alpha_bg, 1920, 1080) in targets and (alpha_bg, layout.card_w, layout.card_h) in targets
+          (alpha_bg, layout.card_w, layout.card_h) in targets
           and (alpha_bg, layout.bg_thumb_w, layout.bg_thumb_h) not in targets)
+    # The carousel is a panel now, not full screen with the background
+    # behind it: nothing is decoded at the screen's size any more.
+    check("warm_targets: nothing at the screen's size (no full-screen background behind the panel)",
+          not any((w, h) == (1920, 1080) for _path, w, h in targets))
     check("warm_targets: middle (no images at all) contributes nothing", not any("middle" in t[0] for t in targets))
     check_eq("warm_targets: no duplicate targets", len(targets), len(set(targets)))
     # skip_cached: an existing cache file drops that target; the fixture
     # images are empty files, so the key comes from _cache_path directly.
     os.makedirs(tc.CAROUSEL_CACHE_DIR, exist_ok=True)
-    open(tc._cache_path(alpha_bg, 1920, 1080), "w").close()
-    targets_skipping = tc.warm_targets(["alpha"], geo, layout)
+    zeta_first = zeta_bgs[0]
+    open(tc._cache_path(zeta_first, layout.card_w, layout.card_h), "w").close()
+    targets_skipping = tc.warm_targets(["zeta"], geo, layout)
     check("warm_targets: an already-cached key is skipped, the rest kept",
-          (alpha_bg, 1920, 1080) not in targets_skipping and (alpha_bg, layout.card_w, layout.card_h) in targets_skipping)
+          (zeta_first, layout.card_w, layout.card_h) not in targets_skipping
+          and (zeta_first, layout.bg_thumb_w, layout.bg_thumb_h) in targets_skipping)
 
     check_eq("_hex_to_rgb: basic conversion", tc._hex_to_rgb("#e68e0d"), (230, 142, 13))
     check(
@@ -2056,7 +2066,7 @@ class _Stop(Exception):
     pass
 
 
-def picker_backend(environ):
+def picker_backend(environ, script="ohmydebn-menu-picker"):
     seen = {}
 
     class Repository(types.ModuleType):
@@ -2079,7 +2089,7 @@ def picker_backend(environ):
     os.environ.clear()
     os.environ.update(environ)
     try:
-        SourceFileLoader("picker_backend_probe", os.path.join(BIN, "ohmydebn-menu-picker")).load_module()
+        SourceFileLoader("picker_backend_probe", os.path.join(BIN, script)).load_module()
     except _Stop:
         pass
     finally:
@@ -2103,6 +2113,69 @@ seen = picker_backend({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
 check_eq("X11: Gdk's backend is left alone", seen.get("at_import"), None)
 check_eq("Wayland without XWayland: nothing to fall back to",
          mp.use_xwayland({"WAYLAND_DISPLAY": "wayland-0"}), False)
+
+# The theme carousel is a panel centered on the pointer's monitor, which a
+# Wayland window can't find or place itself on: the same XWayland opening.
+seen = picker_backend({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "ohmydebn-theme-carousel")
+check_eq("carousel, Wayland: Gdk opens XWayland", seen.get("at_import"), "x11")
+check_eq("carousel, Wayland: GDK_BACKEND is gone again before anything runs", seen.get("after"), None)
+seen = picker_backend({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}, "ohmydebn-theme-carousel")
+check_eq("carousel, X11: Gdk's backend is left alone", seen.get("at_import"), None)
+check_eq("carousel, Wayland without XWayland: nothing to fall back to",
+         tc.use_xwayland({"WAYLAND_DISPLAY": "wayland-0"}), False)
+
+
+# place_on_monitor: centered on the monitor it was sized for, from the
+# panel's natural size, before the first map.
+class _Size:
+    def __init__(self, w, h):
+        self.width, self.height = w, h
+
+
+class _MonitorGeo(_Size):
+    def __init__(self, x, y, w, h):
+        super().__init__(w, h)
+        self.x, self.y = x, y
+
+
+class _FakePanel:
+    def __init__(self, geo, natural):
+        self._geo = geo
+        self._natural = natural
+        self.shown = False
+
+    def get_child(self):
+        panel = self
+
+        class Child:
+            def show_all(self):
+                panel.shown = True
+        return Child()
+
+    def get_preferred_size(self):
+        return _Size(1, 1), self._natural
+
+
+_moves = []
+_saved_move = tc.Gtk.Window.move
+tc.Gtk.Window.move = lambda win, x, y: _moves.append((x, y))
+try:
+    fake_panel = _FakePanel(_MonitorGeo(1920, 0, 2560, 1440), _Size(2000, 1200))
+    tc.Carousel.place_on_monitor(fake_panel)
+    check("place_on_monitor: its widgets are shown first, so it has a size", fake_panel.shown)
+    check_eq("place_on_monitor: centered on the pointer's monitor (a second one, to the right)", _moves, [(2200, 120)])
+    _moves.clear()
+    tc.Carousel.place_on_monitor(_FakePanel(_MonitorGeo(0, 0, 1024, 600), _Size(1100, 700)))
+    check_eq("place_on_monitor: bigger than a small monitor, it starts at its corner", _moves, [(0, 0)])
+finally:
+    tc.Gtk.Window.move = _saved_move
+
+_carousel_code = "\n".join(
+    line for line in open(os.path.join(BIN, "ohmydebn-theme-carousel"), encoding="utf-8").read().splitlines()
+    if not line.lstrip().startswith("#")
+)
+check("carousel: no longer full screen", "fullscreen" not in _carousel_code)
+check("carousel: no full-screen background image behind the panel", "bg_image" not in _carousel_code)
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

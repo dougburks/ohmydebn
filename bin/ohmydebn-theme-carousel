@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 #
-# ohmydebn-theme-carousel: full-screen, Omarchy-style theme AND background
-# browser - launched by Ctrl+Super+T, Ctrl+Super+B (both bound to this same
+# ohmydebn-theme-carousel: Omarchy-style theme AND background browser, a
+# panel centered on the monitor the pointer is on, with the desktop and its
+# windows still showing around it - launched by Ctrl+Super+T, Ctrl+Super+B (both bound to this same
 # script - see install/keybinding/keybinding-custom.txt), and ohmydebn-menu's
 # Appearance > Theme and Appearance > Background entries directly. Used to
 # be two separate scripts/hotkeys/menu entries (this one for themes only,
@@ -56,12 +57,38 @@
 # the theme's own first background image (confirmed every theme has at
 # least one) when no preview.png exists - see preview_image().
 
+import os
+
 import gi
+
+
+def use_xwayland(environ=None):
+    """Whether to open this window through XWayland: in a Wayland session,
+    where XWayland (DISPLAY) is there to use. A Wayland window can't place
+    itself and can't read where the pointer is, which picks the monitor
+    the panel opens on; an X11 window can do both, as in an X11 session."""
+    env = os.environ if environ is None else environ
+    wayland = bool(env.get("WAYLAND_DISPLAY")) or env.get("XDG_SESSION_TYPE") == "wayland"
+    return wayland and bool(env.get("DISPLAY"))
+
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
+# GDK_BACKEND has to be set before Gdk is imported: PyGObject's Gdk
+# overrides open the display on import. It's put back afterwards, so what
+# this starts (Aether, ohmydebn-theme-set's own windows) opens the way it
+# would anyway.
+_USE_XWAYLAND = use_xwayland()
+_SAVED_GDK_BACKEND = os.environ.get("GDK_BACKEND")
+if _USE_XWAYLAND:
+    os.environ["GDK_BACKEND"] = "x11"
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
+if _USE_XWAYLAND:
+    if _SAVED_GDK_BACKEND is None:
+        os.environ.pop("GDK_BACKEND", None)
+    else:
+        os.environ["GDK_BACKEND"] = _SAVED_GDK_BACKEND
 
 # OhMyDebn's full-color icon for this window in the window list and
 # switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).
@@ -70,7 +97,6 @@ Gtk.Window.set_default_icon_name("ohmydebn")
 import collections
 import concurrent.futures
 import hashlib
-import os
 import subprocess
 import sys
 import tempfile
@@ -105,8 +131,8 @@ THEME_BACKGROUNDS_MEMORY_DIR = os.path.expanduser("~/.local/state/ohmydebn-theme
 # file's own mtime can't catch that, since the source itself didn't change.
 CAROUSEL_CACHE_DIR = os.path.expanduser("~/.cache/ohmydebn/theme-carousel")
 # Size cap for that directory. The shipped themes sit around 30-90MB, but
-# a large custom wallpaper collection multiplies out (card + backdrop +
-# three ring sizes + two thumbnail sizes per image) with nothing else
+# a large custom wallpaper collection multiplies out (card + three
+# ring sizes + two thumbnail sizes per image) with nothing else
 # ever pruning it. Checked after each cache write, on the decode thread:
 # oldest files first (by mtime - the file just written is the newest) until
 # under the cap. Best-effort like the write itself.
@@ -165,6 +191,9 @@ DESIGN_CAPTION_H = 365
 STACK_SPACING = 24
 CAROUSEL_H_MARGIN = 60
 CAROUSEL_V_MARGIN = 40
+# The share of the monitor the panel may take at most, so the desktop and
+# its windows still show around it, as around Omarchy's picker.
+PANEL_SHARE = 0.88
 
 REMOVE_LABEL_DEFAULT = "Remove Theme"
 REMOVE_LABEL_ARMED = "Confirm Remove?"
@@ -443,8 +472,8 @@ def starting_background_index(slug, backgrounds):
 
 def get_monitor_geometry():
     """(geometry, monitor number) of the monitor the pointer is on. The
-    number is the Gdk.Screen index fullscreen_on_monitor() takes - found
-    by matching geometry, since GdkMonitor carries no index of its own."""
+    number is the Gdk.Screen index of that monitor - found by matching
+    geometry, since GdkMonitor carries no index of its own."""
     display = Gdk.Display.get_default()
     seat = display.get_default_seat()
     _screen, x, y = seat.get_pointer().get_position()
@@ -503,8 +532,8 @@ def load_cover_pixbuf(path, target_w, target_h, min_target=None):
 
 
 # One decode per source file, not one per requested size. A single
-# render() plus its prefetch asks for the same wallpaper at up to five
-# sizes (full-screen backdrop, card, three neighbor rings), and profiling
+# render() plus its prefetch asks for the same wallpaper at up to four
+# sizes (card, three neighbor rings), and profiling
 # a cold cache showed decode dominating: on the repo's largest JPEG,
 # new_from_file_at_scale costs 72-136ms at ANY of those sizes (libjpeg's
 # shrink-on-load only goes so far), while scaling an already-decoded
@@ -514,15 +543,15 @@ def load_cover_pixbuf(path, target_w, target_h, min_target=None):
 # load_cover_pixbuf. A request larger than the master (the user navigates
 # onto a theme whose preview had only been decoded at ring size) decodes
 # afresh at the larger scale and replaces it - so far rings never pay for
-# a full-screen decode they may never need, and nothing is ever decoded
-# twice at the same or smaller size. Bounded to MASTER_LIMIT entries (a
-# full-screen master is ~13MB), oldest out; keyed on mtime like the disk
+# a card-size decode they may never need, and nothing is ever decoded
+# twice at the same or smaller size. Bounded to MASTER_LIMIT entries,
+# oldest out; keyed on mtime like the disk
 # cache so a replaced file isn't served from its predecessor's pixels.
 # Per-path locks make concurrent requests for one file (a synchronous
 # render() and a prefetch thread) share one decode instead of racing two.
 # Requests usually arrive smallest first: a theme shows up in the far
-# rings at thumbnail size, then at ring-0 size, then as the card, then as
-# the full-screen backdrop as the user browses onto it - and a master
+# rings at thumbnail size, then at ring-0 size, then as the card as the
+# user browses onto it - and a master
 # sized for the first request would be upgraded (re-decoded) at each of
 # those steps, saving nothing. So a first decode is done at no smaller
 # than a floor: MASTER_MIN_TARGET (the card size, set by Carousel.__init__)
@@ -531,12 +560,10 @@ def load_cover_pixbuf(path, target_w, target_h, min_target=None):
 # ring, but the ring-0 and card requests that follow when it's visited
 # (most are - browsing is sequential) derive for free instead of costing
 # 72ms + 99ms more. Background decodes (the prefetch thread, the outer
-# rings' async fill) pass min_target=(screen) instead: nobody is waiting
-# on them, and a full-screen master (~136ms vs ~99ms there) means even
-# the backdrop derives when the theme reaches the centre - one decode
-# per theme, total. Measured cold: a full-screen floor everywhere cut
-# decodes 45 -> 28 but cost ~200ms on first paint; the hybrid keeps the
-# first paint and takes most of the decode saving.
+# rings' async fill, the warm-up) use the same card-size floor, so every
+# size of a theme's image derives from one decode. (The carousel used to
+# show the selected background full screen behind the panel too, and
+# floored at the screen size then.)
 MASTER_LIMIT = 8
 MASTER_MIN_TARGET = None  # (w, h) or None - the main-thread floor
 _masters = collections.OrderedDict()  # path -> (mtime_ns, scale, pixbuf)
@@ -691,6 +718,14 @@ def _evict_cache(keep_path):
 
 
 CSS = """
+#carousel-panel {
+    /* The window itself: a dark panel the cards sit on, with the desktop
+       showing around it. The border's color is the centered theme's
+       accent, from _apply_accent()'s generated rule; this is the
+       pre-first-render fallback. */
+    background-color: #000000;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+}
 #carousel-caption {
     /* Fully opaque, not translucent - a partial scrim (0.55 here,
        previously) still let a bright/busy background show through enough
@@ -995,8 +1030,8 @@ def compute_layout(geo):
     `row` is the part that does. Shared by Carousel.__init__ and the
     cache warm-up (warm_targets), so a warmed cache always holds exactly
     the keys a carousel on that monitor will look up."""
-    available_w = geo.width - CAROUSEL_H_MARGIN
-    available_h = geo.height - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
+    available_w = geo.width * PANEL_SHARE - CAROUSEL_H_MARGIN
+    available_h = geo.height * PANEL_SHARE - DESIGN_CAPTION_H - STACK_SPACING - CAROUSEL_V_MARGIN
     scale = max(0.35, min(1.0, available_w / DESIGN_ROW_W, available_h / DESIGN_ROW_H))
     return Layout(
         round(CARD_W * scale), round(CARD_H * scale),
@@ -1010,7 +1045,7 @@ def warm_targets(slugs, geo, layout, skip_cached=True):
     open instantly on a monitor of this geometry, in the order the
     carousel needs them: for each theme its ring thumbnails first (what
     every neighbor shows of it), then its first background at the
-    backdrop, card and background-thumbnail sizes (what landing on it
+    card and background-thumbnail sizes (what landing on it
     shows), then its remaining backgrounds the same way (Up/Down).
     Targets whose cache file already exists are left out, so a warm
     cache costs one stat per key and no decode. Every size of one image
@@ -1036,7 +1071,6 @@ def warm_targets(slugs, geo, layout, skip_cached=True):
         backgrounds = list_backgrounds_for_theme(slug)
         landing = backgrounds[0] if backgrounds else (first_background(slug) or preview_image(slug))
         for path in [landing] + [b for b in backgrounds if b != landing]:
-            add(path, geo.width, geo.height)
             add(path, layout.card_w, layout.card_h)
             if len(backgrounds) > 1:
                 add(path, layout.bg_thumb_w, layout.bg_thumb_h)
@@ -1053,7 +1087,7 @@ def warm_cache(geo, threads=2, log=None):
     targets = warm_targets(list_theme_slugs(), geo, layout)
     if log:
         log(f"{len(targets)} images to cache for {geo.width}x{geo.height}")
-    min_target = (geo.width, geo.height)
+    min_target = (layout.card_w, layout.card_h)
 
     def decode(target):
         path, w, h = target
@@ -1071,7 +1105,7 @@ class DecodeWorker:
     """The one background thread every image decode goes through - the
     images render() wants on screen now, and the speculative prefetch of
     the likely next moves, in that order. Before this, render() decoded
-    the backdrop, the card and the nearest neighbor thumbnails on the main
+    the card and the nearest neighbor thumbnails on the main
     thread (100-400ms each on a cold cache, measured), so holding an arrow
     key stuttered and the first paint waited for the current wallpaper;
     and every outer ring and every prefetch started a thread of its own,
@@ -1088,8 +1122,8 @@ class DecodeWorker:
     the apply callback checks again there, since the slot can move on
     while the result is in flight."""
 
-    # Two threads, not one: a theme change wants up to ten decodes (the
-    # backdrop, the card, six ring thumbnails, two background thumbnails)
+    # Two threads, not one: a theme change wants up to nine decodes (the
+    # card, six ring thumbnails, two background thumbnails)
     # and a single thread serialized them - measured 320-420ms per move on
     # a cold cache until the last ring landed, against 160-300ms with two
     # sharing the queue. GdkPixbuf's decode releases the GIL, so they
@@ -1147,6 +1181,11 @@ class Carousel(Gtk.Window):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.set_decorated(False)
         self.set_keep_above(True)
+        # Sized to its content, a panel with the desktop around it: it was
+        # full screen, the selected background filling the screen behind
+        # the cards, and hid every window.
+        self.set_resizable(False)
+        self.set_name("carousel-panel")
         self._closing = False
 
         self.slugs = list_theme_slugs()
@@ -1179,15 +1218,14 @@ class Carousel(Gtk.Window):
         # rules out a lost update between "not in cache" and the store.
         self._pixbuf_lock = threading.Lock()
         self._decoder = DecodeWorker()
-        # Which image each slot (backdrop, card, each ring/bg thumbnail)
+        # Which image each slot (card, each ring/bg thumbnail)
         # currently wants, by cache key - a decode that finishes for a slot
         # that has since moved on is cached but not shown.
         self._slot_want = {}
         # Lets render() skip re-decoding widgets that provably didn't
         # change - e.g. Up/Down (background-only) navigation never touches
-        # the full-screen backdrop or the adjacent-theme thumbnails, so
-        # redoing those every keypress was pure waste.
-        self._last_bg_path = None
+        # the adjacent-theme thumbnails, so redoing those every keypress
+        # was pure waste.
         self._last_theme_index = None
         # Bumped on every render(); a background prefetch thread checks
         # this before/after its (slow) decode step and abandons the rest
@@ -1196,12 +1234,11 @@ class Carousel(Gtk.Window):
 
         # Queried once: the pointer-position round trip behind it measured
         # ~5ms, which was being paid again on every render() - a sizeable
-        # share of a warm-cache keypress (14-40ms). The window is sized
-        # and fullscreened for this monitor, so it's the right one for the
+        # share of a warm-cache keypress (14-40ms). The panel is sized
+        # for and centered on this monitor, so it's the right one for the
         # whole session.
         geo, self._monitor_num = get_monitor_geometry()
         self._geo = geo
-        self.set_default_size(geo.width, geo.height)
 
         # Every image size for this monitor - see compute_layout(). One
         # (w, h) pair per RING_SPECS entry in ring_dims, same order (index
@@ -1241,17 +1278,14 @@ class Carousel(Gtk.Window):
         self.overlay = Gtk.Overlay()
         self.add(self.overlay)
 
-        self.bg_image = Gtk.Image()
-        self.overlay.add(self.bg_image)
-
         # halign/valign on a direct Gtk.Overlay child are silently ignored
         # by GTK (confirmed by hand with a minimal, non-reparented
         # reproduction, and even a do_get_child_position() vfunc override
         # didn't help - a real PyGObject binding limitation, not something
         # fixable from here) - every overlay child just renders at its own
         # natural size, pinned to the overlay's top-left corner. The
-        # workaround: give content (this overlay's only real child besides
-        # bg_image) hexpand/vexpand so it fills the *entire* overlay, then
+        # workaround: give content (this overlay's main child) hexpand/
+        # vexpand so it fills the *entire* overlay, then
         # rely on normal (non-overlay) child alignment inside it, which
         # works correctly everywhere else in this file - `stack` below
         # (row + caption, centered as one block) is what actually
@@ -1268,6 +1302,11 @@ class Carousel(Gtk.Window):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content.set_hexpand(True)
         content.set_vexpand(True)
+        # The panel's own edge, the margins compute_layout() budgets for.
+        content.set_margin_start(CAROUSEL_H_MARGIN // 2)
+        content.set_margin_end(CAROUSEL_H_MARGIN // 2)
+        content.set_margin_top(CAROUSEL_V_MARGIN // 2)
+        content.set_margin_bottom(CAROUSEL_V_MARGIN // 2)
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=28)
         # Explicit False, not left to auto-compute: a Box's own hexpand/
@@ -1605,8 +1644,10 @@ class Carousel(Gtk.Window):
         caption.pack_start(self.shortcuts_label, False, False, 0)
 
         stack.pack_start(caption, False, False, 0)
-        self.overlay.add_overlay(content)
-        self.overlay.set_overlay_pass_through(content, True)
+        # The overlay's main child, which sizes it (and so the window):
+        # overlay layers don't count toward its size. Only the search box
+        # floats over it now that no full-screen background sits under it.
+        self.overlay.add(content)
 
         # The S-search box, floated at the top-center of the window until
         # dismissed. A direct overlay child's own halign/valign are silently
@@ -1655,11 +1696,28 @@ class Carousel(Gtk.Window):
         self.connect("show", lambda w: GLib.idle_add(self.render))
         self.connect("map-event", self.on_map_present)
 
+    def place_on_monitor(self):
+        """Center the panel on the monitor the pointer is on (the one
+        get_monitor_geometry() sized it for). Done before the first map:
+        Cinnamon maps a new window on the primary monitor otherwise, and
+        a move after mapping is a request the window manager handles on
+        its own schedule. Its size isn't known until its widgets are
+        shown, so they're shown first (the window itself isn't yet)."""
+        self.get_child().show_all()
+        _minimum, natural = self.get_preferred_size()
+        geo = self._geo
+        x = geo.x + max(0, (geo.width - natural.width) // 2)
+        y = geo.y + max(0, (geo.height - natural.height) // 2)
+        # Gtk.Window's move, not this class's own (which moves between
+        # themes).
+        Gtk.Window.move(self, x, y)
+
     def on_map_present(self, widget, event):
         """Some window managers only reassign keyboard focus to a
         newly-mapped window on an actual pointer-crossing (EnterNotify)
-        event. This window opens fullscreen on whichever monitor already
-        has the pointer (see get_monitor_geometry()), so it maps directly
+        event. This window opens on whichever monitor already has the
+        pointer (see get_monitor_geometry()), often right under it, so it
+        maps directly
         *under* an already-stationary mouse rather than the mouse moving
         into it - no crossing event ever fires, so a WM that focuses purely
         on that event leaves keyboard focus on whatever was focused before,
@@ -1725,12 +1783,12 @@ class Carousel(Gtk.Window):
     def _request_image(self, image, slot, path, w, h, keep_previous):
         """Show `path` cover-fitted to w x h in `image`, now if it's in the
         in-memory cache and otherwise once the decode worker delivers it.
-        On a miss the widget either keeps what it shows (the backdrop and
-        the card: the caption has already moved on, and a stale picture
-        for a moment reads better than a blank flash) or clears (the small
-        thumbnails, where a wrong neighbor would mislead). The decode is
-        floored at the screen size (see MASTER_MIN_TARGET's comment) so
-        one source decode serves every size of that image."""
+        On a miss the widget either keeps what it shows (the card: the
+        caption has already moved on, and a stale picture for a moment
+        reads better than a blank flash) or clears (the small thumbnails,
+        where a wrong neighbor would mislead). The decode is floored at
+        the card size (see MASTER_MIN_TARGET's comment) so one source
+        decode serves every size of that image."""
         if path is None:
             self._slot_want[slot] = None
             image.clear()
@@ -1746,7 +1804,7 @@ class Carousel(Gtk.Window):
             return
         if not keep_previous:
             image.clear()
-        min_target = (self._geo.width, self._geo.height)
+        min_target = (self.card_w, self.card_h)
 
         def still_wanted():
             return self._slot_want.get(slot) == key
@@ -1810,6 +1868,9 @@ class Carousel(Gtk.Window):
             self._accent_cache[slug] = theme_accent_color(slug)
         accent = self._accent_cache[slug]
         css = (
+            "#carousel-panel {\n"
+            f"    border-color: {_rgba(accent, 0.92)};\n"
+            "}\n"
             "#carousel-card {\n"
             f"    border-color: {_rgba(accent, 0.92)};\n"
             f"    box-shadow: 0 0 50px 10px {_rgba(accent, 0.6)};\n"
@@ -1888,19 +1949,8 @@ class Carousel(Gtk.Window):
         # Up/Down (background-only) navigation never changes self.index, so
         # the adjacent-theme thumbnails below are guaranteed identical to
         # what's already on screen - skip redecoding those rather than
-        # paying their cost on every keypress. The full-screen backdrop
-        # isn't included in that skip: it tracks self.bg_index the same way
-        # the card does (below), so Up/Down legitimately changes it too -
-        # otherwise the small card would say "you picked background 3"
-        # while the immersive full-screen preview behind it kept showing
-        # background 1. The bg_path-changed check just below still avoids
-        # redundant redecodes on renders where it genuinely didn't change.
+        # paying their cost on every keypress.
         theme_changed = self.index != self._last_theme_index
-
-        bg_path = self.backgrounds[self.bg_index] if self.backgrounds else (first_background(slug) or preview_image(slug))
-        if bg_path and bg_path != self._last_bg_path:
-            self._request_image(self.bg_image, "backdrop", bg_path, geo.width, geo.height, keep_previous=True)
-            self._last_bg_path = bg_path
 
         # Main card: the specific background actually selected, so what's
         # previewed and what --background N applies on Enter never
@@ -2010,7 +2060,7 @@ class Carousel(Gtk.Window):
         (it lists directories)."""
         slugs = list(self.slugs)
         layout = self._layout
-        min_target = (geo.width, geo.height)
+        min_target = (layout.card_w, layout.card_h)
 
         def collect():
             return warm_targets(slugs, geo, layout)
@@ -2049,7 +2099,6 @@ class Carousel(Gtk.Window):
         index = self.index
         backgrounds = list(self.backgrounds)
         bg_index = self.bg_index
-        geo_w, geo_h = geo.width, geo.height
         card_w, card_h = self.card_w, self.card_h
 
         def work():
@@ -2067,16 +2116,11 @@ class Carousel(Gtk.Window):
                     neighbor_bg_path = neighbor_backgrounds[0] if neighbor_backgrounds else (
                         first_background(neighbor_slug) or preview_image(neighbor_slug)
                     )
-                    # Largest size first: the card then derives from the
-                    # full-screen master instead of costing its own decode
-                    # (see MASTER_MIN_TARGET's comment).
                     if neighbor_bg_path:
-                        targets.append((neighbor_bg_path, geo_w, geo_h))
                         targets.append((neighbor_bg_path, card_w, card_h))
             bg_n = len(backgrounds)
             if bg_n > 1:
                 for neighbor_bg in ((bg_index - 1) % bg_n, (bg_index + 1) % bg_n):
-                    targets.append((backgrounds[neighbor_bg], geo_w, geo_h))
                     targets.append((backgrounds[neighbor_bg], card_w, card_h))
 
             return targets
@@ -2094,7 +2138,7 @@ class Carousel(Gtk.Window):
                 self._decoder.submit(
                     1,
                     lambda: generation == self._prefetch_gen,
-                    lambda path=path, w=w, h=h: load_cover_pixbuf_cached(path, w, h, (geo_w, geo_h)),
+                    lambda path=path, w=w, h=h: load_cover_pixbuf_cached(path, w, h, (card_w, card_h)),
                     lambda pixbuf, key=key: (generation == self._prefetch_gen) and self._cache_store(key, pixbuf),
                 )
 
@@ -2457,22 +2501,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     win = Carousel()
-    # fullscreen() fills whichever monitor the window is on when it's
-    # issued, and Cinnamon maps a new window on the primary monitor - not
-    # the one the pointer is on, which is what get_monitor_geometry() sized
-    # this window for. With the pointer on an external monitor of a
-    # different resolution the carousel opened on the internal screen at
-    # the external one's size and spilled across the seam (single-monitor
-    # setups, and multi-monitor ones with matching resolutions, never
-    # notice). Naming the monitor before the first map is the only thing
-    # that works: a post-map move() is a ConfigureRequest the WM services
-    # on its own schedule, after the fullscreen has already been queued
-    # against the wrong monitor - and since the widgets were scaled for the
-    # larger monitor, the window's minimum size can't fit the smaller one
-    # anyway, so no later correction can shrink it back. Same rule
-    # ohmydebn-menu-picker follows by positioning inside __init__: commit
-    # to the monitor before show_all(), never after.
-    win.fullscreen_on_monitor(win.get_screen(), win._monitor_num)
+    win.place_on_monitor()
     win.show_all()
     Gtk.main()
     sys.exit(0)

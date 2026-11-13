@@ -14,6 +14,15 @@ set -uo pipefail
 # 2026-11-07 14:05:09). And the New Login button's command where LightDM
 # provides dm-tool, as Debian's own xscreensaver-wrapper.sh does: without
 # it the button doesn't show.
+#
+# Not in a Wayland session: XScreenSaver can't lock one, and from Linux
+# Mint 27 on Cinnamon ignores its custom lock command there and locks with
+# its own lock screen, so XScreenSaver would only sit idle. The choice
+# stays saved for X11 sessions, where this starts it as usual.
+
+if [[ -n "${WAYLAND_DISPLAY:-}" || "${XDG_SESSION_TYPE:-}" == wayland ]]; then
+  exit 0
+fi
 
 RESOURCES="$HOME/.config/ohmydebn/current/xscreensaver.Xresources"
 

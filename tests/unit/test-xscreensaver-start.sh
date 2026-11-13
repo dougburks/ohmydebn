@@ -39,8 +39,10 @@ mock_log "xscreensaver $*"
 EOF2
 }
 
+# An X11 session unless a test says otherwise, whatever session runs the
+# tests.
 run_start() {
-  OUTPUT=$(env HOME="$H" PATH="$MOCK_BIN:$MOCK_DIR/tools" "$@" bash "$SCRIPT" </dev/null 2>&1)
+  OUTPUT=$(env -u WAYLAND_DISPLAY XDG_SESSION_TYPE=x11 HOME="$H" PATH="$MOCK_BIN:$MOCK_DIR/tools" "$@" bash "$SCRIPT" </dev/null 2>&1)
   EXIT_CODE=$?
   CALLS=$(cat "$MOCK_CALLS")
 }
@@ -86,5 +88,16 @@ run_start
 assert_eq "no xrdb: exits 0" "0" "$EXIT_CODE"
 assert_eq "no xrdb: only XScreenSaver ran" "xscreensaver --no-splash" "$CALLS"
 mock_cleanup
+
+# --- a Wayland session: XScreenSaver can't lock it, and Cinnamon locks
+# with its own lock screen there, so it isn't started ---
+for session in "XDG_SESSION_TYPE=wayland" "WAYLAND_DISPLAY=wayland-0"; do
+  setup
+  run_start "$session"
+  assert_eq "Wayland ($session): exits 0" "0" "$EXIT_CODE"
+  assert_not_contains "Wayland ($session): XScreenSaver not started" "$CALLS" "xscreensaver"
+  assert_not_contains "Wayland ($session): no X resources merged" "$CALLS" "xrdb"
+  mock_cleanup
+done
 
 test_summary

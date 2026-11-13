@@ -237,7 +237,17 @@ For "make me an app" requests, including the AI button's Make an app.
 5. To match the current theme's colors, read them from `~/.config/ohmydebn/current/theme/colors.toml` when the app starts.
 6. Run it once to check it works, then tell the user its name in the Cinnamon menu.
 
-### Pattern 4: Reset to Defaults -- ALWAYS SEEK USER CONFIRMATION BEFORE RUNNING
+### Pattern 4: Fix a problem
+
+For "something isn't working" requests, including the AI button's Fix my desktop.
+
+1. Run `ohmydebn-doctor` (it only reads, and needs no sudo). It prints one line per check, `ok`, `FAIL` or `skip`, and most `FAIL` lines end with the command that fixes them.
+2. Explain each `FAIL` in plain language, then ask what the user is seeing. Their problem may be something the doctor doesn't check, and a `FAIL` may be unrelated to it.
+3. Fix the smallest thing that explains the problem, and say what you'll change before you change it. Ask before running anything with `sudo`, and back up a config file before editing it (Pattern 1).
+4. Run `ohmydebn-doctor` again, and check with the user that the problem is gone.
+5. Don't reach for `ohmydebn-reset-config` (Pattern 5) or a reinstall unless the targeted fixes failed, and only once the user agrees.
+
+### Pattern 5: Reset to Defaults -- ALWAYS SEEK USER CONFIRMATION BEFORE RUNNING
 
 When customizations go wrong:
 
@@ -419,7 +429,12 @@ System control (lock, shutdown, reboot) is handled through:
 
 ## Troubleshooting
 
+Start with Pattern 4 (Fix a problem); the reset and the reinstall are last resorts.
+
 ```bash
+# Check the installation (read-only)
+ohmydebn-doctor
+
 # Reset all configured apps to defaults
 ohmydebn-reset-config
 

@@ -18,6 +18,7 @@ echo "=== the AI button: ai_button_menu, and starting prompts ==="
 AI_ICON=$(printf '\U000f16a4')
 THEME_ICON=$(printf '\U000f03d8')
 APP_ICON=$(printf '\U000f08c6')
+FIX_ICON=$(printf '\U000f04e3')
 
 # setup_button <what ohmydebn-ai --which prints>: ai_button_menu and its
 # prompts, pulled out of ohmydebn-menu with their paths pointed at mocks.
@@ -33,7 +34,7 @@ EOF
 [ "$1" = --display-name ] && [ "$2" = claude-code ] && echo "Claude Code"
 EOF
   {
-    grep -E '^AI_(THEME|APP)_PROMPT=' "$REPO_ROOT/bin/ohmydebn-menu"
+    grep -E '^AI_(THEME|APP|FIX)_PROMPT=' "$REPO_ROOT/bin/ohmydebn-menu"
     sed -n '/^ai_button_menu() {/,/^}/p' "$REPO_ROOT/bin/ohmydebn-menu"
   } | sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" >"$MOCK_DIR/button.sh"
 }
@@ -51,7 +52,7 @@ press() {
 setup_button claude-code
 press ""
 assert_contains "rows: open the current assistant by name, the starters, then the others" "$CALLS" \
-  "menu AI | $AI_ICON  Open Claude Code\\n$THEME_ICON  Make a theme\\n$APP_ICON  Make an app\\n  Choose another assistant"
+  "menu AI | $AI_ICON  Open Claude Code\\n$THEME_ICON  Make a theme\\n$APP_ICON  Make an app\\n$FIX_ICON  Fix my desktop\\n  Choose another assistant"
 assert_not_contains "Escape: nothing opened" "$CALLS" "ai "
 mock_cleanup
 
@@ -72,6 +73,14 @@ setup_button claude-code
 press "$APP_ICON  Make an app"
 assert_contains "Make an app: the assistant gets the app request" "$CALLS" "ai Make me a new app for my OhMyDebn desktop."
 assert_contains "Make an app: it follows the skill's app guide" "$CALLS" "the OhMyDebn skill's guide to making an app"
+mock_cleanup
+
+setup_button claude-code
+press "$FIX_ICON  Fix my desktop"
+assert_contains "Fix my desktop: the assistant gets the fix request" "$CALLS" "ai Something on my OhMyDebn desktop isn't working right."
+assert_contains "Fix my desktop: it starts from the doctor's report" "$CALLS" "Run ohmydebn-doctor"
+assert_contains "Fix my desktop: it follows the skill's guide, and asks before changing anything" "$CALLS" \
+  "the OhMyDebn skill's guide to fixing a problem, and ask me before you change anything."
 mock_cleanup
 
 setup_button claude-code
@@ -98,6 +107,7 @@ fi
 # The skill has the guides the prompts name.
 SKILL="$REPO_ROOT/config/ohmydebn-skill/SKILL.md"
 assert_eq "the skill has a guide to making a new theme" "yes" "$(grep -q '^### Pattern [0-9]*: Make a new theme' "$SKILL" && echo yes || echo no)"
+assert_eq "the skill has a guide to fixing a problem" "yes" "$(grep -q '^### Pattern [0-9]*: Fix a problem' "$SKILL" && echo yes || echo no)"
 assert_eq "the skill has a guide to making an app" "yes" "$(grep -q '^### Pattern [0-9]*: Make an app' "$SKILL" && echo yes || echo no)"
 
 # --- Starting prompts reach each terminal assistant ---

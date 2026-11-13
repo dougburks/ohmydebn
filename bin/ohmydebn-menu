@@ -872,9 +872,9 @@ pick_default_agent() {
 
 # The panel's AI button (the robot after the OhMyDebn Menu's grin, via
 # `ohmydebn-menu ai-button`): open the assistant Super + A opens, start it
-# on making something, or pick another. Built at runtime (it names the
-# current assistant), so not a show_*_menu function, and it branches with
-# if (see AGENTS.md).
+# on making something or fixing a problem, or pick another. Built at
+# runtime (it names the current assistant), so not a show_*_menu function,
+# and it branches with if (see AGENTS.md).
 #
 # The starters are prompts the assistant gets as its first message
 # (ohmydebn-ai <prompt>). Each asks the user what they want first, and
@@ -882,6 +882,7 @@ pick_default_agent() {
 # the skill links (install/config/ohmydebn-ai-skill.sh).
 AI_THEME_PROMPT="Make me a new OhMyDebn theme. Ask me what look or inspiration I have in mind, then build it following the OhMyDebn skill's guide to making a new theme, and switch to it."
 AI_APP_PROMPT="Make me a new app for my OhMyDebn desktop. Ask me what it should do, then build it following the OhMyDebn skill's guide to making an app, so it shows up in the Cinnamon menu."
+AI_FIX_PROMPT="Something on my OhMyDebn desktop isn't working right. Run ohmydebn-doctor, explain anything it reports in plain language, and ask me what I'm seeing. Then fix it following the OhMyDebn skill's guide to fixing a problem, and ask me before you change anything."
 
 ai_button_menu() {
   local name open items
@@ -891,7 +892,7 @@ ai_button_menu() {
   else
     open="Choose an AI assistant"
   fi
-  items="󱚤  $open\n󰏘  Make a theme\n󰣆  Make an app"
+  items="󱚤  $open\n󰏘  Make a theme\n󰣆  Make an app\n󰓣  Fix my desktop"
   [[ -n "$name" ]] && items+="\n  Choose another assistant"
   menu "AI" "$items"
   if [[ "$MENU_RESULT" == *"$open" ]]; then
@@ -900,6 +901,8 @@ ai_button_menu() {
     /usr/share/ohmydebn/bin/ohmydebn-ai "$AI_THEME_PROMPT"
   elif [[ "$MENU_RESULT" == *"Make an app" ]]; then
     /usr/share/ohmydebn/bin/ohmydebn-ai "$AI_APP_PROMPT"
+  elif [[ "$MENU_RESULT" == *"Fix my desktop" ]]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai "$AI_FIX_PROMPT"
   elif [[ "$MENU_RESULT" == *"Choose another assistant" ]]; then
     show_ai_menu
   fi

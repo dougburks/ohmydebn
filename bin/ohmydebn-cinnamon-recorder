@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# ohmydebn-cinnamon-recorder: starts or stops Cinnamon's own screen
+# recorder, as its Shift+Ctrl+Alt+R hotkey does - the OhMyDebn menu's
+# Capture > Screenrecord > Cinnamon Recorder Start/Stop.
+#
+# The menu pressed that hotkey with xdotool. In Cinnamon's Wayland session
+# a key xdotool presses only reaches X11 windows, never Cinnamon, so the
+# entry did nothing (Linux Mint 27). The recorder has no D-Bus method of
+# its own, so gTile@OhMyDebn, which runs inside Cinnamon, toggles it
+# (ToggleRecording, gTile 3.0.1-20261113.2 and later). If gTile doesn't
+# answer, an X11 session still gets the hotkey pressed, as before.
+
+set -euo pipefail
+
+wayland_session() {
+  [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = "wayland" ]
+}
+
+if /usr/bin/gdbus call --session --dest org.gTile.Control --object-path /org/gTile/Control \
+  --method org.gTile.Control.ToggleRecording >/dev/null 2>&1; then
+  exit 0
+fi
+
+if ! wayland_session; then
+  exec /usr/bin/xdotool key Shift+Ctrl+Alt+R
+fi
+
+notify-send -i ohmydebn "Cinnamon Recorder" \
+  "Couldn't start or stop the recorder from the menu. Press Shift + Ctrl + Alt + R instead." 2>/dev/null || true
+exit 1

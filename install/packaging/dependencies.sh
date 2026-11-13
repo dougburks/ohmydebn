@@ -101,7 +101,6 @@ PACKAGES=(
   # "The thumbnailer-service can not be reached" over every image it
   # opens (Linux Mint 27).
   tumbler
-  xournalpp
   galculator
 
   # CLI tools

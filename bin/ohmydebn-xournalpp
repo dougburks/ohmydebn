@@ -1,0 +1,16 @@
+#!/bin/bash
+#
+# Opens Xournal++ (PDF annotation, highlighting, drawing and handwritten
+# notes), installing it first if needed. OhMyDebn installed it by default
+# until 4.18.0, when Sign a PDF (ohmydebn-pdf-sign) took over signing and
+# filling in PDFs; it's offered here, in Apps > Office, for the rest.
+
+set -euo pipefail
+
+if ! dpkg -s "xournalpp" >/dev/null 2>&1; then
+  /usr/share/ohmydebn/bin/ohmydebn-launch-floating-terminal-with-presentation "Xournal++" /usr/share/ohmydebn/bin/ohmydebn-xournalpp-install
+fi
+
+if dpkg -s "xournalpp" >/dev/null 2>&1; then
+  /usr/bin/xournalpp "$@"
+fi

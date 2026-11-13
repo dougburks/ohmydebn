@@ -24,7 +24,8 @@ echo "=== installers: --skip-prompt ==="
 SRC_DIR="${OHMYDEBN_TEST_SRC_DIR:-$REPO_ROOT/bin}"
 
 SCRIPTS="chatgpt cliamp cloudflare-warp code distrobox docker firefox-esr gestures
-  google-chrome-stable helium-bin localsend powershell simplescreenrecorder tailscale velo"
+  google-chrome-stable helium-bin localsend powershell simplescreenrecorder tailscale velo
+  xournalpp"
 
 # setup <script name>
 setup() {

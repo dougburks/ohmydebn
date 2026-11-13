@@ -490,12 +490,13 @@ show_install_menu() {
 }
 
 show_office_menu() {
-  menu "Office" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord\n󱧃  Sign a PDF"
+  menu "Office" "  LibreOffice Suite\n  Calligra Suite\n  Gnumeric\n  AbiWord\n󰽉  Xournal++\n󱧃  Sign a PDF"
   case "$MENU_RESULT" in
   *LibreOffice*) /usr/share/ohmydebn/bin/ohmydebn-libreoffice ;;
   *Calligra*) /usr/share/ohmydebn/bin/ohmydebn-calligra ;;
   *Gnumeric*) /usr/share/ohmydebn/bin/ohmydebn-gnumeric ;;
   *AbiWord*) /usr/share/ohmydebn/bin/ohmydebn-abiword ;;
+  *Xournal*) /usr/share/ohmydebn/bin/ohmydebn-xournalpp ;;
   *Sign*) /usr/share/ohmydebn/bin/ohmydebn-pdf-sign ;;
   *) show_apps_menu ;;
   esac

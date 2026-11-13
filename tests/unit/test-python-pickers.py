@@ -2170,6 +2170,44 @@ try:
 finally:
     tc.Gtk.Window.move = _saved_move
 
+
+
+# see_through: the panel shows the desktop behind it when the screen can
+# blend it (an alpha visual and a compositor), and stays a dark panel when
+# it can't.
+class _FakeScreen:
+    def __init__(self, visual, composited):
+        self._visual, self._composited = visual, composited
+
+    def get_rgba_visual(self):
+        return self._visual
+
+    def is_composited(self):
+        return self._composited
+
+
+class _FakeWindow:
+    def __init__(self, screen):
+        self._screen = screen
+        self.visual = None
+
+    def get_screen(self):
+        return self._screen
+
+    def set_visual(self, visual):
+        self.visual = visual
+
+
+_win = _FakeWindow(_FakeScreen("rgba", True))
+check_eq("see_through: with a compositor, see-through", tc.see_through(_win), True)
+check_eq("see_through: ...given the alpha visual", _win.visual, "rgba")
+_win = _FakeWindow(_FakeScreen("rgba", False))
+check_eq("see_through: no compositor, a dark panel", tc.see_through(_win), False)
+check_eq("see_through: ...its visual left alone", _win.visual, None)
+check_eq("see_through: no alpha visual, a dark panel", tc.see_through(_FakeWindow(_FakeScreen(None, True))), False)
+check("carousel: the see-through panel has no background or border of its own",
+      "#carousel-panel.see-through {\n    background-color: transparent;\n    border-width: 0;" in tc.CSS)
+
 _carousel_code = "\n".join(
     line for line in open(os.path.join(BIN, "ohmydebn-theme-carousel"), encoding="utf-8").read().splitlines()
     if not line.lstrip().startswith("#")

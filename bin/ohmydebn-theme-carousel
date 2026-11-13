@@ -470,6 +470,20 @@ def starting_background_index(slug, backgrounds):
     return 0
 
 
+def see_through(window):
+    """Give `window` a visual with an alpha channel, so what it leaves
+    unpainted shows the desktop behind it, when the screen has one and a
+    compositor to blend it (Cinnamon always composites, but one with the
+    effects off, or another window manager, may not). Returns whether it
+    did; set before the window is realized."""
+    screen = window.get_screen()
+    visual = screen.get_rgba_visual()
+    if visual is None or not screen.is_composited():
+        return False
+    window.set_visual(visual)
+    return True
+
+
 def get_monitor_geometry():
     """(geometry, monitor number) of the monitor the pointer is on. The
     number is the Gdk.Screen index of that monitor - found by matching
@@ -719,12 +733,18 @@ def _evict_cache(keep_path):
 
 CSS = """
 #carousel-panel {
-    /* The window itself: a dark panel the cards sit on, with the desktop
-       showing around it. The border's color is the centered theme's
-       accent, from _apply_accent()'s generated rule; this is the
-       pre-first-render fallback. */
+    /* The window itself. With a compositor (see see_through()) it's
+       see-through: the cards float over the desktop, as Omarchy's do, and
+       only the caption keeps a dark panel of its own, for its text.
+       Without one, a window can't be, so it's a dark panel with a border
+       in the centered theme's accent (_apply_accent()'s generated rule;
+       this one is the pre-first-render fallback). */
     background-color: #000000;
     border: 2px solid rgba(255, 255, 255, 0.5);
+}
+#carousel-panel.see-through {
+    background-color: transparent;
+    border-width: 0;
 }
 #carousel-caption {
     /* Fully opaque, not translucent - a partial scrim (0.55 here,
@@ -1186,6 +1206,8 @@ class Carousel(Gtk.Window):
         # the cards, and hid every window.
         self.set_resizable(False)
         self.set_name("carousel-panel")
+        if see_through(self):
+            self.get_style_context().add_class("see-through")
         self._closing = False
 
         self.slugs = list_theme_slugs()

@@ -79,7 +79,12 @@ case "$*" in
 *org.cinnamon.ScreenSaver.Lock*)
   mock_log "gdbus Lock"
   [ -e "$MOCK_DIR/cs-lock-fails" ] && exit 1
+  # Like the real one: success even when it couldn't grab the keyboard
+  # (another app holds it, such as a virtual machine window), with
+  # nothing locked.
+  [ -e "$MOCK_DIR/cs-grab-fails" ] || : >"$MOCK_DIR/cs-active"
   ;;
+*org.cinnamon.ScreenSaver.GetActive*) [ -e "$MOCK_DIR/cs-active" ] && echo "(true,)" || echo "(false,)" ;;
 esac
 exit 0
 EOF2
@@ -164,7 +169,25 @@ run_lock
 assert_eq "never locks: exits 0 (the fallback locked)" "0" "$EXIT_CODE"
 assert_contains "never locks: starts Cinnamon's screensaver with default settings" "$CALLS" "cinnamon-screensaver GSETTINGS_BACKEND=memory"
 assert_contains "never locks: asks it to lock over D-Bus" "$CALLS" "gdbus Lock"
-assert_contains "never locks: says so" "$CALLS" "notify-send -i ohmydebn -u critical Lock screen XScreenSaver didn't lock the screen"
+assert_contains "never locks: says Cinnamon's screensaver locked it" "$CALLS" "notify-send -i ohmydebn -u critical Lock screen XScreenSaver couldn't lock the screen, so Cinnamon's screensaver locked it instead"
+assert_contains "never locks: names the likely cause" "$CALLS" "such as a virtual machine window"
+assert_not_contains "never locks: doesn't say the screen is open" "$CALLS" "Screen not locked"
+mock_cleanup
+
+# --- another app holds the keyboard (a virtual machine window): neither
+# can lock. Cinnamon's screensaver still answers Lock with success, so
+# only asking whether it's active shows it isn't. Seen on a desktop with
+# a VM window focused: the notice said the screen was locked, and it
+# wasn't. ---
+setup
+: >"$MOCK_DIR/running"
+: >"$MOCK_DIR/lock-fails"
+: >"$MOCK_DIR/cs-grab-fails"
+run_lock
+assert_eq "keyboard held: exits 1 (nothing locked)" "1" "$EXIT_CODE"
+assert_contains "keyboard held: tried Cinnamon's screensaver" "$CALLS" "gdbus Lock"
+assert_contains "keyboard held: says the screen isn't locked" "$CALLS" "notify-send -i ohmydebn -u critical Screen not locked Your screen wasn't locked"
+assert_not_contains "keyboard held: doesn't claim a lock" "$CALLS" "locked it instead"
 mock_cleanup
 
 # --- XScreenSaver won't start, Cinnamon's screensaver already running ---
@@ -254,7 +277,8 @@ setup
 : >"$MOCK_DIR/cs-lock-fails"
 run_lock
 assert_eq "nothing locks: exits 1" "1" "$EXIT_CODE"
-assert_contains "nothing locks: notification still sent" "$CALLS" "notify-send"
+assert_contains "nothing locks: says the screen isn't locked" "$CALLS" "Screen not locked"
+assert_not_contains "nothing locks: doesn't claim a lock" "$CALLS" "locked it instead"
 mock_cleanup
 
 test_summary

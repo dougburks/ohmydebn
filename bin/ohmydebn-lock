@@ -25,10 +25,16 @@ set -uo pipefail
 # xscreensaver-command --lock only asks a running XScreenSaver to lock,
 # and does nothing at all if none is running, so this starts one first
 # when needed and doesn't return until XScreenSaver itself reports the
-# screen locked. If it never does, the screen still gets locked:
-# Cinnamon's own screensaver is started for this one lock (see
-# fallback_lock), with a notification saying so. A lock request that
-# quietly leaves the screen open is the one outcome this must not have.
+# screen locked. If it never does, Cinnamon's own screensaver is started
+# for this one lock (see fallback_lock), with a notification saying so. A
+# lock request that quietly leaves the screen open is the one outcome
+# this must not have, so when that doesn't lock either, a notification
+# says the screen is open.
+#
+# The usual reason neither can lock: a screen locker has to grab the whole
+# keyboard and mouse, and can't while another app holds them. A virtual
+# machine's window (virt-manager, virt-viewer, Boxes) does while it has
+# focus, so keys reach the VM.
 #
 # Before suspend, csd-power passes XSS_SLEEP_LOCK_FD: an open file
 # descriptor that holds the suspend until it's closed. This script keeps
@@ -72,6 +78,15 @@ detach() {
   ) &
 }
 
+# Whether Cinnamon's screensaver is actually up. Its Lock method reports
+# success even when it couldn't grab the keyboard and mouse and so locked
+# nothing (manager.py: "we were unable to achieve a server grab ... we
+# don't want to block anything"), so this asks afterwards.
+cinnamon_screensaver_active() {
+  timeout 2 gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver \
+    --method org.cinnamon.ScreenSaver.GetActive 2>/dev/null | grep -q true
+}
+
 cinnamon_screensaver_up() {
   gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
     --method org.freedesktop.DBus.NameHasOwner org.cinnamon.ScreenSaver 2>/dev/null | grep -q true
@@ -87,12 +102,16 @@ fallback_lock() {
     detach env GSETTINGS_BACKEND=memory cinnamon-screensaver
     wait_for "$FALLBACK_WAIT_TENTHS" cinnamon_screensaver_up
   fi
-  local status=0
   timeout 5 gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver \
-    --method org.cinnamon.ScreenSaver.Lock "" >/dev/null 2>&1 || status=1
-  notify-send -i ohmydebn -u critical "Lock screen" \
-    "XScreenSaver didn't lock the screen, so Cinnamon's screensaver locked it instead. Run ohmydebn-doctor to see why." 2>/dev/null || true
-  return "$status"
+    --method org.cinnamon.ScreenSaver.Lock "" >/dev/null 2>&1
+  if wait_for "$FALLBACK_WAIT_TENTHS" cinnamon_screensaver_active; then
+    notify-send -i ohmydebn -u critical "Lock screen" \
+      "XScreenSaver couldn't lock the screen, so Cinnamon's screensaver locked it instead. An app holding the keyboard, such as a virtual machine window, keeps XScreenSaver from locking. If none was open, run ohmydebn-doctor to see why." 2>/dev/null || true
+    return 0
+  fi
+  notify-send -i ohmydebn -u critical "Screen not locked" \
+    "Your screen wasn't locked: neither XScreenSaver nor Cinnamon's screensaver could lock it. Usually another app is holding the keyboard, such as a virtual machine window: next time, click outside it before you step away. If none was open, run ohmydebn-doctor to see why." 2>/dev/null || true
+  return 1
 }
 
 # lock, blank (no lock), or grace (blank, then lock after GRACE seconds).

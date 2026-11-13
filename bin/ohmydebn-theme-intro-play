@@ -70,6 +70,10 @@ SKIP_FADE_MS = 150
 # One intro at a time: switching themes again mid-intro replaces the
 # running one rather than stacking a second set of windows on top.
 PID_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "ohmydebn-theme-intro.pid")
+# Touched once the intro's first frame is on screen, the moment it says
+# "ready": the theme carousel, which stays above the windows the intro
+# plays behind, gets out of the way then (its INTRO_READY_FILE).
+READY_FILE = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "ohmydebn-theme-intro.ready")
 
 
 def replace_running_intro():
@@ -219,6 +223,11 @@ class Intro:
         if self.ready_sent:
             return
         self.ready_sent = True
+        try:
+            with open(READY_FILE, "w", encoding="utf-8"):
+                pass
+        except OSError:
+            pass
         try:
             print("ready", flush=True)
             # Nothing else is ever written, and the reader goes away as soon

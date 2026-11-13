@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from importlib.machinery import SourceFileLoader
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -2207,6 +2208,66 @@ check_eq("see_through: ...its visual left alone", _win.visual, None)
 check_eq("see_through: no alpha visual, a dark panel", tc.see_through(_FakeWindow(_FakeScreen(None, True))), False)
 check("carousel: the see-through panel has no background or border of its own",
       "#carousel-panel.see-through {\n    background-color: transparent;\n    border-width: 0;" in tc.CSS)
+
+
+
+# Applying: the carousel stays above the windows, and the new theme's
+# intro plays behind them, so it hides once the intro is showing (its ready
+# file newer than the switch) and quits when ohmydebn-theme-set is done.
+class _FakeProcess:
+    def __init__(self):
+        self.done = False
+
+    def poll(self):
+        return 0 if self.done else None
+
+
+class _FakeApplying:
+    def __init__(self, started):
+        self._apply_started = started
+        self._apply_process = _FakeProcess()
+        self.visible = True
+
+    def get_visible(self):
+        return self.visible
+
+    def hide(self):
+        self.visible = False
+
+
+_runtime = tempfile.mkdtemp()
+_saved_ready = tc.INTRO_READY_FILE
+tc.INTRO_READY_FILE = os.path.join(_runtime, "ohmydebn-theme-intro.ready")
+_quits = []
+_saved_quit = tc.Gtk.main_quit
+tc.Gtk.main_quit = lambda: _quits.append(True)
+try:
+    applying = _FakeApplying(time.time())
+    check_eq("applying: keeps watching while the switch runs", tc.Carousel._watch_apply(applying), tc.GLib.SOURCE_CONTINUE)
+    check("applying: no intro showing yet, the carousel stays", applying.visible and not _quits)
+    # An intro from an earlier switch: its ready file is older.
+    open(tc.INTRO_READY_FILE, "w").close()
+    os.utime(tc.INTRO_READY_FILE, (applying._apply_started - 60, applying._apply_started - 60))
+    tc.Carousel._watch_apply(applying)
+    check("applying: an earlier switch's intro doesn't count", applying.visible)
+    os.utime(tc.INTRO_READY_FILE, None)
+    tc.Carousel._watch_apply(applying)
+    check("applying: this switch's intro showing, the carousel hides", not applying.visible)
+    check("applying: ...but doesn't quit while the switch runs", not _quits)
+    applying._apply_process.done = True
+    check_eq("applying: the switch done, it stops watching", tc.Carousel._watch_apply(applying), tc.GLib.SOURCE_REMOVE)
+    check_eq("applying: ...and quits", _quits, [True])
+    _quits.clear()
+    no_intro = _FakeApplying(time.time() + 60)
+    no_intro._apply_process.done = True
+    tc.Carousel._watch_apply(no_intro)
+    check("applying, no intro: shown until the switch is done, then quits", no_intro.visible and _quits == [True])
+finally:
+    tc.Gtk.main_quit = _saved_quit
+    tc.INTRO_READY_FILE = _saved_ready
+    shutil.rmtree(_runtime, ignore_errors=True)
+check_eq("the carousel looks for the ready file the intro player touches",
+         os.path.basename(tc.INTRO_READY_FILE), "ohmydebn-theme-intro.ready")
 
 _carousel_code = "\n".join(
     line for line in open(os.path.join(BIN, "ohmydebn-theme-carousel"), encoding="utf-8").read().splitlines()

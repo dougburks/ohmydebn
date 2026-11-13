@@ -108,6 +108,14 @@ import tomllib
 import warnings
 
 OHMYDEBN_BIN = "/usr/share/ohmydebn/bin"
+# What the theme intro's player touches once its first frame is on screen
+# (ohmydebn-theme-intro-play's READY_FILE): the carousel's sign that the
+# switch it started has an intro showing.
+INTRO_READY_FILE = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "ohmydebn-theme-intro.ready"
+)
+# How often, while the switch runs, the carousel looks for that.
+APPLY_POLL_MS = 50
 USER_THEMES_DIR = os.path.expanduser("~/.config/ohmydebn/themes")
 SYSTEM_THEMES_DIR = "/usr/share/ohmydebn-themes"
 CURRENT_THEME_FILE = os.path.expanduser("~/.config/ohmydebn/current/theme.name")
@@ -468,6 +476,19 @@ def starting_background_index(slug, backgrounds):
             if os.path.basename(path) == wanted_name:
                 return i
     return 0
+
+
+def intro_showing_since(when):
+    """Whether a theme intro has come on screen since `when` (a
+    time.time()): the player touches its ready file then, so a file that
+    new is this switch's intro, not one left from an earlier switch.
+    Allowing a second: a file's time comes from the kernel's coarse clock,
+    which can read a few milliseconds behind time.time(), and any earlier
+    intro ended long before (the carousel was open in between)."""
+    try:
+        return os.stat(INTRO_READY_FILE).st_mtime >= when - 1.0
+    except OSError:
+        return False
 
 
 def see_through(window):
@@ -2486,8 +2507,24 @@ class Carousel(Gtk.Window):
         if self.backgrounds:
             cmd += ["--background", str(self.bg_index + 1)]
         cmd.append(slug)
-        subprocess.run(cmd, check=False)
-        Gtk.main_quit()
+        self._apply_started = time.time()
+        self._apply_process = subprocess.Popen(cmd)
+        GLib.timeout_add(APPLY_POLL_MS, self._watch_apply)
+
+    def _watch_apply(self):
+        """While ohmydebn-theme-set runs: quit when it's done, and get out
+        of the way as soon as the new theme's intro is showing. The intro
+        plays behind the windows, so the carousel, kept above them, would
+        otherwise sit over it, saying "Applying...", for the second or two
+        the rest of the switch takes. With intros off (or none playing),
+        it stays until the switch is done, so there's still something to
+        show it's under way."""
+        if self._apply_process.poll() is not None:
+            Gtk.main_quit()
+            return GLib.SOURCE_REMOVE
+        if self.get_visible() and intro_showing_since(self._apply_started):
+            self.hide()
+        return GLib.SOURCE_CONTINUE
 
 
 if __name__ == "__main__":

@@ -87,4 +87,17 @@ assert_eq "Wayland session without XWayland: left as it is" "default" \
 assert_eq "X11 session: left as it is" "default" \
   "$(backend -u WAYLAND_DISPLAY DISPLAY=:97 XDG_SESSION_TYPE=x11)"
 
+# The ready file: touched as the first frame goes on screen, the moment
+# "ready" is said, so the theme carousel (above the windows the intro
+# plays behind) knows to get out of the way.
+RUNTIME=$(mktemp -d)
+READY_SAID=$(load_play 'play.Intro().send_ready()' -u DISPLAY -u WAYLAND_DISPLAY XDG_RUNTIME_DIR="$RUNTIME")
+assert_eq "ready: still said on stdout, for ohmydebn-theme-intro" "ready" "$READY_SAID"
+assert_eq "ready: the ready file is touched" "yes" "$([ -f "$RUNTIME/ohmydebn-theme-intro.ready" ] && echo yes || echo no)"
+rm -rf "$RUNTIME"
+RUNTIME=$(mktemp -d)
+load_play 'play.Intro()' -u DISPLAY -u WAYLAND_DISPLAY XDG_RUNTIME_DIR="$RUNTIME" >/dev/null
+assert_eq "ready: not touched before then" "no" "$([ -f "$RUNTIME/ohmydebn-theme-intro.ready" ] && echo yes || echo no)"
+rm -rf "$RUNTIME"
+
 test_summary

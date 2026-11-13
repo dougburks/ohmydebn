@@ -84,6 +84,100 @@ check_eq("activate: the type is (t)", calls[0][1].get_type_string(), "(t)")
 check_eq("activate: False when gTile couldn't (window gone)",
          wl.activate_window(7, fake_call(GLib.Error("No such window"))), False)
 
+# Window placement, workspaces and the screen, for scripts (gTile
+# 3.0.1-20261113.1's ListWindowGeometry, GetScreen, ActivateWorkspace).
+calls.clear()
+geometry = wl.list_geometry(fake_call(([
+    (4, "ohmydebn-doctor-tiling-1", "Alacritty", "Alacritty.desktop", 2, 10, 40, 950, 1030, False),
+    (5, "Home", "Nemo", "nemo.desktop", -1, 0, 0, 800, 600, True),
+],)))
+check_eq("geometry: asks ListWindowGeometry for a(tsssiiiiib) rows", calls,
+         [("ListWindowGeometry", None, "(a(tsssiiiiib))")])
+check_eq("geometry: rows become WindowGeometry tuples", geometry[0],
+         wl.WindowGeometry(4, "ohmydebn-doctor-tiling-1", "Alacritty", "Alacritty.desktop", 2, 10, 40, 950, 1030, False))
+check_eq("geometry: an older gTile without the method is None",
+         wl.list_geometry(fake_call(GLib.Error("org.freedesktop.DBus.Error.UnknownMethod"))), None)
+check_eq("geometry: a malformed row is skipped",
+         [w.id for w in wl.list_geometry(fake_call(([(1, "a", "b", "c", 0, 0, 0, 1, 1, False), (2, "short")],)))], [1])
+
+calls.clear()
+check_eq("screen: width, height, workspaces, active", wl.get_screen(fake_call((1920, 1080, 4, 1))), (1920, 1080, 4, 1))
+check_eq("screen: asks GetScreen", calls, [("GetScreen", None, "(iiii)")])
+check_eq("screen: gTile not answering is None", wl.get_screen(fake_call(GLib.Error("x"))), None)
+check_eq("screen: a reply of the wrong shape is None", wl.get_screen(fake_call(())), None)
+
+calls.clear()
+check_eq("workspace: True when gTile switched", wl.activate_workspace(2, fake_call(())), True)
+check_eq("workspace: asks ActivateWorkspace with an (i)",
+         [(m, p.get_type_string(), p.unpack()) for m, p, r in calls], [("ActivateWorkspace", "(i)", (2,))])
+check_eq("workspace: False when it couldn't", wl.activate_workspace(9, fake_call(GLib.Error("No such workspace"))), False)
+
+# Finding an app's window: X11 says WM_CLASS "KeePassXC", Wayland app ID
+# "org.keepassxc.KeePassXC" - Ctrl+Shift+K found neither through xdotool
+# on Wayland.
+x11_keepass = wl.SwitcherWindow(11, "Passwords - KeePassXC", "KeePassXC", "", "")
+wayland_keepass = wl.SwitcherWindow(12, "Passwords - KeePassXC", "org.keepassxc.KeePassXC",
+                                    "org.keepassxc.KeePassXC.desktop", "")
+brave = wl.SwitcherWindow(3, "KeePassXC - Brave", "brave-browser", "brave-browser.desktop", "")
+check_eq("class: an X11 WM_CLASS, ignoring case", wl.find_by_class([brave, x11_keepass], "keepassxc"), x11_keepass)
+check_eq("class: a Wayland app ID ending in .keepassxc", wl.find_by_class([brave, wayland_keepass], "keepassxc"),
+         wayland_keepass)
+check_eq("class: the most recently used match first", wl.find_by_class([wayland_keepass, x11_keepass], "keepassxc"),
+         wayland_keepass)
+check_eq("class: a title naming the app isn't a match", wl.find_by_class([brave], "keepassxc"), None)
+check_eq("class: a class only containing the name isn't a match",
+         wl.find_by_class([wl.SwitcherWindow(1, "t", "keepassxc-proxy", "", "")], "keepassxc"), None)
+check_eq("class: no windows (gTile not answering)", wl.find_by_class(None, "keepassxc"), None)
+
+# The command-line tool scripts call, with gTile's answers stood in for.
+gw = SourceFileLoader("gtile_windows", os.path.join(BIN, "ohmydebn-gtile-windows")).load_module()
+saved_cli = (gw.windows_lib.list_windows, gw.windows_lib.activate_window, gw.windows_lib.list_geometry,
+             gw.windows_lib.get_screen, gw.windows_lib.activate_workspace)
+activated = []
+try:
+    gw.windows_lib.list_windows = lambda: [brave, wayland_keepass]
+    gw.windows_lib.activate_window = lambda i: activated.append(i) or True
+    check_eq("cli activate-class: finds and raises it", (gw.main(["activate-class", "keepassxc"]), activated), (0, [12]))
+    activated.clear()
+    check_eq("cli activate-class: exit 1 when there's no such window", (gw.main(["activate-class", "gimp"]), activated),
+             (1, []))
+    gw.windows_lib.list_windows = lambda: None
+    check_eq("cli activate-class: exit 1 when gTile doesn't answer", gw.main(["activate-class", "keepassxc"]), 1)
+    check_eq("cli activate: by id", (gw.main(["activate", "7"]), activated), (0, [7]))
+
+    import io
+    from contextlib import redirect_stdout
+    gw.windows_lib.list_geometry = lambda: [
+        wl.WindowGeometry(4, "a\ttitle\nwith breaks", "Alacritty", "", 2, 10, 40, 950, 1030, True)]
+    out = io.StringIO()
+    with redirect_stdout(out):
+        status = gw.main(["geometry"])
+    check_eq("cli geometry: tab-separated, title last and on one line", (status, out.getvalue()),
+             (0, "4\t2\t10\t40\t950\t1030\t1\ta title with breaks\n"))
+    gw.windows_lib.list_geometry = lambda: None
+    check_eq("cli geometry: exit 1 on an older gTile", gw.main(["geometry"]), 1)
+
+    gw.windows_lib.get_screen = lambda: (1920, 1080, 4, 0)
+    out = io.StringIO()
+    with redirect_stdout(out):
+        status = gw.main(["screen"])
+    check_eq("cli screen: one line", (status, out.getvalue()), (0, "1920 1080 4 0\n"))
+
+    gw.windows_lib.activate_workspace = lambda i: i < 4
+    check_eq("cli workspace: switches", gw.main(["workspace", "3"]), 0)
+    check_eq("cli workspace: exit 1 for one that doesn't exist", gw.main(["workspace", "4"]), 1)
+
+    with redirect_stdout(io.StringIO()):
+        import contextlib
+        with contextlib.redirect_stderr(io.StringIO()):
+            check_eq("cli: no command is a usage error", gw.main([]), 2)
+            check_eq("cli: an unknown command is a usage error", gw.main(["frobnicate"]), 2)
+            check_eq("cli: activate needs a numeric id", gw.main(["activate", "x"]), 2)
+            check_eq("cli: workspace needs an index", gw.main(["workspace"]), 2)
+finally:
+    (gw.windows_lib.list_windows, gw.windows_lib.activate_window, gw.windows_lib.list_geometry,
+     gw.windows_lib.get_screen, gw.windows_lib.activate_workspace) = saved_cli
+
 check_eq("Wayland: WAYLAND_DISPLAY set", wl.is_wayland_session({"WAYLAND_DISPLAY": "wayland-0"}), True)
 check_eq("Wayland: XDG_SESSION_TYPE=wayland", wl.is_wayland_session({"XDG_SESSION_TYPE": "wayland"}), True)
 check_eq("X11: neither", wl.is_wayland_session({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}), False)

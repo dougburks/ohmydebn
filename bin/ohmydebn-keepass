@@ -2,11 +2,18 @@
 
 set -euo pipefail
 
+# Ctrl+Shift+K: opens KeePassXC, or brings its window to the front if it's
+# already open. That window used to be found with xdotool, which only sees
+# X11 windows: in Cinnamon's Wayland session KeePassXC is a Wayland window,
+# so the hotkey did nothing while it was open. gTile, inside Cinnamon, sees
+# it in either session. xdotool is kept for when gTile doesn't answer (it's
+# disabled), where it still finds KeePassXC in an X11 session.
+
 # -x: keepassxc-proxy, which keeps running while a browser uses the
 # KeePassXC extension, would otherwise count as KeePassXC being open, and
-# the window search below finds nothing to activate.
+# there'd be no window to bring forward.
 if ! pgrep -x keepassxc >/dev/null; then
 	/usr/bin/keepassxc &
-else
+elif ! /usr/share/ohmydebn/bin/ohmydebn-gtile-windows activate-class keepassxc; then
 	/usr/bin/xdotool search --name ".*- KeePassXC" windowactivate
 fi

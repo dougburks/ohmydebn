@@ -6,6 +6,10 @@
 # `pgrep keepassxc` counted it as KeePassXC being open - so the key ran
 # the window search, found no window, and nothing opened. pgrep is mocked
 # to behave like the real one with only the proxy running.
+#
+# The window is brought forward through gTile (ohmydebn-gtile-windows),
+# which sees it in Cinnamon's Wayland session; xdotool, which didn't, is
+# only the fallback for when gTile doesn't answer.
 
 set -uo pipefail
 
@@ -38,7 +42,13 @@ STUB
 #!/bin/bash
 mock_log "xdotool $*"
 STUB
-  sed "s#/usr/bin/keepassxc#$MOCK_BIN/keepassxc#; s#/usr/bin/xdotool#$MOCK_BIN/xdotool#" \
+  mock_bin ohmydebn-gtile-windows <<'STUB'
+#!/bin/bash
+mock_log "gtile-windows $*"
+exit "${MOCK_GTILE_EXIT:-0}"
+STUB
+  sed -e "s#/usr/bin/keepassxc#$MOCK_BIN/keepassxc#; s#/usr/bin/xdotool#$MOCK_BIN/xdotool#" \
+    -e "s#/usr/share/ohmydebn/bin/ohmydebn-gtile-windows#$MOCK_BIN/ohmydebn-gtile-windows#" \
     "$REPO_ROOT/bin/ohmydebn-keepass" >"$MOCK_DIR/keepass"
 }
 
@@ -55,8 +65,14 @@ mock_cleanup
 
 setup keepassxc keepassxc-proxy
 run
-assert_contains "KeePassXC running: brings its window forward" "$(cat "$MOCK_CALLS")" "xdotool search"
+assert_eq "KeePassXC running: gTile brings its window forward" "gtile-windows activate-class keepassxc" "$(cat "$MOCK_CALLS")"
 assert_eq "KeePassXC running: prints no PIDs" "" "$(cat "$MOCK_DIR/out")"
+mock_cleanup
+
+setup keepassxc
+MOCK_GTILE_EXIT=1 run
+assert_contains "gTile not answering: falls back to xdotool" "$(cat "$MOCK_CALLS")" "xdotool search --name .*- KeePassXC windowactivate"
+assert_not_contains "gTile not answering: doesn't start a second KeePassXC" "$(cat "$MOCK_CALLS")" $'\nkeepassxc'
 mock_cleanup
 
 setup

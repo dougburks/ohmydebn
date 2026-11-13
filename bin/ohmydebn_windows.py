@@ -1,5 +1,6 @@
 """Open windows for the window switcher (Ctrl+Alt+Tab, ohmydebn-menu-picker
---windows), from Cinnamon itself.
+--windows), from Cinnamon itself, and where they are for scripts that find
+or check windows (ohmydebn-gtile-windows).
 
 The switcher used to list and activate windows through libwnck, which only
 works with X11 windows: in Cinnamon's Wayland session, where most apps are
@@ -69,6 +70,76 @@ def activate_window(window_id, call=_gdbus_call):
         return False
     return True
 
+
+
+# ListWindowGeometry's rows (gTile 3.0.1-20261113.1 and later): where each
+# window is, for scripts that check placement. workspace is -1 for a window
+# on every workspace.
+WindowGeometry = namedtuple(
+    "WindowGeometry", "id title wm_class app_id workspace x y width height minimized")
+
+
+def list_geometry(call=_gdbus_call):
+    """Every window's workspace, frame rectangle and minimized state, as
+    WindowGeometry tuples; None when gTile can't be asked, or is a version
+    without ListWindowGeometry."""
+    try:
+        (rows,) = call("ListWindowGeometry", None, "(a(tsssiiiiib))")
+    except Exception:
+        return None
+    windows = []
+    for row in rows:
+        try:
+            windows.append(WindowGeometry(*row))
+        except TypeError:
+            continue
+    return windows
+
+
+def get_screen(call=_gdbus_call):
+    """(width, height, workspace count, active workspace index), or None
+    when gTile can't be asked."""
+    try:
+        reply = call("GetScreen", None, "(iiii)")
+    except Exception:
+        return None
+    try:
+        width, height, count, active = reply
+    except (TypeError, ValueError):
+        return None
+    return width, height, count, active
+
+
+def activate_workspace(index, call=_gdbus_call):
+    """Switches to the workspace with this index; False when gTile
+    couldn't (no such workspace, or gTile is gone)."""
+    from gi.repository import GLib
+
+    try:
+        call("ActivateWorkspace", GLib.Variant("(i)", (index,)), None)
+    except Exception:
+        return False
+    return True
+
+
+def _app_stem(app_id):
+    return app_id[:-len(".desktop")] if app_id.endswith(".desktop") else app_id
+
+
+def find_by_class(windows, name):
+    """The first of these windows (most recently used first, as
+    list_windows gives them) belonging to the app `name`, or None. An app's
+    window can say who it is in several ways, depending on the session: an
+    X11 WM_CLASS such as "KeePassXC", or a Wayland app ID such as
+    "org.keepassxc.KeePassXC". So `name` matches, ignoring case, a WM_CLASS
+    or .desktop ID that is exactly it or ends in "." plus it."""
+    want = name.lower()
+    for window in windows or []:
+        for candidate in (window.wm_class, _app_stem(window.app_id)):
+            candidate = (candidate or "").lower()
+            if candidate == want or candidate.endswith("." + want):
+                return window
+    return None
 
 def is_wayland_session(environ=None):
     """Whether this runs in a Wayland session, where libwnck can't stand in

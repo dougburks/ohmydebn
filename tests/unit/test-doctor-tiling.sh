@@ -39,17 +39,31 @@ assert_eq "classify: the bug's stuck window reads as top-right, not right-half" 
 assert_eq "classify: 45%-wide tall window still reads as a half" "left-half" "$(classify_region 0 0 1143 1314 $SW $SH)"
 
 # --- geometry looks only on the test's own workspace: the user's real
-# cliamp window on another one was found first, a false FAIL ---
-xdotool() {
-  case "$1" in
-  search) [[ " $* " == *" --desktop 3 "* ]] && echo 222 || echo 111 ;;
-  getwindowgeometry) [ "$3" = 222 ] && printf 'X=1285\nY=739\nWIDTH=1245\nHEIGHT=599\n' || printf 'X=0\nY=0\nWIDTH=500\nHEIGHT=300\n' ;;
-  esac
-}
+# cliamp window on another one was found first, a false FAIL. Windows come
+# from gTile (ohmydebn-gtile-windows geometry), not xdotool, which saw no
+# Wayland window at all. ---
+T=$'\t'
+ROWS="111${T}0${T}0${T}0${T}500${T}300${T}0${T}cliamp
+222${T}3${T}1285${T}739${T}1245${T}599${T}0${T}cliamp
+333${T}-1${T}0${T}0${T}2540${T}1314${T}0${T}Desktop
+444${T}3${T}20${T}130${T}1255${T}1218${T}1${T}ohmydebn-doctor-tiling-2"
+windows() { printf '%s\n' "$ROWS"; }
 # shellcheck disable=SC2034 # read by geometry()
 EMPTY_DESKTOP=3
 assert_eq "geometry: the test workspace's window, not another of the same title" "1285 739 1245 599" "$(geometry cliamp)"
-unset -f xdotool
+assert_eq "geometry: nothing for a title not on that workspace" "" "$(geometry Desktop)"
+if geometry nothing-like-it >/dev/null; then assert_eq "geometry: false when not found" "false" "true"; else assert_eq "geometry: false when not found" "false" "false"; fi
+assert_eq "geometry: a title with spaces matches whole" "" "$(rows_geometry 3 "cliamp extra" <<<"$ROWS")"
+assert_eq "count: windows on workspace 3 alone" "2" "$(rows_count 3 <<<"$ROWS")"
+assert_eq "count: a window on every workspace doesn't make one busy" "0" "$(rows_count 1 <<<"$ROWS")"
+assert_eq "window ids: by exact title, any workspace" "111" "$(window_id cliamp)"
+# shellcheck disable=SC2034 # read by win_id/win_visible
+TITLE_PREFIX=ohmydebn-doctor-tiling
+if win_visible 2; then assert_eq "visible: a minimized window isn't" "no" "yes"; else assert_eq "visible: a minimized window isn't" "no" "no"; fi
+ROWS="${ROWS/%${T}1${T}ohmydebn-doctor-tiling-2/${T}0${T}ohmydebn-doctor-tiling-2}"
+if win_visible 2; then assert_eq "visible: an unminimized one is" "yes" "yes"; else assert_eq "visible: an unminimized one is" "yes" "no"; fi
+if win_visible 5; then assert_eq "visible: a missing one isn't" "no" "yes"; else assert_eq "visible: a missing one isn't" "no" "no"; fi
+unset -f windows
 
 # --- mode_cycle_steps follows the extension's cycle order and wraps ---
 assert_eq "cycle: off -> rules is 1 step" "1" "$(mode_cycle_steps off rules)"
@@ -69,6 +83,15 @@ OUT=$(env -i HOME="$HOME" PATH="/usr/bin:/bin" bash "$SCRIPT" 2>&1); STATUS=$?
 assert_eq "no session: exits 0" "0" "$STATUS"
 assert_contains "no session: says why it skipped" "$OUT" "skip - tiling exercise (needs a Cinnamon session with a display)"
 assert_contains "no session: prints its summary" "$OUT" "0 ok, 0 failed, 1 skipped"
+
+# --- a Wayland session (no DISPLAY needed) gets past the session check:
+# here it stops at the next one, with alacritty missing from PATH ---
+SCRATCH_PATH=$(mktemp -d)
+for t in bash cat date; do ln -s "$(command -v "$t")" "$SCRATCH_PATH/$t"; done
+OUT=$(env -i HOME="$HOME" PATH="$SCRATCH_PATH" WAYLAND_DISPLAY=wayland-0 XDG_CURRENT_DESKTOP=X-Cinnamon bash "$SCRIPT" 2>&1)
+assert_not_contains "Wayland: not turned away for lacking an X display" "$OUT" "needs a Cinnamon session"
+assert_contains "Wayland: on to the tool checks" "$OUT" "not found"
+rm -rf "$SCRATCH_PATH"
 
 # --- doctor wiring: --exercise-tiling runs the script; unknown flags are rejected ---
 mock_init

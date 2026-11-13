@@ -24,12 +24,19 @@ set -uo pipefail
 # mode_cycle_steps are pure and unit-tested (tests/unit/
 # test-doctor-tiling.sh); the live sequence can only be proven in a real
 # session, which is what the per-distro VMs are for.
+#
+# Windows, workspaces and the screen size come from gTile itself
+# (ohmydebn-gtile-windows), which sees every window. They came from
+# xdotool and xprop, which only see X11 windows: in Cinnamon's Wayland
+# session the test terminals are Wayland windows, so every check failed
+# with "window not found" while tiling worked.
 
 TITLE_PREFIX="ohmydebn-doctor-tiling"
 SETTLE="${OHMYDEBN_DOCTOR_TILING_SETTLE:-1.2}"
 MODES=(off rules traditional traditional-full scrollable)
 SPICE="$HOME/.config/cinnamon/spices/gTile@OhMyDebn/gTile@OhMyDebn.json"
 DBUS=(gdbus call --session --dest org.gTile.Control --object-path /org/gTile/Control --method)
+GTILE_WINDOWS=/usr/share/ohmydebn/bin/ohmydebn-gtile-windows
 
 # ---------------------------------------------------------- pure helpers
 
@@ -83,15 +90,39 @@ overlaps() {
   (($1 < $5 + $7 && $5 < $1 + $3 && $2 < $6 + $8 && $6 < $2 + $4))
 }
 
+# Every window, one per line, tab-separated: id, workspace (-1 = all of
+# them), x, y, width, height, minimized (1 or 0), title.
+windows() { "$GTILE_WINDOWS" geometry 2>/dev/null; }
+
+# rows_geometry <workspace> <title>, `windows` lines on stdin -> "x y w h"
+# of the first window with exactly that title on that workspace, or
+# nothing and false.
+rows_geometry() {
+  awk -F'\t' -v ws="$1" -v t="$2" '$2 == ws && $8 == t { print $3, $4, $5, $6; found = 1; exit } END { exit !found }'
+}
+
+# rows_count <workspace>, `windows` lines on stdin -> how many windows are
+# on that workspace alone (not those on every workspace).
+rows_count() {
+  awk -F'\t' -v ws="$1" '$2 == ws { n++ } END { print n + 0 }'
+}
+
 # geometry <title-suffix or full title> -> "x y w h" or nothing. Only on
 # EMPTY_DESKTOP, the workspace the test windows open on: searching every
 # workspace found the user's own window of the same title first (a real
 # cliamp window, for the rules check) and reported a false FAIL.
 geometry() {
-  local id
-  id=$(xdotool search --desktop "$EMPTY_DESKTOP" --name "^$1\$" 2>/dev/null | head -1)
-  [ -n "$id" ] || return 1
-  xdotool getwindowgeometry --shell "$id" 2>/dev/null | awk -F= '/^X=/{x=$2} /^Y=/{y=$2} /^WIDTH=/{w=$2} /^HEIGHT=/{h=$2} END{print x, y, w, h}'
+  windows | rows_geometry "$EMPTY_DESKTOP" "$1"
+}
+
+# window_id <title> -> the id of a window with exactly that title, on any
+# workspace, or nothing.
+window_id() { windows | awk -F'\t' -v t="$1" '$8 == t { print $1; exit }'; }
+win_id() { window_id "$TITLE_PREFIX-$1"; }
+# "Visible" means present and not minimized: scrollable tiling minimizes
+# the columns outside its viewport.
+win_visible() {
+  windows | awk -F'\t' -v t="$TITLE_PREFIX-$1" '$8 == t && $7 == 0 { found = 1; exit } END { exit !found }'
 }
 
 # Sourced for its functions only (the unit test).
@@ -112,10 +143,10 @@ finish() {
 
 # ---------------------------------------------------------- preconditions
 echo "OhMyDebn tiling exercise - $(date '+%Y-%m-%d %H:%M')"
-if [ -z "${DISPLAY:-}" ] || [ "${XDG_CURRENT_DESKTOP:-}" != "X-Cinnamon" ]; then
+if { [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; } || [ "${XDG_CURRENT_DESKTOP:-}" != "X-Cinnamon" ]; then
   skip "tiling exercise" "needs a Cinnamon session with a display"; finish; exit $?
 fi
-for t in xdotool xprop gdbus alacritty python3; do
+for t in gdbus alacritty python3; do
   command -v "$t" >/dev/null 2>&1 || { skip "tiling exercise" "$t not found"; finish; exit $?; }
 done
 if ! grep -q gTile@OhMyDebn <<<"$(gsettings get org.cinnamon enabled-extensions 2>/dev/null)"; then
@@ -123,12 +154,14 @@ if ! grep -q gTile@OhMyDebn <<<"$(gsettings get org.cinnamon enabled-extensions 
 fi
 [ -f "$SPICE" ] || { skip "tiling exercise" "no gTile settings file at $SPICE"; finish; exit $?; }
 
-read -r SW SH < <(xdotool getdisplaygeometry)
-NUM_DESKTOPS=$(xdotool get_num_desktops)
-ORIG_DESKTOP=$(xdotool get_desktop)
+# GetScreen and ListWindowGeometry came with gTile 3.0.1-20261113.1.
+if ! read -r SW SH NUM_DESKTOPS ORIG_DESKTOP < <("$GTILE_WINDOWS" screen 2>/dev/null) || [ -z "${ORIG_DESKTOP:-}" ]; then
+  skip "tiling exercise" "gTile@OhMyDebn didn't report the screen - update OhMyDebn, then log out and back in"; finish; exit $?
+fi
+WINDOWS=$(windows)
 EMPTY_DESKTOP=""
 for ((d = 0; d < NUM_DESKTOPS; d++)); do
-  if [ "$(xdotool search --desktop "$d" --onlyvisible --name '' 2>/dev/null | wc -l)" -eq 0 ]; then EMPTY_DESKTOP=$d; break; fi
+  if [ "$(rows_count "$d" <<<"$WINDOWS")" -eq 0 ]; then EMPTY_DESKTOP=$d; break; fi
 done
 if [ -z "$EMPTY_DESKTOP" ]; then
   skip "tiling exercise" "no empty workspace to run on - close windows on one workspace and retry"; finish; exit $?
@@ -153,21 +186,12 @@ set_mode() {
   fail "switch to mode $target" "extension reports $(current_mode)"; return 1
 }
 
-win_id() { xdotool search --name "^$TITLE_PREFIX-$1\$" 2>/dev/null | head -1; }
-# "Visible" means present and not minimized. Muffin keeps minimized X11
-# windows mapped (xdotool's --onlyvisible still lists them - confirmed
-# live), so minimization is read from _NET_WM_STATE's HIDDEN flag instead.
-win_visible() {
-  local id
-  id=$(win_id "$1"); [ -n "$id" ] || return 1
-  ! grep -q _NET_WM_STATE_HIDDEN <<<"$(xprop -id "$id" _NET_WM_STATE 2>/dev/null)"
-}
 
 open_window() {
   local n=$1 title=${2:-$TITLE_PREFIX-$1} i
   /usr/share/ohmydebn/bin/ohmydebn-alacritty --title "$title" -e sleep 900 >/dev/null 2>&1 &
   PIDS[$n]=$!
-  for i in $(seq 1 50); do [ -n "$(xdotool search --name "^$title\$" 2>/dev/null | head -1)" ] && break; sleep 0.1; done
+  for i in $(seq 1 50); do [ -n "$(window_id "$title")" ] && break; sleep 0.1; done
   sleep "$SETTLE"
 }
 
@@ -213,11 +237,11 @@ expect_no_overlaps() {
 restore() {
   close_all
   set_mode "$ORIG_MODE" >/dev/null 2>&1 || true
-  xdotool set_desktop "$ORIG_DESKTOP" 2>/dev/null || true
+  "$GTILE_WINDOWS" workspace "$ORIG_DESKTOP" 2>/dev/null || true
 }
 trap restore EXIT
 
-xdotool set_desktop "$EMPTY_DESKTOP"; sleep 0.5
+"$GTILE_WINDOWS" workspace "$EMPTY_DESKTOP"; sleep 0.5
 
 # ---------------------------------------------------- Traditional (3 windows)
 section "Traditional tiling (3 windows), six windows"
@@ -287,7 +311,7 @@ fi
 section "DBus TileFocusedWindow"
 if set_mode off; then
   open_window 1
-  id=$(win_id 1); [ -n "$id" ] && xdotool windowactivate --sync "$id" 2>/dev/null; sleep 0.3
+  id=$(win_id 1); [ -n "$id" ] && "$GTILE_WINDOWS" activate "$id" 2>/dev/null; sleep 0.3
   "${DBUS[@]}" org.gTile.Control.TileFocusedWindow 2 1 0 0 1 1 >/dev/null 2>&1; sleep "$SETTLE"
   expect "TileFocusedWindow 2 1 0 0 1 1" 1 left-half
   "${DBUS[@]}" org.gTile.Control.TileFocusedWindow 2 2 1 1 1 1 >/dev/null 2>&1; sleep "$SETTLE"

@@ -1,0 +1,82 @@
+#!/usr/bin/python3
+#
+# ohmydebn-gtile-windows: finds, raises and measures windows through
+# gTile@OhMyDebn, for shell scripts. They did this with xdotool, which only
+# sees X11 windows: in Cinnamon's Wayland session most apps are Wayland
+# windows, and xdotool found nothing. gTile runs inside Cinnamon, which sees
+# every window in either session.
+#
+# Usage:
+#   ohmydebn-gtile-windows activate-class <name>
+#       Brings the most recently used window of the app <name> to the
+#       front: an X11 WM_CLASS ("KeePassXC") or a Wayland app ID
+#       ("org.keepassxc.KeePassXC") that is <name> or ends in .<name>,
+#       ignoring case. Exits 1 if there's none.
+#   ohmydebn-gtile-windows activate <id>
+#       Brings the window with this id to the front.
+#   ohmydebn-gtile-windows geometry
+#       One line per window, tab-separated: id, workspace (-1 = all),
+#       x, y, width, height, minimized (1 or 0), title. The title comes
+#       last, with any tabs or line breaks in it made spaces.
+#   ohmydebn-gtile-windows screen
+#       "width height workspaces active-workspace".
+#   ohmydebn-gtile-windows workspace <index>
+#       Switches to that workspace.
+# Each exits 1 when gTile doesn't answer (it's disabled, or a version
+# without the method) or the window or workspace doesn't exist, and 2 on a
+# usage error.
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+
+import ohmydebn_windows as windows_lib  # noqa: E402
+
+USAGE = "Usage: ohmydebn-gtile-windows activate-class <name> | activate <id> | geometry | screen | workspace <index>"
+
+
+def one_line(text):
+    return " ".join(text.replace("\t", " ").splitlines())
+
+
+def main(argv):
+    if not argv:
+        print(USAGE, file=sys.stderr)
+        return 2
+    command, args = argv[0], argv[1:]
+
+    if command == "activate-class" and len(args) == 1 and args[0]:
+        window = windows_lib.find_by_class(windows_lib.list_windows(), args[0])
+        if window is None:
+            return 1
+        return 0 if windows_lib.activate_window(window.id) else 1
+
+    if command == "activate" and len(args) == 1 and args[0].isdigit():
+        return 0 if windows_lib.activate_window(int(args[0])) else 1
+
+    if command == "geometry" and not args:
+        windows = windows_lib.list_geometry()
+        if windows is None:
+            return 1
+        for w in windows:
+            print("\t".join(str(v) for v in (
+                w.id, w.workspace, w.x, w.y, w.width, w.height, 1 if w.minimized else 0, one_line(w.title))))
+        return 0
+
+    if command == "screen" and not args:
+        screen = windows_lib.get_screen()
+        if screen is None:
+            return 1
+        print(*screen)
+        return 0
+
+    if command == "workspace" and len(args) == 1 and args[0].isdigit():
+        return 0 if windows_lib.activate_workspace(int(args[0])) else 1
+
+    print(USAGE, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -129,7 +129,8 @@ try:
     check_eq("main: succeeds", pml.main(), 0)
     with open(os.path.join(tmp, "panel-launchers@cinnamon.org", "16.json")) as f:
         settings = json.load(f)
-    check_eq("main: the launcher's only app is the OhMyDebn Menu", settings["launcherList"]["value"], ["ohmydebn-menu.desktop"])
+    check_eq("main: the launcher has the OhMyDebn Menu, then the AI Assistant", settings["launcherList"]["value"],
+             ["ohmydebn-menu.desktop", "ohmydebn-ai.desktop"])
     check_eq("main: counter set past the new ID, then the applet added",
              [key for key, _ in fake.sets], ["next-applet-id", "enabled-applets"])
     check_eq("main: counter value", fake.sets[0][1], "17")
@@ -141,6 +142,57 @@ try:
     check_eq("main, no session bus: exit 1 so the step retries", pml.main(), 1)
 finally:
     shutil.rmtree(tmp)
+
+# --- --add-ai: installs that got the OhMyDebn Menu button before the AI
+# Assistant existed get it right after, once. ---
+print("=== --add-ai ===")
+PANEL = SEED + ["panel1:left:1:panel-launchers@cinnamon.org:20", "panel2:left:0:panel-launchers@cinnamon.org:21"]
+lists = {"20": ["nemo.desktop", "ohmydebn-menu.desktop", "firefox.desktop"], "21": ["gedit.desktop"]}
+check_eq("plan: right after the OhMyDebn Menu, the user's own launchers kept",
+         pml.plan_add_ai(PANEL, lambda i: lists.get(i, [])),
+         ("20", ["nemo.desktop", "ohmydebn-menu.desktop", "ohmydebn-ai.desktop", "firefox.desktop"]))
+check_eq("plan: already in any panel launcher - nothing",
+         pml.plan_add_ai(PANEL, lambda i: {"21": ["ohmydebn-ai.desktop"]}.get(i, lists.get(i, []))), (None, None))
+check_eq("plan: the OhMyDebn Menu button was removed - nothing (they don't want our buttons)",
+         pml.plan_add_ai(PANEL, lambda i: {"20": ["nemo.desktop"]}.get(i, [])), (None, None))
+check_eq("plan: a launcher in a settings file but not on the panel doesn't count",
+         pml.plan_add_ai(SEED, lambda i: ["ohmydebn-menu.desktop"]), (None, None))
+
+tmp = tempfile.mkdtemp()
+saved_argv, saved_tell = list(pml.sys.argv), pml.tell_cinnamon
+told = []
+try:
+    pml.SPICES_DIR = tmp
+    os.makedirs(os.path.join(tmp, "panel-launchers@cinnamon.org"))
+    path = os.path.join(tmp, "panel-launchers@cinnamon.org", "20.json")
+    with open(path, "w") as f:
+        json.dump({"launcherList": {"type": "generic", "default": [], "value": ["ohmydebn-menu.desktop"]},
+                   "allow-dragging": {"type": "checkbox", "value": False}, "__md5__": "abc"}, f)
+    fake = FakeGsettings(SEED + ["panel1:left:1:panel-launchers@cinnamon.org:20"], 21)
+    pml.gsettings = fake
+    pml.tell_cinnamon = lambda applet_id, launchers: told.append((applet_id, launchers))
+    pml.sys.argv = ["ohmydebn-panel-menu-launcher", "--add-ai"]
+    check_eq("add-ai: succeeds", pml.main(), 0)
+    with open(path) as f:
+        settings = json.load(f)
+    check_eq("add-ai: the file's list has the AI Assistant after the menu", settings["launcherList"]["value"],
+             ["ohmydebn-menu.desktop", "ohmydebn-ai.desktop"])
+    check_eq("add-ai: the rest of the file kept", (settings["allow-dragging"]["value"], settings["__md5__"]), (False, "abc"))
+    check_eq("add-ai: Cinnamon is told (it doesn't watch the file from Mint 27 on)", told,
+             [("20", ["ohmydebn-menu.desktop", "ohmydebn-ai.desktop"])])
+    check_eq("add-ai: no applet added or counter moved", fake.sets, [])
+    told.clear()
+    check_eq("add-ai, second run: succeeds", pml.main(), 0)
+    check_eq("add-ai, second run: nothing told", told, [])
+    fake.fail = True
+    check_eq("add-ai, no session bus: exit 1 so the step retries", pml.main(), 1)
+finally:
+    pml.sys.argv, pml.tell_cinnamon = saved_argv, saved_tell
+    shutil.rmtree(tmp)
+
+check_eq("write_launcher_list: a missing file is False, nothing created",
+         (pml.write_launcher_list("99", ["x"], tempfile.gettempdir() + "/no-such-spices"),
+          os.path.exists(tempfile.gettempdir() + "/no-such-spices")), (False, False))
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

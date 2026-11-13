@@ -2,8 +2,10 @@
 #
 # ohmydebn-panel-menu-launcher: puts the OhMyDebn Menu on the panel, as a
 # panel launcher (Cinnamon's own panel-launchers applet) right after the
-# Cinnamon menu. The corner stays the Cinnamon menu (Super); the grin next
-# to it is the OhMyDebn Menu (Super + Space).
+# Cinnamon menu, with the AI Assistant beside it. The corner stays the
+# Cinnamon menu (Super); the grin next to it is the OhMyDebn Menu
+# (Super + Space), and the sparkle after that your default AI assistant
+# (Super + A).
 #
 # Changes nothing when:
 # - a panel launcher already has the OhMyDebn Menu (one the user added,
@@ -13,14 +15,24 @@
 #
 # The launcher's settings file (spices/panel-launchers@cinnamon.org/
 # <id>.json, since the applet allows several instances) is written before
-# the applet is added, so it starts with just the OhMyDebn Menu rather
-# than the applet's default Firefox, Terminal and Files launchers. Cinnamon
+# the applet is added, so it starts with just the OhMyDebn Menu and the AI
+# Assistant rather than the applet's default Firefox, Terminal and Files
+# launchers. Cinnamon
 # fills in the rest of the file from the applet's schema and keeps the
 # value. The applet gets a new instance ID from Cinnamon's next-applet-id
 # counter, above every ID in use, and applets after the Cinnamon menu move
 # along one place if the next one is taken.
 #
-# Usage: ohmydebn-panel-menu-launcher [--dry-run]
+# --add-ai, for installs that got the OhMyDebn Menu button before the AI
+# Assistant existed (4.18.0): puts the AI Assistant right after the OhMyDebn
+# Menu in that launcher. Changes nothing when a panel launcher already has
+# the AI Assistant, or none has the OhMyDebn Menu (the user removed it, so
+# they don't want OhMyDebn's buttons there). From Linux Mint 27 on Cinnamon
+# no longer watches a running applet's settings file, so after changing
+# the file this tells Cinnamon over D-Bus (org.Cinnamon.updateSetting, which
+# older versions answer by reading the file again).
+#
+# Usage: ohmydebn-panel-menu-launcher [--add-ai] [--dry-run]
 # Exits 0 when the launcher is there or deliberately not added, 1 when
 # Cinnamon's settings couldn't be read (no session bus), so the install
 # step can try again on the next run.
@@ -31,6 +43,7 @@ import subprocess
 import sys
 
 MENU_DESKTOP = "ohmydebn-menu.desktop"
+AI_DESKTOP = "ohmydebn-ai.desktop"
 LAUNCHERS = "panel-launchers@cinnamon.org"
 CINNAMON_MENU = "menu@cinnamon.org"
 SPICES_DIR = os.path.expanduser("~/.config/cinnamon/spices")
@@ -94,12 +107,77 @@ def plan(entries, next_id, launchers_of):
     return new_entries, new_id
 
 
+def plan_add_ai(entries, launchers_of):
+    """(applet_id, new_launcher_list) to put the AI Assistant right after
+    the OhMyDebn Menu in the panel launcher that has it, or (None, None)
+    when nothing should change: a panel launcher already has the AI
+    Assistant, or none has the OhMyDebn Menu."""
+    ids = []
+    for entry in entries:
+        p = entry.split(":")
+        if len(p) == 5 and p[3] == LAUNCHERS:
+            ids.append(p[4])
+    if any(AI_DESKTOP in launchers_of(applet_id) for applet_id in ids):
+        return None, None
+    for applet_id in ids:
+        launchers = launchers_of(applet_id)
+        if MENU_DESKTOP in launchers:
+            at = launchers.index(MENU_DESKTOP) + 1
+            return applet_id, launchers[:at] + [AI_DESKTOP] + launchers[at:]
+    return None, None
+
+
+def write_launcher_list(applet_id, launchers, spices_dir=None):
+    """Replaces a panel launcher's list in its settings file, keeping the
+    rest of the file. False if the file couldn't be read or written."""
+    path = os.path.join(spices_dir or SPICES_DIR, LAUNCHERS, f"{applet_id}.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        data["launcherList"]["value"] = launchers
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=4)
+        os.replace(tmp, path)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return True
+
+
+def tell_cinnamon(applet_id, launchers):
+    """Has the running applet pick up its new list. Without Cinnamon (no
+    session), it reads the file when it starts anyway."""
+    subprocess.run(
+        ["gdbus", "call", "--session", "--dest", "org.Cinnamon", "--object-path", "/org/Cinnamon",
+         "--method", "org.Cinnamon.updateSetting", LAUNCHERS, str(applet_id), "launcherList",
+         json.dumps(launchers)],
+        capture_output=True, check=False)
+
+
+def add_ai(dry_run):
+    try:
+        entries = parse_strv(gsettings("get", "org.cinnamon", "enabled-applets"))
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return 1
+    applet_id, launchers = plan_add_ai(entries, launcher_list)
+    if applet_id is None:
+        return 0
+    print(f"Adding the AI Assistant to the panel (panel launcher {applet_id})")
+    if dry_run:
+        return 0
+    if write_launcher_list(applet_id, launchers):
+        tell_cinnamon(applet_id, launchers)
+    return 0
+
+
 def gsettings(*args):
     return subprocess.run(["gsettings", *args], check=True, capture_output=True, text=True).stdout
 
 
 def main():
     dry_run = "--dry-run" in sys.argv[1:]
+    if "--add-ai" in sys.argv[1:]:
+        return add_ai(dry_run)
     try:
         entries = parse_strv(gsettings("get", "org.cinnamon", "enabled-applets"))
         next_id = int(gsettings("get", "org.cinnamon", "next-applet-id").split()[-1])
@@ -108,7 +186,7 @@ def main():
     new_entries, new_id = plan(entries, next_id, launcher_list)
     if new_entries is None:
         return 0
-    print(f"Adding the OhMyDebn Menu to the panel (panel launcher {new_id})")
+    print(f"Adding the OhMyDebn Menu and the AI Assistant to the panel (panel launcher {new_id})")
     if dry_run:
         return 0
     settings_dir = os.path.join(SPICES_DIR, LAUNCHERS)
@@ -118,7 +196,7 @@ def main():
     if not os.path.exists(settings_file):
         tmp = settings_file + ".tmp"
         with open(tmp, "w") as f:
-            json.dump({"launcherList": {"type": "generic", "default": [], "value": [MENU_DESKTOP]}}, f, indent=4)
+            json.dump({"launcherList": {"type": "generic", "default": [], "value": [MENU_DESKTOP, AI_DESKTOP]}}, f, indent=4)
         os.replace(tmp, settings_file)
     gsettings("set", "org.cinnamon", "next-applet-id", str(new_id + 1))
     gsettings("set", "org.cinnamon", "enabled-applets", format_strv(new_entries))

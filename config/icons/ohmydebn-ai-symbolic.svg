@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- AI Assistant (the panel's AI button and the menus): a large and a
+       small four-pointed sparkle, a generic AI mark rather than any one
+       vendor's logo. Symbolic, so the desktop recolors it with the theme's
+       text color, like the OhMyDebn Menu's grin beside it. -->
+  <path fill="#bebebe" d="M6.5 4Q7.2 8.8 12 9.5Q7.2 10.2 6.5 15Q5.8 10.2 1 9.5Q5.8 8.8 6.5 4ZM12.5 1Q12.8 3.2 15 3.5Q12.8 3.8 12.5 6Q12.2 3.8 10 3.5Q12.2 3.2 12.5 1Z"/>
+</svg>

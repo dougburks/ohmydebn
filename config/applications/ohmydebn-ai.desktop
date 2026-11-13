@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=AI Assistant
+GenericName=AI Assistant
+Comment=Open your default AI assistant (Super + A), or install one
+Exec=/usr/share/ohmydebn/bin/ohmydebn-ai
+Icon=ohmydebn-ai-symbolic
+Terminal=false
+Categories=Utility;
+Keywords=AI;assistant;agent;chat;LLM;
+StartupNotify=true

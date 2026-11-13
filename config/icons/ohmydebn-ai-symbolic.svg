@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-  <!-- AI Assistant (the panel's AI button and the menus): a large and a
-       small four-pointed sparkle, a generic AI mark rather than any one
-       vendor's logo. Symbolic, so the desktop recolors it with the theme's
-       text color, like the OhMyDebn Menu's grin beside it. -->
-  <path fill="#bebebe" d="M6.5 4Q7.2 8.8 12 9.5Q7.2 10.2 6.5 15Q5.8 10.2 1 9.5Q5.8 8.8 6.5 4ZM12.5 1Q12.8 3.2 15 3.5Q12.8 3.8 12.5 6Q12.2 3.8 10 3.5Q12.2 3.2 12.5 1Z"/>
+  <!-- AI Assistant (the panel's AI button, and the AI Assistant entry in
+       the menus): the robot the OhMyDebn menu's AI items show, the
+       "robot" glyph of Material Design Icons (Pictogrammers, Apache
+       License 2.0) as the Nerd Fonts carry it at U+F16A4, traced from
+       the font's outline. Symbolic, so the desktop recolors it with the
+       theme's text color, like the OhMyDebn Menu's grin beside it. -->
+  <path fill="#bebebe" d="M15.25 9.47L14.54 9.47C14.54 8.53 14.31 7.67 13.85 6.89C13.40 6.11 12.78 5.49 12.00 5.03C11.21 4.58 10.37 4.35 9.46 4.35L8.72 4.35L8.72 3.43C8.95 3.32 9.13 3.15 9.26 2.92C9.40 2.69 9.46 2.44 9.46 2.17C9.46 1.78 9.32 1.45 9.04 1.17C8.75 0.88 8.41 0.74 8.00 0.74C7.59 0.74 7.24 0.88 6.96 1.17C6.67 1.45 6.53 1.78 6.53 2.17C6.53 2.44 6.60 2.69 6.73 2.92C6.86 3.15 7.05 3.32 7.28 3.43L7.28 4.35L6.53 4.35C5.62 4.35 4.78 4.58 4.00 5.03C3.22 5.49 2.60 6.11 2.14 6.89C1.69 7.67 1.47 8.53 1.47 9.47L0.75 9.47C0.55 9.47 0.38 9.54 0.23 9.67C0.08 9.80 0.00 9.97 0.00 10.17L0.00 12.36C0.00 12.56 0.08 12.73 0.23 12.87C0.38 13.00 0.55 13.07 0.75 13.07L1.47 13.07L1.47 13.82C1.47 14.20 1.61 14.54 1.89 14.83C2.18 15.12 2.52 15.26 2.93 15.26L13.07 15.26C13.48 15.26 13.82 15.12 14.11 14.83C14.39 14.55 14.54 14.21 14.54 13.82L14.54 13.07L15.25 13.07C15.45 13.07 15.62 13.00 15.77 12.87C15.92 12.73 16.00 12.56 16.00 12.36L16.00 10.17C16.00 9.97 15.92 9.80 15.77 9.67C15.62 9.54 15.45 9.47 15.25 9.47ZM14.54 11.65L13.07 11.65L13.07 13.82L2.93 13.82L2.93 11.65L1.47 11.65L1.47 10.90L2.93 10.90L2.93 9.47C2.93 8.81 3.09 8.20 3.41 7.64C3.73 7.08 4.17 6.63 4.72 6.30C5.27 5.97 5.88 5.80 6.54 5.80L9.47 5.80C10.13 5.80 10.73 5.97 11.28 6.30C11.83 6.63 12.27 7.08 12.59 7.64C12.91 8.20 13.07 8.81 13.07 9.47L13.07 10.90L14.54 10.90ZM5.44 9.09L7.17 10.79L6.32 11.69L5.44 10.79L4.59 11.69L3.73 10.79ZM10.56 9.09L12.24 10.79L11.39 11.69L10.56 10.79L9.65 11.69L8.82 10.79ZM0.00 -7.93"/>
 </svg>

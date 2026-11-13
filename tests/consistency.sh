@@ -1352,6 +1352,18 @@ done < <(grep -lE '^[[:space:]]*from gi\.repository import .*\bGtk\b' "$REPO_ROO
   grep -v '/bin/ohmydebn-console$')
 echo "  checked $CHECKED notifications and GTK scripts"
 
+echo "-- ohmydebn-menu ends with a bare show_main_menu --"
+# Tests source the menu for its functions after deleting that exact line
+# (sed '/^show_main_menu$/d'). When it was indented inside an if/else
+# (for `ohmydebn-menu ai`), sourcing ran the menu itself, and
+# test-menu-persistent-picker.sh looped until killed.
+if [ "$(tail -n1 "$REPO_ROOT/bin/ohmydebn-menu")" = "show_main_menu" ]; then
+  echo "  ohmydebn-menu's last line is show_main_menu"
+else
+  echo "  FAIL - ohmydebn-menu's last line isn't a bare show_main_menu"
+  FAIL=$((FAIL + 1))
+fi
+
 echo
 echo "$FAIL failure(s)"
 [[ $FAIL -eq 0 ]]

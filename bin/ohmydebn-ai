@@ -8,17 +8,33 @@
 # been picked yet or the stored value isn't one of the known names, so
 # upgraders' muscle memory doesn't change until they deliberately pick
 # something else.
+#
+# Unless OpenCode isn't installed either: then nobody has been using it
+# through Super+A, and going straight to its install prompt made OpenCode
+# look like the only choice to a new user (now that the panel's AI button
+# runs this too). Instead the OhMyDebn menu opens on Apps > AI, every
+# assistant OhMyDebn offers; picking one installs it and asks whether to
+# make it the default.
 
 set -euo pipefail
 
 DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
 
-name="opencode"
+name=""
 if [[ -f "$DEFAULT_AI_FILE" ]]; then
   stored=$(<"$DEFAULT_AI_FILE")
   case "$stored" in
   opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode) name="$stored" ;;
   esac
+fi
+
+if [[ -z "$name" ]]; then
+  if ! dpkg -s ohmydebn-opencode-cli >/dev/null 2>&1; then
+    notify-send -i ohmydebn "Choose an AI assistant" \
+      "Pick one to install. OhMyDebn then asks whether to make it your default for Super + A and the panel's AI button." 2>/dev/null || true
+    exec /usr/share/ohmydebn/bin/ohmydebn-menu ai
+  fi
+  name="opencode"
 fi
 
 case "$name" in

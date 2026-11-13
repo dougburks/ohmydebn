@@ -448,7 +448,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Space`, or the grin icon on the panel next to the Cinnamon menu
-- "Launch AI assistant" -> `Super + A` or the sparkle on the panel after the grin (the default assistant, set in Setup > Defaults > Agent), or from Apps > AI
+- "Launch AI assistant" -> `Super + A` or the robot on the panel after the grin (the default assistant, set in Setup > Defaults > Agent), or from Apps > AI
 - "Quick AI console" / "drop-down terminal" -> `Super` + the key left of `1` (press again to hide it)
 - "Update OpenCode to latest version" -> `ohmydebn-update` (updates OpenCode if it's installed)
 - "Open apps menu" -> `Super + R` (GTK app launcher)

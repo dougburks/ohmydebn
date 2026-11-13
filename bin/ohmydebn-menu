@@ -929,4 +929,12 @@ go_to_menu() {
   esac
 }
 
+# `ohmydebn-menu ai` opens on Apps > AI: ohmydebn-ai's first-use choice,
+# when no AI assistant has been picked or installed yet. The last line
+# stays a bare `show_main_menu`: tests strip it to source this file for its
+# functions.
+if [ "${1:-}" = ai ]; then
+  show_ai_menu
+  exit
+fi
 show_main_menu

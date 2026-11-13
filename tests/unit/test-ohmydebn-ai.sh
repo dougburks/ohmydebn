@@ -24,6 +24,20 @@ setup_mocks() {
 echo "$cmd \$*" >>"\$MOCK_CALLS"
 EOF
   done
+  # OpenCode installed unless a test says otherwise (MOCK_NO_OPENCODE=1).
+  mock_bin dpkg <<'EOF'
+#!/bin/bash
+[ "$1" = -s ] && [ "$2" = ohmydebn-opencode-cli ] && [ -z "${MOCK_NO_OPENCODE:-}" ] && exit 0
+exit 1
+EOF
+  mock_bin notify-send <<'EOF'
+#!/bin/bash
+echo "notify-send $*" >>"$MOCK_CALLS"
+EOF
+  mock_bin ohmydebn-menu <<'EOF'
+#!/bin/bash
+echo "ohmydebn-menu $*" >>"$MOCK_CALLS"
+EOF
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$AI_SCRIPT" >"$MOCK_DIR/ohmydebn-ai-patched"
   chmod +x "$MOCK_DIR/ohmydebn-ai-patched"
 }
@@ -45,6 +59,22 @@ setup_mocks
 fresh_scratch_home
 run_ai
 assert_contains "no config file: launches opencode" "$(cat "$MOCK_CALLS")" "ohmydebn-opencode"
+
+# --- Nothing chosen and OpenCode not installed (a new user, or the panel's
+# AI button on a fresh install): every assistant is offered, not just an
+# OpenCode install prompt ---
+fresh_scratch_home
+MOCK_NO_OPENCODE=1 run_ai
+assert_contains "nothing chosen or installed: opens the menu on Apps > AI" "$(cat "$MOCK_CALLS")" "ohmydebn-menu ai"
+assert_contains "nothing chosen or installed: says what to do" "$(cat "$MOCK_CALLS")" "Choose an AI assistant"
+assert_not_contains "nothing chosen or installed: no OpenCode install prompt" "$(cat "$MOCK_CALLS")" "ohmydebn-opencode"
+
+# --- A chosen default that isn't installed yet still opens (and installs) it ---
+fresh_scratch_home
+mkdir -p "$SCRATCH_HOME/.config/ohmydebn/current"
+echo "claude-code" >"$SCRATCH_HOME/.config/ohmydebn/current/default-ai"
+MOCK_NO_OPENCODE=1 run_ai
+assert_eq "chosen default, OpenCode absent: opens the chosen one" "ohmydebn-claude-code " "$(cat "$MOCK_CALLS")"
 
 # --- Each of the valid stored names maps to the matching launcher ---
 declare -A EXPECTED=(

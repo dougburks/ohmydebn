@@ -609,10 +609,16 @@ else
 fi
 # Super+A opens the default AI assistant, installing it first if it isn't
 # (each ohmydebn-<tool> does), so a missing one is a note, not a failure.
+# With none chosen and OpenCode (the fallback) not installed either, it
+# offers every assistant instead (ohmydebn-ai).
 if [ -x "$OHMYDEBN/bin/ohmydebn-ai-set-default" ]; then
   AI_DEFAULT=$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --current 2>/dev/null || echo opencode)
+  AI_CHOSEN=""
+  [ -f "$HOME/.config/ohmydebn/current/default-ai" ] && AI_CHOSEN=$(<"$HOME/.config/ohmydebn/current/default-ai")
   if grep -qx "$AI_DEFAULT" <<<"$("$OHMYDEBN/bin/ohmydebn-ai-set-default" --list-installed 2>/dev/null | cut -f1)"; then
     ok "default AI assistant installed ($AI_DEFAULT)"
+  elif [ "$AI_CHOSEN" != "$AI_DEFAULT" ]; then
+    echo "  no AI assistant chosen yet - Super+A and the panel's AI button offer every one"
   else
     echo "  default AI assistant ($AI_DEFAULT) isn't installed - Super+A offers to install it"
   fi

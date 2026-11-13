@@ -499,6 +499,12 @@ assert_contains "defaults etc: broken TOML named" "$OUTPUT" "FAIL - terminal con
 assert_contains "defaults etc: Super+B does nothing" "$OUTPUT" "FAIL - Super+B opens a browser (the default (gone.desktop) isn't installed and there's no x-www-browser"
 assert_contains "defaults etc: uninstalled default AI is a note, not a failure" "$OUTPUT" "default AI assistant (opencode) isn't installed - Super+A offers to install it"
 assert_not_contains "defaults etc: no FAIL for the AI default" "$OUTPUT" "FAIL - default AI assistant"
+SAVED_OUTPUT=$OUTPUT SAVED_EXIT_CODE=$EXIT_CODE
+rm -f "$H/.config/ohmydebn/current/default-ai"
+run_doctor MOCK_AI_INSTALLED=codex
+assert_contains "defaults etc: none chosen, OpenCode not installed: every one is offered" "$OUTPUT" "no AI assistant chosen yet - Super+A and the panel's AI button offer every one"
+assert_not_contains "defaults etc: none chosen: not called OpenCode's install" "$OUTPUT" "default AI assistant (opencode) isn't installed"
+OUTPUT=$SAVED_OUTPUT EXIT_CODE=$SAVED_EXIT_CODE
 assert_contains "defaults etc: missing Oh My Zsh caught" "$OUTPUT" "FAIL - Oh My Zsh installed in /usr/share/oh-my-zsh"
 assert_contains "defaults etc: missing menu launcher caught" "$OUTPUT" "FAIL - ~/.local/share/applications/ohmydebn-menu.desktop present"
 assert_contains "defaults etc: missing module block named" "$OUTPUT" "FAIL - vulnerable kernel modules blocked (missing /etc/modprobe.d/disable-esp4-esp6-rxrpc.conf"

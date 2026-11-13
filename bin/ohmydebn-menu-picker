@@ -50,13 +50,40 @@
 # no separate theme pipeline to keep in sync - if that generation ever
 # changes, this picks it up automatically.
 
+import os
+
 import gi
+
+
+def use_xwayland(environ=None):
+    """Whether to open this window through XWayland: in a Wayland session,
+    where XWayland (DISPLAY) is there to use. A Wayland window can't place
+    itself - Cinnamon centered it, wherever position_window() asked - and
+    can't read where the pointer is, which picks the monitor it opens on.
+    An X11 window can do both, as in an X11 session."""
+    env = os.environ if environ is None else environ
+    wayland = bool(env.get("WAYLAND_DISPLAY")) or env.get("XDG_SESSION_TYPE") == "wayland"
+    return wayland and bool(env.get("DISPLAY"))
+
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Wnck", "3.0")
-from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango, Wnck
+# GDK_BACKEND has to be set before Gdk is imported: PyGObject's Gdk
+# overrides open the display on import (the same as ohmydebn-console). It's
+# put back afterwards, so apps launched from here open the way they would
+# anyway.
+_USE_XWAYLAND = use_xwayland()
+_SAVED_GDK_BACKEND = os.environ.get("GDK_BACKEND")
+if _USE_XWAYLAND:
+    os.environ["GDK_BACKEND"] = "x11"
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango, Wnck  # noqa: E402
+if _USE_XWAYLAND:
+    if _SAVED_GDK_BACKEND is None:
+        os.environ.pop("GDK_BACKEND", None)
+    else:
+        os.environ["GDK_BACKEND"] = _SAVED_GDK_BACKEND
 
 # OhMyDebn's full-color icon for this window in the window list and
 # switcher (ohmydebn-theme-set-menu-icon colors it to match the theme).

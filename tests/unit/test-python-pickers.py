@@ -2042,6 +2042,68 @@ finally:
     mp.ICON_CACHE_DIR, mp.os.replace = _saved_cache_dir, _saved_replace
     shutil.rmtree(_icon_scratch)
 
+print("=== ohmydebn-menu-picker: XWayland in a Wayland session ===")
+# The picker places itself (position_window: centered, a quarter of the way
+# down, less 176px) - which a Wayland window can't do, so in Cinnamon's
+# Wayland session it opened dead center while X11 had it above center. It
+# opens through XWayland there. GDK_BACKEND must be set as Gdk is imported
+# (PyGObject's Gdk overrides open the display then), and put back after. A
+# stand-in gi records it, then stops the script at its first use of Gtk.
+import types  # noqa: E402
+
+
+class _Stop(Exception):
+    pass
+
+
+def picker_backend(environ):
+    seen = {}
+
+    class Repository(types.ModuleType):
+        def __getattr__(self, name):
+            if name == "Gdk":
+                seen["at_import"] = os.environ.get("GDK_BACKEND")
+
+            class Stopper:
+                def __getattr__(self, _attr):
+                    seen["after"] = os.environ.get("GDK_BACKEND")
+                    raise _Stop()
+            return Stopper()
+
+    fake_gi = types.ModuleType("gi")
+    fake_gi.require_version = lambda *a: None
+    fake_gi.repository = Repository("gi.repository")
+    saved_modules = {k: sys.modules.get(k) for k in ("gi", "gi.repository")}
+    saved_env = dict(os.environ)
+    sys.modules["gi"], sys.modules["gi.repository"] = fake_gi, fake_gi.repository
+    os.environ.clear()
+    os.environ.update(environ)
+    try:
+        SourceFileLoader("picker_backend_probe", os.path.join(BIN, "ohmydebn-menu-picker")).load_module()
+    except _Stop:
+        pass
+    finally:
+        os.environ.clear()
+        os.environ.update(saved_env)
+        for k, v in saved_modules.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+        sys.modules.pop("picker_backend_probe", None)
+    return seen
+
+
+seen = picker_backend({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"})
+check_eq("Wayland: Gdk opens XWayland (GDK_BACKEND=x11 as it's imported)", seen.get("at_import"), "x11")
+check_eq("Wayland: GDK_BACKEND is gone again before anything runs", seen.get("after"), None)
+seen = picker_backend({"XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0", "GDK_BACKEND": "wayland,x11"})
+check_eq("Wayland: a GDK_BACKEND of the user's own is put back", seen.get("after"), "wayland,x11")
+seen = picker_backend({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
+check_eq("X11: Gdk's backend is left alone", seen.get("at_import"), None)
+check_eq("Wayland without XWayland: nothing to fall back to",
+         mp.use_xwayland({"WAYLAND_DISPLAY": "wayland-0"}), False)
+
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")
 sys.exit(0 if TESTS_FAILED == 0 else 1)

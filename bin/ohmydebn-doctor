@@ -84,8 +84,20 @@ ui_scale() {
   esac
 }
 
+# x11 or wayland: DISPLAY alone can't say, since XWayland sets it in a
+# Wayland session too. "tty" over SSH.
+session_type() {
+  if [ -n "${XDG_SESSION_TYPE:-}" ]; then
+    echo "$XDG_SESSION_TYPE"
+  elif [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    echo wayland
+  else
+    echo unknown
+  fi
+}
+
 echo "OhMyDebn doctor - $(date '+%Y-%m-%d %H:%M')"
-echo "user: $(id -un)  home: $HOME  desktop: ${XDG_CURRENT_DESKTOP:-none}  display: ${DISPLAY:-none}  scale: $(ui_scale)"
+echo "user: $(id -un)  home: $HOME  desktop: ${XDG_CURRENT_DESKTOP:-none}  session: $(session_type)  display: ${DISPLAY:-none}  scale: $(ui_scale)"
 
 # ---------------------------------------------------------------- distro
 section "Distro"

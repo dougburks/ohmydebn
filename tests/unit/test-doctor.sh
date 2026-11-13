@@ -743,6 +743,17 @@ run_doctor MOCK_SCALING_FACTOR=2
 assert_contains "scale: Cinnamon can't be asked, a fixed setting is shown" "$OUTPUT" "scale: 2"
 run_doctor
 assert_contains "scale: nothing to ask shows unknown" "$OUTPUT" "scale: unknown"
+
+# --- the header's session type: DISPLAY is set in a Wayland session too
+# (XWayland), so it couldn't tell the two apart ---
+run_doctor XDG_SESSION_TYPE=wayland
+assert_contains "session: Wayland shown" "$OUTPUT" "desktop: X-Cinnamon  session: wayland  display: :0"
+run_doctor XDG_SESSION_TYPE=x11
+assert_contains "session: X11 shown" "$OUTPUT" "session: x11  display: :0"
+run_doctor WAYLAND_DISPLAY=wayland-0
+assert_contains "session: no XDG_SESSION_TYPE, but a Wayland display" "$OUTPUT" "session: wayland"
+run_doctor
+assert_contains "session: nothing to tell by shows unknown" "$OUTPUT" "session: unknown"
 assert_eq "scale: the header line changes no result" "0" "$EXIT_CODE"
 mock_cleanup
 

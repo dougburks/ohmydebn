@@ -14,10 +14,9 @@
 # runs `apt upgrade`), not from install/config/cinnamon.sh - config/all.sh
 # runs before finalization/all.sh in ohmydebn.sh's own
 # packaging -> config -> cleanup -> finalization order, so checking the
-# installed version there would see the OLD version: both a stale
-# "out of date" warning (see the GTILE_MIN_VERSION check below - it used
-# to live in cinnamon.sh too) and (confirmed live) restarting Cinnamon
-# before ohmydebn-gtile had actually been upgraded that run.
+# installed version there would see the OLD version, and (confirmed live)
+# restart Cinnamon before ohmydebn-gtile had actually been upgraded that
+# run.
 #
 # Doesn't restart Cinnamon directly. Two independent, backgrounded
 # `cinnamon --replace &` calls in the same run would race each other -
@@ -30,17 +29,6 @@
 # one actual restart at the very end if anything asked for it.
 
 GTILE_INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' ohmydebn-gtile 2>/dev/null || true)
-
-# Purely a diagnostic nudge, not a safety gate - an ohmydebn-gtile older
-# than GTILE_MIN_VERSION has no code path that reads tile-rules.json at
-# all, so apps just silently won't auto-tile on an out-of-date extension
-# without this warning telling the user why.
-GTILE_MIN_VERSION="2.3.1"
-if [ -z "$GTILE_INSTALLED_VERSION" ] || ! dpkg --compare-versions "$GTILE_INSTALLED_VERSION" ge "$GTILE_MIN_VERSION"; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "WARNING: ohmydebn-gtile is out of date"
-  echo "Installed: ${GTILE_INSTALLED_VERSION:-none}, need >= $GTILE_MIN_VERSION - apps launched from keybindings or the menu won't auto-tile until it's upgraded."
-  echo "Run: sudo apt install --only-upgrade ohmydebn-gtile"
-fi
 
 if [ -n "$GTILE_INSTALLED_VERSION" ] && gsettings get org.cinnamon enabled-extensions 2>/dev/null | grep -q "gTile@OhMyDebn"; then
   GTILE_RESTART_STATE=~/.local/state/ohmydebn-config/gtile-cinnamon-restart-version

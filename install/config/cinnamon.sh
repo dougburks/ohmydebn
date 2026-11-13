@@ -101,16 +101,14 @@ if [ ! -f $GTILE_BOOLEANS_STATE ]; then
   fi
 fi
 
-# The ohmydebn-gtile minimum-version warning and the "restart Cinnamon if
-# the installed version changed" check both live in
-# install/finalization/gtile-restart-flag.sh, not here - this script runs
+# The "restart Cinnamon if the installed ohmydebn-gtile version changed"
+# check lives in install/finalization/gtile-restart-flag.sh, not here - this script runs
 # as part of config/all.sh, which is sourced *before*
 # finalization/updates.sh actually runs `apt upgrade` (see ohmydebn.sh's
 # own packaging -> config -> cleanup -> finalization order). Checking the
-# installed version here would see the OLD, pre-upgrade version - both a
-# stale "out of date" warning that's already wrong by the time this run
-# finishes, and (confirmed live) restarting Cinnamon before ohmydebn-gtile
-# had even been upgraded that run.
+# installed version here would see the OLD, pre-upgrade version, and
+# (confirmed live) restart Cinnamon before ohmydebn-gtile had even been
+# upgraded that run.
 
 NEMO_CONFIG_STATE=~/.local/state/ohmydebn-config/nemo-config-20250924
 if [ ! -f $NEMO_CONFIG_STATE ]; then

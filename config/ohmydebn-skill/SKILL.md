@@ -116,7 +116,7 @@ or browse everything with `dconf-editor` / `dconf dump /org/cinnamon/`.
 
 **Key behaviors:**
 - Cinnamon auto-reloads most settings changes (no restart needed)
-- Use `Ctrl + Alt + Escape` to restart Cinnamon desktop
+- Use `Ctrl + Alt + Escape` to restart Cinnamon desktop. In a Wayland session (`$XDG_SESSION_TYPE` is `wayland`), Cinnamon can't restart without ending the session: log out and back in instead
 - Use `ohmydebn-reset-config` to reset OhMyDebn's app config files (terminal, shell, editor and the like) to defaults; desktop settings are left alone
 
 ### Nemo File Manager
@@ -305,7 +305,7 @@ information when it frees a key.
 
 ### Display/Monitors
 
-Configure through Cinnamon Settings > Displays or via command line:
+Configure through Cinnamon Settings > Displays, or via command line in an X11 session (`xrandr` can't configure displays in Cinnamon's Wayland session; use Displays there):
 ```bash
 # List displays
 xrandr
@@ -440,7 +440,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 
 - "Change my theme to catppuccin" -> `ohmydebn-theme-set catppuccin` or OhMyDebn Menu → Appearance → Theme
 - "Add a keybinding for Super+E to open file manager" -> Super+E is already the stock "Gmail" keybinding, so pick a free key or retarget it: add a line to `~/.config/ohmydebn/keybindings.txt` (see Keybindings above) and run `ohmydebn-keybindings-apply`
-- "Configure my external monitor" -> Use Cinnamon Settings > Displays or `xrandr` command
+- "Configure my external monitor" -> Use Cinnamon Settings > Displays, or the `xrandr` command in an X11 session
 - "Make the window animations faster" -> Edit Cinnamon Settings > Effects or `gsettings set org.cinnamon window-effect-speed <value>`
 - "Set up custom terminal prompt" -> Edit `~/.config/starship.toml` or use Starship presets
 - "Build a theme from this wallpaper" -> `Ctrl + Shift + A` (Aether theme builder)

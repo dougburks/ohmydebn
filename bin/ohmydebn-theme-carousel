@@ -2244,7 +2244,7 @@ class Carousel(Gtk.Window):
     def open_browse_themes(self):
         remove_legacy_aether_desktop_files()
         # Full-screen-with-gaps, via the shared ohmydebn-launch-tiled
-        # helper - the same TileFocusedWindow grid ("2 2 0 0 2 2") as the
+        # helper - the same grid ("2 2 0 0 2 2") as the
         # "Tile with gaps 5 full" keybinding, and the same
         # launch_and_close()-detaches-immediately reasoning as
         # open_aether()'s own comment. xdg-open (see ohmydebn-browser's
@@ -2259,11 +2259,10 @@ class Carousel(Gtk.Window):
 
     def open_aether(self):
         # Full-screen-with-gaps, via the shared ohmydebn-launch-tiled
-        # helper - the same TileFocusedWindow grid ("2 2 0 0 2 2") as the
-        # "Tile with gaps 5 full" keybinding. launch_and_close() detaches
-        # this immediately and closes the carousel, so there's no PID
-        # here to track directly - ohmydebn-launch-tiled backgrounds and
-        # polls for Aether's own window instead.
+        # helper - the same grid ("2 2 0 0 2 2") as the "Tile with gaps
+        # 5 full" keybinding: gTile tiles Aether's window as it opens.
+        # launch_and_close() detaches this immediately and closes the
+        # carousel.
         self.launch_and_close([
             "/usr/share/ohmydebn/bin/ohmydebn-launch-tiled",
             "2", "2", "0", "0", "2", "2", "--",

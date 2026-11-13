@@ -12,8 +12,9 @@
 # Wayland session doesn't offer, so it draws a plain grey frame of its own
 # that ignores the OhMyDebn theme, while GTK apps (Nemo, Brave) draw theirs
 # in it. Through XWayland, Cinnamon draws the title bar as on X11, themed.
-# It also keeps Alacritty visible to xdotool, which ohmydebn-terminal and
-# the tiling scripts use to find and focus the new window.
+# It also keeps Alacritty visible to xdotool, which ohmydebn-terminal uses
+# to find and focus the new window, and to Wnck, which ohmydebn-console
+# uses to place and toggle its window.
 #
 # Only Alacritty itself goes to X11: WAYLAND_DISPLAY comes back for
 # everything started inside it, through Alacritty's own env setting, so

@@ -4,9 +4,8 @@
 # no install check, nothing user-facing. Picks the installed default
 # browser and opens $1 as a kiosk/app window in it, falling back to
 # xdg-open for anything else. Pulled out into its own script so
-# ohmydebn-launch-webapp can wrap this browser-picking logic with
-# ohmydebn-launch-tiled without also tiling ohmydebn-launch-tiled's own
-# active-window-capture step before the browser exists.
+# ohmydebn-launch-webapp can hand this whole browser pick to
+# ohmydebn-launch-tiled as the one command it runs.
 
 # Get the default browser
 DEFAULT_BROWSER=$(xdg-settings get default-web-browser)

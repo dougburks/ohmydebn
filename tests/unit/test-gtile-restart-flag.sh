@@ -19,10 +19,6 @@
 # finalization/all.sh, so checking dpkg-query from cinnamon.sh would see
 # the pre-upgrade version and flag a restart before ohmydebn-gtile had
 # actually been upgraded that run (confirmed live).
-#
-# Also covers the ohmydebn-gtile minimum-version warning, which used to
-# live in install/config/cinnamon.sh for the same reason (same stale-
-# version problem, plus it had zero test coverage anywhere before this).
 
 set -uo pipefail
 
@@ -73,11 +69,8 @@ EOF
 # pipeline invokes it (finalization/all.sh sources every finalization
 # script into the same shell) - required to observe
 # OHMYDEBN_CINNAMON_RESTART_NEEDED, which only propagates back to the
-# caller via `source`, not a subprocess. Sets RESTART_FLAG to "1" or "",
-# and SCRIPT_STDOUT to whatever the script itself echoed (the min-version
-# warning's detail lines are plain `echo`, not the mocked
-# ohmydebn-headline call, so they only show up here, not in $CALLS) - a
-# marker line separates the flag from that so both can be asserted on.
+# caller via `source`, not a subprocess. Sets RESTART_FLAG and RELOAD_FLAG
+# to "1" or "", read from marker lines the wrapper prints after it.
 # OHMYDEBN_CINNAMON_RESTART_NEEDED= clears whatever this var already is in
 # the ambient environment before the child bash starts - on a real OhMyDebn
 # desktop session it's commonly already exported to 1, and since the script
@@ -97,7 +90,6 @@ run_script() {
   " 2>/dev/null)
   RESTART_FLAG=$(echo "$output" | sed -n 's/^GTILE_TEST_FLAG_MARKER://p')
   RELOAD_FLAG=$(echo "$output" | sed -n 's/^GTILE_TEST_RELOAD_MARKER://p')
-  SCRIPT_STDOUT=$(echo "$output" | grep -v '^GTILE_TEST_\(FLAG\|RELOAD\)_MARKER:')
 }
 
 # Scenario 1: first run ever, gTile installed and enabled -> flags a
@@ -152,46 +144,17 @@ assert_eq "gTile disabled: no restart-version state file written" "no" \
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# Scenario 5: ohmydebn-gtile not installed at all -> no flag, but the
-# min-version warning still fires (installed: none is still "too old").
+# Scenario 5: ohmydebn-gtile not installed at all -> no flag. (The
+# ohmydebn package requires it now, so this is a safety net.)
 mock_init
 setup_mocks
 SCRATCH_HOME=$(mktemp -d)
 run_script
-CALLS=$(cat "$MOCK_CALLS")
 assert_eq "gTile not installed: no restart flag" "" "$RESTART_FLAG"
-assert_contains "gTile not installed: out-of-date headline shown" "$CALLS" "WARNING: ohmydebn-gtile is out of date"
-assert_contains "gTile not installed: out-of-date detail shown" "$SCRIPT_STDOUT" "Installed: none, need >= 2.3.1"
 rm -rf "$SCRATCH_HOME"
 mock_cleanup
 
-# Scenario 6: installed but older than GTILE_MIN_VERSION (2.3.1) -> the
-# out-of-date warning fires. This check used to live in
-# install/config/cinnamon.sh, which ran before finalization/updates.sh
-# actually upgrades packages - moved here (still had zero test coverage
-# before this) so it reads the post-upgrade version, not a stale one.
-mock_init
-setup_mocks
-SCRATCH_HOME=$(mktemp -d)
-DPKG_GTILE_VERSION="2.2.1" run_script
-CALLS=$(cat "$MOCK_CALLS")
-assert_contains "below min version: out-of-date headline shown" "$CALLS" "WARNING: ohmydebn-gtile is out of date"
-assert_contains "below min version: out-of-date detail shown" "$SCRIPT_STDOUT" "Installed: 2.2.1, need >= 2.3.1"
-rm -rf "$SCRATCH_HOME"
-mock_cleanup
-
-# Scenario 7: installed at/above GTILE_MIN_VERSION -> no warning.
-mock_init
-setup_mocks
-SCRATCH_HOME=$(mktemp -d)
-DPKG_GTILE_VERSION="2.8.1-20260831" run_script
-CALLS=$(cat "$MOCK_CALLS")
-assert_not_contains "at/above min version: no out-of-date headline" "$CALLS" "out of date"
-assert_not_contains "at/above min version: no out-of-date detail" "$SCRIPT_STDOUT" "Installed:"
-rm -rf "$SCRATCH_HOME"
-mock_cleanup
-
-# Scenario 8: version bumped, but no Cinnamon session is running (the
+# Scenario 6: version bumped, but no Cinnamon session is running (the
 # install or update ran from XFCE on an LCOS/Devuan base, say) -> no
 # restart flag and no "Cinnamon will restart" headline, since finale.sh
 # checks the same thing and wouldn't restart anything; the version is

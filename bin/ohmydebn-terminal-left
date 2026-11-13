@@ -14,10 +14,10 @@
 # distinguishable in the taskbar (window-list@cinnamon.org, enabled by
 # default - despite what this file used to claim about titles not being
 # shown anywhere) instead of every one reading "OhMyDebn Terminal". In
-# "rules" mode, ohmydebn-terminal-tiled tiles this by tracking the
-# launched alacritty's own PID, not its title, so there's no need for a
-# stable title to match against tile-rules.json at all - see that entry's
-# removal there.
+# "rules" mode, ohmydebn-terminal-tiled has gTile tile the next new
+# window (TileNextWindow), not one matched by title, so there's no need
+# for a stable title to match against tile-rules.json at all - see that
+# entry's removal there.
 #
 # Deliberately not folded into ohmydebn-terminal-tiled itself: that
 # script's other caller (ohmydebn-demo-gui) is a fixed showcase window

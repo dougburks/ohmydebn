@@ -12,9 +12,8 @@
 # gtk-launch instead, but gtk-launch goes through GIO/D-Bus activation, so
 # the browser process ends up spawned by the session bus rather than by
 # this script - detached from the process tree the keybinding started,
-# which threw off OhMyDebn's automatic tiling (ohmydebn-launch-tiled's
-# focus tracking and tile-rules matching both assume the launch is
-# attributable to the launcher). So instead: ask xdg-settings which
+# which threw off OhMyDebn's automatic tiling at the time (it tracked the
+# launch from the launcher). So instead: ask xdg-settings which
 # browser is the desktop-wide default, resolve its .desktop file across
 # the XDG data dirs ourselves, parse the Exec= line, and exec the binary
 # directly with no activation layer in between. Falls back to

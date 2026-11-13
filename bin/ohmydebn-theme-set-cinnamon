@@ -135,19 +135,6 @@ process_thumbnails() {
 # Process thumbnails in the main output directory
 process_thumbnails "$OUTPUT_DIR"
 
-# Helper function to convert hex to RGBA hex
-to_rgba() {
-  local hex="$1"
-  local alpha="$2"
-  # Remove # if present
-  hex="${hex#\#}"
-  # Convert to rgba format for CSS
-  local r=$((16#${hex:0:2}))
-  local g=$((16#${hex:2:2}))
-  local b=$((16#${hex:4:2}))
-  printf "rgba(%d, %d, %d, %s)" "$r" "$g" "$b" "$alpha"
-}
-
 # Helper function to lighten/darken a hex color
 adjust_color() {
   local hex="$1"

@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 #
-# ohmydebn-theme-intro-play: play a theme intro full screen on every
-# monitor, ending on the theme's still background, then fade out to reveal
-# that still underneath. Only ohmydebn-theme-intro runs this, after
+# ohmydebn-theme-intro-play: play a theme intro on every monitor's
+# desktop, behind the open windows, ending on the theme's still background,
+# then fade out to reveal that still underneath. Only ohmydebn-theme-intro runs this, after
 # deciding an intro should play at all (effects on, not a Raspberry Pi,
 # intros not turned off).
 # Usage: ohmydebn-theme-intro-play <clip>
@@ -33,9 +33,25 @@ import sys
 import cairo
 import gi
 
+
+
+def use_xwayland(environ=None):
+    """Whether to open the windows through XWayland: in a Wayland session,
+    where XWayland (DISPLAY) is there to use. A Wayland window can't ask
+    to be a desktop window, below the others, or say where it goes; an
+    X11 window can do both, as in an X11 session."""
+    env = os.environ if environ is None else environ
+    wayland = bool(env.get("WAYLAND_DISPLAY")) or env.get("XDG_SESSION_TYPE") == "wayland"
+    return wayland and bool(env.get("DISPLAY"))
+
+
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 gi.require_version("Gtk", "3.0")
+# Set before Gdk is imported: PyGObject's Gdk overrides open the display on
+# import. This only ever plays the intro, so nothing it starts inherits it.
+if use_xwayland():
+    os.environ["GDK_BACKEND"] = "x11"
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
@@ -45,9 +61,9 @@ from ohmydebn_glib import unix_signal_add  # noqa: E402
 # nothing beyond GTK and cairo, which Cinnamon itself depends on.
 Gst = None
 
-# A full-screen window that stays above everything must never outlive its
-# clip: the longest intro is about 8 seconds, so anything past this is a
-# stuck pipeline, and the window goes regardless.
+# A window covering the desktop must never outlive its clip: the longest
+# intro is about 8 seconds, so anything past this is a stuck pipeline, and
+# the window goes regardless.
 MAX_SECONDS = 20
 FADE_MS = 500
 SKIP_FADE_MS = 150
@@ -148,26 +164,32 @@ class Intro:
         pass
 
     def make_window(self, monitor_num, widget):
+        """A window covering one monitor, behind every other window, as the
+        background is. It was full screen and kept above everything, so the
+        intro hid the whole desktop, panel and all; Omarchy plays its
+        intros in the wallpaper layer, under the windows. A desktop-type
+        window (what Nemo's desktop icons live in) is Cinnamon's nearest
+        thing: it stays below every normal window and the panel, on every
+        workspace. It never takes the keyboard, so what was being typed in
+        keeps it; a click on it skips the intro."""
+        geo = self.monitors()[monitor_num].get_geometry()
         win = Gtk.Window()
         win.set_title("OhMyDebn theme intro")
+        win.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
         win.set_decorated(False)
-        win.set_keep_above(True)
+        win.set_accept_focus(False)
+        win.set_focus_on_map(False)
         win.set_skip_taskbar_hint(True)
         win.set_skip_pager_hint(True)
+        win.stick()
         win.get_style_context().add_class("ohmydebn-theme-intro")
         win.add(widget)
-        win.add_events(Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.BUTTON_PRESS_MASK)
-        win.connect("key-press-event", lambda *_: self.fade_out(SKIP_FADE_MS))
+        win.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         win.connect("button-press-event", lambda *_: self.fade_out(SKIP_FADE_MS))
-        win.connect("realize", self.hide_cursor)
         win.connect("delete-event", lambda *_: self.quit(0) or True)
-        win.fullscreen_on_monitor(win.get_screen(), monitor_num)
+        win.set_default_size(geo.width, geo.height)
+        win.move(geo.x, geo.y)
         return win
-
-    @staticmethod
-    def hide_cursor(win):
-        cursor = Gdk.Cursor.new_for_display(win.get_display(), Gdk.CursorType.BLANK_CURSOR)
-        win.get_window().set_cursor(cursor)
 
     def start(self):
         # Black behind the video, around a clip that doesn't fill its

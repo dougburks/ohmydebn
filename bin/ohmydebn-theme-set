@@ -11,8 +11,8 @@ set -euo pipefail
 #   old theme's own copy), a background from the new theme is picked as
 #   usual.
 #   --no-intro switches without playing the new background's intro: for a
-#   switch made by an update (install/config/theme-replaced.sh), where a
-#   full-screen clip would cover the update's own terminal.
+#   switch made by an update (install/config/theme-replaced.sh), which
+#   nobody watching the update asked to see.
 
 # What a theme installed with `ohmydebn-theme-install <git-url>` may not ship,
 # because these run code rather than just carry color. Neovim loads a theme's
@@ -135,8 +135,8 @@ fi
 # The theme being switched away from: an intro plays only on an actual
 # change, not when the same theme is applied again (by ohmydebn-update,
 # ohmydebn-reset-config or Aether), and not when there was none before: a
-# first install's theme step would otherwise cover the installer's own
-# terminal with a full-screen intro, which a keypress there also skipped.
+# first install's theme step would otherwise play one behind the
+# installer's own terminal, where nobody chose a theme.
 OLD_THEME_NAME=$(cat "$HOME/.config/ohmydebn/current/theme.name" 2>/dev/null) || true
 
 # Remove the symlinks to shipped themes that releases before 3.3.0 put in
@@ -251,10 +251,10 @@ mv "$NEXT_THEME_PATH" "$CURRENT_THEME_PATH"
 echo "$THEME_NAME" >"$HOME/.config/ohmydebn/current/theme.name"
 
 # Choose the new background now, before anything on screen changes, and
-# start its intro if it has one: the intro covers the screen within about a
-# third of a second, and the rest of the switch (colors, panel, background)
-# then happens underneath it, the clip ending on the same picture the
-# desktop now shows. ohmydebn-theme-bg-next reads the theme.name and theme
+# start its intro if it has one: the intro covers the desktop within about a
+# third of a second, so the background changes underneath it (the windows
+# in front, and the panel, take their new colors as it plays), the clip
+# ending on the same picture the desktop now shows. ohmydebn-theme-bg-next reads the theme.name and theme
 # copy just written.
 NEW_BACKGROUND=""
 if [[ "$KEEP_BACKGROUND" == true && -n "$KEPT_BACKGROUND" && -f "$KEPT_BACKGROUND" ]]; then

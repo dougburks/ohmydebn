@@ -23,5 +23,10 @@ fi
 if dpkg -s "ohmydebn-grok-build" >/dev/null 2>&1; then
   mkdir -p ~/grok-sessions && cd "$(mktemp -d ~/grok-sessions/session-XXXXXX)"
   export GROK_DISABLE_AUTOUPDATER=1
+  # A starting prompt (ohmydebn-ai-prompt: the AI button's Make a theme
+  # and Make an app) opens the session with it as the first message.
+  if [ -n "${1:-}" ]; then
+    exec /usr/lib/ohmydebn-grok-build/grok -- "$1"
+  fi
   exec /usr/lib/ohmydebn-grok-build/grok
 fi

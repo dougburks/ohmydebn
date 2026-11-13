@@ -23,6 +23,7 @@
 #   --current         print the current default's name (opencode if unset
 #                     or unrecognized - the same fallback ohmydebn-ai uses)
 #   --list-installed  print "name<TAB>display name" for each installed tool
+#   --display-name <name>  print one tool's display name
 
 set -euo pipefail
 
@@ -74,7 +75,7 @@ current_default() {
 
 usage() {
   echo "Usage: ohmydebn-ai-set-default [--ask] <opencode|opencode-desktop|claude-code|claude-desktop|chatgpt|codex|grok|crush|omp|pi|t3code|vscode>" >&2
-  echo "       ohmydebn-ai-set-default --current | --list-installed" >&2
+  echo "       ohmydebn-ai-set-default --current | --list-installed | --display-name <name>" >&2
   exit 1
 }
 
@@ -82,6 +83,13 @@ ASK=false
 case "${1:-}" in
 --current)
   current_default
+  exit 0
+  ;;
+--display-name)
+  # The name people see for one of the names above ("Claude Code"), for
+  # the AI button's "Open <assistant>" (ohmydebn-menu's ai_button_menu).
+  [[ -n "$(display_name "${2:-}")" ]] || usage
+  display_name "$2"
   exit 0
   ;;
 --list-installed)

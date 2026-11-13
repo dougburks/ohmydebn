@@ -6,4 +6,4 @@
 
 set -euo pipefail
 
-exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/share/ohmydebn/bin/ohmydebn-claude-code-run
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Claude Code' -e /usr/share/ohmydebn/bin/ohmydebn-claude-code-run "$@"

@@ -21,5 +21,10 @@ fi
 
 if dpkg -s "ohmydebn-oh-my-pi" >/dev/null 2>&1; then
   mkdir -p ~/omp-sessions && cd "$(mktemp -d ~/omp-sessions/session-XXXXXX)"
+  # A starting prompt (ohmydebn-ai-prompt: the AI button's Make a theme
+  # and Make an app) opens the session with it as the first message.
+  if [ -n "${1:-}" ]; then
+    exec /usr/lib/ohmydebn-oh-my-pi/omp -- "$1"
+  fi
   exec /usr/lib/ohmydebn-oh-my-pi/omp
 fi

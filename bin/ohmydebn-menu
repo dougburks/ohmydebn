@@ -870,6 +870,42 @@ pick_default_agent() {
   return 0
 }
 
+# The panel's AI button (the robot after the OhMyDebn Menu's grin, via
+# `ohmydebn-menu ai-button`): open the assistant Super + A opens, start it
+# on making something, or pick another. Built at runtime (it names the
+# current assistant), so not a show_*_menu function, and it branches with
+# if (see AGENTS.md).
+#
+# The starters are prompts the assistant gets as its first message
+# (ohmydebn-ai <prompt>). Each asks the user what they want first, and
+# points at the OhMyDebn skill's guide, which the assistant finds through
+# the skill links (install/config/ohmydebn-ai-skill.sh).
+AI_THEME_PROMPT="Make me a new OhMyDebn theme. Ask me what look or inspiration I have in mind, then build it following the OhMyDebn skill's guide to making a new theme, and switch to it."
+AI_APP_PROMPT="Make me a new app for my OhMyDebn desktop. Ask me what it should do, then build it following the OhMyDebn skill's guide to making an app, so it shows up in the Cinnamon menu."
+
+ai_button_menu() {
+  local name open items
+  name=$(/usr/share/ohmydebn/bin/ohmydebn-ai --which)
+  if [[ -n "$name" ]]; then
+    open="Open $(/usr/share/ohmydebn/bin/ohmydebn-ai-set-default --display-name "$name")"
+  else
+    open="Choose an AI assistant"
+  fi
+  items="󱚤  $open\n󰏘  Make a theme\n󰣆  Make an app"
+  [[ -n "$name" ]] && items+="\n  Choose another assistant"
+  menu "AI" "$items"
+  if [[ "$MENU_RESULT" == *"$open" ]]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai
+  elif [[ "$MENU_RESULT" == *"Make a theme" ]]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai "$AI_THEME_PROMPT"
+  elif [[ "$MENU_RESULT" == *"Make an app" ]]; then
+    /usr/share/ohmydebn/bin/ohmydebn-ai "$AI_APP_PROMPT"
+  elif [[ "$MENU_RESULT" == *"Choose another assistant" ]]; then
+    show_ai_menu
+  fi
+  return 0
+}
+
 pick_default_browser() {
   local current pkg label result items=""
   local -A pkg_of=()
@@ -930,11 +966,12 @@ go_to_menu() {
 }
 
 # `ohmydebn-menu ai` opens on Apps > AI: ohmydebn-ai's first-use choice,
-# when no AI assistant has been picked or installed yet. The last line
+# when no AI assistant has been picked or installed yet. `ohmydebn-menu
+# ai-button` is the panel's AI button (ai_button_menu). The last line
 # stays a bare `show_main_menu`: tests strip it to source this file for its
 # functions.
-if [ "${1:-}" = ai ]; then
-  show_ai_menu
-  exit
-fi
+case "${1:-}" in
+ai) show_ai_menu; exit ;;
+ai-button) ai_button_menu; exit ;;
+esac
 show_main_menu

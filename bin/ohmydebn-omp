@@ -6,4 +6,4 @@
 
 set -euo pipefail
 
-exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Oh My Pi' -e /usr/share/ohmydebn/bin/ohmydebn-omp-run
+exec /usr/share/ohmydebn/bin/ohmydebn-terminal --title 'Oh My Pi' -e /usr/share/ohmydebn/bin/ohmydebn-omp-run "$@"

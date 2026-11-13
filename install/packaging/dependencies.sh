@@ -82,6 +82,12 @@ PACKAGES=(
   python3-pil
   python3-gi-cairo
 
+  # The clipboard, from scripts: ohmydebn-ai puts the AI button's Make a
+  # theme or Make an app request there for an assistant that can't take
+  # a starting message. xclip for X11, wl-clipboard (wl-copy) for Wayland.
+  xclip
+  wl-clipboard
+
   # Dev toolchain
   gcc
   pkg-config

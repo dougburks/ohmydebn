@@ -21,5 +21,10 @@ if ! dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
 fi
 if dpkg -s "ohmydebn-opencode-cli" >/dev/null 2>&1; then
   mkdir -p ~/opencode-sessions && cd "$(mktemp -d ~/opencode-sessions/session-XXXXXX)"
+  # A starting prompt (ohmydebn-ai-prompt: the AI button's Make a theme
+  # and Make an app) opens the session with it as the first message.
+  if [ -n "${1:-}" ]; then
+    exec /usr/bin/opencode-cli --prompt "$1"
+  fi
   exec /usr/bin/opencode-cli
 fi

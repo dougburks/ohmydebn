@@ -38,13 +38,25 @@ EOF
 #!/bin/bash
 echo "ohmydebn-menu $*" >>"$MOCK_CALLS"
 EOF
+  for clip in xclip wl-copy; do
+    mock_bin "$clip" <<EOF
+#!/bin/bash
+echo "$clip \$* <<< \$(cat)" >>"\$MOCK_CALLS"
+EOF
+  done
   sed "s#/usr/share/ohmydebn/bin#$MOCK_BIN#g" "$AI_SCRIPT" >"$MOCK_DIR/ohmydebn-ai-patched"
   chmod +x "$MOCK_DIR/ohmydebn-ai-patched"
 }
 
 run_ai() {
   : >"$MOCK_CALLS"
-  HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/ohmydebn-ai-patched" >"$MOCK_DIR/out" 2>&1
+  HOME="$SCRATCH_HOME" PATH="$(mock_path)" XDG_SESSION_TYPE="${SESSION:-x11}" WAYLAND_DISPLAY="" \
+    bash "$MOCK_DIR/ohmydebn-ai-patched" "$@" >"$MOCK_DIR/out" 2>&1
+}
+store_default() {
+  fresh_scratch_home
+  mkdir -p "$SCRATCH_HOME/.config/ohmydebn/current"
+  echo "$1" >"$SCRATCH_HOME/.config/ohmydebn/current/default-ai"
 }
 
 fresh_scratch_home() {
@@ -68,6 +80,38 @@ MOCK_NO_OPENCODE=1 run_ai
 assert_contains "nothing chosen or installed: opens the menu on Apps > AI" "$(cat "$MOCK_CALLS")" "ohmydebn-menu ai"
 assert_contains "nothing chosen or installed: says what to do" "$(cat "$MOCK_CALLS")" "Choose an AI assistant"
 assert_not_contains "nothing chosen or installed: no OpenCode install prompt" "$(cat "$MOCK_CALLS")" "ohmydebn-opencode"
+
+# --- A starting prompt (the AI button's Make a theme / Make an app) ---
+PROMPT="Make me a new OhMyDebn theme."
+store_default claude-code
+run_ai "$PROMPT"
+assert_eq "prompt, terminal assistant: passed to its launcher" "ohmydebn-claude-code $PROMPT" "$(cat "$MOCK_CALLS")"
+for gui in chatgpt claude-desktop crush; do
+  store_default "$gui"
+  run_ai "$PROMPT"
+  assert_contains "prompt, $gui (no starting-prompt option): on the clipboard" "$(cat "$MOCK_CALLS")" "xclip -selection clipboard <<< $PROMPT"
+  assert_contains "prompt, $gui: a notification says to paste it" "$(cat "$MOCK_CALLS")" "Your request is on the clipboard"
+  assert_not_contains "prompt, $gui: not passed on the command line" "$(cat "$MOCK_CALLS")" "ohmydebn-$gui $PROMPT"
+done
+store_default chatgpt
+SESSION=wayland run_ai "$PROMPT"
+assert_contains "prompt, Wayland: wl-copy rather than xclip" "$(cat "$MOCK_CALLS")" "wl-copy  <<< $PROMPT"
+store_default chatgpt
+run_ai
+assert_not_contains "no prompt: nothing copied" "$(cat "$MOCK_CALLS")" "clipboard"
+fresh_scratch_home
+MOCK_NO_OPENCODE=1 run_ai "$PROMPT"
+assert_contains "prompt, nothing chosen or installed: the request waits on the clipboard" "$(cat "$MOCK_CALLS")" "xclip -selection clipboard <<< $PROMPT"
+assert_contains "prompt, nothing chosen or installed: then the list" "$(cat "$MOCK_CALLS")" "ohmydebn-menu ai"
+
+# --- --which: what the button names ---
+store_default grok
+: >"$MOCK_CALLS"
+assert_eq "--which: the chosen one" "grok" "$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/ohmydebn-ai-patched" --which)"
+fresh_scratch_home
+assert_eq "--which: nothing chosen, OpenCode installed" "opencode" "$(HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/ohmydebn-ai-patched" --which)"
+assert_eq "--which: nothing chosen or installed is empty" "" "$(MOCK_NO_OPENCODE=1 HOME="$SCRATCH_HOME" PATH="$(mock_path)" bash "$MOCK_DIR/ohmydebn-ai-patched" --which)"
+assert_eq "--which: launches nothing" "" "$(cat "$MOCK_CALLS")"
 
 # --- A chosen default that isn't installed yet still opens (and installs) it ---
 fresh_scratch_home

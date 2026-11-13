@@ -15,39 +15,90 @@
 # runs this too). Instead the OhMyDebn menu opens on Apps > AI, every
 # assistant OhMyDebn offers; picking one installs it and asks whether to
 # make it the default.
+#
+# Usage: ohmydebn-ai [prompt]
+#        ohmydebn-ai --which
+# A prompt (the AI button's Make a theme and Make an app) opens the
+# assistant with it as the first message. The terminal assistants take one
+# when they start; the others (and Crush, whose only prompt option answers
+# once and exits) open as usual with the prompt on the clipboard, and a
+# notification says to paste it. --which prints the assistant this would
+# open, or nothing when it would offer the list instead.
 
 set -euo pipefail
 
 DEFAULT_AI_FILE="$HOME/.config/ohmydebn/current/default-ai"
 
-name=""
-if [[ -f "$DEFAULT_AI_FILE" ]]; then
-  stored=$(<"$DEFAULT_AI_FILE")
-  case "$stored" in
-  opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode) name="$stored" ;;
-  esac
+resolve() {
+  local stored
+  if [[ -f "$DEFAULT_AI_FILE" ]]; then
+    stored=$(<"$DEFAULT_AI_FILE")
+    case "$stored" in
+    opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | grok | crush | omp | pi | t3code | vscode)
+      echo "$stored"
+      return
+      ;;
+    esac
+  fi
+  if dpkg -s ohmydebn-opencode-cli >/dev/null 2>&1; then
+    echo opencode
+  fi
+}
+
+# Puts text on the clipboard: wl-copy in a Wayland session, else xclip.
+# Both keep running in the background to hand it over when pasted.
+copy_to_clipboard() {
+  if { [ -n "${WAYLAND_DISPLAY:-}" ] || [ "${XDG_SESSION_TYPE:-}" = wayland ]; } && command -v wl-copy >/dev/null 2>&1; then
+    printf '%s' "$1" | wl-copy
+  elif command -v xclip >/dev/null 2>&1; then
+    printf '%s' "$1" | xclip -selection clipboard
+  else
+    return 1
+  fi
+}
+
+if [[ "${1:-}" == "--which" ]]; then
+  resolve
+  exit 0
 fi
 
+PROMPT="${1:-}"
+name=$(resolve)
+
 if [[ -z "$name" ]]; then
-  if ! dpkg -s ohmydebn-opencode-cli >/dev/null 2>&1; then
+  if [[ -n "$PROMPT" ]] && copy_to_clipboard "$PROMPT"; then
+    notify-send -i ohmydebn "Choose an AI assistant" \
+      "Pick one to install. Your request is on the clipboard: once it opens, paste it as your first message." 2>/dev/null || true
+  else
     notify-send -i ohmydebn "Choose an AI assistant" \
       "Pick one to install. OhMyDebn then asks whether to make it your default for Super + A and the panel's AI button." 2>/dev/null || true
-    exec /usr/share/ohmydebn/bin/ohmydebn-menu ai
   fi
-  name="opencode"
+  exec /usr/share/ohmydebn/bin/ohmydebn-menu ai
+fi
+
+# The ones that take a starting prompt.
+case "$name" in
+opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode ${PROMPT:+"$PROMPT"} ;;
+claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code ${PROMPT:+"$PROMPT"} ;;
+codex) exec /usr/share/ohmydebn/bin/ohmydebn-codex ${PROMPT:+"$PROMPT"} ;;
+grok) exec /usr/share/ohmydebn/bin/ohmydebn-grok ${PROMPT:+"$PROMPT"} ;;
+omp) exec /usr/share/ohmydebn/bin/ohmydebn-omp ${PROMPT:+"$PROMPT"} ;;
+pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi ${PROMPT:+"$PROMPT"} ;;
+esac
+
+# The rest: the prompt goes on the clipboard.
+if [[ -n "$PROMPT" ]]; then
+  if copy_to_clipboard "$PROMPT"; then
+    notify-send -i ohmydebn "Your request is on the clipboard" \
+      "Paste it as your first message once your AI assistant opens (Ctrl + Shift + V in a terminal)." 2>/dev/null || true
+  fi
 fi
 
 case "$name" in
-opencode) exec /usr/share/ohmydebn/bin/ohmydebn-opencode ;;
 opencode-desktop) exec /usr/share/ohmydebn/bin/ohmydebn-opencode-desktop ;;
-claude-code) exec /usr/share/ohmydebn/bin/ohmydebn-claude-code ;;
 claude-desktop) exec /usr/share/ohmydebn/bin/ohmydebn-claude-desktop ;;
 chatgpt) exec /usr/share/ohmydebn/bin/ohmydebn-chatgpt ;;
-codex) exec /usr/share/ohmydebn/bin/ohmydebn-codex ;;
-grok) exec /usr/share/ohmydebn/bin/ohmydebn-grok ;;
 crush) exec /usr/share/ohmydebn/bin/ohmydebn-crush ;;
-omp) exec /usr/share/ohmydebn/bin/ohmydebn-omp ;;
-pi) exec /usr/share/ohmydebn/bin/ohmydebn-pi ;;
 t3code) exec /usr/share/ohmydebn/bin/ohmydebn-t3code ;;
 vscode) exec /usr/share/ohmydebn/bin/ohmydebn-code ;;
 esac

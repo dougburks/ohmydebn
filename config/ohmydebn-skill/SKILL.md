@@ -215,7 +215,29 @@ cp ~/.config/alacritty/alacritty.toml ~/.config/alacritty/alacritty.toml.bak.$(d
 4. Download a matching background (or several) from the internet and put them in ~/.config/ohmydebn/themes/[name-of-new-theme]/backgrounds/
 5. When done with the theme, run ohmydebn-theme-set "Name of new theme"
 
-### Pattern 3: Reset to Defaults -- ALWAYS SEEK USER CONFIRMATION BEFORE RUNNING
+### Pattern 3: Make an app
+
+For "make me an app" requests, including the AI button's Make an app.
+
+1. Ask what the app should do, and whether it belongs in a window or a terminal. Keep it small: a Bash or Python 3 script. For a window, use GTK 3 through PyGObject (`python3-gi`, which OhMyDebn installs); for a terminal app, plain text or `gum`.
+2. Put the program in `~/.local/bin/<name>` (create the folder if needed) and make it executable. Python scripts start with `#!/usr/bin/python3`.
+3. If it needs a package that isn't installed, ask the user first, then install it with `sudo apt install <package>` from the distro's own repositories. Never use `curl | bash`, `pip install --user` or a downloaded binary.
+4. Add a launcher at `~/.local/share/applications/<name>.desktop` so it appears in the Cinnamon menu straight away:
+   ```ini
+   [Desktop Entry]
+   Type=Application
+   Name=<Name>
+   Comment=<What it does>
+   Exec=/home/<user>/.local/bin/<name>
+   Icon=<an icon theme name, such as accessories-text-editor>
+   Terminal=false
+   Categories=Utility;
+   ```
+   Use the full path in `Exec` (no `~`). A terminal app gets `Terminal=true`.
+5. To match the current theme's colors, read them from `~/.config/ohmydebn/current/theme/colors.toml` when the app starts.
+6. Run it once to check it works, then tell the user its name in the Cinnamon menu.
+
+### Pattern 4: Reset to Defaults -- ALWAYS SEEK USER CONFIRMATION BEFORE RUNNING
 
 When customizations go wrong:
 
@@ -448,7 +470,7 @@ When a user runs `ohmydebn-update`, it first installs the latest ohmydebn packag
 - "Take a screenshot of an area" -> `Shift + Print` or `Ctrl + Shift + Print` (to clipboard)
 - "Show system information" -> `Ctrl + Shift + S` (fastfetch)
 - "Open OhMyDebn menu" -> `Super + Space`, or the grin icon on the panel next to the Cinnamon menu
-- "Launch AI assistant" -> `Super + A` or the robot on the panel after the grin (the default assistant, set in Setup > Defaults > Agent), or from Apps > AI
+- "Launch AI assistant" -> `Super + A` (the default assistant, set in Setup > Defaults > Agent), the robot on the panel after the grin (Open, Make a theme, Make an app, Choose another assistant), or Apps > AI
 - "Quick AI console" / "drop-down terminal" -> `Super` + the key left of `1` (press again to hide it)
 - "Update OpenCode to latest version" -> `ohmydebn-update` (updates OpenCode if it's installed)
 - "Open apps menu" -> `Super + R` (GTK app launcher)

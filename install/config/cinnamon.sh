@@ -8,6 +8,25 @@ if [ ! -f $PANEL_STATE ]; then
   touch $PANEL_STATE
 fi
 
+# The applets' settings are copied in before the applets go on the panel
+# below. Cinnamon reads an applet's settings file when it loads the applet,
+# and from Linux Mint 27 on it no longer watches the file afterwards: a copy
+# made once the applet was running went unnoticed, and Cinnamon's own first
+# save of the defaults, a moment later, overwrote it. So a fresh Mint 27
+# install kept the visual workspace switcher instead of numbered buttons.
+SPICE_STATE=~/.local/state/ohmydebn-spices
+if [ ! -f $SPICE_STATE ]; then
+  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Cinnamon spices"
+  for SPICE in "workspace-switcher@cinnamon.org" "notifications@cinnamon.org" "calendar@cinnamon.org"; do
+    SPICE_DIR=~/.config/cinnamon/spices/$SPICE
+    mkdir -p $SPICE_DIR
+    /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Cinnamon spice $SPICE"
+    cp -av /usr/share/ohmydebn/config/cinnamon/spices/$SPICE/* $SPICE_DIR
+    echo
+  done
+  touch $SPICE_STATE
+fi
+
 # Every applet's instance ID (the number after the last colon) must be
 # unique across the whole list, not just per applet: Cinnamon tracks applets
 # and their settings files (config/cinnamon/spices/<uuid>/<id>.json) by that
@@ -33,19 +52,6 @@ if [ ! -f $ALTTAB_STATE ]; then
   gsettings set org.cinnamon alttab-switcher-style 'icons+preview'
   gsettings set org.cinnamon alttab-switcher-show-all-workspaces true
   touch $ALTTAB_STATE
-fi
-
-SPICE_STATE=~/.local/state/ohmydebn-spices
-if [ ! -f $SPICE_STATE ]; then
-  /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Cinnamon spices"
-  for SPICE in "workspace-switcher@cinnamon.org" "notifications@cinnamon.org" "calendar@cinnamon.org"; do
-    SPICE_DIR=~/.config/cinnamon/spices/$SPICE
-    mkdir -p $SPICE_DIR
-    /usr/share/ohmydebn/bin/ohmydebn-headline "Configuring Cinnamon spice $SPICE"
-    cp -av /usr/share/ohmydebn/config/cinnamon/spices/$SPICE/* $SPICE_DIR
-    echo
-  done
-  touch $SPICE_STATE
 fi
 
 GTILE_CONFIG_STATE=~/.local/state/ohmydebn-config/gTile-config-20250920

@@ -2275,6 +2275,19 @@ _carousel_code = "\n".join(
 )
 check("carousel: no longer full screen", "fullscreen" not in _carousel_code)
 check("carousel: no full-screen background image behind the panel", "bg_image" not in _carousel_code)
+# gTile's tiling leaves a window alone only when it says it's out of the
+# window list before it appears; the panel, not full screen any more, was
+# tiled like an app window.
+import inspect  # noqa: E402
+_carousel_init = inspect.getsource(tc.Carousel.__init__)
+check("carousel: out of the window list, so tiling leaves it alone",
+      "self.set_skip_taskbar_hint(True)" in _carousel_init)
+check("carousel: and out of the workspace pager",
+      "self.set_skip_pager_hint(True)" in _carousel_init)
+check("carousel: a normal window, so it still gets the keyboard",
+      "self.set_type_hint(Gdk.WindowTypeHint.NORMAL)" in _carousel_init)
+check("carousel: all said before it appears (main shows it, after)",
+      "self.show" not in _carousel_init)
 
 print()
 print(f"{TESTS_RUN - TESTS_FAILED}/{TESTS_RUN} passed")

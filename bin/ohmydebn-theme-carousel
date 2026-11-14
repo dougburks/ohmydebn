@@ -1226,6 +1226,15 @@ class Carousel(Gtk.Window):
         # full screen, the selected background filling the screen behind
         # the cards, and hid every window.
         self.set_resizable(False)
+        # Out of the window list, and so out of gTile's tiling, which
+        # leaves alone a window that says so before it appears: full
+        # screen, gTile let it be anyway, but a panel was tiled like any
+        # app window (into a grid cell, or a column of the strip). NORMAL,
+        # as the OhMyDebn menu's picker does, so it still gets the
+        # keyboard when it appears.
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
         self.set_name("carousel-panel")
         if see_through(self):
             self.get_style_context().add_class("see-through")

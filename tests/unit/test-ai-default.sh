@@ -91,6 +91,23 @@ for answer in "" n no; do
   teardown
 done
 
+# --- --ask with no default in effect (nothing picked, OpenCode not
+# installed) makes it the default without asking: the AI button's first
+# use, where a reflexive Enter used to "keep" an OpenCode that isn't there
+# and leave Super+A offering the list ---
+setup "ohmydebn-codex-cli"
+OUT=$(run_set_default --ask codex </dev/null 2>&1)
+assert_eq "--ask, no default in effect: makes it the default" "codex" "$(cat "$DEFAULT_FILE" 2>/dev/null)"
+assert_not_contains "--ask, no default in effect: asks nothing" "$OUT" "[y/N]"
+assert_contains "--ask, no default in effect: says so" "$OUT" "Codex is now your default AI assistant."
+teardown
+# OpenCode installed is a default in effect (the fallback): still asks.
+setup "ohmydebn-codex-cli ohmydebn-opencode-cli"
+OUT=$(run_set_default --ask codex </dev/null 2>&1)
+assert_contains "--ask, OpenCode installed: asks" "$OUT" "[y/N]"
+assert_eq "--ask, OpenCode installed: Enter keeps OpenCode" "no" "$([[ -f "$DEFAULT_FILE" ]] && echo yes || echo no)"
+teardown
+
 # --- --ask stays quiet when it's already the default (Super+A installing its own default) ---
 setup "ohmydebn-opencode-cli"
 OUT=$(run_set_default --ask opencode </dev/null 2>&1)
@@ -106,9 +123,11 @@ teardown
 
 # --- an installer run from the menu asks, after installing; --skip-prompt never asks ---
 setup ""
-# dpkg reports Codex missing until apt has "installed" it.
+# dpkg reports Codex missing until apt has "installed" it. OpenCode is
+# installed, so a default is in effect and the question is asked.
 mock_bin dpkg <<'EOF2'
 #!/bin/bash
+[[ "$1" == "-s" && "$2" == "ohmydebn-opencode-cli" ]] && exit 0
 [[ "$1" == "-s" && "$2" == "ohmydebn-codex-cli" && -f "$MOCK_DIR/installed" ]] && exit 0
 exit 1
 EOF2

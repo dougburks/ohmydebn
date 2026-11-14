@@ -4,8 +4,8 @@
 # panel launcher (Cinnamon's own panel-launchers applet) right after the
 # Cinnamon menu, with the AI Assistant beside it. The corner stays the
 # Cinnamon menu (Super); the grin next to it is the OhMyDebn Menu
-# (Super + Space), and the sparkle after that your default AI assistant
-# (Super + A).
+# (Super + Space), and the robot after that the AI button, a menu that
+# opens your default AI assistant or gives it a starting request.
 #
 # Changes nothing when:
 # - a panel launcher already has the OhMyDebn Menu (one the user added,

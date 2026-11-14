@@ -232,6 +232,16 @@ holder.wait()
 claimed, fd = wl.claim_switcher(lock)
 check_eq("lock: free again once the first has ended", claimed, True)
 os.close(fd)
+# The fallback, ~/.cache, may not exist yet (no XDG_RUNTIME_DIR, a new
+# account): the switcher opened nothing when it didn't.
+with tempfile.TemporaryDirectory() as home:
+    missing = os.path.join(home, ".cache", "ohmydebn-window-switcher.lock")
+    try:
+        claimed, fd = wl.claim_switcher(missing)
+        os.close(fd)
+    except OSError:
+        claimed = False
+    check_eq("lock: made in a cache directory that doesn't exist yet", claimed, True)
 
 print("=== ohmydebn-menu-picker --windows ===")
 mp = SourceFileLoader("ohmydebn_menu_picker_windows", os.path.join(BIN, "ohmydebn-menu-picker")).load_module()

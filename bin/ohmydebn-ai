@@ -18,8 +18,8 @@
 #
 # Usage: ohmydebn-ai [prompt]
 #        ohmydebn-ai --which
-# A prompt (the AI button's Make a theme and Make an app) opens the
-# assistant with it as the first message. The terminal assistants take one
+# A prompt (the AI button's Make a theme, Make an app and Fix my desktop)
+# opens the assistant with it as the first message. The terminal assistants take one
 # when they start; the others (and Crush, whose only prompt option answers
 # once and exits) open as usual with the prompt on the clipboard, and a
 # notification says to paste it. --which prints the assistant this would

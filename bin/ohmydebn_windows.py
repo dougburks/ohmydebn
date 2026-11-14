@@ -141,6 +141,7 @@ def find_by_class(windows, name):
                 return window
     return None
 
+
 def is_wayland_session(environ=None):
     """Whether this runs in a Wayland session, where libwnck can't stand in
     for gTile: there it sees only X11 windows, if any."""
@@ -154,8 +155,7 @@ def icon_candidates(window):
     window itself for windows Cinnamon couldn't match to an app (many
     apps name their icon after their WM_CLASS or .desktop file)."""
     names = []
-    app_stem = window.app_id[:-len(".desktop")] if window.app_id.endswith(".desktop") else window.app_id
-    for name in (window.icon, window.wm_class.lower(), window.wm_class, app_stem):
+    for name in (window.icon, window.wm_class.lower(), window.wm_class, _app_stem(window.app_id)):
         if name and name not in names:
             names.append(name)
     return names
@@ -173,6 +173,8 @@ def claim_switcher(lock_path):
     Returns (True, fd) when this one is the switcher - keep fd open for as
     long as it runs, which holds the lock - or (False, pid) for the one
     already running (pid None if it couldn't be read)."""
+    # The cache directory (the fallback) may not exist yet.
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

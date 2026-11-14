@@ -13,7 +13,7 @@
 # once its colors.toml is: its folder can outlive it, since this runs
 # before the update's package upgrades, and until those the old intros
 # package keeps Osaka Jade's clip in backgrounds/intros there.
-# --no-intro: a full-screen intro would cover this update's terminal.
+# --no-intro: an intro is something nobody watching the update asked to see.
 THEME_NAME_FILE=~/.config/ohmydebn/current/theme.name
 SHIPPED_THEMES=/usr/share/ohmydebn-themes
 if [ "$(cat "$THEME_NAME_FILE" 2>/dev/null)" = "osaka-jade" ] &&

@@ -19,7 +19,9 @@
 #                     reflexive second Enter must not silently change the
 #                     default. Says nothing if the tool is already the
 #                     default (Super+A installing its own default on first
-#                     use).
+#                     use), and makes it the default without asking when
+#                     none is in effect (nothing picked, OpenCode not
+#                     installed).
 #   --current         print the current default's name (opencode if unset
 #                     or unrecognized - the same fallback ohmydebn-ai uses)
 #   --list-installed  print "name<TAB>display name" for each installed tool
@@ -112,11 +114,26 @@ opencode | opencode-desktop | claude-code | claude-desktop | chatgpt | codex | g
 esac
 NAME="$1"
 
+# Whether a default is in effect: one picked, or OpenCode installed for
+# the fallback. Without either, Super + A has no assistant to open, and
+# ohmydebn-ai offers the list of them instead.
+has_default() {
+  [[ -f "$DEFAULT_AI_FILE" && "$(current_default)" == "$(<"$DEFAULT_AI_FILE")" ]] ||
+    dpkg -s "$(package_of opencode)" >/dev/null 2>&1
+}
+
 if [[ "$ASK" == true ]]; then
   [[ "$(current_default)" == "$NAME" ]] && exit 0
   # Only offer what actually got installed: an installer that failed
   # partway may still reach this question.
   dpkg -s "$(package_of "$NAME")" >/dev/null 2>&1 || exit 0
+fi
+
+# With no default in effect, the one just installed becomes it without
+# asking: asking would let a reflexive Enter "keep" OpenCode, which isn't
+# there, and Super + A would go on offering the list although an
+# assistant is installed.
+if [[ "$ASK" == true ]] && has_default; then
   echo
   # printf + read rather than read -p: bash shows a -p prompt only when
   # stdin is a terminal, and the floating install terminal's isn't always.

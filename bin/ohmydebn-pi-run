@@ -25,8 +25,9 @@ if ! dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
 fi
 if dpkg -s "ohmydebn-pi-coding-agent" >/dev/null 2>&1; then
   mkdir -p ~/pi-sessions && cd "$(mktemp -d ~/pi-sessions/session-XXXXXX)"
-  # A starting prompt (ohmydebn-ai-prompt: the AI button's Make a theme
-  # and Make an app) opens the session with it as the first message.
+  # A starting prompt (from ohmydebn-ai: the AI button's Make a theme,
+  # Make an app and Fix my desktop) opens the session with it as the
+  # first message.
   if [ -n "${1:-}" ]; then
     exec /usr/lib/ohmydebn-pi-coding-agent/pi -- "$1"
   fi

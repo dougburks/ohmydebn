@@ -21,8 +21,9 @@ if ! dpkg -s "claude-code" >/dev/null 2>&1; then
 fi
 if dpkg -s "claude-code" >/dev/null 2>&1; then
   mkdir -p ~/claude-sessions && cd "$(mktemp -d ~/claude-sessions/session-XXXXXX)"
-  # A starting prompt (ohmydebn-ai-prompt: the AI button's Make a theme
-  # and Make an app) opens the session with it as the first message.
+  # A starting prompt (from ohmydebn-ai: the AI button's Make a theme,
+  # Make an app and Fix my desktop) opens the session with it as the
+  # first message.
   if [ -n "${1:-}" ]; then
     exec /usr/bin/claude -- "$1"
   fi

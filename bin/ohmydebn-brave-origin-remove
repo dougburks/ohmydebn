@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# ohmydebn-brave-origin-remove: removes Brave Origin, and its repository
+# when the other Brave isn't installed. Brave Origin is OhMyDebn's default
+# browser, so nothing calls this: the Remove menu doesn't offer it, and
+# ohmydebn-pkg-remove-all-optional leaves it out on purpose. It stays for
+# running by hand, for anyone who wants Brave Origin gone.
 
 set -euo pipefail
 
